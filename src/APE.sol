@@ -8,7 +8,7 @@ import "hardhat/console.sol";
 
 contract APE is SyntheticToken {
     constructor(
-        address debtToken,
+        address debtToken, 
         address collateralToken,
         int8 leverageTier
     )
