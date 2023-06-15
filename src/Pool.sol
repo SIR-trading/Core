@@ -24,7 +24,7 @@ contract Pool is MAAM, PoolStructs {
 
     event poolCreated(address indexed debtToken, address indexed collateralToken, int8 indexed leverageTier);
 
-    SyntheticToken private immutable _TEA_TOKEN;
+        SyntheticToken private immutable _TEA_TOKEN;
     SyntheticToken private immutable _APE_TOKEN;
 
     address private immutable _DEBT_TOKEN;

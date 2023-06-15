@@ -35,13 +35,28 @@ contract Factory {
     ////////////////////////////////////////////////////////////////*/
 
     // Creates a pool
-    function createPool(address debtToken, address collateralToken, int8 leverageTier) public {
+    function createPool(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier
+    ) public {
         // Create oracle if it does not exist
-        address oracle = DeployerOfOracles.deployOracle(debtToken, collateralToken, uniswapFeeTiers);
+        address oracle = DeployerOfOracles.deployOracle(
+            debtToken,
+            collateralToken,
+            uniswapFeeTiers
+        );
 
         // Create pool
-        address pool =
-            address(new Pool{salt: bytes32(0)}(debtToken, collateralToken, leverageTier, oracle, _POOL_LOGIC));
+        address pool = address(
+            new Pool{salt: bytes32(0)}(
+                debtToken,
+                collateralToken,
+                leverageTier,
+                oracle,
+                _POOL_LOGIC
+            )
+        );
 
         // Store all parameters in an easy to access array
         poolsAddresses.push(pool);
@@ -62,7 +77,8 @@ contract Factory {
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
     function newUniswapFeeTier(uint24 fee) external {
         // Check fee tier actually exists in Uniswap v3
-        int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
+        int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY)
+            .feeAmountTickSpacing(fee);
         require(tickSpacing > 0);
 
         // Check fee tier has not been added yet
@@ -70,6 +86,8 @@ contract Factory {
             require(fee != uniswapFeeTiers[i].fee);
         }
 
-        uniswapFeeTiers.push(Oracle.UniswapFeeTier(fee, uint24(tickSpacing), 0));
+        uniswapFeeTiers.push(
+            Oracle.UniswapFeeTier(fee, uint24(tickSpacing), 0)
+        );
     }
 }
