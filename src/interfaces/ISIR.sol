@@ -22,11 +22,7 @@ interface ISIR is IERC20 {
     function getPoolsIssuanceParams(address)
         external
         view
-        returns (
-            uint16 taxToDAO,
-            uint72 issuance,
-            bytes16 cumSIRperMAAM
-        );
+        returns (uint16 taxToDAO, uint72 issuance, bytes16 cumSIRperMAAM);
 
     //////////////////////////////////////////////////////
 
@@ -41,12 +37,8 @@ interface ISIR is IERC20 {
 
     function contributorMint() external;
 
-    function updateIssuance(
-        address LPer,
-        bytes16 lastNonZeroBalance,
-        bytes16 latestBalance,
-        bytes16 latestSupplyMAAM
-    ) external;
+    function updateIssuance(address LPer, bytes16 lastNonZeroBalance, bytes16 latestBalance, bytes16 latestSupplyMAAM)
+        external;
 
     function haultLPersIssuances(bytes16 nonRebasingSupplyMAAM) external;
 

@@ -7,11 +7,10 @@ import "../APE.sol";
 
 library DeployerOfTokens {
     // Deploy TEA
-    function deploy(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) external returns (TEA tea, APE ape) {
+    function deploy(address debtToken, address collateralToken, int8 leverageTier)
+        external
+        returns (TEA tea, APE ape)
+    {
         tea = new TEA{salt: hex"00"}(debtToken, collateralToken, leverageTier);
         ape = new APE{salt: hex"00"}(debtToken, collateralToken, leverageTier);
     }

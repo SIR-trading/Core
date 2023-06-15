@@ -19,17 +19,12 @@ library ResettableBalancesBytes16 {
     }
 
     function get(ResettableBalances storage resettableBalances, address account) public view returns (bytes16) {
-        return
-            resettableBalances.tsLastLiquidation < resettableBalances.timestampedBalances[account].tsLastUpdate
-                ? FloatingPoint.ZERO
-                : resettableBalances.timestampedBalances[account].balance;
+        return resettableBalances.tsLastLiquidation < resettableBalances.timestampedBalances[account].tsLastUpdate
+            ? FloatingPoint.ZERO
+            : resettableBalances.timestampedBalances[account].balance;
     }
 
-    function set(
-        ResettableBalances storage resettableBalances,
-        address account,
-        bytes16 balance_
-    ) internal {
+    function set(ResettableBalances storage resettableBalances, address account, bytes16 balance_) internal {
         resettableBalances.timestampedBalances[account].balance = balance_;
         resettableBalances.timestampedBalances[account].tsLastUpdate = uint40(block.timestamp);
     }
@@ -39,19 +34,11 @@ library ResettableBalancesBytes16 {
         resettableBalances.numLiquidations++;
     }
 
-    function increase(
-        ResettableBalances storage resettableBalances,
-        address account,
-        bytes16 value
-    ) internal {
+    function increase(ResettableBalances storage resettableBalances, address account, bytes16 value) internal {
         set(resettableBalances, account, get(resettableBalances, account).add(value));
     }
 
-    function decrease(
-        ResettableBalances storage resettableBalances,
-        address account,
-        bytes16 value
-    ) internal {
+    function decrease(ResettableBalances storage resettableBalances, address account, bytes16 value) internal {
         set(resettableBalances, account, get(resettableBalances, account).sub(value));
     }
 }

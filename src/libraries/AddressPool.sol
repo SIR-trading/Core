@@ -15,25 +15,24 @@ library AddressPool {
         address oracle,
         address poolLogic
     ) internal pure returns (address) {
-        return
-            address(
-                uint160(
-                    uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                bytes1(0xff),
-                                addrFactory,
-                                bytes32(0), // Salt
-                                keccak256(
-                                    abi.encodePacked(
-                                        type(Pool).creationCode,
-                                        abi.encode(addrDebtToken, addrCollateralToken, leverageTier, oracle, poolLogic)
-                                    )
+        return address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff),
+                            addrFactory,
+                            bytes32(0), // Salt
+                            keccak256(
+                                abi.encodePacked(
+                                    type(Pool).creationCode,
+                                    abi.encode(addrDebtToken, addrCollateralToken, leverageTier, oracle, poolLogic)
                                 )
                             )
                         )
                     )
                 )
-            );
+            )
+        );
     }
 }

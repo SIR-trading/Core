@@ -39,9 +39,9 @@ contract SystemControl is Ownable {
     ///////////////////////////////////////////////////////////////*/
 
     /**
-        @notice The next 3 functions control the only configurable parameters of SIR.
-        @notice As soon as the protocol is redeemed safe and stable,
-        @notice ownership will be revoked and SIR will be completely immutable
+     * @notice The next 3 functions control the only configurable parameters of SIR.
+     *     @notice As soon as the protocol is redeemed safe and stable,
+     *     @notice ownership will be revoked and SIR will be completely immutable
      */
 
     function setBasisFee(uint16 basisFee) external onlyOwner betaIsOn {
@@ -71,9 +71,9 @@ contract SystemControl is Ownable {
     }
 
     /**
-        @param prevPools is an array of the pools participating in the liquidity mining up to this instant
-        @param nextPools is an array of pools participating in the liquidity mining from this instant
-        @param taxesToDAO is an array containing the % of the fees revenue taken from each pool in nextPools.
+     * @param prevPools is an array of the pools participating in the liquidity mining up to this instant
+     *     @param nextPools is an array of pools participating in the liquidity mining from this instant
+     *     @param taxesToDAO is an array containing the % of the fees revenue taken from each pool in nextPools.
      */
     function updatePoolsIssuances(
         address[] calldata prevPools,
@@ -92,35 +92,30 @@ contract SystemControl is Ownable {
         }
 
         /**
-            Verify that the DAO taxes satisfy constraint
-                taxesToDAO[0]**2 + ... + taxesToDAO[N]**2 ≤ (10%)**2
-            Checks the pools are valid by
-                1) calling the alleged pool address
-                2) retrieving its alleged parameters
-                3) and computing the theoretical address
+         * Verify that the DAO taxes satisfy constraint
+         *             taxesToDAO[0]**2 + ... + taxesToDAO[N]**2 ≤ (10%)**2
+         *         Checks the pools are valid by
+         *             1) calling the alleged pool address
+         *             2) retrieving its alleged parameters
+         *             3) and computing the theoretical address
          */
         uint256 sumTaxesToDAO = 0;
         uint256 sumSqTaxes = 0;
         for (uint256 i = 0; i < nextPools.length; i++) {
             sumTaxesToDAO += uint256(taxesToDAO[i]);
-            sumSqTaxes += uint256(taxesToDAO[i])**2;
+            sumSqTaxes += uint256(taxesToDAO[i]) ** 2;
 
-            (address debtToken, , , ) = _FACTORY.poolsParameters(nextPools[i]);
+            (address debtToken,,,) = _FACTORY.poolsParameters(nextPools[i]);
             require(debtToken != address(0), "Not a SIR pool");
         }
-        require(sumSqTaxes <= (1e4)**2, "Taxes too high");
+        require(sumSqTaxes <= (1e4) ** 2, "Taxes too high");
         _sumTaxesToDAO = sumTaxesToDAO;
 
         for (uint256 i = 0; i < nextPools.length; i++) {}
 
         // Set new issuances
-        hashPools = _SYSTEM_STATE.changePoolsIssuances(
-            prevPools,
-            latestSuppliesMAAM,
-            nextPools,
-            taxesToDAO,
-            sumTaxesToDAO
-        );
+        hashPools =
+            _SYSTEM_STATE.changePoolsIssuances(prevPools, latestSuppliesMAAM, nextPools, taxesToDAO, sumTaxesToDAO);
     }
 
     function updateContributorsIssuances(
@@ -134,12 +129,8 @@ contract SystemControl is Ownable {
         require(keccak256(abi.encodePacked(prevContributors)) == hashContributors, "Incorrect list of contributors");
 
         // Set new issuances
-        hashContributors = _SYSTEM_STATE.changeContributorsIssuances(
-            prevContributors,
-            nextContributors,
-            issuances,
-            false
-        );
+        hashContributors =
+            _SYSTEM_STATE.changeContributorsIssuances(prevContributors, nextContributors, issuances, false);
     }
 
     function updateContributorsIssuances(
@@ -157,12 +148,8 @@ contract SystemControl is Ownable {
         require(keccak256(abi.encodePacked(pools)) == hashPools, "Incorrect list of pools");
 
         // Set new issuances
-        hashContributors = _SYSTEM_STATE.changeContributorsIssuances(
-            prevContributors,
-            nextContributors,
-            issuances,
-            true
-        );
+        hashContributors =
+            _SYSTEM_STATE.changeContributorsIssuances(prevContributors, nextContributors, issuances, true);
 
         // Get the MAAM supplies of all the previous pools
         bytes16[] memory latestSuppliesMAAM = new bytes16[](pools.length);

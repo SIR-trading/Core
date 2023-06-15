@@ -5,14 +5,7 @@ import "./IMAAM.sol";
 import "./IFees.sol";
 
 interface IPool is IMAAM {
-    function parameters()
-        external
-        view
-        returns (
-            address debtToken,
-            address collateralToken,
-            int8 leverageTier
-        );
+    function parameters() external view returns (address debtToken, address collateralToken, int8 leverageTier);
 
     function syntheticTokens() external view returns (address teaToken, address apeToken);
 
@@ -25,12 +18,7 @@ interface IPool is IMAAM {
     function getReserves()
         external
         view
-        returns (
-            uint256 DAOFees,
-            uint256 gentlemenReserve,
-            uint256 apesReserve,
-            uint256 LPReserve
-        );
+        returns (uint256 DAOFees, uint256 gentlemenReserve, uint256 apesReserve, uint256 LPReserve);
 
     function quoteMintTEA(uint256 collateralDeposited) external view returns (uint256 amountTEA);
 

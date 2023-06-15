@@ -6,20 +6,20 @@ import "uniswap-v2-core/interfaces/IERC20.sol";
 import "./interfaces/IPoolLogic.sol";
 
 // Libraries
-import "./libraries/FloatingPoint.sol"; 
+import "./libraries/FloatingPoint.sol";
 import "./libraries/TokenNaming.sol";
 import "./libraries/ResettableBalancesBytes16.sol";
 // import "./test/TestFloatingPoint.sol";
 
 /**
-    @notice MAAM is liquidity providers' token in the SIR protocol. It is also a rebasing token.
-    The rebasing mechanism is not just a cosmetic feature but necessary for its function. Otherwise its totalSupply() would be unbounded
-    due to the price fluctuations of the leverage + liquidations.
-    @notice Highly modified from Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/ERC20.sol)
-    @dev Floating point operations on balances (_nonRebasingBalances) round down (to zero)
-    Floating point operations on the total supply (nonRebasingSupply) round up (to positive infinity)
-    For this reason, the sum of all internal floating-point balances may not be equal to the floating-poin supply (nonRebasingSupply),
-    specially when the balances and supply in normal integer numbers occupy more than 113 bits (the accuracy of FP) 
+ * @notice MAAM is liquidity providers' token in the SIR protocol. It is also a rebasing token.
+ *     The rebasing mechanism is not just a cosmetic feature but necessary for its function. Otherwise its totalSupply() would be unbounded
+ *     due to the price fluctuations of the leverage + liquidations.
+ *     @notice Highly modified from Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/ERC20.sol)
+ *     @dev Floating point operations on balances (_nonRebasingBalances) round down (to zero)
+ *     Floating point operations on the total supply (nonRebasingSupply) round up (to positive infinity)
+ *     For this reason, the sum of all internal floating-point balances may not be equal to the floating-poin supply (nonRebasingSupply),
+ *     specially when the balances and supply in normal integer numbers occupy more than 113 bits (the accuracy of FP)
  */
 abstract contract MAAM {
     using ResettableBalancesBytes16 for ResettableBalancesBytes16.ResettableBalances;
@@ -41,7 +41,7 @@ abstract contract MAAM {
                              METADATA STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    IPoolLogic internal immutable POOL_LOGIC;
+    IPoolLogic internal immutable _POOL_LOGIC;
 
     string public name;
 
@@ -90,7 +90,7 @@ abstract contract MAAM {
         symbol = TokenNaming._generateSymbol("MAAM", address(this));
         decimals = IERC20(collateralToken).decimals();
 
-        POOL_LOGIC = IPoolLogic(poolLogic);
+        _POOL_LOGIC = IPoolLogic(poolLogic);
 
         _INITIAL_CHAIN_ID = block.chainid;
         _INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
@@ -108,11 +108,7 @@ abstract contract MAAM {
         return true;
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         if (allowance[from][msg.sender] != type(uint256).max) {
             allowance[from][msg.sender] -= amount;
         }
@@ -137,13 +133,13 @@ abstract contract MAAM {
 
         // Update SIR issuances
         bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        POOL_LOGIC.updateIssuance(
+        _POOL_LOGIC.updateIssuance(
             msg.sender,
             _nonRebasingBalances.timestampedBalances[msg.sender].balance,
             nonRebasingBalance,
             nonRebasingSupplyExcludePOL_
         );
-        POOL_LOGIC.updateIssuance(
+        _POOL_LOGIC.updateIssuance(
             to,
             _nonRebasingBalances.timestampedBalances[to].balance,
             _nonRebasingBalances.get(to),
@@ -166,14 +162,10 @@ abstract contract MAAM {
         return true;
     }
 
-    function _mint(
-        address account,
-        uint256 amount,
-        uint256 totalSupply_
-    ) internal {
+    function _mint(address account, uint256 amount, uint256 totalSupply_) internal {
         // Update SIR issuance
         bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        POOL_LOGIC.updateIssuance(
+        _POOL_LOGIC.updateIssuance(
             account,
             _nonRebasingBalances.timestampedBalances[account].balance,
             _nonRebasingBalances.get(account),
@@ -200,16 +192,12 @@ abstract contract MAAM {
         emit Transfer(address(0), account, amount);
     }
 
-    function _burn(
-        address account,
-        uint256 amount,
-        uint256 totalSupply_
-    ) internal {
+    function _burn(address account, uint256 amount, uint256 totalSupply_) internal {
         require(amount <= totalSupply_, "Insufficient balance");
 
         // Update SIR issuance
         bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        POOL_LOGIC.updateIssuance(
+        _POOL_LOGIC.updateIssuance(
             account,
             _nonRebasingBalances.timestampedBalances[account].balance,
             _nonRebasingBalances.get(account),
@@ -234,22 +222,18 @@ abstract contract MAAM {
                         WRITE (PRIVATE) FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount
-    ) private {
+    function _transfer(address from, address to, uint256 amount) private {
         require(to != address(0), "ERC20: transfer to the zero address");
 
         // Update SIR issuances
         bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        POOL_LOGIC.updateIssuance(
+        _POOL_LOGIC.updateIssuance(
             from,
             _nonRebasingBalances.timestampedBalances[from].balance,
             _nonRebasingBalances.get(from),
             nonRebasingSupplyExcludePOL_
         );
-        POOL_LOGIC.updateIssuance(
+        _POOL_LOGIC.updateIssuance(
             to,
             _nonRebasingBalances.timestampedBalances[to].balance,
             _nonRebasingBalances.get(to),
@@ -270,12 +254,12 @@ abstract contract MAAM {
     }
 
     function _fixSupplyDivergence(uint256 totalSupply_) private {
-        if (nonRebasingSupply == FloatingPoint.ZERO && totalSupply_ > 0)
+        if (nonRebasingSupply == FloatingPoint.ZERO && totalSupply_ > 0) {
             // Mint POL
             _nonRebasingBalances.increase(address(this), FloatingPoint.fromUInt(totalSupply_));
-        else if (nonRebasingSupply != FloatingPoint.ZERO && totalSupply_ == 0) {
+        } else if (nonRebasingSupply != FloatingPoint.ZERO && totalSupply_ == 0) {
             // Liquidate
-            POOL_LOGIC.haultLPersIssuances(nonRebasingSupply.subUp(_nonRebasingBalances.get(address(this))));
+            _POOL_LOGIC.haultLPersIssuances(nonRebasingSupply.subUp(_nonRebasingBalances.get(address(this))));
             nonRebasingSupply = FloatingPoint.ZERO;
             _nonRebasingBalances.reset();
             emit Liquidation(totalSupply_);
@@ -311,15 +295,7 @@ abstract contract MAAM {
         return nonRebasingBalance;
     }
 
-    function parametersForSIRContract(address account)
-        external
-        view
-        returns (
-            bytes16,
-            bytes16,
-            bytes16
-        )
-    {
+    function parametersForSIRContract(address account) external view returns (bytes16, bytes16, bytes16) {
         return (
             _nonRebasingBalances.timestampedBalances[account].balance,
             _nonRebasingBalances.get(account),
@@ -328,7 +304,7 @@ abstract contract MAAM {
     }
 
     /**
-        @return number of times MAAM has been liquidated 
+     * @return number of times MAAM has been liquidated
      */
     function numberOfLiquidations() external view returns (uint216) {
         return _nonRebasingBalances.numLiquidations;
@@ -338,15 +314,9 @@ abstract contract MAAM {
                               EIP-2612 LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function permit(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) public {
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        public
+    {
         require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
 
         // Unchecked because the only math done is incrementing
@@ -374,15 +344,14 @@ abstract contract MAAM {
     }
 
     function _computeDomainSeparator() private view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                    keccak256(bytes(name)),
-                    keccak256(bytes("1")),
-                    block.chainid,
-                    address(this)
-                )
-            );
+        return keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name)),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(this)
+            )
+        );
     }
 }

@@ -12,18 +12,9 @@ interface IFactory is IPoolLogic {
     function poolsParameters(address)
         external
         view
-        returns (
-            address debtToken,
-            address collateralToken,
-            address oracle,
-            int8 leverageTier
-        );
+        returns (address debtToken, address collateralToken, address oracle, int8 leverageTier);
 
-    function createPool(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) external;
+    function createPool(address debtToken, address collateralToken, int8 leverageTier) external;
 
     function newUniswapFeeTier(uint24 uniswapFeeTier) external;
 }

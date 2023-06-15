@@ -164,8 +164,8 @@ library ABDKMath64x64 {
         unchecked {
             if (x == MIN_64x64) {
                 require(
-                    y >= -0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF &&
-                        y <= 0x1000000000000000000000000000000000000000000000000
+                    y >= -0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                        && y <= 0x1000000000000000000000000000000000000000000000000
                 );
                 return -y << 63;
             } else {
@@ -648,8 +648,9 @@ library ABDKMath64x64 {
 
             uint256 result;
 
-            if (x <= 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF) result = (x << 64) / y;
-            else {
+            if (x <= 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF) {
+                result = (x << 64) / y;
+            } else {
                 uint256 msb = 192;
                 uint256 xc = x >> 192;
                 if (xc >= 0x100000000) {
@@ -708,8 +709,9 @@ library ABDKMath64x64 {
      */
     function sqrtu(uint256 x) private pure returns (uint128) {
         unchecked {
-            if (x == 0) return 0;
-            else {
+            if (x == 0) {
+                return 0;
+            } else {
                 uint256 xx = x;
                 uint256 r = 1;
                 if (xx >= 0x100000000000000000000000000000000) {

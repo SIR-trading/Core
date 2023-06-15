@@ -48,7 +48,7 @@ abstract contract SyntheticToken is Owned {
     uint256 public totalSupply;
 
     /**
-        @notice SyntheticToken is the base contract of all TEA & APE tokens because logic-wise TEA and APE are identical.
+     * @notice SyntheticToken is the base contract of all TEA & APE tokens because logic-wise TEA and APE are identical.
      */
     ResettableBalancesUInt216.ResettableBalances private _balances;
 
@@ -116,11 +116,7 @@ abstract contract SyntheticToken is Owned {
         return true;
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) external returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         if (allowance[from][msg.sender] != type(uint256).max) {
             allowance[from][msg.sender] -= amount;
         }
@@ -137,15 +133,9 @@ abstract contract SyntheticToken is Owned {
                               EIP-2612 LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function permit(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external {
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+    {
         require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
 
         // Unchecked because the only math done is incrementing
@@ -173,16 +163,15 @@ abstract contract SyntheticToken is Owned {
     }
 
     function _computeDomainSeparator() private view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                    keccak256(bytes(name)),
-                    keccak256(bytes("1")),
-                    block.chainid,
-                    address(this)
-                )
-            );
+        return keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name)),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -211,7 +200,7 @@ abstract contract SyntheticToken is Owned {
     }
 
     /**
-        @notice It resets all balances to 0
+     * @notice It resets all balances to 0
      */
     function liquidate() external onlyOwner {
         if (totalSupply == 0) return;
@@ -231,7 +220,7 @@ abstract contract SyntheticToken is Owned {
     }
 
     /**
-        @return number of times MAAM has been liquidated 
+     * @return number of times MAAM has been liquidated
      */
     function numberOfLiquidations() public view returns (uint216) {
         return _balances.numLiquidations;

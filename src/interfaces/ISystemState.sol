@@ -10,11 +10,7 @@ interface ISystemState is IFees, ISIR {
 
     function onlyWithdrawals() external view returns (bool);
 
-    function updateSystemParameters(
-        uint40 tsIssuanceStart_,
-        uint16 basisFee_,
-        bool onlyWithdrawals_
-    ) external;
+    function updateSystemParameters(uint40 tsIssuanceStart_, uint16 basisFee_, bool onlyWithdrawals_) external;
 
     function setPoolsIssuances() external;
 
@@ -28,11 +24,8 @@ interface ISystemState is IFees, ISIR {
         uint256 sumTaxes
     ) external returns (bytes32);
 
-    function recalibratePoolsIssuances(
-        address[] calldata pools,
-        bytes16[] memory latestSuppliesMAAM,
-        uint256 sumTaxes
-    ) external;
+    function recalibratePoolsIssuances(address[] calldata pools, bytes16[] memory latestSuppliesMAAM, uint256 sumTaxes)
+        external;
 
     function changeContributorsIssuances(
         address[] calldata prevContributors,

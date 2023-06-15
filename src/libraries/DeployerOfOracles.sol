@@ -9,11 +9,10 @@ import "../Oracle.sol";
 
 library DeployerOfOracles {
     // Deploy oracle
-    function deployOracle(
-        address tokenA,
-        address tokenB,
-        Oracle.UniswapFeeTier[] memory uniswapFeeTiers
-    ) external returns (address) {
+    function deployOracle(address tokenA, address tokenB, Oracle.UniswapFeeTier[] memory uniswapFeeTiers)
+        external
+        returns (address)
+    {
         // Retrieve oracle address
         address addrOracle = AddressOracle.get(address(this), tokenA, tokenB);
 
@@ -30,11 +29,7 @@ library DeployerOfOracles {
         return addrOracle;
     }
 
-    function getAddress(
-        address factory,
-        address tokenA,
-        address tokenB
-    ) external pure returns (address) {
+    function getAddress(address factory, address tokenA, address tokenB) external pure returns (address) {
         return AddressOracle.get(factory, tokenA, tokenB);
     }
 }

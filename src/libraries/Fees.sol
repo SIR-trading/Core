@@ -5,19 +5,19 @@ pragma solidity ^0.8.0;
 import "./FullMath.sol";
 
 /**
-    @notice	Smart contract for computing fees in SIR.
+ * @notice	Smart contract for computing fees in SIR.
  */
 
 library Fees {
     /**
-        FeesParameters compacts all parameters and avoid "stack to deep" compiling errors
-        basisFee: indicates the fee in basis points charged to gentlmen/apes per unit of liquidity.
-        isMint: is true if the fee is computed for minting TEA/APE, or false for burning TEA/APE
-        collateralInOrOut: is the collateral send or burnt by the user
-        reserveSyntheticToken: is the amount of collateral in the pool for gentlemen/apes
-        reserveOtherToken: is the amount of collateral in the pool for apes/gentlemen
-        collateralizationOrLeverageTier: is the collateralization factor or leverage tier
-    */
+     * FeesParameters compacts all parameters and avoid "stack to deep" compiling errors
+     *     basisFee: indicates the fee in basis points charged to gentlmen/apes per unit of liquidity.
+     *     isMint: is true if the fee is computed for minting TEA/APE, or false for burning TEA/APE
+     *     collateralInOrOut: is the collateral send or burnt by the user
+     *     reserveSyntheticToken: is the amount of collateral in the pool for gentlemen/apes
+     *     reserveOtherToken: is the amount of collateral in the pool for apes/gentlemen
+     *     collateralizationOrLeverageTier: is the collateralization factor or leverage tier
+     */
     struct FeesParameters {
         uint16 basisFee;
         bool isMint;
@@ -28,10 +28,10 @@ library Fees {
     }
 
     /**
-        @notice The user mints/burns TEA/APE and a fee is substracted
-        @return collateralDepositedOrWithdrawn
-        @return comission to LPers
-    */
+     * @notice The user mints/burns TEA/APE and a fee is substracted
+     *     @return collateralDepositedOrWithdrawn
+     *     @return comission to LPers
+     */
     function _hiddenFee(FeesParameters memory feesParams)
         internal
         pure

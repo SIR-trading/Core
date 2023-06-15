@@ -14,17 +14,12 @@ library ResettableBalancesUInt216 {
     }
 
     function get(ResettableBalances storage resettableBalances, address account) public view returns (uint216) {
-        return
-            resettableBalances.tsLastLiquidation < resettableBalances.timestampedBalances[account].tsLastUpdate
-                ? 0
-                : resettableBalances.timestampedBalances[account].balance;
+        return resettableBalances.tsLastLiquidation < resettableBalances.timestampedBalances[account].tsLastUpdate
+            ? 0
+            : resettableBalances.timestampedBalances[account].balance;
     }
 
-    function set(
-        ResettableBalances storage resettableBalances,
-        address account,
-        uint256 value
-    ) external {
+    function set(ResettableBalances storage resettableBalances, address account, uint256 value) external {
         uint216 value_ = uint216(value);
         require(value_ == value);
         resettableBalances.timestampedBalances[account].balance = value_;
@@ -36,22 +31,14 @@ library ResettableBalancesUInt216 {
         resettableBalances.numLiquidations++;
     }
 
-    function increase(
-        ResettableBalances storage resettableBalances,
-        address account,
-        uint256 value
-    ) internal {
+    function increase(ResettableBalances storage resettableBalances, address account, uint256 value) internal {
         uint216 value_ = uint216(value);
         require(value_ == value);
         resettableBalances.timestampedBalances[account].balance = get(resettableBalances, account) + value_;
         resettableBalances.timestampedBalances[account].tsLastUpdate = uint40(block.timestamp);
     }
 
-    function decrease(
-        ResettableBalances storage resettableBalances,
-        address account,
-        uint256 value
-    ) internal {
+    function decrease(ResettableBalances storage resettableBalances, address account, uint256 value) internal {
         uint216 value_ = uint216(value);
         require(value_ == value);
         resettableBalances.timestampedBalances[account].balance = get(resettableBalances, account) - value_;

@@ -10,7 +10,7 @@ import "./libraries/Addresses.sol";
 import "./libraries/DeployerOfOracles.sol";
 
 contract Factory {
-    address private immutable POOL_LOGIC;
+    address private immutable _POOL_LOGIC;
 
     // List of Uniswap v3 fee tiers
     Oracle.UniswapFeeTier[] public uniswapFeeTiers;
@@ -23,10 +23,11 @@ contract Factory {
         address oracle;
         int8 leverageTier; // Only 4 bytes for efficient storage
     }
+
     mapping(address => PoolParameters) public poolsParameters;
 
     constructor(address poolLogic) {
-        POOL_LOGIC = poolLogic;
+        _POOL_LOGIC = poolLogic;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -34,18 +35,13 @@ contract Factory {
     ////////////////////////////////////////////////////////////////*/
 
     // Creates a pool
-    function createPool(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) public {
+    function createPool(address debtToken, address collateralToken, int8 leverageTier) public {
         // Create oracle if it does not exist
         address oracle = DeployerOfOracles.deployOracle(debtToken, collateralToken, uniswapFeeTiers);
 
         // Create pool
-        address pool = address(
-            new Pool{salt: bytes32(0)}(debtToken, collateralToken, leverageTier, oracle, POOL_LOGIC)
-        );
+        address pool =
+            address(new Pool{salt: bytes32(0)}(debtToken, collateralToken, leverageTier, oracle, _POOL_LOGIC));
 
         // Store all parameters in an easy to access array
         poolsAddresses.push(pool);
