@@ -7,9 +7,7 @@ import "./interfaces/IFactory.sol";
 import "./interfaces/ISystemState.sol";
 
 // Smart contracts
-import "@openzeppelin/contracts/access/Ownable.sol";
-
-import "hardhat/console.sol";
+import "openzeppelin/access/Ownable.sol";
 
 contract SystemControl is Ownable {
     event systemRunning();

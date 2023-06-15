@@ -2,18 +2,16 @@
 pragma solidity >=0.8.0;
 
 // Interfaces
-import "@uniswap/v2-core/contracts/interfaces/IERC20.sol";
+import "uniswap-v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import "./libraries/FullMath.sol";
 import "./libraries/TokenNaming.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
+import "openzeppelin/utils/Strings.sol";
 import "./libraries/ResettableBalancesUInt216.sol";
 
 // Contracts
 import "./Owned.sol";
-
-import "hardhat/console.sol";
 
 /// @notice Highly modified ERC20 from Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/IERC20.sol)
 abstract contract SyntheticToken is Owned {

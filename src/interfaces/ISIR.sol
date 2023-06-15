@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import "@uniswap/v2-core/contracts/interfaces/IERC20.sol";
+import "uniswap-v2-core/interfaces/IERC20.sol";
 
 interface ISIR is IERC20 {
     function ISSUANCE_RATE() external view returns (uint72);

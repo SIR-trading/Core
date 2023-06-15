@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity >=0.6.0;
 
-import "@uniswap/v2-core/contracts/interfaces/IERC20.sol";
+import "uniswap-v2-core/interfaces/IERC20.sol";
 
 ///@notice Modified version of @uniswap/v3-core/contracts/libraries/LowGasSafeMath.sol
 library TransferHelper {

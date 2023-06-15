@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
+import "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 import "./interfaces/IFactory.sol";
 
 // Libraries
@@ -12,8 +12,6 @@ import "./libraries/UniswapPoolAddress.sol";
 
 // Contracts
 import "./libraries/Addresses.sol";
-
-import "hardhat/console.sol";
 
 /**
     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
@@ -385,9 +383,6 @@ contract Oracle {
         @dev https://uniswap.org/blog/uniswap-v3-oracles#potential-oracle-innovations
      */
     function _truncatePrice(bytes16 priceFP_) internal view returns (bytes16) {
-        console.logBytes16(_priceFP);
-        console.log("_tsPrice", _tsPrice);
-        // console.log("block.timestamp", block.timestamp);
         bytes16 maxPriceAttenuation = uniswapFeeTiers[_indexCurrentFeeTier].maxPriceAttenPerSec.pow(
             FloatingPoint.fromUInt(block.timestamp - _tsPrice)
         );

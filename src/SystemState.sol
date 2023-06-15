@@ -8,8 +8,7 @@ import "./interfaces/IPool.sol";
 import "./libraries/FloatingPoint.sol";
 
 // Contracts
-import "@rari-capital/solmate/src/tokens/ERC20.sol";
-import "hardhat/console.sol";
+import "solmate/tokens/ERC20.sol";
 
 contract SystemState is ERC20 {
     using FloatingPoint for bytes16;

@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import "./SystemState.sol";
 
 // Interfaces
-import "@uniswap/v2-core/contracts/interfaces/IERC20.sol";
+import "uniswap-v2-core/interfaces/IERC20.sol";
 import "./interfaces/PoolStructs.sol";
 
 // Libraries

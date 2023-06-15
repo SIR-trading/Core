@@ -2,9 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Smart contracts
-import "@rari-capital/solmate/src/tokens/ERC20.sol";
-
-import "hardhat/console.sol";
+import "solmate/tokens/ERC20.sol";
 
 contract MockERC20 is ERC20 {
     constructor(

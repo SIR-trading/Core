@@ -3,8 +3,7 @@ pragma solidity ^0.8.0;
 
 // Smart contracts
 import "../libraries/FullMath.sol";
-import "@uniswap/v3-core/contracts/libraries/FixedPoint96.sol";
-import "hardhat/console.sol";
+import "uniswap-v3-core/libraries/FixedPoint96.sol";
 
 contract MockLiquidityAmounts {
     function getAmountsForLiquidity(

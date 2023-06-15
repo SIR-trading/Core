@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-import "@uniswap/v2-core/contracts/interfaces/IERC20.sol";
+import "uniswap-v2-core/interfaces/IERC20.sol";
 
 interface ISyntheticToken is IERC20 {
     event Liquidation(uint256 amount);

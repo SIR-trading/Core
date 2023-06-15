@@ -12,7 +12,6 @@ import "./libraries/DeployerOfTokens.sol";
 // Contracts
 import "./MAAM.sol";
 
-import "hardhat/console.sol";
 
 /** @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
  *  @dev The price of the collateral vs rewards token is also represented as FP.
