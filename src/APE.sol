@@ -6,7 +6,7 @@ import "./SyntheticToken.sol";
 
 contract APE is SyntheticToken {
     constructor(address debtToken, address collateralToken, int8 leverageTier)
-        SyntheticToken( 
+        SyntheticToken(
             _generateName(debtToken, collateralToken, leverageTier),
             "APE",
             IERC20(collateralToken).decimals(),

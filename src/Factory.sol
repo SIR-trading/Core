@@ -2,12 +2,12 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import "uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
-import "./Pool.sol";
+import {IUniswapV3Factory} from "uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
+import {Pool} from "./Pool.sol";
 
 // Libraries
-import "./libraries/Addresses.sol";
-import "./libraries/DeployerOfOracles.sol";
+import {Addresses} from "./libraries/Addresses.sol";
+import {DeployerOfOracles, Oracle} from "./libraries/DeployerOfOracles.sol";
 
 contract Factory {
     address private immutable _POOL_LOGIC;

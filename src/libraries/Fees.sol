@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Libraries
-import "./FullMath.sol";
+import {FullMath} from "./FullMath.sol";
 
 /**
  * @notice	Smart contract for computing fees in SIR.
@@ -32,36 +32,80 @@ library Fees {
      *     @return collateralDepositedOrWithdrawn
      *     @return comission to LPers
      */
-    function _hiddenFee(FeesParameters memory feesParams)
+    function _hiddenFee(
+        FeesParameters memory feesParams
+    )
         internal
         pure
         returns (uint256 collateralDepositedOrWithdrawn, uint256 comission)
     {
         unchecked {
-            uint256 temp = feesParams.collateralizationOrLeverageTier >= 0
-                ? feesParams.reserveOtherToken >> uint256(feesParams.collateralizationOrLeverageTier)
-                : feesParams.reserveOtherToken << uint256(-feesParams.collateralizationOrLeverageTier);
+            uint256 maxFreeReserveSyntheticToken;
+            if (feesParams.collateralizationOrLeverageTier >= 0) {
+                maxFreeReserveSyntheticToken =
+                    feesParams.reserveOtherToken >>
+                    uint256(feesParams.collateralizationOrLeverageTier);
+            } else {
+                maxFreeReserveSyntheticToken =
+                    feesParams.reserveOtherToken <<
+                    uint256(-feesParams.collateralizationOrLeverageTier);
+
+                if (
+                    maxFreeReserveSyntheticToken >>
+                        uint256(-feesParams.collateralizationOrLeverageTier) !=
+                    feesParams.reserveOtherToken
+                ) maxFreeReserveSyntheticToken = type(uint256).max;
+            }
+
             uint256 taxFreeCollateral = feesParams.isMint
-                ? (temp > feesParams.reserveSyntheticToken ? temp - feesParams.reserveSyntheticToken : 0)
-                : (feesParams.reserveSyntheticToken > temp ? feesParams.reserveSyntheticToken - temp : 0);
+                ? (
+                    maxFreeReserveSyntheticToken >
+                        feesParams.reserveSyntheticToken
+                        ? maxFreeReserveSyntheticToken -
+                            feesParams.reserveSyntheticToken
+                        : 0
+                )
+                : (
+                    feesParams.reserveSyntheticToken >
+                        maxFreeReserveSyntheticToken
+                        ? feesParams.reserveSyntheticToken -
+                            maxFreeReserveSyntheticToken
+                        : 0
+                );
 
-            if (taxFreeCollateral >= feesParams.collateralInOrOut) return (feesParams.collateralInOrOut, 0);
+            if (taxFreeCollateral >= feesParams.collateralInOrOut)
+                return (feesParams.collateralInOrOut, 0);
 
-            uint256 taxableCollateral = feesParams.collateralInOrOut - taxFreeCollateral;
+            uint256 taxableCollateral = feesParams.collateralInOrOut -
+                taxFreeCollateral;
 
             uint256 feeNum;
             uint256 feeDen;
             if (feesParams.collateralizationOrLeverageTier >= 0) {
-                feeNum = uint256(feesParams.basisFee) << uint256(feesParams.collateralizationOrLeverageTier);
-                feeDen = 10000 + (uint256(feesParams.basisFee) << uint256(feesParams.collateralizationOrLeverageTier));
+                feeNum =
+                    uint256(feesParams.basisFee) <<
+                    uint256(feesParams.collateralizationOrLeverageTier);
+                feeDen =
+                    10000 +
+                    (uint256(feesParams.basisFee) <<
+                        uint256(feesParams.collateralizationOrLeverageTier));
             } else {
                 feeNum = uint256(feesParams.basisFee);
-                feeDen = (10000 << uint256(-feesParams.collateralizationOrLeverageTier)) + uint256(feesParams.basisFee);
+                feeDen =
+                    (10000 <<
+                        uint256(-feesParams.collateralizationOrLeverageTier)) +
+                    uint256(feesParams.basisFee);
             }
 
             // Split taxableCollateral into comission and collateralDepositedOrWithdrawn
-            comission = FullMath.mulDivRoundingUp(taxableCollateral, feeNum, feeDen);
-            collateralDepositedOrWithdrawn = feesParams.collateralInOrOut - comission;
+            comission = FullMath.mulDivRoundingUp(
+                taxableCollateral,
+                feeNum,
+                feeDen
+            );
+            collateralDepositedOrWithdrawn =
+                feesParams.collateralInOrOut -
+                comission;
         }
     }
 }

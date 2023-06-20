@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 abstract contract Owned {
     address public immutable OWNER;
 
-    modifier onlyOwner() { 
+    modifier onlyOwner() {
         require(OWNER == msg.sender);
         _;
     }

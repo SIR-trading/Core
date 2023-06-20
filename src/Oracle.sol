@@ -22,23 +22,23 @@ import "./libraries/Addresses.sol";
 
 /**
  * ON MULTI-BLOCK ORALCE ATTACK
- * 
+ *
  *     Oracle manipulation is a problem that has plagued the DeFi space since the beginning.
  *     The problem is that a malicious actor can manipulate the price of an asset by front-running a transaction and then reverting it.
  *     This is a problem because the price oracle is used to determine the price of an asset,
  *     and the price of an asset is used to determine the amount of collateral that is required to mint a synthetic token.
  *     If the price of an asset is manipulated, then the amount of collateral required to mint a synthetic token can be manipulated.
- * 
+ *
  *     The solution to this problem is to use a TWAP (time-weighted average price) instead of a single price point.
  *     The TWAP is calculated by taking the average price of an asset over a certain amount of time.
  *     This means that the price of an asset is less susceptible to manipulation because the price of an asset is the average price over a certain amount of time.
  *     The longer the TWAP, the less susceptible the price is to manipulation.
- *     
- *     For more information read https://uniswap.org/blog/uniswap-v3-oracles
- * 
  *
- *     ANALYSIS OF ORACLE ATTACK IN SIR TRADING 
- * 
+ *     For more information read https://uniswap.org/blog/uniswap-v3-oracles
+ *
+ *
+ *     ANALYSIS OF ORACLE ATTACK IN SIR TRADING
+ *
  *     To analyze SIR, we look at worst case scenarios. If the attacker wanted to manipulate the price up, the worse case scenario for SIR would be when there are only
  *     gentlemen because minting fresh APE or MAAM will have maximum leverage. That is totalReserve = gentlemenReserve. Since LPers do not pay fees to mint,
  *     the steps of an attack maximizing profit are:
@@ -46,28 +46,28 @@ import "./libraries/Addresses.sol";
  *     2. Attacker manipulates price up
  *     3. Attacker burns MAAM getting more collateral in return
  *     4. Attacker returns price to market price
- * 
+ *
  *     Let z denote value of the LPer's minted MAAM, let R be the value of the total reserve, let T be the amoung of minted TEA, and let p be the price of the collateral.
  *     A) After minting MAAM, R' = R + z = T/p + z
  *     B) As price goes up, the LPer's new holding is: z' = R' - T/p' = z + T(1/p - 1/p')
  *     C) Upon defining the price gain as g = p'/p, we get that the attacker's profit is z'-z = R(1-1/g)
- * 
+ *
  *     Neglecting the cost of capital, the cost of this attack is the cost of manipulating the Uniswap v3 TWAP.
  *     In the worse case scenario, all Uni v3 liquidity (say Q) is concentrated just above the current price.
  *     D) So the cost of manipulating the price are the trading fees: 2*Q*f where f is the fee portion charged counted twice because the attacker must eventually revert the trade.
- *     
+ *
  *     Furthermore, we assume the attacker can maintain this attack for 5 straight blocks without suffering arbitrage losses, which would in a normal situation incurs in huge losses.
  *     The total profit of the attacker under these assumptions is:
  *     E) R(1-1/g) - 2*Q*f
- * 
+ *
  *     If we wish to make this attack unprofitable whenever R ≤ Q, we get that the maximum price gain allowed over 5 blocks must not be greater than
  *     gmax = 1/(1-2f)
  *     For instance, if f = 0.05%, then gmax = 1/(1-2*0.0005) = 1.001, which means that the TWAP can only go up by 0.1% in 1 minute.
  *     For a 1h TWAP, the instance price would be allowed to increase 34% from block-to-block.
- * 
+ *
  *
  *     ABOUT PRICE CALCULATION ACROSS FEE TIERS
- * 
+ *
  *     A TWAP weighted across pools of different liquidity is just as weak as the weakest pool (pool with least liquiity).
  *     For this reason, we select the best pool acrooss all fee tiers with the highest liquidity by tick weighted by fee, because as
  *     shown in the previous section, the fee has a direct impact on the price manipulation cost.

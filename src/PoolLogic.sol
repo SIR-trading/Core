@@ -215,10 +215,12 @@ contract PoolLogic is SystemState {
             // COMPUTE APES RESERVE
             if (pLow == state.pHigh) {
                 reserves.apesReserve = state.totalReserves - reserves.gentlemenReserve;
-            } // No liquidity providers
+            }
+            // No liquidity providers
             else if (state.pHigh == FloatingPoint.INFINITY) {
                 reserves.apesReserve = 0;
-            } // No apes
+            }
+            // No apes
             else if (price.cmp(pLow) <= 0) {
                 /**
                  * PRICE BELOW PSR

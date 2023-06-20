@@ -5,7 +5,7 @@ import "./FullMath.sol";
 /**
  * @notice This a modified version of ABDK Math Quad Smart Contract Library
  *     by Mikhail Vladimirov <mikhail.vladimirov@gmail.com> found at https://github.com/abdk-consulting/abdk-libraries-solidity/blob/master/ABDKMathQuad.md
- * 
+ *
  *     @dev Sub-normals are REMOVED for all functions because they add extra complexity for negligible gain.
  *     @dev Negative numbers are REMOVED, except for fromInt() and  mul() whose 1st parameter is allowed to be negative.
  *     @dev NaN & -INFINITY are REMOVED. Functions only output positive numbers, INFINITY or revert().
@@ -25,7 +25,7 @@ library FloatingPoint {
     /**
      * @notice Convert signed 256-bit integer number into quadruple precision number.
      *     @notice Rounds towards zero
-     * 
+     *
      *     @param x Unsigned 256-bit integer number
      *     @return Quadruple precision number
      */
@@ -45,7 +45,7 @@ library FloatingPoint {
     /**
      * @notice Convert unsigned 256-bit integer number into quadruple precision number.
      *     @notice Rounds down
-     * 
+     *
      *     @param x Unsigned 256-bit integer number
      *     @return Quadruple precision positive number
      */
@@ -59,7 +59,7 @@ library FloatingPoint {
     /**
      * @notice Convert unsigned 256-bit integer number into quadruple precision number.
      *     @notice Rounds up
-     * 
+     *
      *     @param x Unsigned 256-bit integer number
      *     @return Quadruple precision positive number
      */
@@ -93,7 +93,7 @@ library FloatingPoint {
     /**
      * @notice Convert quadruple precision number into unsigned 256-bit integer number
      *     @notice Rounds down
-     * 
+     *
      *     @param x Quadruple precision number
      *     @return Unsigned 256-bit integer number. Reverts on overflow.
      */
@@ -117,7 +117,7 @@ library FloatingPoint {
 
     /**
      * @notice Calculate sign of x, i.e. -1 if x is negative, 0 if x if zero, and 1 if x is positive.
-     * 
+     *
      *     @param x Quadruple precision number
      *     @return Sign of x
      */
@@ -132,9 +132,9 @@ library FloatingPoint {
     }
 
     /**
-     * @notice Calculate sign (x - y). 
+     * @notice Calculate sign (x - y).
      *     @notice Revert if both arguments are infinities.
-     * 
+     *
      *     @param x Quadruple precision number
      *     @param y Quadruple precision number
      *     @return sign (x - y)
@@ -167,7 +167,7 @@ library FloatingPoint {
      * @notice Calculate x + y.
      *     @notice Caller must ensure no OF
      *     @notice Rounds down
-     * 
+     *
      *     @param x quadruple precision positive number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision positive number
@@ -180,7 +180,7 @@ library FloatingPoint {
      * @notice Calculate x + y.
      *     @notice Caller must ensure no OF
      *     @notice Rounds up
-     * 
+     *
      *     @param x quadruple precision positive number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision positive number
@@ -251,7 +251,7 @@ library FloatingPoint {
     /**
      * @notice Calculate x + 1.
      *     @notice Caller must ensure no OF
-     * 
+     *
      *     @param x quadruple precision positive number
      *     @return Quadruple precision positive number
      */
@@ -264,7 +264,7 @@ library FloatingPoint {
      *     @notice Caller must ensure no OF
      *     @notice Revert on UF
      *     @notice Rounds down
-     * 
+     *
      *     @param x quadruple precision positive number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision positive number
@@ -278,7 +278,7 @@ library FloatingPoint {
      *     @notice Caller must ensure no OF
      *     @notice Revert on UF
      *     @notice Rounds up
-     * 
+     *
      *     @param x quadruple precision positive number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision positive number
@@ -290,7 +290,7 @@ library FloatingPoint {
     /**
      * @notice Calculate x - 1.
      *     @notice Revert on UF
-     * 
+     *
      *     @param x quadruple precision positive number
      *     @return Quadruple precision positive number
      */
@@ -361,7 +361,7 @@ library FloatingPoint {
      * @notice Calculate x * y.
      *     @notice Caller must ensure no OF
      *     @notice Rounds towards 0
-     * 
+     *
      *     @param x Quadruple precision number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision number
@@ -374,7 +374,7 @@ library FloatingPoint {
      * @notice Calculate x * y.
      *     @notice Caller must ensure no OF
      *     @notice Rounds towards 0
-     * 
+     *
      *     @param x Quadruple precision number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision number
@@ -427,7 +427,7 @@ library FloatingPoint {
      *     @notice Caller must ensure no x / inf or inf / y or x / 0 does NOT occur
      *     @notice However, in the case of x / y where y is very small and it OF, it returns INFINITY
      *     @notice Rounds down
-     * 
+     *
      *     @param x Quadruple precision positive number
      *     @param y Quadruple precision positive number
      *     @return Quadruple precision positive number
@@ -471,7 +471,7 @@ library FloatingPoint {
     /**
      * @notice Calculate 1/x.
      *     @notice Rounds down
-     * 
+     *
      *     @param x Quadruple precision positive number
      *     @return Quadruple precision positive number
      */
@@ -483,7 +483,7 @@ library FloatingPoint {
      * @notice Computes x * y
      *     @notice Caller must ensure no OF
      *     @notice Rounds down
-     * 
+     *
      *     @param x Quadruple precision positive number
      *     @param y Unsigned integer
      *     @return Unsigned integer
@@ -497,9 +497,9 @@ library FloatingPoint {
      *     @notice Caller must ensure x ≤ z
      *     @notice Rounds down
      *     @notice mulDiv() is better than splitting the * & / operation because it does not degrade the precision.
-     * 
+     *
      *     @param x Quadruple precision positive number
-     *     @param y Unsigned 256-bit integer 
+     *     @param y Unsigned 256-bit integer
      *     @param z Quadruple precision positive number
      *     @return Unsigned 256-bit integer
      */
@@ -547,7 +547,7 @@ library FloatingPoint {
      * @notice Computes x / y
      *     @notice Caller must ensure no OF
      *     @notice Rounds down
-     * 
+     *
      *     @param x Unsigned integer
      *     @param y Unsigned integer
      *     @return Quadruple precision positive number
@@ -561,9 +561,9 @@ library FloatingPoint {
      *     @notice Caller must ensure no OF
      *     @notice Rounds down
      *     @notice mulDiv() is better than splitting the * & / operation because it does not degrade the precision.
-     * 
+     *
      *     @param x Quadruple precision positive number
-     *     @param y Unsigned 256-bit integer 
+     *     @param y Unsigned 256-bit integer
      *     @param z Unsigned 256-bit integer
      *     @return Quadruple precision positive number
      */
@@ -576,9 +576,9 @@ library FloatingPoint {
      *     @notice Caller must ensure no OF
      *     @notice Rounds up
      *     @notice mulDiv() is better than splitting the * & / operation because it does not degrade the precision.
-     * 
+     *
      *     @param x Quadruple precision positive number
-     *     @param y Unsigned 256-bit integer 
+     *     @param y Unsigned 256-bit integer
      *     @param z Unsigned 256-bit integer
      *     @return Quadruple precision positive number
      */
@@ -650,7 +650,7 @@ library FloatingPoint {
      * @notice Calculate 2^x.
      *     @notice Caller must ensure no OF
      *     @notice Rounds down
-     * 
+     *
      *     @param x Quadruple precision number
      *     @return Quadruple precision positive number
      */
@@ -1067,7 +1067,7 @@ library FloatingPoint {
      * @notice Calculate x ** y.
      *     @notice Caller must ensure x≤1 & 0≤y
      *     @notice Rounds down
-     * 
+     *
      *     @param x Quadruple precision number
      *     @return Quadruple precision positive number
      */
@@ -1138,7 +1138,7 @@ library FloatingPoint {
     /**
      * /**
      *     @notice Get index of the most significant non-zero bit in binary representation of unsigned integer.
-     * 
+     *
      *     @param x Unsigned 256-bit non-zero integer
      *     @return Unsigned 256-bit integer
      */

@@ -2,9 +2,11 @@
   "solidity.packageDefaultDependenciesContractsDirectory": "src",
   "solidity.packageDefaultDependenciesDirectory": "lib",
   "solidity.compileUsingRemoteVersion": "v0.8.20",
+
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "solidity.formatter": "prettier",
   "editor.formatOnSave": true,
+
   "[solidity]": {
     "editor.defaultFormatter": "JuanBlanco.solidity"
   }

@@ -58,15 +58,24 @@ contract SystemState is ERC20 {
 
     address public immutable SYSTEM_CONTROL;
 
-    mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
+    mapping(address => ContributorIssuanceParams)
+        internal _contributorsIssuances;
     mapping(address => PoolIssuanceParams) internal _poolsIssuances;
     mapping(address => bytes16[]) internal _liquidationsCumSIRperMAAM; // Stores cumSIRperMAAM value during LP liquidations
-    mapping(address => mapping(address => LPerIssuanceParams)) internal _lpersIssuances;
+    mapping(address => mapping(address => LPerIssuanceParams))
+        internal _lpersIssuances;
 
     SystemParameters public systemParams =
-        SystemParameters({tsIssuanceStart: 0, basisFee: 100, onlyWithdrawals: false, issuanceAllPools: ISSUANCE});
+        SystemParameters({
+            tsIssuanceStart: 0,
+            basisFee: 100,
+            onlyWithdrawals: false,
+            issuanceAllPools: ISSUANCE
+        });
 
-    constructor(address systemControl) ERC20("Governance token of the SIR protocol", "SIR", 18) {
+    constructor(
+        address systemControl
+    ) ERC20("Governance token of the SIR protocol", "SIR", 18) {
         SYSTEM_CONTROL = systemControl;
     }
 
@@ -80,35 +89,41 @@ contract SystemState is ERC20 {
         return ISSUANCE * (block.timestamp - systemParams.tsIssuanceStart);
     }
 
-    function getContributorIssuance(address contributor)
-        public
-        view
-        returns (ContributorIssuanceParams memory contributorParams)
-    {
+    function getContributorIssuance(
+        address contributor
+    ) public view returns (ContributorIssuanceParams memory contributorParams) {
         if (systemParams.tsIssuanceStart == 0) return contributorParams; // Issuance has not started yet
 
         contributorParams = _contributorsIssuances[contributor];
 
         if (block.timestamp < systemParams.tsIssuanceStart + _THREE_YEARS) {
             // Still within the 3 years that contributors receive rewards
-            contributorParams.rewards += contributorParams.issuance
-                * uint128(
-                    block.timestamp
-                        - (
-                            systemParams.tsIssuanceStart > contributorParams.tsLastUpdate
+            contributorParams.rewards +=
+                contributorParams.issuance *
+                uint128(
+                    block.timestamp -
+                        (
+                            systemParams.tsIssuanceStart >
+                                contributorParams.tsLastUpdate
                                 ? systemParams.tsIssuanceStart
                                 : contributorParams.tsLastUpdate
                         )
                 );
         } else {
             // Already exceeded 3 years
-            if (contributorParams.tsLastUpdate < systemParams.tsIssuanceStart + _THREE_YEARS) {
+            if (
+                contributorParams.tsLastUpdate <
+                systemParams.tsIssuanceStart + _THREE_YEARS
+            ) {
                 // Update the rewards up to 3 yeards
-                contributorParams.rewards += contributorParams.issuance
-                    * uint128(
-                        systemParams.tsIssuanceStart + _THREE_YEARS
-                            - (
-                                systemParams.tsIssuanceStart > contributorParams.tsLastUpdate
+                contributorParams.rewards +=
+                    contributorParams.issuance *
+                    uint128(
+                        systemParams.tsIssuanceStart +
+                            _THREE_YEARS -
+                            (
+                                systemParams.tsIssuanceStart >
+                                    contributorParams.tsLastUpdate
                                     ? systemParams.tsIssuanceStart
                                     : contributorParams.tsLastUpdate
                             )
@@ -120,10 +135,23 @@ contract SystemState is ERC20 {
         contributorParams.tsLastUpdate = uint40(block.timestamp);
     }
 
-    function getLPerIssuance(address pool, address LPer) public view returns (LPerIssuanceParams memory) {
-        (bytes16 lastNonZeroBalance, bytes16 latestBalance, bytes16 latestSupplyMAAM) =
-            IPool(pool).parametersForSIRContract(LPer);
-        return _getLPerIssuance(pool, LPer, lastNonZeroBalance, latestBalance, latestSupplyMAAM);
+    function getLPerIssuance(
+        address pool,
+        address LPer
+    ) public view returns (LPerIssuanceParams memory) {
+        (
+            bytes16 lastNonZeroBalance,
+            bytes16 latestBalance,
+            bytes16 latestSupplyMAAM
+        ) = IPool(pool).parametersForSIRContract(LPer);
+        return
+            _getLPerIssuance(
+                pool,
+                LPer,
+                lastNonZeroBalance,
+                latestBalance,
+                latestSupplyMAAM
+            );
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -132,7 +160,8 @@ contract SystemState is ERC20 {
 
     function contributorMint() external {
         // Get contributor issuance parameters
-        ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
+        ContributorIssuanceParams
+            memory contributorParams = getContributorIssuance(msg.sender);
 
         // Mint if any rewards
         require(contributorParams.rewards > 0);
@@ -145,7 +174,10 @@ contract SystemState is ERC20 {
 
     function LPerMint(address pool) external {
         // Get LPer issuance parameters
-        LPerIssuanceParams memory lperIssuance = getLPerIssuance(pool, msg.sender);
+        LPerIssuanceParams memory lperIssuance = getLPerIssuance(
+            pool,
+            msg.sender
+        );
 
         // Mint if any rewards
         require(lperIssuance.rewards > 0);
@@ -166,22 +198,33 @@ contract SystemState is ERC20 {
      *     @dev LPer parameters get updated on every call
      *     @dev No-op unless caller is a pool
      */
-    function updateIssuance(address LPer, bytes16 lastNonZeroBalance, bytes16 latestBalance, bytes16 latestSupplyMAAM)
-        external
-    {
+    function updateIssuance(
+        address LPer,
+        bytes16 lastNonZeroBalance,
+        bytes16 latestBalance,
+        bytes16 latestSupplyMAAM
+    ) external {
         if (systemParams.tsIssuanceStart == 0) return; // Issuances has not started
 
         // Update pool issuance params (they only get updated once per block)
         _updatePoolIssuance(latestSupplyMAAM);
 
         // Update LPer issuances params
-        LPerIssuanceParams memory lperIssuance =
-            _getLPerIssuance(msg.sender, LPer, lastNonZeroBalance, latestBalance, latestSupplyMAAM);
+        LPerIssuanceParams memory lperIssuance = _getLPerIssuance(
+            msg.sender,
+            LPer,
+            lastNonZeroBalance,
+            latestBalance,
+            latestSupplyMAAM
+        );
         _lpersIssuances[msg.sender][LPer] = lperIssuance;
     }
 
     function haultLPersIssuances(bytes16 latestSupplyMAAM) external {
-        if (systemParams.tsIssuanceStart == 0 || _poolsIssuances[msg.sender].issuance == 0) return; // This pool gets no SIR anyway
+        if (
+            systemParams.tsIssuanceStart == 0 ||
+            _poolsIssuances[msg.sender].issuance == 0
+        ) return; // This pool gets no SIR anyway
 
         // Update pool issuance params (they only get updated once per block)
         bytes16 cumSIRperMAAM = _updatePoolIssuance(latestSupplyMAAM);
@@ -197,12 +240,16 @@ contract SystemState is ERC20 {
     /**
      * @dev Only one parameter can be updated at one. We use a single function to reduce bytecode size.
      */
-    function updateSystemParameters(uint40 tsIssuanceStart_, uint16 basisFee_, bool onlyWithdrawals_)
-        external
-        onlySystemControl
-    {
+    function updateSystemParameters(
+        uint40 tsIssuanceStart_,
+        uint16 basisFee_,
+        bool onlyWithdrawals_
+    ) external onlySystemControl {
         if (tsIssuanceStart_ > 0) {
-            require(systemParams.tsIssuanceStart == 0, "Issuance already started");
+            require(
+                systemParams.tsIssuanceStart == 0,
+                "Issuance already started"
+            );
             systemParams.tsIssuanceStart = tsIssuanceStart_;
         } else if (basisFee_ > 0) {
             systemParams.basisFee = basisFee_;
@@ -215,21 +262,27 @@ contract SystemState is ERC20 {
                             ADMIN ISSUANCE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function recalibratePoolsIssuances(address[] calldata pools, bytes16[] memory latestSuppliesMAAM, uint256 sumTaxes)
-        public
-        onlySystemControl
-    {
+    function recalibratePoolsIssuances(
+        address[] calldata pools,
+        bytes16[] memory latestSuppliesMAAM,
+        uint256 sumTaxes
+    ) public onlySystemControl {
         // Reset issuance of prev pools
         for (uint256 i = 0; i < pools.length; i++) {
             // Update pool issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
-            _poolsIssuances[pools[i]].cumSIRperMAAM = _getCumSIRperMAAM(pools[i], latestSuppliesMAAM[i]);
+            _poolsIssuances[pools[i]].cumSIRperMAAM = _getCumSIRperMAAM(
+                pools[i],
+                latestSuppliesMAAM[i]
+            );
             _poolsIssuances[pools[i]].tsLastUpdate = uint40(block.timestamp);
             if (sumTaxes == 0) {
                 _poolsIssuances[pools[i]].taxToDAO = 0;
                 _poolsIssuances[pools[i]].issuance = 0;
             } else {
-                _poolsIssuances[pools[i]].issuance =
-                    uint72((systemParams.issuanceAllPools * _poolsIssuances[pools[i]].taxToDAO) / sumTaxes);
+                _poolsIssuances[pools[i]].issuance = uint72(
+                    (systemParams.issuanceAllPools *
+                        _poolsIssuances[pools[i]].taxToDAO) / sumTaxes
+                );
             }
         }
     }
@@ -246,9 +299,13 @@ contract SystemState is ERC20 {
 
         // Set next issuances
         for (uint256 i = 0; i < nextPools.length; i++) {
-            _poolsIssuances[nextPools[i]].tsLastUpdate = uint40(block.timestamp);
+            _poolsIssuances[nextPools[i]].tsLastUpdate = uint40(
+                block.timestamp
+            );
             _poolsIssuances[nextPools[i]].taxToDAO = taxesToDAO[i];
-            _poolsIssuances[nextPools[i]].issuance = uint72((systemParams.issuanceAllPools * taxesToDAO[i]) / sumTaxes);
+            _poolsIssuances[nextPools[i]].issuance = uint72(
+                (systemParams.issuanceAllPools * taxesToDAO[i]) / sumTaxes
+            );
         }
 
         return keccak256(abi.encodePacked(nextPools));
@@ -262,7 +319,10 @@ contract SystemState is ERC20 {
     ) external onlySystemControl returns (bytes32) {
         // Stop issuance of previous contributors
         for (uint256 i = 0; i < prevContributors.length; i++) {
-            ContributorIssuanceParams memory contributorParams = getContributorIssuance(prevContributors[i]);
+            ContributorIssuanceParams
+                memory contributorParams = getContributorIssuance(
+                    prevContributors[i]
+                );
             contributorParams.issuance = 0;
             _contributorsIssuances[prevContributors[i]] = contributorParams;
         }
@@ -271,7 +331,9 @@ contract SystemState is ERC20 {
         uint72 issuanceAllContributors = 0;
         for (uint256 i = 0; i < nextContributors.length; i++) {
             _contributorsIssuances[nextContributors[i]].issuance = issuances[i];
-            _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(block.timestamp);
+            _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(
+                block.timestamp
+            );
 
             issuanceAllContributors += issuances[i]; // Check total issuance does not change
         }
@@ -281,7 +343,9 @@ contract SystemState is ERC20 {
             systemParams.issuanceAllPools = ISSUANCE - issuanceAllContributors;
         } else {
             require(
-                ISSUANCE == issuanceAllContributors + systemParams.issuanceAllPools, "Total issuance must not change"
+                ISSUANCE ==
+                    issuanceAllContributors + systemParams.issuanceAllPools,
+                "Total issuance must not change"
             );
         }
 
@@ -292,7 +356,9 @@ contract SystemState is ERC20 {
                             INTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _updatePoolIssuance(bytes16 latestSupplyMAAM) private returns (bytes16 cumSIRperMAAM) {
+    function _updatePoolIssuance(
+        bytes16 latestSupplyMAAM
+    ) private returns (bytes16 cumSIRperMAAM) {
         // Update pool issuance params (they only get updated once per block)
         cumSIRperMAAM = _getCumSIRperMAAM(msg.sender, latestSupplyMAAM);
         _poolsIssuances[msg.sender].cumSIRperMAAM = cumSIRperMAAM;
@@ -319,8 +385,11 @@ contract SystemState is ERC20 {
         // Find event that liquidated the LPer if it existed
         uint256 i = _lpersIssuances[pool][LPer].indexLiquidations;
         while (
-            i < _liquidationsCumSIRperMAAM[pool].length
-                && _lpersIssuances[pool][LPer].cumSIRperMAAM.cmp(_liquidationsCumSIRperMAAM[pool][i]) >= 0
+            i < _liquidationsCumSIRperMAAM[pool].length &&
+            _lpersIssuances[pool][LPer].cumSIRperMAAM.cmp(
+                _liquidationsCumSIRperMAAM[pool][i]
+            ) >=
+            0
         ) {
             i++;
         }
@@ -329,54 +398,65 @@ contract SystemState is ERC20 {
          * Find out if we must use
          *             latestBalance
          *             lperIssuance.cumSIRperMAAM
-         *         or 
+         *         or
          *             lastNonZeroBalance
          *             _liquidationsCumSIRperMAAM[pool][i]
          */
         bool liquidated = i < _liquidationsCumSIRperMAAM[pool].length;
 
         // Compute rewards
-        lperIssuance.rewards = _lpersIssuances[pool][LPer].rewards
-            + uint104(
-                (liquidated ? _liquidationsCumSIRperMAAM[pool][i] : lperIssuance.cumSIRperMAAM).mul(
-                    liquidated ? lastNonZeroBalance : latestBalance
-                ).toUInt()
+        lperIssuance.rewards =
+            _lpersIssuances[pool][LPer].rewards +
+            uint104(
+                (
+                    liquidated
+                        ? _liquidationsCumSIRperMAAM[pool][i]
+                        : lperIssuance.cumSIRperMAAM
+                ).mul(liquidated ? lastNonZeroBalance : latestBalance).toUInt()
             );
 
         /**
          * Update lperIssuance.indexLiquidations
          */
-        lperIssuance.indexLiquidations = _liquidationsCumSIRperMAAM[pool].length < type(uint24).max
+        lperIssuance.indexLiquidations = _liquidationsCumSIRperMAAM[pool]
+            .length < type(uint24).max
             ? uint24(_liquidationsCumSIRperMAAM[pool].length)
             : type(uint24).max;
     }
 
-    function _getCumSIRperMAAM(address pool, bytes16 latestSupplyMAAM) internal view returns (bytes16) {
+    function _getCumSIRperMAAM(
+        address pool,
+        bytes16 latestSupplyMAAM
+    ) internal view returns (bytes16) {
         if (systemParams.tsIssuanceStart == 0) return 0; // Issuance has not started yet
 
         PoolIssuanceParams storage poolIssuanceParams = _poolsIssuances[pool];
         bytes16 cumSIRperMAAM = poolIssuanceParams.cumSIRperMAAM;
 
         // If cumSIRperMAAM is already updated in this block, just return it
-        if (poolIssuanceParams.tsLastUpdate == uint40(block.timestamp)) return cumSIRperMAAM;
+        if (poolIssuanceParams.tsLastUpdate == uint40(block.timestamp)) {
+            return cumSIRperMAAM;
+        }
 
         // If the supply is 0, cumSIRperMAAM does not increase
         if (latestSupplyMAAM == FloatingPoint.ZERO) return cumSIRperMAAM;
 
         // Return updated value
-        return cumSIRperMAAM.add(
-            FloatingPoint.fromUInt(
-                poolIssuanceParams.issuance
-                    * (
-                        block.timestamp
-                            - (
-                                systemParams.tsIssuanceStart > poolIssuanceParams.tsLastUpdate
-                                    ? systemParams.tsIssuanceStart
-                                    : poolIssuanceParams.tsLastUpdate
-                            )
+        return
+            cumSIRperMAAM.add(
+                FloatingPoint
+                    .fromUInt(
+                        poolIssuanceParams.issuance *
+                            (block.timestamp -
+                                (
+                                    systemParams.tsIssuanceStart >
+                                        poolIssuanceParams.tsLastUpdate
+                                        ? systemParams.tsIssuanceStart
+                                        : poolIssuanceParams.tsLastUpdate
+                                ))
                     )
-            ).div(latestSupplyMAAM)
-        );
+                    .div(latestSupplyMAAM)
+            );
     }
 
     function _onlySystemControl() private view {
