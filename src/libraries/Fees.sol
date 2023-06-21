@@ -24,7 +24,7 @@ library Fees {
         uint256 collateralInOrOut; // mint => collateralIn; burn => collateralOut
         uint256 reserveSyntheticToken; // TEA => gentlemenReserve; APE => apesReserve
         uint256 reserveOtherToken; // TEA => apesReserve; APE => gentlemenReserve
-        int8 collateralizationOrLeverageTier; // TEA => collateralization tier (-k); APE => leverage tier (k)
+        int256 collateralizationOrLeverageTier; // TEA => collateralization tier (-k); APE => leverage tier (k)
     }
 
     /**
@@ -40,40 +40,41 @@ library Fees {
         returns (uint256 collateralDepositedOrWithdrawn, uint256 comission)
     {
         unchecked {
-            uint256 maxFreeReserveSyntheticToken;
+            assert(
+                // Negative of such value would cause revert
+                feesParams.collateralizationOrLeverageTier != type(int256).min
+            );
+
+            uint256 idealReserveSyntheticToken;
             if (feesParams.collateralizationOrLeverageTier >= 0) {
-                maxFreeReserveSyntheticToken =
+                idealReserveSyntheticToken =
                     feesParams.reserveOtherToken >>
-                    uint256(int256(feesParams.collateralizationOrLeverageTier));
+                    uint256(feesParams.collateralizationOrLeverageTier);
             } else {
-                maxFreeReserveSyntheticToken =
+                idealReserveSyntheticToken =
                     feesParams.reserveOtherToken <<
-                    uint256(
-                        -int256(feesParams.collateralizationOrLeverageTier)
-                    );
+                    uint256(-feesParams.collateralizationOrLeverageTier);
 
                 if (
-                    maxFreeReserveSyntheticToken >>
-                        uint256(
-                            -int256(feesParams.collateralizationOrLeverageTier)
-                        ) !=
+                    idealReserveSyntheticToken >>
+                        uint256(-feesParams.collateralizationOrLeverageTier) !=
                     feesParams.reserveOtherToken
-                ) maxFreeReserveSyntheticToken = type(uint256).max;
+                ) idealReserveSyntheticToken = type(uint256).max;
             }
 
             uint256 taxFreeCollateral = feesParams.isMint
                 ? (
-                    maxFreeReserveSyntheticToken >
+                    idealReserveSyntheticToken >
                         feesParams.reserveSyntheticToken
-                        ? maxFreeReserveSyntheticToken -
+                        ? idealReserveSyntheticToken -
                             feesParams.reserveSyntheticToken
                         : 0
                 )
                 : (
                     feesParams.reserveSyntheticToken >
-                        maxFreeReserveSyntheticToken
+                        idealReserveSyntheticToken
                         ? feesParams.reserveSyntheticToken -
-                            maxFreeReserveSyntheticToken
+                            idealReserveSyntheticToken
                         : 0
                 );
 
@@ -88,20 +89,16 @@ library Fees {
             if (feesParams.collateralizationOrLeverageTier >= 0) {
                 feeNum =
                     uint256(feesParams.basisFee) <<
-                    uint256(int256(feesParams.collateralizationOrLeverageTier));
+                    uint256(feesParams.collateralizationOrLeverageTier);
                 feeDen =
                     10000 +
                     (uint256(feesParams.basisFee) <<
-                        uint256(
-                            int256(feesParams.collateralizationOrLeverageTier)
-                        ));
+                        uint256(feesParams.collateralizationOrLeverageTier));
             } else {
                 feeNum = uint256(feesParams.basisFee);
                 feeDen =
                     (10000 <<
-                        uint256(
-                            -int256(feesParams.collateralizationOrLeverageTier)
-                        )) +
+                        uint256(-feesParams.collateralizationOrLeverageTier)) +
                     uint256(feesParams.basisFee);
             }
 
