@@ -24,7 +24,7 @@ library Fees {
         uint256 collateralInOrOut; // mint => collateralIn; burn => collateralOut
         uint256 reserveSyntheticToken; // TEA => gentlemenReserve; APE => apesReserve
         uint256 reserveOtherToken; // TEA => apesReserve; APE => gentlemenReserve
-        int256 collateralizationOrLeverageTier; // TEA => collateralization tier (-k); APE => leverage tier (k)
+        int8 collateralizationOrLeverageTier; // TEA => collateralization tier (-k); APE => leverage tier (k)
     }
 
     /**
@@ -44,15 +44,19 @@ library Fees {
             if (feesParams.collateralizationOrLeverageTier >= 0) {
                 maxFreeReserveSyntheticToken =
                     feesParams.reserveOtherToken >>
-                    uint256(feesParams.collateralizationOrLeverageTier);
+                    uint256(int256(feesParams.collateralizationOrLeverageTier));
             } else {
                 maxFreeReserveSyntheticToken =
                     feesParams.reserveOtherToken <<
-                    uint256(-feesParams.collateralizationOrLeverageTier);
+                    uint256(
+                        -int256(feesParams.collateralizationOrLeverageTier)
+                    );
 
                 if (
                     maxFreeReserveSyntheticToken >>
-                        uint256(-feesParams.collateralizationOrLeverageTier) !=
+                        uint256(
+                            -int256(feesParams.collateralizationOrLeverageTier)
+                        ) !=
                     feesParams.reserveOtherToken
                 ) maxFreeReserveSyntheticToken = type(uint256).max;
             }
@@ -84,16 +88,20 @@ library Fees {
             if (feesParams.collateralizationOrLeverageTier >= 0) {
                 feeNum =
                     uint256(feesParams.basisFee) <<
-                    uint256(feesParams.collateralizationOrLeverageTier);
+                    uint256(int256(feesParams.collateralizationOrLeverageTier));
                 feeDen =
                     10000 +
                     (uint256(feesParams.basisFee) <<
-                        uint256(feesParams.collateralizationOrLeverageTier));
+                        uint256(
+                            int256(feesParams.collateralizationOrLeverageTier)
+                        ));
             } else {
                 feeNum = uint256(feesParams.basisFee);
                 feeDen =
                     (10000 <<
-                        uint256(-feesParams.collateralizationOrLeverageTier)) +
+                        uint256(
+                            -int256(feesParams.collateralizationOrLeverageTier)
+                        )) +
                     uint256(feesParams.basisFee);
             }
 
