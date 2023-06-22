@@ -1,33 +1,17 @@
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
 import {Fees, FullMath} from "src/libraries/Fees.sol";
 
-contract FeesContract {
-    function publicHiddenFee(
-        Fees.FeesParameters memory feesParams
-    )
-        public
-        pure
-        returns (uint256 collateralDepositedOrWithdrawn, uint256 comission)
-    {
-        return Fees._hiddenFee(feesParams);
-    }
-}
-
 contract FeesTest is Test {
-    FeesContract fees;
     uint8 constant basisFee = 100; // 1%
-
-    function setUp() public {
-        fees = new FeesContract();
-    }
 
     /*********************
         MINT TEA TESTS
      *********************/
 
-    function test_FullFeeWhenMintingFirstTEA() public {
+    function test_mintTEA_fullFeeWhenFirst() public {
         uint256 collateralIn = 10 ** 18;
         uint256 reserveGentlemen = 0;
         uint256 reserveApes = 0;
@@ -42,7 +26,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -59,7 +43,7 @@ contract FeesTest is Test {
         );
     }
 
-    function testFuzz_NoFeeWhenMintingTEA(
+    function testFuzz_mintTEA_noFee(
         uint256 collateralIn,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -86,7 +70,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -99,7 +83,7 @@ contract FeesTest is Test {
         assertEq(comission, 0, "comission is not zero");
     }
 
-    function testFuzz_FullFeeWhenMintingTEA(
+    function testFuzz_mintTEA_fullFee(
         uint256 collateralIn,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -128,7 +112,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -153,7 +137,7 @@ contract FeesTest is Test {
         assertLe(comission, comissionUpperBound, "comission is too high");
     }
 
-    function testFuzz_PartialFeeWhenMintingTEA(
+    function testFuzz_mintTEA_partialFee(
         uint256 collateralIn,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -186,13 +170,13 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralInTaxFree = idealReserveGentlemen - reserveGentlemen;
-        testFuzz_NoFeeWhenMintingTEA(
+        testFuzz_mintTEA_noFee(
             collateralInTaxFree,
             reserveGentlemen,
             reserveApes,
             collateralizationTier
         );
-        testFuzz_FullFeeWhenMintingTEA(
+        testFuzz_mintTEA_fullFee(
             collateralIn - collateralInTaxFree,
             idealReserveGentlemen,
             reserveApes,
@@ -204,7 +188,7 @@ contract FeesTest is Test {
         MINT APE TESTS
      *********************/
 
-    function test_FullFeeWhenMintingFirstAPE() public {
+    function test_mintAPE_fullFee() public {
         uint256 collateralIn = 10 ** 18;
         uint256 reserveGentlemen = 0;
         uint256 reserveApes = 0;
@@ -219,7 +203,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -236,7 +220,7 @@ contract FeesTest is Test {
         );
     }
 
-    function testFuzz_NoFeeWhenMintingAPE(
+    function testFuzz_mintAPE_noFee(
         uint256 collateralIn,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -259,7 +243,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -272,7 +256,7 @@ contract FeesTest is Test {
         assertEq(comission, 0, "comission is not zero");
     }
 
-    function testFuzz_FullFeeWhenMintingAPE(
+    function testFuzz_mintAPE_fullFee(
         uint256 collateralIn,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -297,7 +281,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -322,7 +306,7 @@ contract FeesTest is Test {
         assertLe(comission, comissionUpperBound, "comission is too high");
     }
 
-    function testFuzz_PartialFeeWhenMintingAPE(
+    function testFuzz_mintAPE_partialFee(
         uint256 collateralIn,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -346,13 +330,13 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralInTaxFree = idealReserveApes - reserveApes;
-        testFuzz_NoFeeWhenMintingAPE(
+        testFuzz_mintAPE_noFee(
             collateralInTaxFree,
             reserveGentlemen,
             reserveApes,
             leverageTier
         );
-        testFuzz_FullFeeWhenMintingAPE(
+        testFuzz_mintAPE_fullFee(
             collateralIn - collateralInTaxFree,
             idealReserveApes,
             reserveApes,
@@ -364,7 +348,7 @@ contract FeesTest is Test {
         BURN TEA TESTS
      *********************/
 
-    function testFuzz_NoFeeWhenBurningTEA(
+    function testFuzz_burnTEA_noFee(
         uint256 collateralOut,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -395,7 +379,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -408,7 +392,7 @@ contract FeesTest is Test {
         assertEq(comission, 0, "comission is not zero");
     }
 
-    function testFuzz_FullFeeWhenBurningTEA(
+    function testFuzz_burnTEA_fullFee(
         uint256 collateralOut,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -432,7 +416,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -457,7 +441,7 @@ contract FeesTest is Test {
         assertLe(comission, comissionUpperBound, "comission is too high");
     }
 
-    function testFuzz_PartialFeeWhenBurningTEA(
+    function testFuzz_burnTEA_partialFee(
         uint256 collateralOut,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -486,13 +470,13 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralOutTaxFree = reserveGentlemen - idealReserveGentlemen;
-        testFuzz_NoFeeWhenBurningTEA(
+        testFuzz_burnTEA_noFee(
             collateralOutTaxFree,
             reserveGentlemen,
             reserveApes,
             collateralizationTier
         );
-        testFuzz_FullFeeWhenBurningTEA(
+        testFuzz_burnTEA_fullFee(
             collateralOut - collateralOutTaxFree,
             idealReserveGentlemen,
             reserveApes,
@@ -504,7 +488,7 @@ contract FeesTest is Test {
         BURN APE TESTS
      *********************/
 
-    function testFuzz_NoFeeWhenBurningAPE(
+    function testFuzz_burnAPE_noFee(
         uint256 collateralOut,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -527,7 +511,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -540,7 +524,7 @@ contract FeesTest is Test {
         assertEq(comission, 0, "comission is not zero");
     }
 
-    function testFuzz_FullFeeWhenBurningAPE(
+    function testFuzz_burnAPE_fullFee(
         uint256 collateralOut,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -564,7 +548,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = fees.publicHiddenFee(
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
             feesParams
         );
 
@@ -589,7 +573,7 @@ contract FeesTest is Test {
         assertLe(comission, comissionUpperBound, "comission is too high");
     }
 
-    function testFuzz_PartialFeeWhenBurningAPE(
+    function testFuzz_burnAPE_partialFee(
         uint256 collateralOut,
         uint256 reserveGentlemen,
         uint256 reserveApes,
@@ -617,13 +601,13 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralOutTaxFree = reserveApes - idealReserveApes;
-        testFuzz_NoFeeWhenBurningAPE(
+        testFuzz_burnAPE_noFee(
             collateralOutTaxFree,
             reserveGentlemen,
             reserveApes,
             leverageTier
         );
-        testFuzz_FullFeeWhenBurningAPE(
+        testFuzz_burnAPE_fullFee(
             collateralOut - collateralOutTaxFree,
             idealReserveApes,
             reserveApes,
