@@ -16,20 +16,54 @@ contract FloatingPointTest is Test {
     bytes16 internal constant MIN_FP = 0x00010000000000000000000000000000;
 
     function testFuzz_fromInt_boundedRoundingError(int256 x) public {
-        int256 xRounded;
-        unchecked {
-            uint256 xAbs = uint256(x < 0 ? -x : x);
-            bool xSgn = x >= 0;
+        vm.assume(x != int256(type(int256).min));
 
-            uint totalBits = _bitLength(xAbs);
-            uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
+        uint256 xAbs = uint256(x < 0 ? -x : x);
+        bool xSgn = x >= 0;
 
-            xRounded = int256((xAbs >> lostBits) << lostBits);
-            if (!xSgn) xRounded = -xRounded;
+        uint totalBits = _bitLength(xAbs);
+        uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
+
+        int256 xLB = int256((xAbs >> lostBits) << lostBits);
+        int256 xUB = xLB + int256(2 ** lostBits - 1);
+        if (!xSgn) {
+            xLB = -xLB;
+            xUB = -xUB;
         }
 
-        assertEq(FloatingPoint.fromInt(x), FloatingPoint.fromInt(xRounded));
+        assertEq(FloatingPoint.fromInt(x), FloatingPoint.fromInt(xLB));
+        assertEq(FloatingPoint.fromInt(x), FloatingPoint.fromInt(xUB));
     }
+
+    function testFuzz_fromUInt_boundedRoundingError(uint256 x) public {
+        uint totalBits = _bitLength(x);
+        uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
+
+        uint xLB = (x >> lostBits) << lostBits;
+        uint xUB;
+        unchecked {
+            xUB = xLB + 2 ** lostBits - 1;
+        }
+        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xLB));
+        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xUB));
+    }
+
+    function testFuzz_fromUIntUp_boundedRoundingError(uint256 x) public {
+        uint totalBits = _bitLength(x);
+        uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
+
+        uint xLB = ((x >> lostBits) << lostBits) + 1;
+        uint xUB = xLB + 2 ** lostBits;
+
+        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xLB));
+        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xUB));
+        // CHECK NUMBERS THAT DO NOT MATCH
+        // BETTER WAY TO ROUND UP?
+    }
+
+    /************************
+        INTERNAL FUNCTIONS
+     ************************/
 
     function _bitLength(uint256 x) internal pure returns (uint256) {
         uint256 bits = 0;
