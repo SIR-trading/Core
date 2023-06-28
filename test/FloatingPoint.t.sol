@@ -25,14 +25,22 @@ contract FloatingPointTest is Test {
         uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
 
         int256 xLB = int256((xAbs >> lostBits) << lostBits);
-        int256 xUB = xLB + int256(2 ** lostBits - 1);
+        int256 xUB;
+        unchecked {
+            xUB = int256((((xAbs >> lostBits) + 1) << lostBits) - 1);
+        }
         if (!xSgn) {
-            xLB = -xLB;
-            xUB = -xUB;
+            (xLB, xUB) = (-xUB, -xLB);
         }
 
-        assertEq(FloatingPoint.fromInt(x), FloatingPoint.fromInt(xLB));
-        assertEq(FloatingPoint.fromInt(x), FloatingPoint.fromInt(xUB));
+        bytes16 xFP = FloatingPoint.fromInt(x);
+
+        assertEq(xFP, FloatingPoint.fromInt(xLB));
+        if (xLB != type(int256).min)
+            assertTrue(xFP != FloatingPoint.fromInt(xLB - 1), "xLB - 1");
+        assertEq(xFP, FloatingPoint.fromInt(xUB));
+        if (xUB != type(int256).max)
+            assertTrue(xFP != FloatingPoint.fromInt(xUB + 1), "xUB + 1");
     }
 
     function testFuzz_fromUInt_boundedRoundingError(uint256 x) public {
@@ -42,23 +50,48 @@ contract FloatingPointTest is Test {
         uint xLB = (x >> lostBits) << lostBits;
         uint xUB;
         unchecked {
-            xUB = xLB + 2 ** lostBits - 1;
+            xUB = (((x >> lostBits) + 1) << lostBits) - 1;
         }
-        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xLB));
-        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xUB));
+
+        bytes16 xFP = FloatingPoint.fromUInt(x);
+
+        assertEq(xFP, FloatingPoint.fromUInt(xLB));
+        if (xLB != type(uint256).min)
+            assertTrue(xFP != FloatingPoint.fromUInt(xLB - 1), "xLB - 1");
+        assertEq(xFP, FloatingPoint.fromUInt(xUB));
+        if (xUB != type(uint256).max)
+            assertTrue(xFP != FloatingPoint.fromUInt(xUB + 1), "xUB + 1");
     }
 
     function testFuzz_fromUIntUp_boundedRoundingError(uint256 x) public {
         uint totalBits = _bitLength(x);
         uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
 
-        uint xLB = ((x >> lostBits) << lostBits) + 1;
-        uint xUB = xLB + 2 ** lostBits;
+        uint xLB;
+        uint xUB;
+        if (x != 0) {
+            if (lostBits == 0) xLB = x;
+            else if (x == 2 ** (totalBits - 1))
+                xLB = (((x - 1) >> (lostBits - 1)) << (lostBits - 1)) + 1;
+            else xLB = (((x - 1) >> lostBits) << lostBits) + 1;
 
-        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xLB));
-        assertEq(FloatingPoint.fromUInt(x), FloatingPoint.fromUInt(xUB));
-        // CHECK NUMBERS THAT DO NOT MATCH
-        // BETTER WAY TO ROUND UP?
+            unchecked {
+                xUB = ((((x - 1) >> lostBits) + 1) << lostBits);
+            }
+            if (xUB < xLB) xUB = type(uint256).max;
+        } else {
+            xLB = 0;
+            xUB = 0;
+        }
+
+        bytes16 xFP = FloatingPoint.fromUIntUp(x);
+
+        assertEq(xFP, FloatingPoint.fromUIntUp(xLB), "xLB");
+        if (xLB != type(uint256).min)
+            assertTrue(xFP != FloatingPoint.fromUIntUp(xLB - 1), "xLB - 1");
+        assertEq(xFP, FloatingPoint.fromUIntUp(xUB), "xUB");
+        if (xUB != type(uint256).max)
+            assertTrue(xFP != FloatingPoint.fromUIntUp(xUB + 1), "xUB + 1");
     }
 
     /************************
