@@ -99,7 +99,7 @@ contract FloatingPointTest is Test {
             assertTrue(xFP != FloatingPoint.fromUIntUp(xUB + 1), "xUB + 1");
     }
 
-    function testFuzz_toUIntFromUInt(uint x) public {
+    function testFuzz_toUInt_fromUInt(uint x) public {
         uint totalBits = _bitLength(x);
         uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
 
@@ -108,7 +108,7 @@ contract FloatingPointTest is Test {
         assertEq(xApprox, (x >> lostBits) << lostBits);
     }
 
-    function testFuzz_toUIntFromInt(int x) public {
+    function testFuzz_toUInt_fromInt(int x) public {
         bytes16 xFP = FloatingPoint.fromInt(x);
         if (x < 0) {
             vm.expectRevert();
@@ -122,7 +122,7 @@ contract FloatingPointTest is Test {
         }
     }
 
-    function testFuzz_toUIntFromNaN(uint128 xFP) public {
+    function testFuzz_toUInt_fromNaN(uint128 xFP) public {
         xFP = uint128(
             bound(
                 uint(xFP),
@@ -138,14 +138,14 @@ contract FloatingPointTest is Test {
         FloatingPoint.toUInt(bytes16(xFP));
     }
 
-    function test_toUIntFromInfinity() public {
+    function test_toUInt_fromInfinity() public {
         vm.expectRevert();
         FloatingPoint.toUInt(INFINITY);
         vm.expectRevert();
         FloatingPoint.toUInt(NEGATIVE_INFINITY);
     }
 
-    function testFuzz_toUIntFromSubnormals(uint128 xFP) public {
+    function testFuzz_toUInt_fromSubnormals(uint128 xFP) public {
         xFP = uint128(
             bound(
                 uint(xFP),
@@ -156,6 +156,49 @@ contract FloatingPointTest is Test {
         vm.expectRevert();
         FloatingPoint.toUInt(bytes16(xFP));
     }
+
+    function testFuzz_sign_uint(uint x) public {
+        bytes16 xFP = FloatingPoint.fromUInt(x);
+        if (x == 0) assertEq(FloatingPoint.sign(xFP), 0);
+        else assertEq(FloatingPoint.sign(xFP), 1);
+
+        xFP = FloatingPoint.fromUIntUp(x);
+        if (x == 0) assertEq(FloatingPoint.sign(xFP), 0);
+        else assertEq(FloatingPoint.sign(xFP), 1);
+    }
+
+    function testFuzz_sign_int(int x) public {
+        bytes16 xFP = FloatingPoint.fromInt(x);
+        if (x == 0) assertEq(FloatingPoint.sign(xFP), 0);
+        else if (x > 0) assertEq(FloatingPoint.sign(xFP), 1);
+        else assertEq(FloatingPoint.sign(xFP), -1);
+    }
+
+    function testFuzz_sign_positiveFloatingPointNumbers(uint128 xFP) public {
+        xFP = uint128(
+            bound(
+                uint(xFP),
+                uint(0x00000000000000000000000000000001),
+                uint(0x7fffffffffffffffffffffffffffffff)
+            )
+        );
+        assertEq(FloatingPoint.sign(bytes16(xFP)), 1);
+    }
+
+    function testFuzz_sign_negativeFloatingPointNumbers(uint128 xFP) public {
+        xFP = uint128(
+            bound(
+                uint(xFP),
+                uint(0x80000000000000000000000000000001),
+                uint(0xFfffffffffffffffffffffffffffffff)
+            )
+        );
+        assertEq(FloatingPoint.sign(bytes16(xFP)), -1);
+    }
+
+    // function testFuzz_sign_infinity() public {
+    //     assertEq(FloatingPoint.sign(xFP), 1);
+    // }
 
     /************************
         INTERNAL FUNCTIONS
