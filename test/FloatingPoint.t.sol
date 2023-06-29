@@ -100,12 +100,9 @@ contract FloatingPointTest is Test {
     }
 
     function testFuzz_toUInt_fromUInt(uint x) public {
-        uint totalBits = _bitLength(x);
-        uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
-
         uint xApprox = FloatingPoint.toUInt(FloatingPoint.fromUInt(x));
 
-        assertEq(xApprox, (x >> lostBits) << lostBits);
+        assertEq(xApprox, _precission113Bits(x));
     }
 
     function testFuzz_toUInt_fromInt(int x) public {
@@ -196,13 +193,84 @@ contract FloatingPointTest is Test {
         assertEq(FloatingPoint.sign(bytes16(xFP)), -1);
     }
 
-    // function testFuzz_sign_infinity() public {
-    //     assertEq(FloatingPoint.sign(xFP), 1);
-    // }
+    function testFuzz_cmp_uint(uint128 x, uint128 y) public {
+        x = uint128(_precission113Bits(x));
+        y = uint128(_precission113Bits(y));
+
+        assertEq(
+            FloatingPoint.cmp(
+                FloatingPoint.fromUInt(x),
+                FloatingPoint.fromUInt(y)
+            ),
+            x == y ? int8(0) : x < y ? -1 : int8(1)
+        );
+    }
+
+    function testFuzz_cmp_int(int128 x, int128 y) public {
+        x = int128(_precission113Bits(x));
+        y = int128(_precission113Bits(y));
+
+        assertEq(
+            FloatingPoint.cmp(
+                FloatingPoint.fromInt(x),
+                FloatingPoint.fromInt(y)
+            ),
+            x == y ? int8(0) : x < y ? -1 : int8(1)
+        );
+    }
+
+    function testFuzz_cmp_fp(uint128 xFP, uint128 yFP) public {
+        if (
+            xFP & uint128(0x7fffffffffffffffffffffffffffffff) >= uint128(NaN) ||
+            yFP & uint128(0x7fffffffffffffffffffffffffffffff) >= uint128(NaN) ||
+            (xFP == uint128(INFINITY) && yFP == uint128(INFINITY)) ||
+            (xFP == uint128(NEGATIVE_INFINITY) &&
+                yFP == uint128(NEGATIVE_INFINITY))
+        ) {
+            vm.expectRevert();
+            FloatingPoint.cmp(bytes16(xFP), bytes16(yFP));
+        } else {
+            int8 res;
+            if (
+                FloatingPoint.sign(bytes16(xFP)) >
+                FloatingPoint.sign(bytes16(yFP))
+            ) {
+                res = int8(1);
+            } else if (
+                FloatingPoint.sign(bytes16(xFP)) <
+                FloatingPoint.sign(bytes16(yFP))
+            ) {
+                res = int8(-1);
+            } else if (FloatingPoint.sign(bytes16(xFP)) >= 0) {
+                res = xFP > yFP ? int8(1) : xFP < yFP ? int8(-1) : int8(0);
+            } else {
+                res = xFP > yFP ? int8(-1) : xFP < yFP ? int8(1) : int8(0);
+            }
+            assertEq(FloatingPoint.cmp(bytes16(xFP), bytes16(yFP)), res);
+        }
+    }
 
     /************************
         INTERNAL FUNCTIONS
      ************************/
+
+    function _precission113Bits(uint256 x) internal pure returns (uint256) {
+        uint256 bits = _bitLength(x);
+        if (bits > 113) {
+            uint256 lostBits = bits - 113;
+            return (x >> lostBits) << lostBits;
+        } else {
+            return x;
+        }
+    }
+
+    function _precission113Bits(int256 x) internal pure returns (int256) {
+        unchecked {
+            uint256 ux = uint256(x < 0 ? -x : x); // Taking advantage of OF here
+            uint256 xPrecission = _precission113Bits(ux);
+            return x < 0 ? -int256(xPrecission) : int256(xPrecission);
+        }
+    }
 
     function _bitLength(uint256 x) internal pure returns (uint256) {
         uint256 bits = 0;

@@ -152,8 +152,8 @@ library FloatingPoint {
             uint128 absoluteX = uint128(x) & 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
             uint128 absoluteY = uint128(y) & 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-            require(absoluteX <= 0x7FFF0000000000000000000000000000); // Not NaN
-            require(absoluteY <= 0x7FFF0000000000000000000000000000); // Not NaN
+            assert(absoluteX <= 0x7FFF0000000000000000000000000000); // Not NaN
+            assert(absoluteY <= 0x7FFF0000000000000000000000000000); // Not NaN
             require(x != y || absoluteX < 0x7FFF0000000000000000000000000000); // Not infinities of the same sign
 
             if (x == y) return 0;
