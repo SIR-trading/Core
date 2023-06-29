@@ -15,7 +15,12 @@ contract FloatingPointTest is Test {
     bytes16 internal constant MAX_FP = 0x7ffeffffffffffffffffffffffffffff;
     bytes16 internal constant MIN_FP = 0x00010000000000000000000000000000;
 
-    function testFuzz_fromInt_boundedRoundingError(int256 x) public {
+    bytes16 private constant NEGATIVE_ZERO = 0x80000000000000000000000000000000;
+    bytes16 private constant NEGATIVE_INFINITY =
+        0xFFFF0000000000000000000000000000;
+    bytes16 private constant NaN = 0x7FFF8000000000000000000000000000;
+
+    function testFuzz_fromInt(int256 x) public {
         vm.assume(x != int256(type(int256).min));
 
         uint256 xAbs = uint256(x < 0 ? -x : x);
@@ -43,7 +48,7 @@ contract FloatingPointTest is Test {
             assertTrue(xFP != FloatingPoint.fromInt(xUB + 1), "xUB + 1");
     }
 
-    function testFuzz_fromUInt_boundedRoundingError(uint256 x) public {
+    function testFuzz_fromUInt(uint256 x) public {
         uint totalBits = _bitLength(x);
         uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
 
@@ -63,7 +68,7 @@ contract FloatingPointTest is Test {
             assertTrue(xFP != FloatingPoint.fromUInt(xUB + 1), "xUB + 1");
     }
 
-    function testFuzz_fromUIntUp_boundedRoundingError(uint256 x) public {
+    function testFuzz_fromUIntUp(uint256 x) public {
         uint totalBits = _bitLength(x);
         uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
 
@@ -92,6 +97,64 @@ contract FloatingPointTest is Test {
         assertEq(xFP, FloatingPoint.fromUIntUp(xUB), "xUB");
         if (xUB != type(uint256).max)
             assertTrue(xFP != FloatingPoint.fromUIntUp(xUB + 1), "xUB + 1");
+    }
+
+    function testFuzz_toUIntFromUInt(uint x) public {
+        uint totalBits = _bitLength(x);
+        uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
+
+        uint xApprox = FloatingPoint.toUInt(FloatingPoint.fromUInt(x));
+
+        assertEq(xApprox, (x >> lostBits) << lostBits);
+    }
+
+    function testFuzz_toUIntFromInt(int x) public {
+        bytes16 xFP = FloatingPoint.fromInt(x);
+        if (x < 0) {
+            vm.expectRevert();
+            FloatingPoint.toUInt(xFP);
+        } else {
+            uint totalBits = _bitLength(uint(x));
+            uint lostBits = totalBits > 113 ? totalBits - 113 : 0;
+
+            uint xApprox = FloatingPoint.toUInt(xFP);
+            assertEq(xApprox, (uint(x) >> lostBits) << lostBits);
+        }
+    }
+
+    function testFuzz_toUIntFromNaN(uint128 xFP) public {
+        xFP = uint128(
+            bound(
+                uint(xFP),
+                uint(uint128(NaN)),
+                uint(0x7FFFffffffffffffffffffffffffffff)
+            )
+        );
+        vm.expectRevert();
+        FloatingPoint.toUInt(bytes16(xFP));
+
+        vm.expectRevert();
+        xFP |= 0x80000000000000000000000000000000; // Negative NaN
+        FloatingPoint.toUInt(bytes16(xFP));
+    }
+
+    function test_toUIntFromInfinity() public {
+        vm.expectRevert();
+        FloatingPoint.toUInt(INFINITY);
+        vm.expectRevert();
+        FloatingPoint.toUInt(NEGATIVE_INFINITY);
+    }
+
+    function testFuzz_toUIntFromSubnormals(uint128 xFP) public {
+        xFP = uint128(
+            bound(
+                uint(xFP),
+                uint(0x00000000000000000000000000000001),
+                uint(0x0000ffffffffffffffffffffffffffff)
+            )
+        );
+        vm.expectRevert();
+        FloatingPoint.toUInt(bytes16(xFP));
     }
 
     /************************
