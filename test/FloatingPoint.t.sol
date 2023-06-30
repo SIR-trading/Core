@@ -250,6 +250,21 @@ contract FloatingPointTest is Test {
         }
     }
 
+    function testFuzz_add_uint(uint x, uint y) public {
+        x = _precission113Bits(x);
+        y = _precission113Bits(y);
+
+        vm.assume(x <= type(uint256).max - y);
+
+        assertEq(
+            FloatingPoint.add(
+                FloatingPoint.fromUInt(x),
+                FloatingPoint.fromUInt(y)
+            ),
+            FloatingPoint.fromUInt(_precission113Bits(x + y))
+        );
+    }
+
     /************************
         INTERNAL FUNCTIONS
      ************************/
