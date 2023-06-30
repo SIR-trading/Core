@@ -15,3 +15,7 @@ docs/
 
 # Node modules
 node_modules/
+
+# Hardhat
+cache
+cache_hardhat
