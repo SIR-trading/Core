@@ -257,6 +257,12 @@ contract Oracle {
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
     function newUniswapFeeTier(uint24 fee) external {
+        // Get all fee tiers
+        UniswapFeeTier[] memory uniswapFeeTiers = _uniswapFeeTiers();
+
+        // Check there is space to add a new fee tier
+        require(uniswapFeeTiers.length < 9); // 4 basic fee tiers + 5 extra fee tiers max
+
         // Check fee tier actually exists in Uniswap v3
         int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY)
             .feeAmountTickSpacing(fee);
@@ -264,12 +270,20 @@ contract Oracle {
 
         // Check fee tier has not been added yet
         for (uint256 i = 0; i < uniswapFeeTiers.length; i++) {
-            require(fee != uniswapFeeTiers[i].fee);
+            require(
+                fee != uniswapFeeTiers[i].fee &&
+                    tickSpacing != uniswapFeeTiers[i].tickSpacing
+            );
         }
 
-        uniswapFeeTiers.push(
-            Oracle.UniswapFeeTier(fee, uint24(tickSpacing), 0)
-        );
+        // Add new fee tier
+        _uniswapExtraFeeTiers |=
+            (uint24(fee) | (uint24(tickSpacing) << 24)) <<
+            (16 + 48 * (uniswapFeeTiers.length - 4));
+
+        // Increase count
+        _uniswapExtraFeeTiers &= (2 ** 240 - 1) << 16;
+        _uniswapExtraFeeTiers |= uint16(_uniswapExtraFeeTiers) + 1;
     }
 
     function newFeeTier(uint24 fee) external returns (bool) {
