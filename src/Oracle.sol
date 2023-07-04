@@ -76,6 +76,8 @@ import "./libraries/Addresses.sol";
 contract Oracle {
     error NoUniswapV3Pool();
     error UniswapFeeTierIndexOutOfBounds();
+    error OracleAlreadyInitialized();
+    error OracleNotInitialized();
 
     using FloatingPoint for bytes16;
 
@@ -85,7 +87,6 @@ contract Oracle {
     struct UniswapFeeTier {
         uint24 fee;
         int24 tickSpacing;
-        bytes16 maxPriceAttenPerSec;
     }
 
     /**
@@ -102,15 +103,16 @@ contract Oracle {
      * The following 4 state variables only take 1 slot
      */
     struct OracleState {
-        bytes16 priceFP; // Last stored price
-        uint32 tsPrice; // Timestamp of the last stored price
+        bytes16 price; // Last stored price
+        uint32 timeStamp; // Timestamp of the last stored price
         uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
         uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
         bool initialized; // Whether the oracle has been initialized
+        UniswapFeeTier uniswapFeeTier; // Uniswap v3 fee tier currently being used as oracle
     }
 
     event UniswapOracleAdded(address indexed pool);
-    event PriceUpdated(bytes16 priceFP);
+    event PriceUpdated(bytes16 price);
     event PriceTruncated(bytes16 priceUntruncated);
 
     /**
@@ -129,70 +131,74 @@ contract Oracle {
     // USE FIRST 16 BITS TO INDICATE LENGTH OF TIERS, AND 48 BITS FOR EACH EXTRA FEE TIER
     uint private _uniswapExtraFeeTiers;
 
-    function _maxPriceAttenPerSec(uint24 fee) private pure returns (bytes16) {
-        return FloatingPoint.ONE.sub(FloatingPoint.divu(fee, 0.5 * 10 ** 6)).pow(ONE_DIV_SIXTY); // 5 blocks of 12s = 60s
-    }
-
-    function _uniswapFeeTier(uint8 indexFeeTier) internal view returns (UniswapFeeTier memory uniswapFeeTier) {
-        if (indexFeeTier == 0) return UniswapFeeTier(100, 1, 0);
-        if (indexFeeTier == 1) return UniswapFeeTier(500, 10, 0);
-        if (indexFeeTier == 2) return UniswapFeeTier(3000, 60, 0);
-        if (indexFeeTier == 3) return UniswapFeeTier(10000, 200, 0);
-        else {
-            // Extra fee tiers
-            uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
-            uint NuniswapExtraFeeTiers = uint(uint16(uniswapExtraFeeTiers_));
-            if (indexFeeTier >= NuniswapExtraFeeTiers + 4) revert UniswapFeeTierIndexOutOfBounds();
-
-            uniswapExtraFeeTiers_ >>= 16 + 48 * (indexFeeTier - 4);
-            return UniswapFeeTier(uint24(uniswapExtraFeeTiers_), uint24(uniswapExtraFeeTiers_ >> 24), 0);
-        }
-    }
-
-    function _uniswapFeeTiers() internal view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
-        // Find out # of all possible fee tiers
-        uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
-        uint NuniswapExtraFeeTiers = uint(uint16(uniswapExtraFeeTiers_));
-
-        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
-        uniswapFeeTiers[0] = UniswapFeeTier(100, 1, 0);
-        uniswapFeeTiers[1] = UniswapFeeTier(500, 10, 0);
-        uniswapFeeTiers[2] = UniswapFeeTier(3000, 60, 0);
-        uniswapFeeTiers[3] = UniswapFeeTier(10000, 200, 0);
-
-        // Extra fee tiers
-        if (NuniswapExtraFeeTiers > 0) {
-            uniswapExtraFeeTiers_ >>= 16;
-            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
-                uniswapFeeTiers[4 + i] = UniswapFeeTier(
-                    uint24(uniswapExtraFeeTiers_),
-                    uint24(uniswapExtraFeeTiers_ >> 24),
-                    0
-                );
-                uniswapExtraFeeTiers_ >>= 48;
-            }
-        }
-    }
-
-    function _feeTierScore(uint160 liquidity, uint24 fee, int24 tickSpacing) private returns (uint256) {
-        return ((uint256(liquidity) * uint256(fee)) << 72) / uint256(uint24(tickSpacing));
-    }
-
     /**
      * @notice Initialize the oracleState for the pair of tokens
      */
-    function updateOracle(address tokenA, address tokenB) external {
+    function initialize(address tokenA, address tokenB) external {
         (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
 
         // Get oracle state
         OracleState memory oracleState = oracleStates[tokenA][tokenB];
-        if (oracleState.initialized) {
+        if (oracleState.initialized) revert OracleAlreadyInitialized();
+
+        // Get all fee tiers
+        UniswapFeeTier[] memory uniswapFeeTiers = _uniswapFeeTiers();
+
+        // Find the best fee tier by weighted liquidity
+        uint256 score;
+        uint16 cardinalityToIncrease;
+        for (uint i = 0; i < uniswapFeeTiers.length; i++) {
+            // Retrieve instant liquidity (we pass true as the last argument) because some pools may not have an initialized TWAP yet.
+            UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee, true);
+
+            if (oracleData.avLiquidity > 0) {
+                // Compute score
+                uint256 scoreTemp = _feeTierScore(oracleData.avLiquidity, uniswapFeeTiers[i]);
+
+                // Update best score
+                if (scoreTemp > score) {
+                    oracleState.indexFeeTier = uint8(i);
+                    cardinalityToIncrease = oracleData.cardinalityToIncrease;
+                    score = scoreTemp;
+                }
+            }
+        }
+
+        if (score == 0) revert NoUniswapV3Pool();
+        oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uniswapFeeTiers.length;
+        oracleState.initialized = true;
+        oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
+
+        // Extend the memory array of the selected Uniswap pool.
+        if (cardinalityToIncrease > 0) {
+            IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, uniswapFeeTiers[oracleState.indexFeeTier].fee);
+            uniswapPool.increaseObservationCardinalityNext(cardinalityToIncrease);
+        }
+
+        // Update oracle state
+        oracleStates[tokenA][tokenB] = oracleState;
+    }
+
+    /**
+     * @notice Update the oracle state for the pair of tokens
+     */
+    function updateOracleState(address collateralToken, address debtToken) external returns (bytes16) {
+        (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
+
+        // Get oracle state
+        OracleState memory oracleState = oracleStates[tokenA][tokenB];
+        if (!oracleState.initialized) revert OracleNotInitialized();
+
+        // Update price
+        UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee, false);
+        _updatePrice(oracleState, oracleData);
+
+        // Fee tier is updated once per block at most
+        if (oracleState.timeStamp != uint32(block.timestamp % 2 ** 32)) {
             // Get current fee tier and the one we wish to probe
-            UniswapFeeTier memory uniswapFeeTier = _uniswapFeeTier(oracleState.indexFeeTier);
             UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
             // Retrieve oracle data
-            UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTier.fee, false);
             UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
                 tokenA,
                 tokenB,
@@ -201,80 +207,59 @@ contract Oracle {
             );
 
             // Check the scores for the current fee tier and the probed one
-            uint256 score = _feeTierScore(oracleData.avLiquidity, uniswapFeeTier.fee, uniswapFeeTier.tickSpacing);
-            uint256 scoreProbed = _feeTierScore(
-                oracleDataProbed.avLiquidity,
-                uniswapFeeTierProbed.fee,
-                uniswapFeeTierProbed.tickSpacing
-            );
+            uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
+            uint256 scoreProbed = _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
 
             if (score >= scoreProbed) {
                 if (oracleData.cardinalityToIncrease > 0) {
-                    uniswapFeeTier.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
+                    // If the current tier is better and the TWAP's cardinality is insufficient, increase the cardinality
+                    IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
+                    uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
                 }
             } else {
                 if (oracleDataProbed.cardinalityToIncrease > 0) {
-                    uniswapFeeTierProbed.increaseObservationCardinalityNext(oracleDataProbed.cardinalityToIncrease);
-                }
-                if (oracleDataProbed.period >= TWAP_DURATION) {
-                    // If the probed tier is better and the TWAP is fully initialized, change to it
+                    // If the probed tier is better and the TWAP's cardinality is insufficient, increase the cardinality
+                    IUniswapV3Pool uniswapPoolProbed = _getUniswapPool(tokenA, tokenB, uniswapFeeTierProbed.fee);
+                    uniswapPoolProbed.increaseObservationCardinalityNext(oracleDataProbed.cardinalityToIncrease);
+                } else if (oracleDataProbed.period >= TWAP_DURATION) {
+                    // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
                     oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
+                    oracleState.uniswapFeeTier = uniswapFeeTierProbed;
                 }
             }
 
-            uint NuniswapFeeTiers = 4 + uint(uint16(_uniswapExtraFeeTiers);
-            oracleState.indexFeeTierProbeNext =
-                (oracleState.indexFeeTierProbeNext + 1) %
-                NuniswapFeeTiers;
+            // Update indices
+            uint NuniswapFeeTiers = 4 + uint(uint16(_uniswapExtraFeeTiers));
+            oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % NuniswapFeeTiers;
             if (oracleState.indexFeeTier == oracleState.indexFeeTierProbeNext)
-                oracleState.indexFeeTierProbeNext =
-                    (oracleState.indexFeeTierProbeNext + 1) %
-                    NuniswapFeeTiers;
-        } else {
-            // Get all fee tiers
-            UniswapFeeTier[] memory uniswapFeeTiers = _uniswapFeeTiers();
+                oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % NuniswapFeeTiers;
 
-            // Find the best fee tier by weighted liquidity
-            uint256 score;
-            uint16 cardinalityToIncrease;
-            for (uint i = 0; i < uniswapFeeTiers.length; i++) {
-                // Retrieve instant liquidity (we pass true as the last argument) because some pools may not have an initialized TWAP yet.
-                UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee, true);
-
-                if (oracleData.avLiquidity > 0) {
-                    // Compute score
-                    uint256 scoreTemp = _feeTierScore(
-                        oracleData.avLiquidity,
-                        uniswapFeeTiers[i].fee,
-                        uniswapFeeTiers[i].tickSpacing
-                    );
-
-                    // Update best score
-                    if (scoreTemp > score) {
-                        oracleState.indexFeeTier = uint8(i);
-                        cardinalityToIncrease = oracleData.cardinalityToIncrease;
-                        score = scoreTemp;
-                    }
-                }
-            }
-
-            if (score == 0) revert NoUniswapV3Pool();
-            oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uniswapFeeTiers.length;
-            oracleState.initialized = true;
-
-            // Extend the memory array of the selected Uniswap pool.
-            if (cardinalityToIncrease > 0) {
-                IUniswapV3Pool uniswapPool = _getUniswapPool(
-                    tokenA,
-                    tokenB,
-                    uniswapFeeTiers[oracleState.indexFeeTier].fee
-                );
-                uniswapPool.increaseObservationCardinalityNext(cardinalityToIncrease);
-            }
+            // Update timestamp
+            oracleState.timeStamp = uint32(block.timestamp % 2 ** 32);
         }
 
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
+
+        // Invert price if necessary
+        if (collateralToken == tokenB) return oracleState.price.inv();
+        return oracleState.price;
+    }
+
+    function getPrice(address collateralToken, address debtToken) external view returns (bytes16) {
+        (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
+
+        // Get oracle state
+        OracleState memory oracleState = oracleStates[tokenA][tokenB];
+        if (!oracleState.initialized) revert OracleNotInitialized();
+
+        // Update price
+        UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee, false);
+        _updatePrice(oracleState, oracleData);
+
+        // Invert price if necessary
+        if (collateralToken == tokenB) return oracleState.price.inv();
+        return oracleState.price;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -282,22 +267,15 @@ contract Oracle {
     /////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Returns price
+     * @notice Updates price
      */
-    function getPrice(address addrCollateralToken) external view returns (bytes16) {
-        // No need to update price if it has already been updated in this block
-        if (tsPrice == uint32(block.timestamp % 2 ** 32)) return _outputPrice(addrCollateralToken, priceFP);
-
-        // Retrieve oracle data from the most liquid fee tier
-        UniswapOracleData memory oracleData = _uniswapOracleData(uniswapFeeTiers[indexFeeTier].fee, false);
-
+    function _updatePrice(OracleState memory oracleState, UniswapOracleData memory oracleData) internal pure {
         // Compute price
-        bytes16 priceFP_ = FloatingPoint
+        bytes16 price = FloatingPoint
             .fromInt(oracleData.aggLogPrice / int256(uint256(oracleData.period)))
             .mul(_LOG2_OF_TICK_FP)
             .pow_2();
-        priceFP_ = _truncatePrice(priceFP_); // Oracle attack protection
-        return _outputPrice(addrCollateralToken, priceFP_);
+        oracleState.price = _truncatePrice(price, oracleState); // Oracle attack protection
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -327,16 +305,17 @@ contract Oracle {
             (16 + 48 * (uniswapFeeTiers.length - 4));
 
         // Increase count
+        uint NuniswapExtraFeeTiers = uint(uint16(_uniswapExtraFeeTiers));
         _uniswapExtraFeeTiers &= (2 ** 240 - 1) << 16;
-        _uniswapExtraFeeTiers |= uint16(_uniswapExtraFeeTiers) + 1;
+        _uniswapExtraFeeTiers |= NuniswapExtraFeeTiers + 1;
     }
 
     /**
      * @notice Returns price, stores new price and updates oracles if necessary.
      */
     function updatePriceMemory(address addrCollateralToken) external returns (bytes16) {
-        // No need to update price if it has already been updated in this block
-        if (tsPrice == uint32(block.timestamp % 2 ** 32)) return priceFP;
+        // No need to _updateOracleState price if it has already been updated in this block
+        if (timeStamp == uint32(block.timestamp % 2 ** 32)) return price;
 
         // Retrieve oracle data from the most liquid fee tier
         UniswapOracleData memory oracleData = _uniswapOracleData(uniswapFeeTiers[indexFeeTier].fee, false);
@@ -379,19 +358,68 @@ contract Oracle {
         }
 
         // Compute price
-        bytes16 priceFP_ = FloatingPoint
+        bytes16 price = FloatingPoint
             .fromInt(oracleData.aggLogPrice / int256(uint256(oracleData.period)))
             .mul(_LOG2_OF_TICK_FP)
             .pow_2();
-        priceFP = _truncatePrice(priceFP_); // Oracle attack protection
-        emit PriceUpdated(priceFP);
-        if (priceFP_ != priceFP) emit PriceTruncated(priceFP_);
-        return _outputPrice(addrCollateralToken, priceFP);
+        price = _truncatePrice(price); // Oracle attack protection
+        emit PriceUpdated(price);
+        if (price != price) emit PriceTruncated(price);
+        return _outputPrice(addrCollateralToken, price);
     }
 
     /*////////////////////////////////////////////////////////////////
                         PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
+
+    function _maxPriceAttenPerSec(uint24 fee) private pure returns (bytes16) {
+        return FloatingPoint.ONE.sub(FloatingPoint.divu(fee, 0.5 * 10 ** 6)).pow(ONE_DIV_SIXTY); // 5 blocks of 12s = 60s
+    }
+
+    function _uniswapFeeTier(uint8 indexFeeTier) internal view returns (UniswapFeeTier memory uniswapFeeTier) {
+        if (indexFeeTier == 0) return UniswapFeeTier(100, 1);
+        if (indexFeeTier == 1) return UniswapFeeTier(500, 10);
+        if (indexFeeTier == 2) return UniswapFeeTier(3000, 60);
+        if (indexFeeTier == 3) return UniswapFeeTier(10000, 200);
+        else {
+            // Extra fee tiers
+            uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
+            uint NuniswapExtraFeeTiers = uint(uint16(uniswapExtraFeeTiers_));
+            if (indexFeeTier >= NuniswapExtraFeeTiers + 4) revert UniswapFeeTierIndexOutOfBounds();
+
+            uniswapExtraFeeTiers_ >>= 16 + 48 * (indexFeeTier - 4);
+            return UniswapFeeTier(uint24(uniswapExtraFeeTiers_), uint24(uniswapExtraFeeTiers_ >> 24));
+        }
+    }
+
+    function _uniswapFeeTiers() internal view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
+        // Find out # of all possible fee tiers
+        uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
+        uint NuniswapExtraFeeTiers = uint(uint16(uniswapExtraFeeTiers_));
+
+        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
+        uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
+        uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
+        uniswapFeeTiers[2] = UniswapFeeTier(3000, 60);
+        uniswapFeeTiers[3] = UniswapFeeTier(10000, 200);
+
+        // Extra fee tiers
+        if (NuniswapExtraFeeTiers > 0) {
+            uniswapExtraFeeTiers_ >>= 16;
+            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
+                uniswapFeeTiers[4 + i] = UniswapFeeTier(
+                    uint24(uniswapExtraFeeTiers_),
+                    uint24(uniswapExtraFeeTiers_ >> 24),
+                    0
+                );
+                uniswapExtraFeeTiers_ >>= 48;
+            }
+        }
+    }
+
+    function _feeTierScore(uint160 liquidity, UniswapFeeTier memory uniswapFeeTier) private returns (uint256) {
+        return ((uint256(liquidity) * uint256(uniswapFeeTier.fee)) << 72) / uint256(uint24(uniswapFeeTier.tickSpacing));
+    }
 
     function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private pure returns (IUniswapV3Pool) {
         return
@@ -412,7 +440,7 @@ contract Oracle {
         // Retrieve Uniswap pool
         IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, fee);
 
-        // If pool does not exist, no-op return all parameters 0.
+        // If pool does not exist, no-op, return all parameters 0.
         if (address(uniswapPool).code == 0) return oracleData;
 
         // Retrieve oracle info from Uniswap v3
@@ -429,7 +457,7 @@ contract Oracle {
             tickCumulatives = tickCumulatives_;
             liquidityCumulatives = liquidityCumulatives_;
         } catch Error(string memory reason) {
-            // If pool is not initialized (or other unexpected errors), no-op return all parameters 0.
+            // If pool is not initialized (or other unexpected errors), no-op, return all parameters 0.
             if (keccak256(bytes(reason)) != keccak256(bytes("OLD"))) return oracleData;
 
             /* 
@@ -494,30 +522,29 @@ contract Oracle {
         oracleData.period = interval[0];
     }
 
-    function _outputPrice(address addrCollateralToken, bytes16 priceFP_) private view returns (bytes16) {
-        bytes16 priceOut = addrCollateralToken == TOKEN_B ? priceFP_.inv() : priceFP;
-        assert(priceOut.cmp(FloatingPoint.INFINITY) < 0 && priceOut.cmp(FloatingPoint.ZERO) > 0);
-        return priceOut;
-    }
-
     /**
      * @dev https://uniswap.org/blog/uniswap-v3-oracles#potential-oracle-innovations
      */
-    function _truncatePrice(bytes16 priceFP_) internal view returns (bytes16) {
-        bytes16 maxPriceAttenuation = uniswapFeeTiers[indexFeeTier].maxPriceAttenPerSec.pow(
-            FloatingPoint.fromUInt(block.timestamp - tsPrice)
+    function _truncatePrice(bytes16 price, OracleState memory oracleState) internal view returns (bytes16) {
+        bytes16 maxPriceAttenPerSec = FloatingPoint
+            .ONE
+            .sub(FloatingPoint.divu(oracleState.uniswapFeeTier.fee, 0.5 * 10 ** 6))
+            .pow(ONE_DIV_SIXTY); // 5 blocks of 12s = 60s
+        bytes16 maxPriceAttenuation = maxPriceAttenPerSec.pow(
+            FloatingPoint.fromUInt(block.timestamp - oracleState.timeStamp)
         );
 
-        bytes16 priceMax = priceFP.div(maxPriceAttenuation);
-        if (priceFP_.cmp(priceMax) > 0) return priceMax;
+        bytes16 priceMax = price.div(maxPriceAttenuation);
+        if (price.cmp(priceMax) > 0) return priceMax;
 
-        bytes16 priceMin = priceFP.mul(maxPriceAttenuation);
-        if (priceFP_.cmp(priceMin) < 0) return priceMin;
+        bytes16 priceMin = price.mul(maxPriceAttenuation);
+        if (price.cmp(priceMin) < 0) return priceMin;
 
-        return priceFP_;
+        return price;
     }
 
     function _orderTokens(address tokenA, address tokenB) private pure returns (address, address) {
         if (tokenA > tokenB) (tokenA, tokenB) = (tokenB, tokenA);
+        return (tokenA, tokenB);
     }
 }
