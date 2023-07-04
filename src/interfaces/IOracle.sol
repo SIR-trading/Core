@@ -2,21 +2,15 @@
 pragma solidity ^0.8.0;
 
 interface IOracle {
-    function FACTORY() external view returns (address);
+    function TWAP_DELTA() external pure returns (uint16);
 
-    function TOKEN_A() external view returns (address);
+    function TWAP_DURATION() external pure returns (uint16);
 
-    function TOKEN_B() external view returns (address);
+    function newUniswapFeeTier(uint24 fee) external;
 
-    function feesUniswapV3Pools(uint256 index) external view returns (uint24);
+    function initialize(address tokenA, address tokenB) external;
 
-    function addrsUniswapV3Pools(uint24 index) external view returns (address);
+    function updateOracleState(address collateralToken, address debtToken) external returns (bytes16);
 
-    function newFeePool(uint24 fee) external returns (bool);
-
-    function increaseOracleLength(uint16 Nblocks) external;
-
-    function getPrice(address) external view returns (bytes16);
-
-    function updatePriceMemory(address) external returns (bytes16);
+    function getPrice(address collateralToken, address debtToken) external view returns (bytes16);
 }
