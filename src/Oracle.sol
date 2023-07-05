@@ -79,6 +79,12 @@ contract Oracle {
     error OracleAlreadyInitialized();
     error OracleNotInitialized();
 
+    event UniswapFeeTierAdded(uint24 fee);
+    event OracleInitialized(address tokenA, address tokenB, uint24 feeTier);
+    event OracleFeeTierChanged(address tokenA, address tokenB, uint24 feeTier);
+    event PriceUpdated(address tokenA, address tokenB, bytes16 price);
+    event PriceTruncated(address tokenA, address tokenB, bytes16 price);
+
     using FloatingPoint for bytes16;
 
     /**
@@ -111,15 +117,10 @@ contract Oracle {
         UniswapFeeTier uniswapFeeTier; // Uniswap v3 fee tier currently being used as oracle
     }
 
-    event UniswapFeeTierAdded(uint24 fee);
-    event PriceUpdated(address tokenA, address tokenB, bytes16 price);
-    event PriceTruncated(address tokenA, address tokenB, bytes16 price);
-
     /**
      * Constants
      */
-    uint16 private constant MAX_CARDINALITY = 2 ^ (16 - 1);
-    bytes16 private constant ONE_DIV_SIXTY = 0x3ff91111111111111111111111111111;
+    bytes16 private constant _ONE_DIV_SIXTY = 0x3ff91111111111111111111111111111;
     bytes16 private constant _LOG2_OF_TICK_FP = 0x3ff22e8a3a504218b0777ee4f3ff131c; // log2(1.0001)
     uint16 public constant TWAP_DELTA = 10 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
     uint16 public constant TWAP_DURATION = 1 hours;
@@ -127,7 +128,7 @@ contract Oracle {
     /**
      * State variables
      */
-    mapping(address tokenA => mapping(address tokenB => OracleState)) private oracleStates;
+    mapping(address tokenA => mapping(address tokenB => OracleState)) public oracleStates;
     uint private _uniswapExtraFeeTiers; // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier
 
     /*////////////////////////////////////////////////////////////////
@@ -137,7 +138,7 @@ contract Oracle {
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
     function newUniswapFeeTier(uint24 fee) external {
         // Get all fee tiers
-        UniswapFeeTier[] memory uniswapFeeTiers = _uniswapFeeTiers();
+        UniswapFeeTier[] memory uniswapFeeTiers = getUniswapFeeTiers();
 
         // Check there is space to add a new fee tier
         require(uniswapFeeTiers.length < 9); // 4 basic fee tiers + 5 extra fee tiers max
@@ -176,7 +177,7 @@ contract Oracle {
         if (oracleState.initialized) revert OracleAlreadyInitialized();
 
         // Get all fee tiers
-        UniswapFeeTier[] memory uniswapFeeTiers = _uniswapFeeTiers();
+        UniswapFeeTier[] memory uniswapFeeTiers = getUniswapFeeTiers();
 
         // Find the best fee tier by weighted liquidity
         uint256 score;
@@ -211,6 +212,8 @@ contract Oracle {
 
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
+
+        emit OracleInitialized(tokenA, tokenB, uniswapFeeTiers[oracleState.indexFeeTier].fee);
     }
 
     /**
@@ -261,6 +264,7 @@ contract Oracle {
                     // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
                     oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
                     oracleState.uniswapFeeTier = uniswapFeeTierProbed;
+                    emit OracleFeeTierChanged(tokenA, tokenB, uniswapFeeTierProbed.fee);
                 }
             }
 
@@ -286,6 +290,30 @@ contract Oracle {
     /*////////////////////////////////////////////////////////////////
                             READ-ONLY FUNCTIONS
     /////////////////////////////////////////////////////////////////*/
+
+    function getUniswapFeeTiers() public view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
+        // Find out # of all possible fee tiers
+        uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
+        uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
+
+        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
+        uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
+        uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
+        uniswapFeeTiers[2] = UniswapFeeTier(3000, 60);
+        uniswapFeeTiers[3] = UniswapFeeTier(10000, 200);
+
+        // Extra fee tiers
+        if (NuniswapExtraFeeTiers > 0) {
+            uniswapExtraFeeTiers_ >>= 8;
+            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
+                uniswapFeeTiers[4 + i] = UniswapFeeTier(
+                    uint24(uniswapExtraFeeTiers_),
+                    int24(uint24(uniswapExtraFeeTiers_ >> 24))
+                );
+                uniswapExtraFeeTiers_ >>= 48;
+            }
+        }
+    }
 
     /**
      * @return the TWAP price of the pair of tokens
@@ -340,30 +368,6 @@ contract Oracle {
 
             uniswapExtraFeeTiers_ >>= 8 + 48 * (indexFeeTier - 4);
             return UniswapFeeTier(uint24(uniswapExtraFeeTiers_), int24(uint24(uniswapExtraFeeTiers_ >> 24)));
-        }
-    }
-
-    function _uniswapFeeTiers() internal view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
-        // Find out # of all possible fee tiers
-        uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
-        uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
-
-        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
-        uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
-        uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
-        uniswapFeeTiers[2] = UniswapFeeTier(3000, 60);
-        uniswapFeeTiers[3] = UniswapFeeTier(10000, 200);
-
-        // Extra fee tiers
-        if (NuniswapExtraFeeTiers > 0) {
-            uniswapExtraFeeTiers_ >>= 8;
-            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
-                uniswapFeeTiers[4 + i] = UniswapFeeTier(
-                    uint24(uniswapExtraFeeTiers_),
-                    int24(uint24(uniswapExtraFeeTiers_ >> 24))
-                );
-                uniswapExtraFeeTiers_ >>= 48;
-            }
         }
     }
 
@@ -479,7 +483,7 @@ contract Oracle {
         bytes16 maxPriceAttenPerSec = FloatingPoint
             .ONE
             .sub(FloatingPoint.divu(oracleState.uniswapFeeTier.fee, 0.5 * 10 ** 6))
-            .pow(ONE_DIV_SIXTY); // 5 blocks of 12s = 60s
+            .pow(_ONE_DIV_SIXTY); // 5 blocks of 12s = 60s
         bytes16 maxPriceAttenuation = maxPriceAttenPerSec.pow(
             FloatingPoint.fromUInt(block.timestamp - oracleState.timeStamp)
         );
