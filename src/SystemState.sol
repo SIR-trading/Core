@@ -202,10 +202,8 @@ contract SystemState is ERC20 {
         for (uint256 i = 0; i < LPers.length; i++) {
             LPerIssuanceParams memory lperIssuance = _getLPerIssuance(
                 vaultId,
-                LPers[i],
                 nonRebasingBalances,
-                nonRebasingBalances.timestampedBalances[LPers[i]].balance,
-                nonRebasingBalances.get(LPers[i]),
+                LPers[i],
                 nonRebasingSupplyExcVault
             );
             _vaultIssuanceStates[vaultId].lpersIssuances[LPers[i]] = lperIssuance;
@@ -334,8 +332,8 @@ contract SystemState is ERC20 {
 
     function _getLPerIssuance(
         uint256 vaultId,
-        address LPer,
         ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
+        address LPer,
         bytes16 nonRebasingSupplyExcVault
     ) internal view returns (LPerIssuanceParams memory lperIssuance) {
         /**

@@ -35,16 +35,16 @@ library ResettableBalancesBytes16 {
         });
     }
 
-    function transfer(
+    function transferAll(
         ResettableBalances storage resettableBalances,
         address from,
-        address to,
-        bytes16 amount
-    ) internal {
+        address to
+    ) internal returns (bytes16 nonRebasingAmount) {
         if (resettableBalances.nonRebasingSupply == FloatingPoint.ZERO) revert ZeroBalance();
 
-        setBalance(resettableBalances, from, getBalance(resettableBalances, from).sub(amount));
-        setBalance(resettableBalances, to, getBalance(resettableBalances, to).add(amount));
+        nonRebasingAmount = getBalance(resettableBalances, from);
+        setBalance(resettableBalances, from, FloatingPoint.ZERO);
+        setBalance(resettableBalances, to, getBalance(resettableBalances, to).add(nonRebasingAmount));
     }
 
     function transfer(
