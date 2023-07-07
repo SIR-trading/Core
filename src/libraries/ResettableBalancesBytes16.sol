@@ -75,7 +75,7 @@ library ResettableBalancesBytes16 {
         address account,
         uint256 amount,
         uint256 totalSupply
-    ) internal returns (bool lpersLiquidated) {
+    ) internal returns (bool lpersLiquidated, bool mintedPOL) {
         if (totalSupply == 0) {
             // Liquidate previous LPers if the LP reserve is empty
             if (resettableBalances.nonRebasingSupply.cmp(FloatingPoint.ZERO) > 0) {
@@ -102,6 +102,7 @@ library ResettableBalancesBytes16 {
                 bytes16 POL = FloatingPoint.fromUInt(totalSupply);
                 setBalance(resettableBalances, address(this), POL);
                 resettableBalances.nonRebasingSupply = POL;
+                mintedPOL = true;
             }
 
             // Update balance

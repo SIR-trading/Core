@@ -53,6 +53,7 @@ abstract contract MAAM {
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     event URI(string value, uint256 indexed id);
     event Liquidation(uint256 vaultId, uint256 amount);
+    event MintedPOL(uint256 vaultId, uint256 amount);
 
     IPoolLogic internal immutable _POOL_LOGIC;
 
@@ -100,7 +101,7 @@ abstract contract MAAM {
         _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
 
         // Transfer
-        _nonRebasingBalances[id].transfer(from, to, amount, totalSupply_);
+        _nonRebasingBalances[id].transfer(from, to, amount, totalSupply(id));
 
         emit TransferSingle(msg.sender, from, to, id, amount);
 
@@ -136,7 +137,7 @@ abstract contract MAAM {
             _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
 
             // Transfer
-            _nonRebasingBalances[id].transfer(from, to, amount, totalSupply_);
+            _nonRebasingBalances[id].transfer(from, to, amount, totalSupply(id));
 
             // An array can't have a total length
             // larger than the max uint256 value.
@@ -164,7 +165,7 @@ abstract contract MAAM {
 
         // Transfer
         bytes16 nonRebasingAmount = _nonRebasingBalances[id].transferAll(from, to);
-        uint amount = nonRebasingAmount.mulDiv(totalSupply(), _nonRebasingBalances[id].nonRebasingSupply);
+        uint amount = nonRebasingAmount.mulDiv(totalSupply(id), _nonRebasingBalances[id].nonRebasingSupply);
 
         emit TransferSingle(msg.sender, from, to, id, amount);
 
@@ -214,9 +215,13 @@ abstract contract MAAM {
         _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
 
         // Mint and liquidate previous LPers if totalSupply_ is 0
-        if (_nonRebasingBalances[id].mint(account, amount, totalSupply_)) {
+        uint256 totalSupply_ = totalSupply(id);
+        (bool lpersLiquidated, bool mintedPOL) = _nonRebasingBalances[id].mint(account, amount, totalSupply_);
+        if (lpersLiquidated) {
             _POOL_LOGIC.haultIssuance(id);
             emit Liquidation(id, totalSupply_);
+        } else if (mintedPOL) {
+            emit MintedPOL(id, totalSupply_);
         }
 
         emit TransferSingle(msg.sender, address(0), to, id, amount);
@@ -235,7 +240,7 @@ abstract contract MAAM {
         _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
 
         // Burn
-        _nonRebasingBalances[id].burn(account, amount, totalSupply_);
+        _nonRebasingBalances[id].burn(account, amount, totalSupply(id));
 
         emit TransferSingle(msg.sender, from, address(0), id, amount);
     }
@@ -254,7 +259,7 @@ abstract contract MAAM {
     function balanceOf(address account, uint256 id) public view returns (uint256) {
         bytes16 nonRebasingBalance = _nonRebasingBalances[id].get(account);
         assert(nonRebasingBalance.cmp(_nonRebasingBalances[id].nonRebasingSupply) <= 0);
-        return nonRebasingBalance.mulDiv(totalSupply(), _nonRebasingBalances[id].nonRebasingSupply); // Division by 0 not possible because nonRebasingSupply!=0
+        return nonRebasingBalance.mulDiv(totalSupply(id), _nonRebasingBalances[id].nonRebasingSupply); // Division by 0 not possible because nonRebasingSupply!=0
     }
 
     /**
