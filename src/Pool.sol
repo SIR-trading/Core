@@ -35,9 +35,13 @@ contract Pool is MAAM, PoolStructs {
 
     PoolStructs.State public state;
 
-    constructor(address debtToken, address collateralToken, int8 leverageTier, address oracle, address poolLogic)
-        MAAM(collateralToken, poolLogic)
-    {
+    constructor(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier,
+        address oracle,
+        address poolLogic
+    ) MAAM(collateralToken, poolLogic) {
         // Deploy the two synthetic tokens
         (_TEA_TOKEN, _APE_TOKEN) = DeployerOfTokens.deploy(debtToken, collateralToken, leverageTier);
 
@@ -66,8 +70,14 @@ contract Pool is MAAM, PoolStructs {
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
         PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 amountTEA, uint256 feeToPOL) =
-            _POOL_LOGIC.quoteMint(state_, _LEVERAGE_TIER, price, _TEA_TOKEN.totalSupply(), _COLLATERAL_TOKEN, true);
+        (PoolStructs.Reserves memory reservesPre, uint256 amountTEA, uint256 feeToPOL) = _POOL_LOGIC.quoteMint(
+            state_,
+            _LEVERAGE_TIER,
+            price,
+            _TEA_TOKEN.totalSupply(),
+            _COLLATERAL_TOKEN,
+            true
+        );
 
         // Liquidate gentlemen if necessary
         if (reservesPre.gentlemenReserve == 0) _TEA_TOKEN.liquidate();
@@ -87,10 +97,16 @@ contract Pool is MAAM, PoolStructs {
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
         PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) =
-            _POOL_LOGIC.quoteMint(state_, _LEVERAGE_TIER, price, _APE_TOKEN.totalSupply(), _COLLATERAL_TOKEN, false);
+        (PoolStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) = _POOL_LOGIC.quoteMint(
+            state_,
+            _LEVERAGE_TIER,
+            price,
+            _APE_TOKEN.totalSupply(),
+            _COLLATERAL_TOKEN,
+            false
+        );
 
-        // Liquidate gentlemen if necessary
+        // Liquidate apes if necessary
         if (reservesPre.apesReserve == 0) _APE_TOKEN.liquidate();
 
         // Mints
@@ -112,8 +128,8 @@ contract Pool is MAAM, PoolStructs {
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
         PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) =
-            _POOL_LOGIC.quoteBurn(state_, _LEVERAGE_TIER, price, _TEA_TOKEN.totalSupply(), amountTEA, true);
+        (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _POOL_LOGIC
+            .quoteBurn(state_, _LEVERAGE_TIER, price, _TEA_TOKEN.totalSupply(), amountTEA, true);
 
         // Burn TEA, mint POL?
         _TEA_TOKEN.burn(msg.sender, amountTEA);
@@ -137,8 +153,8 @@ contract Pool is MAAM, PoolStructs {
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
         PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) =
-            _POOL_LOGIC.quoteBurn(state_, _LEVERAGE_TIER, price, _APE_TOKEN.totalSupply(), amountAPE, false);
+        (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _POOL_LOGIC
+            .quoteBurn(state_, _LEVERAGE_TIER, price, _APE_TOKEN.totalSupply(), amountAPE, false);
 
         // Burn TEA, mint POL?
         _APE_TOKEN.burn(msg.sender, amountAPE);
@@ -164,8 +180,12 @@ contract Pool is MAAM, PoolStructs {
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
         PoolStructs.State memory state_ = state;
-        (uint256 LPReservePre, uint256 collateralDeposited) =
-            _POOL_LOGIC.quoteMintMAAM(state_, _LEVERAGE_TIER, price, _COLLATERAL_TOKEN);
+        (uint256 LPReservePre, uint256 collateralDeposited) = _POOL_LOGIC.quoteMintMAAM(
+            state_,
+            _LEVERAGE_TIER,
+            price,
+            _COLLATERAL_TOKEN
+        );
 
         // Mint MAAM
         _mint(msg.sender, collateralDeposited, LPReservePre);

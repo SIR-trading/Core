@@ -101,7 +101,7 @@ contract Oracle {
     struct UniswapOracleData {
         int64 aggLogPrice; // Aggregated log price over the period
         uint160 avLiquidity; // Average in-range liquidity over the period
-        uint32 period; // Duration of the current TWAP
+        uint40 period; // Duration of the current TWAP
         uint16 cardinalityToIncrease; // Cardinality suggested for increase
     }
 
@@ -110,7 +110,7 @@ contract Oracle {
      */
     struct OracleState {
         bytes16 price; // Last stored price
-        uint32 timeStamp; // Timestamp of the last stored price
+        uint40 timeStamp; // Timestamp of the last stored price
         uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
         uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
         bool initialized; // Whether the oracle has been initialized
@@ -122,8 +122,8 @@ contract Oracle {
      */
     bytes16 private constant _ONE_DIV_SIXTY = 0x3ff91111111111111111111111111111;
     bytes16 private constant _LOG2_OF_TICK_FP = 0x3ff22e8a3a504218b0777ee4f3ff131c; // log2(1.0001)
-    uint16 public constant TWAP_DELTA = 10 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
-    uint16 public constant TWAP_DURATION = 1 hours;
+    uint32 public constant TWAP_DELTA = 10 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
+    uint32 public constant TWAP_DURATION = 1 hours;
 
     /**
      * State variables
@@ -233,7 +233,7 @@ contract Oracle {
         if (_updatePrice(oracleState, oracleData)) emit PriceTruncated(tokenA, tokenB, oracleState.price);
 
         // Fee tier is updated once per block at most
-        if (oracleState.timeStamp != uint32(block.timestamp % 2 ** 32)) {
+        if (oracleState.timeStamp != uint32(block.timestamp)) {
             // Get current fee tier and the one we wish to probe
             UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
@@ -275,7 +275,7 @@ contract Oracle {
                 oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
 
             // Update timestamp
-            oracleState.timeStamp = uint32(block.timestamp % 2 ** 32);
+            oracleState.timeStamp = uint40(block.timestamp);
         }
 
         // Save new oracle state to storage
@@ -435,7 +435,7 @@ contract Oracle {
             (, , observationIndex, cardinalityNow, cardinalityNext, , ) = uniswapPool.slot0();
 
             // Obtain the timestamp of the oldest observation
-            uint32 blockTimestampOldest;
+            uint40 blockTimestampOldest;
             bool initialized;
             (blockTimestampOldest, , , initialized) = uniswapPool.observations((observationIndex + 1) % cardinalityNow);
 

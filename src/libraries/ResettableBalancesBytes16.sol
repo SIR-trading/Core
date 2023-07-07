@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Libraries
-import "./FloatingPoint.sol";
+import {FloatingPoint} from "./FloatingPoint.sol";
 
 library ResettableBalancesBytes16 {
     error ZeroBalance();

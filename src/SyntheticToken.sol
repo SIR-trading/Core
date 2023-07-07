@@ -2,24 +2,22 @@
 pragma solidity >=0.8.0;
 
 // Interfaces
-import "uniswap-v2-core/interfaces/IERC20.sol";
+import {IERC20} from "uniswap-v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import "./libraries/FullMath.sol";
-import "./libraries/TokenNaming.sol";
-import "openzeppelin/utils/Strings.sol";
-import "./libraries/ResettableBalancesUInt216.sol";
+import {TokenNaming} from "./libraries/TokenNaming.sol";
+import {ResettableBalancesUInt216} from "./libraries/ResettableBalancesUInt216.sol";
 
 // Contracts
-import "./Owned.sol";
+import {Owned} from "./Owned.sol";
 
 /// @notice Highly modified ERC20 from Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/IERC20.sol)
 abstract contract SyntheticToken is Owned {
     using ResettableBalancesUInt216 for ResettableBalancesUInt216.ResettableBalances;
 
-    address public immutable DEBT_TOKEN;
-    address public immutable COLLATERAL_TOKEN;
-    int8 public immutable LEVERAGE_TIER;
+    address public collateralToken;
+    address public debtToken;
+    int8 public leverageTier;
 
     /*///////////////////////////////////////////////////////////////
                                   EVENTS
@@ -39,7 +37,7 @@ abstract contract SyntheticToken is Owned {
 
     string public symbol;
 
-    uint8 public immutable decimals;
+    uint8 public decimals;
 
     /*///////////////////////////////////////////////////////////////
                               IERC20 STORAGE
@@ -71,24 +69,30 @@ abstract contract SyntheticToken is Owned {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(
+    constructor() {
+        // Because the constructor does not receive parameters, the deployment bytecode is deterministic
+        INITIAL_CHAIN_ID = block.chainid;
+        INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
+    }
+
+    function initialize(
         string memory name_,
         string memory symbolPrefix,
         uint8 decimals_,
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) {
+        address debtToken_,
+        address collateralToken_,
+        int8 leverageTier_
+    ) external {
+        // Make sure this function is only called once
+        require(bytes(name).length == 0);
+
         name = name_;
         symbol = TokenNaming._generateSymbol(symbolPrefix, address(msg.sender));
         decimals = decimals_;
 
-        DEBT_TOKEN = debtToken;
-        COLLATERAL_TOKEN = collateralToken;
-        LEVERAGE_TIER = leverageTier;
-
-        INITIAL_CHAIN_ID = block.chainid;
-        INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
+        debtToken = debtToken_;
+        collateralToken = collateralToken_;
+        leverageTier = leverageTier_;
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -133,9 +137,15 @@ abstract contract SyntheticToken is Owned {
                               EIP-2612 LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
-        external
-    {
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external {
         require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
 
         // Unchecked because the only math done is incrementing
@@ -163,15 +173,16 @@ abstract contract SyntheticToken is Owned {
     }
 
     function _computeDomainSeparator() private view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256(bytes(name)),
-                keccak256(bytes("1")),
-                block.chainid,
-                address(this)
-            )
-        );
+        return
+            keccak256(
+                abi.encode(
+                    keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                    keccak256(bytes(name)),
+                    keccak256(bytes("1")),
+                    block.chainid,
+                    address(this)
+                )
+            );
     }
 
     /*///////////////////////////////////////////////////////////////

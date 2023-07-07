@@ -7,7 +7,7 @@ import "./interfaces/IFactory.sol";
 import "./interfaces/ISystemState.sol";
 
 // Smart contracts
-import "openzeppelin/access/Ownable.sol";
+import {Owned} from "openzeppelin/access/Ownable.sol";
 
 contract SystemControl is Ownable {
     event systemRunning();
@@ -105,7 +105,7 @@ contract SystemControl is Ownable {
             sumTaxesToDAO += uint256(taxesToDAO[i]);
             sumSqTaxes += uint256(taxesToDAO[i]) ** 2;
 
-            (address debtToken,,,) = _FACTORY.poolsParameters(nextPools[i]);
+            (address debtToken, , , ) = _FACTORY.poolsParameters(nextPools[i]);
             require(debtToken != address(0), "Not a SIR pool");
         }
         require(sumSqTaxes <= (1e4) ** 2, "Taxes too high");
@@ -114,8 +114,13 @@ contract SystemControl is Ownable {
         for (uint256 i = 0; i < nextPools.length; i++) {}
 
         // Set new issuances
-        hashPools =
-            _SYSTEM_STATE.changePoolsIssuances(prevPools, latestSuppliesMAAM, nextPools, taxesToDAO, sumTaxesToDAO);
+        hashPools = _SYSTEM_STATE.changePoolsIssuances(
+            prevPools,
+            latestSuppliesMAAM,
+            nextPools,
+            taxesToDAO,
+            sumTaxesToDAO
+        );
     }
 
     function updateContributorsIssuances(
@@ -129,8 +134,12 @@ contract SystemControl is Ownable {
         require(keccak256(abi.encodePacked(prevContributors)) == hashContributors, "Incorrect list of contributors");
 
         // Set new issuances
-        hashContributors =
-            _SYSTEM_STATE.changeContributorsIssuances(prevContributors, nextContributors, issuances, false);
+        hashContributors = _SYSTEM_STATE.changeContributorsIssuances(
+            prevContributors,
+            nextContributors,
+            issuances,
+            false
+        );
     }
 
     function updateContributorsIssuances(
@@ -148,8 +157,12 @@ contract SystemControl is Ownable {
         require(keccak256(abi.encodePacked(pools)) == hashPools, "Incorrect list of pools");
 
         // Set new issuances
-        hashContributors =
-            _SYSTEM_STATE.changeContributorsIssuances(prevContributors, nextContributors, issuances, true);
+        hashContributors = _SYSTEM_STATE.changeContributorsIssuances(
+            prevContributors,
+            nextContributors,
+            issuances,
+            true
+        );
 
         // Get the MAAM supplies of all the previous pools
         bytes16[] memory latestSuppliesMAAM = new bytes16[](pools.length);

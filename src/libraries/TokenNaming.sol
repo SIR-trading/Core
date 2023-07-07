@@ -2,7 +2,7 @@
 pragma solidity >=0.8.0;
 
 // Libraries
-import "openzeppelin/utils/Strings.sol";
+import {Strings} from "openzeppelin/utils/Strings.sol";
 
 library TokenNaming {
     function _generateSymbol(string memory symbolPrefix, address addr) internal pure returns (string memory) {

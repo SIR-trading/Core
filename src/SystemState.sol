@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Interfaces
-import "./interfaces/IPool.sol";
-
 // Libraries
-import "./libraries/FloatingPoint.sol";
+import {ResettableBalancesBytes16, FloatingPoint} from "./libraries/ResettableBalancesBytes16.sol";
 
 // Contracts
-import "solmate/tokens/ERC20.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
 
 contract SystemState is ERC20 {
     using FloatingPoint for bytes16;
@@ -16,14 +13,14 @@ contract SystemState is ERC20 {
     struct LPerIssuanceParams {
         bytes16 cumSIRperMAAM; // Cumulative SIR minted by an LPer per unit of MAAM (it should only be active when his balance is non-zero)
         uint104 rewards; // SIR owed to the LPer
-        uint24 indexLiquidations; // For efficiency purposes when searching through poolIssuanceParams[pool]._liquidationsCumSIRperMAAM
+        uint24 indexLiquidations; // For efficiency purposes when searching through poolIssuanceParams[vaultId]._liquidationsCumSIRperMAAM
     }
 
-    struct PoolIssuanceParams {
-        uint16 taxToDAO; // [‱] A value of 1e4 means that the pool pays 10% of its fee revenue to the DAO.
+    struct VaultIssuanceParams {
+        uint16 taxToDAO; // [‱] A value of 1e4 means that the vaultId pays 10% of its fee revenue to the DAO.
         uint72 issuance;
         uint40 tsLastUpdate; // timestamp of the last time cumSIRperMAAM was updated. 0 => use systemParams.tsIssuanceStart instead
-        bytes16 cumSIRperMAAM; // Cumulative SIR minted by the pool per unit of MAAM.
+        bytes16 cumSIRperMAAM; // Cumulative SIR minted by the vaultId per unit of MAAM.
     }
 
     struct ContributorIssuanceParams {
@@ -32,12 +29,18 @@ contract SystemState is ERC20 {
         uint128 rewards; // SIR owed to the contributor
     }
 
+    struct VaultIssuanceState {
+        VaultIssuanceParams vaultIssuance;
+        bytes16[] liquidationsCumSIRperMAAM;
+        mapping(address => LPerIssuanceParams) lpersIssuances;
+    }
+
     struct SystemParameters {
         // Timestamp when issuance (re)started. 0 => issuance has not started yet
         uint40 tsIssuanceStart;
         /**
          * Base fee in basis points charged to gentlmen/apes per unit of liquidity.
-         *     For example, in a pool with 3x target leverage but an actual leverage of 2.9, apes are charged a fee for minting APE, and gentlemen are charged for burning TEA.
+         *     For example, in a vaultId with 3x target leverage but an actual leverage of 2.9, apes are charged a fee for minting APE, and gentlemen are charged for burning TEA.
          *     If the the actual leverage was higher than the target leverage, then apes would be charged a fee for burning APE, and gentlemen would be charged for minting TEA.
          *     In this particular example, ideally for every unit of collateral backing APE, 2 units of collateral should back TEA.
          *     Thus the fee charge upon minting APE (if actual leverage is 2.9) is fee = (2 * systemParams.basisFee / 10,000) * collateralDeposited
@@ -52,30 +55,26 @@ contract SystemState is ERC20 {
         _;
     }
 
+    modifier onlyVault() {
+        _onlyVault();
+        _;
+    }
+
     // Tokens issued per second
     uint72 public constant ISSUANCE = 1e2 * 1e18;
     uint256 private constant _THREE_YEARS = 365 * 24 * 60 * 60;
 
     address public immutable SYSTEM_CONTROL;
+    address public immutable VAULT;
 
-    mapping(address => ContributorIssuanceParams)
-        internal _contributorsIssuances;
-    mapping(address => PoolIssuanceParams) internal _poolsIssuances;
-    mapping(address => bytes16[]) internal _liquidationsCumSIRperMAAM; // Stores cumSIRperMAAM value during LP liquidations
-    mapping(address => mapping(address => LPerIssuanceParams))
-        internal _lpersIssuances;
+    mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
+    mapping(vaultId => VaultIssuanceState) internal _vaultIssuanceStates;
 
     SystemParameters public systemParams =
-        SystemParameters({
-            tsIssuanceStart: 0,
-            basisFee: 100,
-            onlyWithdrawals: false,
-            issuanceAllPools: ISSUANCE
-        });
+        SystemParameters({tsIssuanceStart: 0, basisFee: 100, onlyWithdrawals: false, issuanceAllPools: ISSUANCE});
 
-    constructor(
-        address systemControl
-    ) ERC20("Governance token of the SIR protocol", "SIR", 18) {
+    constructor(address vault, address systemControl) ERC20("Governance token of the SIR protocol", "SIR", 18) {
+        VAULT = vault;
         SYSTEM_CONTROL = systemControl;
     }
 
@@ -103,18 +102,14 @@ contract SystemState is ERC20 {
                 uint128(
                     block.timestamp -
                         (
-                            systemParams.tsIssuanceStart >
-                                contributorParams.tsLastUpdate
+                            systemParams.tsIssuanceStart > contributorParams.tsLastUpdate
                                 ? systemParams.tsIssuanceStart
                                 : contributorParams.tsLastUpdate
                         )
                 );
         } else {
             // Already exceeded 3 years
-            if (
-                contributorParams.tsLastUpdate <
-                systemParams.tsIssuanceStart + _THREE_YEARS
-            ) {
+            if (contributorParams.tsLastUpdate < systemParams.tsIssuanceStart + _THREE_YEARS) {
                 // Update the rewards up to 3 yeards
                 contributorParams.rewards +=
                     contributorParams.issuance *
@@ -122,8 +117,7 @@ contract SystemState is ERC20 {
                         systemParams.tsIssuanceStart +
                             _THREE_YEARS -
                             (
-                                systemParams.tsIssuanceStart >
-                                    contributorParams.tsLastUpdate
+                                systemParams.tsIssuanceStart > contributorParams.tsLastUpdate
                                     ? systemParams.tsIssuanceStart
                                     : contributorParams.tsLastUpdate
                             )
@@ -135,33 +129,13 @@ contract SystemState is ERC20 {
         contributorParams.tsLastUpdate = uint40(block.timestamp);
     }
 
-    function getLPerIssuance(
-        address pool,
-        address LPer
-    ) public view returns (LPerIssuanceParams memory) {
-        (
-            bytes16 lastNonZeroBalance,
-            bytes16 latestBalance,
-            bytes16 latestSupplyMAAM
-        ) = IPool(pool).parametersForSIRContract(LPer);
-        return
-            _getLPerIssuance(
-                pool,
-                LPer,
-                lastNonZeroBalance,
-                latestBalance,
-                latestSupplyMAAM
-            );
-    }
-
     /*////////////////////////////////////////////////////////////////
                             MINT EXTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
     function contributorMint() external {
         // Get contributor issuance parameters
-        ContributorIssuanceParams
-            memory contributorParams = getContributorIssuance(msg.sender);
+        ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
 
         // Mint if any rewards
         require(contributorParams.rewards > 0);
@@ -172,12 +146,18 @@ contract SystemState is ERC20 {
         _contributorsIssuances[msg.sender] = contributorParams;
     }
 
-    function LPerMint(address pool) external {
+    /**
+        TO CHANGE: PERIPHERY IN CHARGE OF UPDATING VAULT ISSUANCE STATE
+        SO WE CAN PASS FIRST REQUIRE
+        Don't query vault here but just check its issuance has been updated.
+        Assume issuances have been updated just before. The periphery would take care of this.
+     */
+    function LPerMint(uint256 vaultId) external {
+        // Check issuance data is up to date
+        require(_vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate == uint40(block.timestamp));
+
         // Get LPer issuance parameters
-        LPerIssuanceParams memory lperIssuance = getLPerIssuance(
-            pool,
-            msg.sender
-        );
+        LPerIssuanceParams memory lperIssuance = _vaultIssuanceStates[vaultId].lpersIssuances[msg.sender];
 
         // Mint if any rewards
         require(lperIssuance.rewards > 0);
@@ -185,52 +165,66 @@ contract SystemState is ERC20 {
 
         // Update state
         lperIssuance.rewards = 0;
-        _lpersIssuances[pool][msg.sender] = lperIssuance;
+        _vaultIssuanceStates[vaultId].lpersIssuances[msg.sender] = lperIssuance;
     }
 
     /*////////////////////////////////////////////////////////////////
-                            POOL ACCESS FUNCTIONS
+                            VAULT ACCESS FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
     /**
      * @dev To be called BEFORE minting/burning MAAM in Pool.sol
      *     @dev Pool parameters get updated only once in the 1st tx in the block
      *     @dev LPer parameters get updated on every call
-     *     @dev No-op unless caller is a pool
+     *     @dev No-op unless caller is a vaultId
      */
     function updateIssuance(
-        address LPer,
-        bytes16 lastNonZeroBalance,
-        bytes16 latestBalance,
-        bytes16 latestSupplyMAAM
-    ) external {
+        uint256 vaultId,
+        ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
+        address[] memory LPers
+    ) external onlyVault {
         if (systemParams.tsIssuanceStart == 0) return; // Issuances has not started
 
-        // Update pool issuance params (they only get updated once per block)
-        _updatePoolIssuance(latestSupplyMAAM);
-
-        // Update LPer issuances params
-        LPerIssuanceParams memory lperIssuance = _getLPerIssuance(
-            msg.sender,
-            LPer,
-            lastNonZeroBalance,
-            latestBalance,
-            latestSupplyMAAM
+        // Get the MAAM total supply excluding the one owned by the vault
+        bytes16 nonRebasingSupplyExcVault = nonRebasingBalances.nonRebasingSupply.subUp(
+            _nonRebasingBalances.get(VAULT)
         );
-        _lpersIssuances[msg.sender][LPer] = lperIssuance;
+
+        // Compute the cumulative SIR per unit of MAAM
+        cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
+
+        // Update vault's issuance params (they only get updated once per block)
+        _vaultIssuanceStates[vaultId].vaultIssuance.cumSIRperMAAM = cumSIRperMAAM;
+        _vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+
+        // Update LPers issuances params
+        for (uint256 i = 0; i < LPers.length; i++) {
+            LPerIssuanceParams memory lperIssuance = _getLPerIssuance(
+                vaultId,
+                LPers[i],
+                nonRebasingBalances.timestampedBalances[LPers[i]].balance,
+                nonRebasingBalances.get(LPers[i]),
+                nonRebasingSupplyExcVault
+            );
+            _vaultIssuanceStates[vaultId].lpersIssuances[LPers[i]] = lperIssuance;
+        }
     }
 
-    function haultLPersIssuances(bytes16 latestSupplyMAAM) external {
-        if (
-            systemParams.tsIssuanceStart == 0 ||
-            _poolsIssuances[msg.sender].issuance == 0
-        ) return; // This pool gets no SIR anyway
+    function haultLPersIssuances(bytes16 nonRebasingSupplyExcVault) external {
+        if (systemParams.tsIssuanceStart == 0 || _vaultIssuanceStates[vaultId].vaultIssuance.issuance == 0) return; // This vault gets no SIR anyway
 
-        // Update pool issuance params (they only get updated once per block)
-        bytes16 cumSIRperMAAM = _updatePoolIssuance(latestSupplyMAAM);
+        // Update vaultId issuance params (they only get updated once per block)
+        bytes16 cumSIRperMAAM = _updateVaultIssuance(nonRebasingSupplyExcVault);
+
+        // Compute the cumulative SIR per unit of MAAM
+        cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
+
+        // Update vaultId issuance params (they only get updated once per block)
+        _vaultIssuanceStates[vaultId].vaultIssuance.cumSIRperMAAM = cumSIRperMAAM;
+        _vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
 
         // Hault LPers issuance because their balances were just liquidated
-        _liquidationsCumSIRperMAAM[msg.sender].push(cumSIRperMAAM);
+        _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.push(cumSIRperMAAM);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -246,10 +240,7 @@ contract SystemState is ERC20 {
         bool onlyWithdrawals_
     ) external onlySystemControl {
         if (tsIssuanceStart_ > 0) {
-            require(
-                systemParams.tsIssuanceStart == 0,
-                "Issuance already started"
-            );
+            require(systemParams.tsIssuanceStart == 0, "Issuance already started");
             systemParams.tsIssuanceStart = tsIssuanceStart_;
         } else if (basisFee_ > 0) {
             systemParams.basisFee = basisFee_;
@@ -269,19 +260,18 @@ contract SystemState is ERC20 {
     ) public onlySystemControl {
         // Reset issuance of prev pools
         for (uint256 i = 0; i < pools.length; i++) {
-            // Update pool issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
-            _poolsIssuances[pools[i]].cumSIRperMAAM = _getCumSIRperMAAM(
+            // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
+            _vaultIssuanceStates[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
                 pools[i],
                 latestSuppliesMAAM[i]
             );
-            _poolsIssuances[pools[i]].tsLastUpdate = uint40(block.timestamp);
+            _vaultIssuanceStates[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
             if (sumTaxes == 0) {
-                _poolsIssuances[pools[i]].taxToDAO = 0;
-                _poolsIssuances[pools[i]].issuance = 0;
+                _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO = 0;
+                _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = 0;
             } else {
-                _poolsIssuances[pools[i]].issuance = uint72(
-                    (systemParams.issuanceAllPools *
-                        _poolsIssuances[pools[i]].taxToDAO) / sumTaxes
+                _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = uint72(
+                    (systemParams.issuanceAllPools * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) / sumTaxes
                 );
             }
         }
@@ -290,7 +280,7 @@ contract SystemState is ERC20 {
     function changePoolsIssuances(
         address[] calldata prevPools,
         bytes16[] memory latestSuppliesMAAM,
-        address[] calldata nextPools,
+        address[] calldata nextVaults,
         uint16[] calldata taxesToDAO,
         uint256 sumTaxes
     ) external onlySystemControl returns (bytes32) {
@@ -298,17 +288,15 @@ contract SystemState is ERC20 {
         recalibratePoolsIssuances(prevPools, latestSuppliesMAAM, 0);
 
         // Set next issuances
-        for (uint256 i = 0; i < nextPools.length; i++) {
-            _poolsIssuances[nextPools[i]].tsLastUpdate = uint40(
-                block.timestamp
-            );
-            _poolsIssuances[nextPools[i]].taxToDAO = taxesToDAO[i];
-            _poolsIssuances[nextPools[i]].issuance = uint72(
+        for (uint256 i = 0; i < nextVaults.length; i++) {
+            _vaultIssuanceStates[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+            _vaultIssuanceStates[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
+            _vaultIssuanceStates[nextVaults[i]].vaultIssuance.issuance = uint72(
                 (systemParams.issuanceAllPools * taxesToDAO[i]) / sumTaxes
             );
         }
 
-        return keccak256(abi.encodePacked(nextPools));
+        return keccak256(abi.encodePacked(nextVaults));
     }
 
     function changeContributorsIssuances(
@@ -319,10 +307,7 @@ contract SystemState is ERC20 {
     ) external onlySystemControl returns (bytes32) {
         // Stop issuance of previous contributors
         for (uint256 i = 0; i < prevContributors.length; i++) {
-            ContributorIssuanceParams
-                memory contributorParams = getContributorIssuance(
-                    prevContributors[i]
-                );
+            ContributorIssuanceParams memory contributorParams = getContributorIssuance(prevContributors[i]);
             contributorParams.issuance = 0;
             _contributorsIssuances[prevContributors[i]] = contributorParams;
         }
@@ -331,9 +316,7 @@ contract SystemState is ERC20 {
         uint72 issuanceAllContributors = 0;
         for (uint256 i = 0; i < nextContributors.length; i++) {
             _contributorsIssuances[nextContributors[i]].issuance = issuances[i];
-            _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(
-                block.timestamp
-            );
+            _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(block.timestamp);
 
             issuanceAllContributors += issuances[i]; // Check total issuance does not change
         }
@@ -343,8 +326,7 @@ contract SystemState is ERC20 {
             systemParams.issuanceAllPools = ISSUANCE - issuanceAllContributors;
         } else {
             require(
-                ISSUANCE ==
-                    issuanceAllContributors + systemParams.issuanceAllPools,
+                ISSUANCE == issuanceAllContributors + systemParams.issuanceAllPools,
                 "Total issuance must not change"
             );
         }
@@ -356,17 +338,20 @@ contract SystemState is ERC20 {
                             INTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _updatePoolIssuance(
-        bytes16 latestSupplyMAAM
+    function _updateVaultIssuance(
+        uint256 vaultId,
+        bytes16 nonRebasingSupplyExcVault
     ) private returns (bytes16 cumSIRperMAAM) {
-        // Update pool issuance params (they only get updated once per block)
-        cumSIRperMAAM = _getCumSIRperMAAM(msg.sender, latestSupplyMAAM);
-        _poolsIssuances[msg.sender].cumSIRperMAAM = cumSIRperMAAM;
-        _poolsIssuances[msg.sender].tsLastUpdate = uint40(block.timestamp);
+        // Compute the cumulative SIR per unit of MAAM
+        cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
+
+        // Update vaultId issuance params (they only get updated once per block)
+        _vaultIssuanceStates[vaultId].vaultIssuance.cumSIRperMAAM = cumSIRperMAAM;
+        _vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
     }
 
     function _getLPerIssuance(
-        address pool,
+        uint256 vaultId,
         address LPer,
         bytes16 lastNonZeroBalance,
         bytes16 latestBalance,
@@ -377,17 +362,17 @@ contract SystemState is ERC20 {
         /**
          * Update cumSIRperMAAM
          */
-        lperIssuance.cumSIRperMAAM = _getCumSIRperMAAM(pool, latestSupplyMAAM);
+        lperIssuance.cumSIRperMAAM = _getCumSIRperMAAM(vaultId, latestSupplyMAAM);
 
         /**
          * Update lperIssuance.rewards taking into account any possible liquidation events
          */
         // Find event that liquidated the LPer if it existed
-        uint256 i = _lpersIssuances[pool][LPer].indexLiquidations;
+        uint256 i = _vaultIssuanceStates[vaultId].lpersIssuances[LPer].indexLiquidations;
         while (
-            i < _liquidationsCumSIRperMAAM[pool].length &&
-            _lpersIssuances[pool][LPer].cumSIRperMAAM.cmp(
-                _liquidationsCumSIRperMAAM[pool][i]
+            i < _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.length &&
+            _vaultIssuanceStates[vaultId].lpersIssuances[LPer].cumSIRperMAAM.cmp(
+                _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM[i]
             ) >=
             0
         ) {
@@ -400,37 +385,32 @@ contract SystemState is ERC20 {
          *             lperIssuance.cumSIRperMAAM
          *         or
          *             lastNonZeroBalance
-         *             _liquidationsCumSIRperMAAM[pool][i]
+         *             _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM[i]
          */
-        bool liquidated = i < _liquidationsCumSIRperMAAM[pool].length;
+        bool liquidated = i < _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.length;
 
         // Compute rewards
         lperIssuance.rewards =
-            _lpersIssuances[pool][LPer].rewards +
+            _vaultIssuanceStates[vaultId].lpersIssuances[LPer].rewards +
             uint104(
-                (
-                    liquidated
-                        ? _liquidationsCumSIRperMAAM[pool][i]
-                        : lperIssuance.cumSIRperMAAM
-                ).mul(liquidated ? lastNonZeroBalance : latestBalance).toUInt()
+                (liquidated ? _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM[i] : lperIssuance.cumSIRperMAAM)
+                    .mul(liquidated ? lastNonZeroBalance : latestBalance)
+                    .toUInt()
             );
 
         /**
          * Update lperIssuance.indexLiquidations
          */
-        lperIssuance.indexLiquidations = _liquidationsCumSIRperMAAM[pool]
-            .length < type(uint24).max
-            ? uint24(_liquidationsCumSIRperMAAM[pool].length)
+        lperIssuance.indexLiquidations = _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.length <
+            type(uint24).max
+            ? uint24(_vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.length)
             : type(uint24).max;
     }
 
-    function _getCumSIRperMAAM(
-        address pool,
-        bytes16 latestSupplyMAAM
-    ) internal view returns (bytes16) {
-        if (systemParams.tsIssuanceStart == 0) return 0; // Issuance has not started yet
+    function _getCumSIRperMAAM(uint256 vaultId, bytes16 nonRebasingSupplyExcVault) internal view returns (bytes16) {
+        if (systemParams.tsIssuanceStart == 0) return FloatingPoint.ZERO; // Issuance has not started yet
 
-        PoolIssuanceParams storage poolIssuanceParams = _poolsIssuances[pool];
+        VaultIssuanceParams storage poolIssuanceParams = _vaultIssuanceStates[vaultId].vaultIssuance;
         bytes16 cumSIRperMAAM = poolIssuanceParams.cumSIRperMAAM;
 
         // If cumSIRperMAAM is already updated in this block, just return it
@@ -439,7 +419,7 @@ contract SystemState is ERC20 {
         }
 
         // If the supply is 0, cumSIRperMAAM does not increase
-        if (latestSupplyMAAM == FloatingPoint.ZERO) return cumSIRperMAAM;
+        if (nonRebasingSupplyExcVault == FloatingPoint.ZERO) return cumSIRperMAAM;
 
         // Return updated value
         return
@@ -449,17 +429,20 @@ contract SystemState is ERC20 {
                         poolIssuanceParams.issuance *
                             (block.timestamp -
                                 (
-                                    systemParams.tsIssuanceStart >
-                                        poolIssuanceParams.tsLastUpdate
+                                    systemParams.tsIssuanceStart > poolIssuanceParams.tsLastUpdate
                                         ? systemParams.tsIssuanceStart
                                         : poolIssuanceParams.tsLastUpdate
                                 ))
                     )
-                    .div(latestSupplyMAAM)
+                    .div(nonRebasingSupplyExcVault)
             );
     }
 
     function _onlySystemControl() private view {
         require(msg.sender == SYSTEM_CONTROL);
+    }
+
+    function _onlyVault() private view {
+        require(msg.sender == VAULT);
     }
 }
