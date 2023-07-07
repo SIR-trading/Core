@@ -13,7 +13,7 @@ contract SystemState is ERC20 {
     struct LPerIssuanceParams {
         bytes16 cumSIRperMAAM; // Cumulative SIR minted by an LPer per unit of MAAM (it should only be active when his balance is non-zero)
         uint104 rewards; // SIR owed to the LPer
-        uint24 indexLiquidations; // For efficiency purposes when searching through poolIssuanceParams[vaultId]._liquidationsCumSIRperMAAM
+        uint24 indexLiquidations; // For efficiency purposes when searching through vaultIssuanceParams[vaultId]._liquidationsCumSIRperMAAM
     }
 
     struct VaultIssuanceParams {
@@ -183,7 +183,8 @@ contract SystemState is ERC20 {
         ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
         address[] memory LPers
     ) external onlyVault {
-        if (systemParams.tsIssuanceStart == 0) return; // Issuances has not started
+        // Issuances has not started
+        if (systemParams.tsIssuanceStart == 0) return;
 
         // Get the MAAM total supply excluding the one owned by the vault
         bytes16 nonRebasingSupplyExcVault = nonRebasingBalances.nonRebasingSupply.subUp(
@@ -202,6 +203,7 @@ contract SystemState is ERC20 {
             LPerIssuanceParams memory lperIssuance = _getLPerIssuance(
                 vaultId,
                 LPers[i],
+                nonRebasingBalances,
                 nonRebasingBalances.timestampedBalances[LPers[i]].balance,
                 nonRebasingBalances.get(LPers[i]),
                 nonRebasingSupplyExcVault
@@ -210,21 +212,13 @@ contract SystemState is ERC20 {
         }
     }
 
-    function haultLPersIssuances(bytes16 nonRebasingSupplyExcVault) external {
+    function haultIssuance(uint256 vaultId) external onlyVault {
         if (systemParams.tsIssuanceStart == 0 || _vaultIssuanceStates[vaultId].vaultIssuance.issuance == 0) return; // This vault gets no SIR anyway
 
-        // Update vaultId issuance params (they only get updated once per block)
-        bytes16 cumSIRperMAAM = _updateVaultIssuance(nonRebasingSupplyExcVault);
-
-        // Compute the cumulative SIR per unit of MAAM
-        cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
-
-        // Update vaultId issuance params (they only get updated once per block)
-        _vaultIssuanceStates[vaultId].vaultIssuance.cumSIRperMAAM = cumSIRperMAAM;
-        _vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-
-        // Hault LPers issuance because their balances were just liquidated
-        _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.push(cumSIRperMAAM);
+        // Record the value of cumSIRperMAAM at the time of the liquidation event
+        _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.push(
+            _vaultIssuanceStates[vaultId].vaultIssuance.cumSIRperMAAM
+        );
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -338,31 +332,16 @@ contract SystemState is ERC20 {
                             INTERNAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _updateVaultIssuance(
-        uint256 vaultId,
-        bytes16 nonRebasingSupplyExcVault
-    ) private returns (bytes16 cumSIRperMAAM) {
-        // Compute the cumulative SIR per unit of MAAM
-        cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
-
-        // Update vaultId issuance params (they only get updated once per block)
-        _vaultIssuanceStates[vaultId].vaultIssuance.cumSIRperMAAM = cumSIRperMAAM;
-        _vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-    }
-
     function _getLPerIssuance(
         uint256 vaultId,
         address LPer,
-        bytes16 lastNonZeroBalance,
-        bytes16 latestBalance,
-        bytes16 latestSupplyMAAM
+        ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
+        bytes16 nonRebasingSupplyExcVault
     ) internal view returns (LPerIssuanceParams memory lperIssuance) {
-        if (systemParams.tsIssuanceStart == 0) return lperIssuance; // Emission of SIR has not started
-
         /**
          * Update cumSIRperMAAM
          */
-        lperIssuance.cumSIRperMAAM = _getCumSIRperMAAM(vaultId, latestSupplyMAAM);
+        lperIssuance.cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
 
         /**
          * Update lperIssuance.rewards taking into account any possible liquidation events
@@ -381,10 +360,10 @@ contract SystemState is ERC20 {
 
         /**
          * Find out if we must use
-         *             latestBalance
+         *             nonRebasingBalances.get(LPer)
          *             lperIssuance.cumSIRperMAAM
          *         or
-         *             lastNonZeroBalance
+         *             nonRebasingBalances.timestampedBalances[LPer].balance
          *             _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM[i]
          */
         bool liquidated = i < _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM.length;
@@ -394,7 +373,11 @@ contract SystemState is ERC20 {
             _vaultIssuanceStates[vaultId].lpersIssuances[LPer].rewards +
             uint104(
                 (liquidated ? _vaultIssuanceStates[vaultId].liquidationsCumSIRperMAAM[i] : lperIssuance.cumSIRperMAAM)
-                    .mul(liquidated ? lastNonZeroBalance : latestBalance)
+                    .mul(
+                        liquidated
+                            ? nonRebasingBalances.timestampedBalances[LPer].balance
+                            : nonRebasingBalances.get(LPer)
+                    )
                     .toUInt()
             );
 
@@ -410,28 +393,31 @@ contract SystemState is ERC20 {
     function _getCumSIRperMAAM(uint256 vaultId, bytes16 nonRebasingSupplyExcVault) internal view returns (bytes16) {
         if (systemParams.tsIssuanceStart == 0) return FloatingPoint.ZERO; // Issuance has not started yet
 
-        VaultIssuanceParams storage poolIssuanceParams = _vaultIssuanceStates[vaultId].vaultIssuance;
-        bytes16 cumSIRperMAAM = poolIssuanceParams.cumSIRperMAAM;
+        VaultIssuanceParams storage vaultIssuanceParams = _vaultIssuanceStates[vaultId].vaultIssuance;
+        bytes16 cumSIRperMAAM = vaultIssuanceParams.cumSIRperMAAM;
 
-        // If cumSIRperMAAM is already updated in this block, just return it
-        if (poolIssuanceParams.tsLastUpdate == uint40(block.timestamp)) {
-            return cumSIRperMAAM;
-        }
-
-        // If the supply is 0, cumSIRperMAAM does not increase
-        if (nonRebasingSupplyExcVault == FloatingPoint.ZERO) return cumSIRperMAAM;
+        /** If cumSIRperMAAM is already updated in this block,
+         *  OR the supply is 0,
+         *  OR the issuance is 0,
+         *      return cumSIRperMAAM unchanged
+         */
+        if (
+            vaultIssuanceParams.issuance == 0 ||
+            vaultIssuanceParams.tsLastUpdate == uint40(block.timestamp) ||
+            nonRebasingSupplyExcVault == FloatingPoint.ZERO
+        ) return cumSIRperMAAM;
 
         // Return updated value
         return
             cumSIRperMAAM.add(
                 FloatingPoint
                     .fromUInt(
-                        poolIssuanceParams.issuance *
+                        vaultIssuanceParams.issuance *
                             (block.timestamp -
                                 (
-                                    systemParams.tsIssuanceStart > poolIssuanceParams.tsLastUpdate
+                                    systemParams.tsIssuanceStart > vaultIssuanceParams.tsLastUpdate
                                         ? systemParams.tsIssuanceStart
-                                        : poolIssuanceParams.tsLastUpdate
+                                        : vaultIssuanceParams.tsLastUpdate
                                 ))
                     )
                     .div(nonRebasingSupplyExcVault)

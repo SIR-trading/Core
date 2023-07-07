@@ -99,25 +99,7 @@ abstract contract MAAM {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        _POOL_LOGIC.updateIssuance(
-            id,
-            from,
-            _nonRebasingBalances.timestampedBalances[from].balance,
-            _nonRebasingBalances.get(from),
-            nonRebasingSupplyExcludePOL_
-        );
-        _POOL_LOGIC.updateIssuance(
-            id,
-            to,
-            _nonRebasingBalances.timestampedBalances[to].balance,
-            _nonRebasingBalances.get(to),
-            nonRebasingSupplyExcludePOL_
-        );
-
-        // Mint POL or liquidate if necessary
-        uint256 totalSupply_ = totalSupply(id);
-        _fixSupplyDivergence(totalSupply_); // PASS id TOO HERE!
+        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances, [from, to]);
 
         balanceOf[from][id] -= amount;
         balanceOf[to][id] += amount;
@@ -141,23 +123,7 @@ abstract contract MAAM {
         require(to != address(0), "ERC20: transfer to the zero address");
 
         // Update SIR issuances
-        bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        _POOL_LOGIC.updateIssuance(
-            from,
-            _nonRebasingBalances.timestampedBalances[from].balance,
-            _nonRebasingBalances.get(from),
-            nonRebasingSupplyExcludePOL_
-        );
-        _POOL_LOGIC.updateIssuance(
-            to,
-            _nonRebasingBalances.timestampedBalances[to].balance,
-            _nonRebasingBalances.get(to),
-            nonRebasingSupplyExcludePOL_
-        );
-
-        // Mint POL or liquidate if necessary
-        uint256 totalSupply_ = totalSupply();
-        _fixSupplyDivergence(totalSupply_);
+        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances, [from, to]);
 
         // Update MAAM balances
         if (totalSupply_ != 0) {
@@ -177,23 +143,7 @@ abstract contract MAAM {
         bytes16 nonRebasingBalance = _nonRebasingBalances.get(msg.sender);
 
         // Update SIR issuances
-        bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        _POOL_LOGIC.updateIssuance(
-            msg.sender,
-            _nonRebasingBalances.timestampedBalances[msg.sender].balance,
-            nonRebasingBalance,
-            nonRebasingSupplyExcludePOL_
-        );
-        _POOL_LOGIC.updateIssuance(
-            to,
-            _nonRebasingBalances.timestampedBalances[to].balance,
-            _nonRebasingBalances.get(to),
-            nonRebasingSupplyExcludePOL_
-        );
-
-        // Mint POL or liquidate if necessary
-        uint256 totalSupply_ = totalSupply();
-        _fixSupplyDivergence(totalSupply_);
+        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances, [msg.sender, to]);
 
         // Update MAAM balances
         _nonRebasingBalances.transfer(from, to, nonRebasingBalance);
@@ -209,56 +159,27 @@ abstract contract MAAM {
     function _mint(address account, uint256 amount, uint256 totalSupply_) internal {
         // Update SIR issuance
         bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        _POOL_LOGIC.updateIssuance(
-            account,
-            _nonRebasingBalances.timestampedBalances[account].balance,
-            _nonRebasingBalances.get(account),
-            nonRebasingSupplyExcludePOL_
-        );
+        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances, [account]);
 
-        // Mint POL or liquidate if necessary
-        _fixSupplyDivergence(totalSupply_);
-
-        _nonRebasingBalances.mint(account, amount, totalSupply_);
+        // Mint and liquidate previous LPers if totalSupply_ is 0
+        if (_nonRebasingBalances.mint(account, amount, totalSupply_)) {
+            _POOL_LOGIC.haultIssuance(id);
+            emit Liquidation(totalSupply_);
+        }
 
         emit Transfer(address(0), account, amount);
     }
 
-    function _burn(address account, uint256 amount, uint256 totalSupply_) internal {
+    function _burn(uint256 id, address account, uint256 amount, uint256 totalSupply_) internal {
         require(amount <= totalSupply_, "Insufficient balance");
 
         // Update SIR issuance
         bytes16 nonRebasingSupplyExcludePOL_ = nonRebasingSupplyExcludePOL();
-        _POOL_LOGIC.updateIssuance(
-            account,
-            _nonRebasingBalances.timestampedBalances[account].balance,
-            _nonRebasingBalances.get(account),
-            nonRebasingSupplyExcludePOL_
-        );
-
-        // Mint POL or liquidate if necessary
-        _fixSupplyDivergence(totalSupply_);
+        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances, [account]);
 
         _nonRebasingBalances.burn(account, amount, totalSupply_);
 
         emit Transfer(account, address(0), amount);
-    }
-
-    /*///////////////////////////////////////////////////////////////
-                        WRITE (PRIVATE) FUNCTIONS
-    ///////////////////////////////////////////////////////////////*/
-
-    function _fixSupplyDivergence(uint256 totalSupply_) private {
-        if (nonRebasingSupply == FloatingPoint.ZERO && totalSupply_ > 0) {
-            // Mint POL
-            _nonRebasingBalances.mint(address(this), totalSupply_, 0);
-        } else if (nonRebasingSupply != FloatingPoint.ZERO && totalSupply_ == 0) {
-            // Liquidate
-            _POOL_LOGIC.haultLPersIssuances(nonRebasingSupply.subUp(_nonRebasingBalances.get(address(this)))); // THIS IS NOT IN THE LIBRARY
-            nonRebasingSupply = FloatingPoint.ZERO;
-            _nonRebasingBalances.reset();
-            emit Liquidation(totalSupply_);
-        }
     }
 
     /*///////////////////////////////////////////////////////////////

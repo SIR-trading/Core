@@ -75,13 +75,14 @@ library ResettableBalancesBytes16 {
         address account,
         uint256 amount,
         uint256 totalSupply
-    ) internal {
+    ) internal returns (bool lpersLiquidated) {
         if (totalSupply == 0) {
             // Liquidate previous LPers if the LP reserve is empty
             if (resettableBalances.nonRebasingSupply.cmp(FloatingPoint.ZERO) > 0) {
                 resettableBalances.nonRebasingSupply = FloatingPoint.ZERO;
                 resettableBalances.tsLastLiquidation = uint40(block.timestamp);
                 resettableBalances.numLiquidations++;
+                lpersLiquidated = true;
             }
 
             // Update balance
