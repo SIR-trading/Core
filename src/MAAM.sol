@@ -53,7 +53,7 @@ abstract contract MAAM {
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     event URI(string value, uint256 indexed id);
     event Liquidation(uint256 vaultId, uint256 amount);
-    event MintedPOL(uint256 vaultId, uint256 amount);
+    event MintPOL(uint256 vaultId, uint256 amount);
 
     IPoolLogic internal immutable _POOL_LOGIC;
 
@@ -221,7 +221,7 @@ abstract contract MAAM {
             _POOL_LOGIC.haultIssuance(id);
             emit Liquidation(id, totalSupply_);
         } else if (mintedPOL) {
-            emit MintedPOL(id, totalSupply_);
+            emit MintPOL(id, totalSupply_);
         }
 
         emit TransferSingle(msg.sender, address(0), to, id, amount);
@@ -267,7 +267,7 @@ abstract contract MAAM {
      *  @notice Internally, balances are still stored as a fixed floating point number.
      *  @return the internal floating point balance.
      */
-    function nonRebasingBalanceOf(address account) external view returns (bytes16) {
+    function nonRebasingBalanceOf(address account, uint256 id) external view returns (bytes16) {
         bytes16 nonRebasingBalance = _nonRebasingBalances[id].get(account);
         assert(nonRebasingBalance.cmp(_nonRebasingBalances[id].nonRebasingSupply) <= 0);
         return nonRebasingBalance;
@@ -276,7 +276,7 @@ abstract contract MAAM {
     /**
      * @return number of times MAAM has been liquidated
      */
-    function numberOfLiquidations() external view returns (uint216) {
+    function numberOfLiquidations(uint256 id) external view returns (uint216) {
         return _nonRebasingBalances[id].numLiquidations;
     }
 }
