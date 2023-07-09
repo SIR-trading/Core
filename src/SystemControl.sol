@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import "./interfaces/IPool.sol";
+import "./interfaces/IVault.sol";
 import "./interfaces/IFactory.sol";
 import "./interfaces/ISystemState.sol";
 
@@ -22,7 +22,7 @@ contract SystemControl is Ownable {
     bool public betaPeriod = true;
 
     bytes32 public hashContributors = keccak256(abi.encodePacked(new address[](0)));
-    bytes32 public hashPools = keccak256(abi.encodePacked(new address[](0)));
+    bytes32 public hashVaults = keccak256(abi.encodePacked(new address[](0)));
 
     modifier betaIsOn() {
         require(betaPeriod, "Beta is over");
@@ -71,53 +71,53 @@ contract SystemControl is Ownable {
     }
 
     /**
-     * @param prevPools is an array of the pools participating in the liquidity mining up to this instant
-     *     @param nextPools is an array of pools participating in the liquidity mining from this instant
-     *     @param taxesToDAO is an array containing the % of the fees revenue taken from each pool in nextPools.
+     * @param prevVaults is an array of the vaults participating in the liquidity mining up to this instant
+     *     @param nextVaults is an array of vaults participating in the liquidity mining from this instant
+     *     @param taxesToDAO is an array containing the % of the fees revenue taken from each vault in nextVaults.
      */
-    function updatePoolsIssuances(
-        address[] calldata prevPools,
-        address[] calldata nextPools,
+    function updateVaultsIssuances(
+        address[] calldata prevVaults,
+        address[] calldata nextVaults,
         uint16[] calldata taxesToDAO
     ) public onlyOwner {
-        require(nextPools.length > 0 && nextPools.length == taxesToDAO.length);
+        require(nextVaults.length > 0 && nextVaults.length == taxesToDAO.length);
 
-        // Check the array of prev pools is correct
-        require(keccak256(abi.encodePacked(prevPools)) == hashPools, "Incorrect list of pools");
+        // Check the array of prev vaults is correct
+        require(keccak256(abi.encodePacked(prevVaults)) == hashVaults, "Incorrect list of vaults");
 
-        // Get the MAAM supplies of all the previous pools
-        bytes16[] memory latestSuppliesMAAM = new bytes16[](prevPools.length);
-        for (uint256 i = 0; i < prevPools.length; i++) {
-            latestSuppliesMAAM[i] = IPool(prevPools[i]).nonRebasingSupplyExcludePOL();
+        // Get the MAAM supplies of all the previous vaults
+        bytes16[] memory latestSuppliesMAAM = new bytes16[](prevVaults.length);
+        for (uint256 i = 0; i < prevVaults.length; i++) {
+            latestSuppliesMAAM[i] = IVault(prevVaults[i]).nonRebasingSupplyExcludePOL();
         }
 
         /**
          * Verify that the DAO taxes satisfy constraint
          *             taxesToDAO[0]**2 + ... + taxesToDAO[N]**2 ≤ (10%)**2
-         *         Checks the pools are valid by
-         *             1) calling the alleged pool address
+         *         Checks the vaults are valid by
+         *             1) calling the alleged vault address
          *             2) retrieving its alleged parameters
          *             3) and computing the theoretical address
          */
         uint256 sumTaxesToDAO = 0;
         uint256 sumSqTaxes = 0;
-        for (uint256 i = 0; i < nextPools.length; i++) {
+        for (uint256 i = 0; i < nextVaults.length; i++) {
             sumTaxesToDAO += uint256(taxesToDAO[i]);
             sumSqTaxes += uint256(taxesToDAO[i]) ** 2;
 
-            (address debtToken, , , ) = _FACTORY.poolsParameters(nextPools[i]);
-            require(debtToken != address(0), "Not a SIR pool");
+            (address debtToken, , , ) = _FACTORY.vaultsParameters(nextVaults[i]);
+            require(debtToken != address(0), "Not a SIR vault");
         }
         require(sumSqTaxes <= (1e4) ** 2, "Taxes too high");
         _sumTaxesToDAO = sumTaxesToDAO;
 
-        for (uint256 i = 0; i < nextPools.length; i++) {}
+        for (uint256 i = 0; i < nextVaults.length; i++) {}
 
         // Set new issuances
-        hashPools = _SYSTEM_STATE.changePoolsIssuances(
-            prevPools,
+        hashVaults = _SYSTEM_STATE.changeVaultsIssuances(
+            prevVaults,
             latestSuppliesMAAM,
-            nextPools,
+            nextVaults,
             taxesToDAO,
             sumTaxesToDAO
         );
@@ -146,15 +146,15 @@ contract SystemControl is Ownable {
         address[] calldata prevContributors,
         address[] calldata nextContributors,
         uint72[] calldata issuances,
-        address[] calldata pools
+        address[] calldata vaults
     ) external onlyOwner betaIsOn {
         require(nextContributors.length == issuances.length);
 
         // Check the array of prev contributors is correct
         require(keccak256(abi.encodePacked(prevContributors)) == hashContributors, "Incorrect list of contributors");
 
-        // Check the array of pools is correct
-        require(keccak256(abi.encodePacked(pools)) == hashPools, "Incorrect list of pools");
+        // Check the array of vaults is correct
+        require(keccak256(abi.encodePacked(vaults)) == hashVaults, "Incorrect list of vaults");
 
         // Set new issuances
         hashContributors = _SYSTEM_STATE.changeContributorsIssuances(
@@ -164,18 +164,18 @@ contract SystemControl is Ownable {
             true
         );
 
-        // Get the MAAM supplies of all the previous pools
-        bytes16[] memory latestSuppliesMAAM = new bytes16[](pools.length);
-        for (uint256 i = 0; i < pools.length; i++) {
-            latestSuppliesMAAM[i] = IPool(pools[i]).nonRebasingSupplyExcludePOL();
+        // Get the MAAM supplies of all the previous vaults
+        bytes16[] memory latestSuppliesMAAM = new bytes16[](vaults.length);
+        for (uint256 i = 0; i < vaults.length; i++) {
+            latestSuppliesMAAM[i] = IVault(vaults[i]).nonRebasingSupplyExcludePOL();
         }
 
-        // Becaues the total pool issuance has change, the pools need to be recalibrated
-        _SYSTEM_STATE.recalibratePoolsIssuances(pools, latestSuppliesMAAM, _sumTaxesToDAO);
+        // Becaues the total vault issuance has change, the vaults need to be recalibrated
+        _SYSTEM_STATE.recalibrateVaultsIssuances(vaults, latestSuppliesMAAM, _sumTaxesToDAO);
     }
 
     // MAKE A WITHDRAWAL FUNCTION!
-    // function withdrawDAOFees(address pool) external onlyOwner returns () {
+    // function withdrawDAOFees(address vault) external onlyOwner returns () {
     //     DAOFees = state.DAOFees;
     //     state.DAOFees = 0; // No re-entrancy attack
     //     TransferHelper.safeTransfer(COLLATERAL_TOKEN, msg.sender, DAOFees);

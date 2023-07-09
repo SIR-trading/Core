@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../Pool.sol";
+import "../Vault.sol";
 
-library AddressPool {
+library AddressVault {
     // Returns address of a pair
     // leverage ratio = 1+2^leverageTier
     // collateralization ratio = 1+2^-leverageTier
@@ -13,7 +13,7 @@ library AddressPool {
         address addrCollateralToken,
         int256 leverageTier,
         address oracle,
-        address poolLogic
+        address vaultLogic
     ) internal pure returns (address) {
         return address(
             uint160(
@@ -25,8 +25,8 @@ library AddressPool {
                             bytes32(0), // Salt
                             keccak256(
                                 abi.encodePacked(
-                                    type(Pool).creationCode,
-                                    abi.encode(addrDebtToken, addrCollateralToken, leverageTier, oracle, poolLogic)
+                                    type(Vault).creationCode,
+                                    abi.encode(addrDebtToken, addrCollateralToken, leverageTier, oracle, vaultLogic)
                                 )
                             )
                         )

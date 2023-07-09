@@ -12,19 +12,19 @@ interface ISystemState is IFees, ISIR {
 
     function updateSystemParameters(uint40 tsIssuanceStart_, uint16 basisFee_, bool onlyWithdrawals_) external;
 
-    function setPoolsIssuances() external;
+    function setVaultsIssuances() external;
 
     function setContributorsIssuances() external;
 
-    function changePoolsIssuances(
-        address[] calldata prevPools,
+    function changeVaultsIssuances(
+        address[] calldata prevVaults,
         bytes16[] memory latestSuppliesMAAM,
-        address[] calldata nextPools,
+        address[] calldata nextVaults,
         uint16[] calldata taxesToDAO,
         uint256 sumTaxes
     ) external returns (bytes32);
 
-    function recalibratePoolsIssuances(address[] calldata pools, bytes16[] memory latestSuppliesMAAM, uint256 sumTaxes)
+    function recalibrateVaultsIssuances(address[] calldata vaults, bytes16[] memory latestSuppliesMAAM, uint256 sumTaxes)
         external;
 
     function changeContributorsIssuances(

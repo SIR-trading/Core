@@ -6,14 +6,14 @@ import "./SystemState.sol";
 
 // Interfaces
 import "uniswap-v2-core/interfaces/IERC20.sol";
-import "./interfaces/PoolStructs.sol";
+import "./interfaces/VaultStructs.sol";
 
 // Libraries
 import "./libraries/FullMath.sol";
 import "./libraries/FloatingPoint.sol";
 import "./libraries/Fees.sol";
 
-contract PoolLogic is SystemState {
+contract VaultLogic is SystemState {
     using FloatingPoint for bytes16;
 
     constructor(address systemControl) SystemState(systemControl) {}
@@ -29,13 +29,13 @@ contract PoolLogic is SystemState {
      *     @notice If it reverts, mint() also reverts; but the opposite is not always true.
      */
     function quoteMint(
-        PoolStructs.State memory state,
+        VaultStructs.State memory state,
         int8 leverageTier,
         bytes16 price,
         uint256 syntheticSupply,
         address collateralToken,
         bool isTEA
-    ) external view returns (PoolStructs.Reserves memory reservesPre, uint256 amountSyntheticToken, uint256 feeToPOL) {
+    ) external view returns (VaultStructs.Reserves memory reservesPre, uint256 amountSyntheticToken, uint256 feeToPOL) {
         // Until SIR is running, only LPers are allowed to mint (deposit collateral)
         require(systemParams.tsIssuanceStart > 0);
 
@@ -71,7 +71,7 @@ contract PoolLogic is SystemState {
             : FullMath.mulDiv(syntheticSupply, collateralIn, feesParams.reserveSyntheticToken);
 
         // Update reserves
-        PoolStructs.Reserves memory reservesPost;
+        VaultStructs.Reserves memory reservesPost;
         (reservesPost, feeToPOL) = _updateReserves(reservesPre, collateralIn, collateralFee, isTEA, true);
 
         // Update state
@@ -79,19 +79,21 @@ contract PoolLogic is SystemState {
     }
 
     function quoteBurn(
-        PoolStructs.State memory state,
+        VaultStructs.State memory state,
         int8 leverageTier,
         bytes16 price,
         uint256 syntheticSupply,
         uint256 amountSyntheticToken,
         bool isTEA
-    ) external view returns (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) {
+    ) external view returns (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) {
         // Get reserves
         reservesPre = getReserves(state, leverageTier, price);
 
         // Get collateralOut
         uint256 collateralOut = FullMath.mulDiv(
-            isTEA ? reservesPre.gentlemenReserve : reservesPre.apesReserve, amountSyntheticToken, syntheticSupply
+            isTEA ? reservesPre.gentlemenReserve : reservesPre.apesReserve,
+            amountSyntheticToken,
+            syntheticSupply
         );
 
         // Substract fee
@@ -117,23 +119,24 @@ contract PoolLogic is SystemState {
         (collateralWithdrawn, collateralFee) = Fees._hiddenFee(feesParams);
 
         // Update reserves
-        PoolStructs.Reserves memory reservesPost;
+        VaultStructs.Reserves memory reservesPost;
         (reservesPost, feeToPOL) = _updateReserves(reservesPre, collateralOut, collateralFee, isTEA, false);
 
         // Update state
         _updateState(state, reservesPost, leverageTier, price);
     }
 
-    function quoteMintMAAM(PoolStructs.State memory state, int8 leverageTier, bytes16 price, address collateralToken)
-        external
-        view
-        returns (uint256 LPReservePre, uint256 collateralDeposited)
-    {
+    function quoteMintMAAM(
+        VaultStructs.State memory state,
+        int8 leverageTier,
+        bytes16 price,
+        address collateralToken
+    ) external view returns (uint256 LPReservePre, uint256 collateralDeposited) {
         // Get deposited collateral
         collateralDeposited = _getCollateralDeposited(state, collateralToken);
 
         // Get reserves
-        PoolStructs.Reserves memory reserves = getReserves(state, leverageTier, price);
+        VaultStructs.Reserves memory reserves = getReserves(state, leverageTier, price);
 
         // Update reserves
         LPReservePre = reserves.LPReserve;
@@ -143,13 +146,14 @@ contract PoolLogic is SystemState {
         _updateState(state, reserves, leverageTier, price);
     }
 
-    function quoteBurnMAAM(PoolStructs.State memory state, int8 leverageTier, bytes16 price, uint256 amountMAAM)
-        external
-        pure
-        returns (uint256 LPReservePre)
-    {
+    function quoteBurnMAAM(
+        VaultStructs.State memory state,
+        int8 leverageTier,
+        bytes16 price,
+        uint256 amountMAAM
+    ) external pure returns (uint256 LPReservePre) {
         // Get reserves
-        PoolStructs.Reserves memory reserves = getReserves(state, leverageTier, price);
+        VaultStructs.Reserves memory reserves = getReserves(state, leverageTier, price);
 
         // Update reserves
         LPReservePre = reserves.LPReserve;
@@ -176,11 +180,11 @@ contract PoolLogic is SystemState {
      *     (0,pLow,pHigh) ⇔ (0,0,0)
      */
 
-    function getReserves(PoolStructs.State memory state, int8 leverageTier, bytes16 price)
-        public
-        pure
-        returns (PoolStructs.Reserves memory reserves)
-    {
+    function getReserves(
+        VaultStructs.State memory state,
+        int8 leverageTier,
+        bytes16 price
+    ) public pure returns (VaultStructs.Reserves memory reserves) {
         unchecked {
             reserves.DAOFees = state.DAOFees;
 
@@ -226,8 +230,9 @@ contract PoolLogic is SystemState {
                  * PRICE BELOW PSR
                  *                 LPers are 100% in APE
                  */
-                reserves.apesReserve =
-                    pLow.div(state.pHigh).pow(leverageRatio.dec()).mulu(state.totalReserves - reserves.gentlemenReserve);
+                reserves.apesReserve = pLow.div(state.pHigh).pow(leverageRatio.dec()).mulu(
+                    state.totalReserves - reserves.gentlemenReserve
+                );
                 /**
                  * Proof gentlemenReserve + apesReserve ≤ totalReserves
                  *                     pLow.div(state.pHigh).pow(leverageRatio.dec()) ≤ 1
@@ -240,8 +245,10 @@ contract PoolLogic is SystemState {
                  * PRICE IN PSR
                  *                 Leverage behaves as expected
                  */
-                reserves.apesReserve =
-                    price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(state.totalReserves, leverageRatio);
+                reserves.apesReserve = price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(
+                    state.totalReserves,
+                    leverageRatio
+                );
                 /**
                  * Proof gentlemenReserve + apesReserve ≤ totalReserves
                  *                     1) price < pHigh ⇒ price.div(pHigh).pow(leverageRatio.dec()).mulDiv(totalReserves,leverageRatio) < totalReserves / leverageRatio
@@ -280,11 +287,10 @@ contract PoolLogic is SystemState {
                         PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _getCollateralDeposited(PoolStructs.State memory state, address collateralToken)
-        private
-        view
-        returns (uint256)
-    {
+    function _getCollateralDeposited(
+        VaultStructs.State memory state,
+        address collateralToken
+    ) private view returns (uint256) {
         require(!systemParams.onlyWithdrawals);
 
         // Get deposited collateral
@@ -292,19 +298,23 @@ contract PoolLogic is SystemState {
     }
 
     function _updateReserves(
-        PoolStructs.Reserves memory reservesPre,
+        VaultStructs.Reserves memory reservesPre,
         uint256 collateralInOrOut,
         uint256 collateralFee,
         bool isTEA,
         bool goesIn
-    ) private view returns (PoolStructs.Reserves memory reservesPost, uint256 feeToPOL) {
+    ) private view returns (VaultStructs.Reserves memory reservesPost, uint256 feeToPOL) {
         // Calculate fee to the DAO
-        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _poolsIssuances[msg.sender].taxToDAO, 1e5);
+        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
 
-        reservesPost = PoolStructs.Reserves({
+        reservesPost = VaultStructs.Reserves({
             DAOFees: reservesPre.DAOFees + feeToDAO,
             gentlemenReserve: isTEA
-                ? (goesIn ? reservesPre.gentlemenReserve + collateralInOrOut : reservesPre.gentlemenReserve - collateralInOrOut) // Reverts if too much collateral is withdrawn
+                ? (
+                    goesIn
+                        ? reservesPre.gentlemenReserve + collateralInOrOut
+                        : reservesPre.gentlemenReserve - collateralInOrOut
+                ) // Reverts if too much collateral is withdrawn
                 : reservesPre.gentlemenReserve,
             apesReserve: isTEA
                 ? reservesPre.apesReserve
@@ -317,8 +327,8 @@ contract PoolLogic is SystemState {
     }
 
     function _updateState(
-        PoolStructs.State memory state,
-        PoolStructs.Reserves memory reserves,
+        VaultStructs.State memory state,
+        VaultStructs.Reserves memory reserves,
         int8 leverageTier,
         bytes16 price
     ) private pure {
@@ -377,7 +387,8 @@ contract PoolLogic is SystemState {
             } else {
                 // PRICE ABOVE PSR
                 state.pHigh = collateralizationFactor.mul(price).mulDivu(
-                    reserves.gentlemenReserve + reserves.LPReserve, state.totalReserves
+                    reserves.gentlemenReserve + reserves.LPReserve,
+                    state.totalReserves
                 );
                 /**
                  * Numerical Concerns
@@ -394,11 +405,9 @@ contract PoolLogic is SystemState {
         }
     }
 
-    function _calculateRatios(int8 leverageTier)
-        private
-        pure
-        returns (bytes16 leverageRatio, bytes16 collateralizationFactor)
-    {
+    function _calculateRatios(
+        int8 leverageTier
+    ) private pure returns (bytes16 leverageRatio, bytes16 collateralizationFactor) {
         bytes16 temp = FloatingPoint.fromInt(leverageTier).pow_2();
         collateralizationFactor = temp.inv().inc();
         leverageRatio = temp.inc();

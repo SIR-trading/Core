@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-// Contracts
-import {PoolLogic} from "./PoolLogic.sol";
-
 // Libraries
 import {FloatingPoint} from "./libraries/FloatingPoint.sol";
 import {TokenNaming} from "./libraries/TokenNaming.sol";
@@ -55,12 +52,6 @@ abstract contract MAAM {
     event Liquidation(uint256 vaultId, uint256 amount);
     event MintPOL(uint256 vaultId, uint256 amount);
 
-    PoolLogic internal immutable _POOL_LOGIC;
-
-    /**
-     * ERC-1155 state
-     */
-
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     /**
@@ -74,12 +65,7 @@ abstract contract MAAM {
                             WRITE FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    /**
-     * Constructor
-     */
-    constructor(address collateralToken, address poolLogic) {
-        _POOL_LOGIC = PoolLogic(poolLogic);
-    }
+    function _VAULT_LOGIC() internal view virtual returns (VaultLogic);
 
     function setApprovalForAll(address operator, bool approved) public virtual {
         isApprovedForAll[msg.sender][operator] = approved;
@@ -97,7 +83,7 @@ abstract contract MAAM {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
+        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
 
         // Transfer
         _nonRebasingBalances[id].transfer(from, to, amount, totalSupply(id));
@@ -133,7 +119,7 @@ abstract contract MAAM {
             amount = amounts[i];
 
             // Update SIR issuances
-            _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
+            _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
 
             // Transfer
             _nonRebasingBalances[id].transfer(from, to, amount, totalSupply(id));
@@ -160,7 +146,7 @@ abstract contract MAAM {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
+        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
 
         // Transfer
         bytes16 nonRebasingAmount = _nonRebasingBalances[id].transferAll(from, to);
@@ -211,13 +197,13 @@ abstract contract MAAM {
 
     function _mint(address to, uint256 id, uint256 amount, bytes memory data) internal virtual {
         // Update SIR issuance
-        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
+        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
 
         // Mint and liquidate previous LPers if totalSupply_ is 0
         uint256 totalSupply_ = totalSupply(id);
         (bool lpersLiquidated, bool mintedPOL) = _nonRebasingBalances[id].mint(account, amount, totalSupply_);
         if (lpersLiquidated) {
-            _POOL_LOGIC.haultIssuance(id);
+            _VAULT_LOGIC.haultIssuance(id);
             emit Liquidation(id, totalSupply_);
         } else if (mintedPOL) {
             emit MintPOL(id, totalSupply_);
@@ -236,7 +222,7 @@ abstract contract MAAM {
 
     function _burn(address from, uint256 id, uint256 amount) internal virtual {
         // Update SIR issuance
-        _POOL_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
+        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
 
         // Burn
         _nonRebasingBalances[id].burn(account, amount, totalSupply(id));
@@ -249,7 +235,7 @@ abstract contract MAAM {
     ///////////////////////////////////////////////////////////////*/
 
     /**
-     *  @dev To be implemented in Pool.sol. Use a JSON data URI to customize the metadata for each id
+     *  @dev To be implemented in Vault.sol. Use a JSON data URI to customize the metadata for each id
      */
     function uri(uint256 id) public view virtual returns (string memory);
 

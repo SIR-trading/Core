@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import "./interfaces/IOracle.sol";
-import "./interfaces/PoolStructs.sol";
+import "./interfaces/VaultStructs.sol";
 
 // Libraries
 import "./libraries/TransferHelper.sol";
@@ -11,6 +11,7 @@ import "./libraries/DeployerOfTokens.sol";
 
 // Contracts
 import "./MAAM.sol";
+import {VaultLogic} from "./VaultLogic.sol";
 
 /**
  * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
@@ -19,10 +20,10 @@ import "./MAAM.sol";
  *  @dev price's range is [0,Infinity], where Infinity is included.
  *  @dev TEA's supply cannot exceed type(uint).max because of its mint() function.
  */
-contract Pool is MAAM, PoolStructs {
+contract Vault is MAAM, VaultStructs {
     using FloatingPoint for bytes16;
 
-    event poolCreated(address indexed debtToken, address indexed collateralToken, int8 indexed leverageTier);
+    event vaultCreated(address indexed debtToken, address indexed collateralToken, int8 indexed leverageTier);
 
     SyntheticToken private immutable _TEA_TOKEN;
     SyntheticToken private immutable _APE_TOKEN;
@@ -32,28 +33,32 @@ contract Pool is MAAM, PoolStructs {
     int8 private immutable _LEVERAGE_TIER;
 
     IOracle public immutable ORACLE;
+    VaultLogic internal immutable _VAULT_LOGIC;
 
-    PoolStructs.State public state;
+    VaultStructs.State public state;
 
     constructor(
         address debtToken,
         address collateralToken,
         int8 leverageTier,
         address oracle,
-        address poolLogic
-    ) MAAM(collateralToken, poolLogic) {
+        address vaultLogic
+    ) MAAM(collateralToken, vaultLogic) {
         // Deploy the two synthetic tokens
         (_TEA_TOKEN, _APE_TOKEN) = DeployerOfTokens.deploy(debtToken, collateralToken, leverageTier);
 
-        // Pool parameters
+        // Vault parameters
         _DEBT_TOKEN = debtToken;
         _COLLATERAL_TOKEN = collateralToken;
         _LEVERAGE_TIER = leverageTier;
 
+        // Vault logic
+        _VAULT_LOGIC = VaultLogic(vaultLogic);
+
         // Price oracle
         ORACLE = IOracle(oracle);
 
-        emit poolCreated(debtToken, collateralToken, leverageTier);
+        emit vaultCreated(debtToken, collateralToken, leverageTier);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -63,14 +68,14 @@ contract Pool is MAAM, PoolStructs {
     /**
      * @notice Upon transfering collateral to the contract, the minter must call this function atomically to mint the corresponding amount of TEA.
      *     @return the minted amount of TEA
-     *     @dev All view functions are outsourced to _POOL_LOGIC
+     *     @dev All view functions are outsourced to _VAULT_LOGIC
      */
     function mintTEA() external returns (uint256) {
         // Get price and update ORACLE if necessary
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
-        PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 amountTEA, uint256 feeToPOL) = _POOL_LOGIC.quoteMint(
+        VaultStructs.State memory state_ = state;
+        (VaultStructs.Reserves memory reservesPre, uint256 amountTEA, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
             state_,
             _LEVERAGE_TIER,
             price,
@@ -96,8 +101,8 @@ contract Pool is MAAM, PoolStructs {
         // Get price and update ORACLE if necessary
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
-        PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) = _POOL_LOGIC.quoteMint(
+        VaultStructs.State memory state_ = state;
+        (VaultStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
             state_,
             _LEVERAGE_TIER,
             price,
@@ -127,8 +132,8 @@ contract Pool is MAAM, PoolStructs {
         // Get price and update ORACLE if necessary
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
-        PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _POOL_LOGIC
+        VaultStructs.State memory state_ = state;
+        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
             .quoteBurn(state_, _LEVERAGE_TIER, price, _TEA_TOKEN.totalSupply(), amountTEA, true);
 
         // Burn TEA, mint POL?
@@ -152,8 +157,8 @@ contract Pool is MAAM, PoolStructs {
         // Get price and update ORACLE if necessary
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
-        PoolStructs.State memory state_ = state;
-        (PoolStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _POOL_LOGIC
+        VaultStructs.State memory state_ = state;
+        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
             .quoteBurn(state_, _LEVERAGE_TIER, price, _APE_TOKEN.totalSupply(), amountAPE, false);
 
         // Burn TEA, mint POL?
@@ -179,8 +184,8 @@ contract Pool is MAAM, PoolStructs {
         // Get price and update ORACLE if necessary
         bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
 
-        PoolStructs.State memory state_ = state;
-        (uint256 LPReservePre, uint256 collateralDeposited) = _POOL_LOGIC.quoteMintMAAM(
+        VaultStructs.State memory state_ = state;
+        (uint256 LPReservePre, uint256 collateralDeposited) = _VAULT_LOGIC.quoteMintMAAM(
             state_,
             _LEVERAGE_TIER,
             price,
@@ -209,8 +214,8 @@ contract Pool is MAAM, PoolStructs {
         // Burn all?
         if (amountMAAM == type(uint256).max) amountMAAM = balanceOf(msg.sender);
 
-        PoolStructs.State memory state_ = state;
-        uint256 LPReservePre = _POOL_LOGIC.quoteBurnMAAM(state_, _LEVERAGE_TIER, price, amountMAAM);
+        VaultStructs.State memory state_ = state;
+        uint256 LPReservePre = _VAULT_LOGIC.quoteBurnMAAM(state_, _LEVERAGE_TIER, price, amountMAAM);
 
         // Burn MAAM
         _burn(msg.sender, amountMAAM, LPReservePre);
@@ -255,7 +260,7 @@ contract Pool is MAAM, PoolStructs {
      */
     function totalSupply() public view override returns (uint256) {
         bytes16 price = ORACLE.getPrice(_COLLATERAL_TOKEN);
-        PoolStructs.Reserves memory reserves = _POOL_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
+        VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
         return reserves.LPReserve;
     }
 
@@ -269,18 +274,18 @@ contract Pool is MAAM, PoolStructs {
     //         bytes16 pHigh
     //     )
     // {
-    //     return _POOL_LOGIC.priceStabilityRange(state, _LEVERAGE_TIER);
+    //     return _VAULT_LOGIC.priceStabilityRange(state, _LEVERAGE_TIER);
     // }
 
     // BRING THIS FUNCTION TO PERIPHERY
     // function LPAllocation() external view returns (uint256 collateralInTEA, uint256 collateralInAPE) {
     //     bytes16 price = ORACLE.getPrice(_COLLATERAL_TOKEN);
-    //     PoolStructs.Reserves memory reserves = _POOL_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
+    //     VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
 
     //     bytes16 x = FloatingPoint.divu(reserves.apesReserve, state.totalReserves);
     //     bytes16 y = FloatingPoint.divu(reserves.gentlemenReserve, state.totalReserves);
 
-    //     (bytes16 leverageRatio, bytes16 collateralizationFactor) = _POOL_LOGIC.calculateRatios(_LEVERAGE_TIER);
+    //     (bytes16 leverageRatio, bytes16 collateralizationFactor) = _VAULT_LOGIC.calculateRatios(_LEVERAGE_TIER);
 
     //     if (y.cmp(collateralizationFactor.inv()) >= 0) {
     //         /**
@@ -307,10 +312,10 @@ contract Pool is MAAM, PoolStructs {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Multisig/DAOFees withdraws collected _POOL_LOGIC
+     * @notice Multisig/DAOFees withdraws collected _VAULT_LOGIC
      */
     function withdrawDAOFees() external returns (uint256 DAOFees) {
-        require(msg.sender == _POOL_LOGIC.SYSTEM_CONTROL());
+        require(msg.sender == _VAULT_LOGIC.SYSTEM_CONTROL());
         DAOFees = state.DAOFees;
         state.DAOFees = 0; // No re-entrancy attack
         TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, DAOFees);

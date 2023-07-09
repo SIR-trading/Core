@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-interface PoolStructs {
+interface VaultStructs {
     struct Reserves {
         uint256 DAOFees;
         uint256 gentlemenReserve;

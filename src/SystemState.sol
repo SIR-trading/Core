@@ -46,7 +46,7 @@ contract SystemState is ERC20 {
          *     Thus the fee charge upon minting APE (if actual leverage is 2.9) is fee = (2 * systemParams.basisFee / 10,000) * collateralDeposited
          */
         uint16 basisFee;
-        uint72 issuanceAllPools; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
+        uint72 issuanceAllVaults; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
         bool onlyWithdrawals;
     }
 
@@ -71,7 +71,7 @@ contract SystemState is ERC20 {
     mapping(vaultId => VaultIssuanceState) internal _vaultIssuanceStates;
 
     SystemParameters public systemParams =
-        SystemParameters({tsIssuanceStart: 0, basisFee: 100, onlyWithdrawals: false, issuanceAllPools: ISSUANCE});
+        SystemParameters({tsIssuanceStart: 0, basisFee: 100, onlyWithdrawals: false, issuanceAllVaults: ISSUANCE});
 
     constructor(address vault, address systemControl) ERC20("Governance token of the SIR protocol", "SIR", 18) {
         VAULT = vault;
@@ -173,8 +173,8 @@ contract SystemState is ERC20 {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev To be called BEFORE minting/burning MAAM in Pool.sol
-     *     @dev Pool parameters get updated only once in the 1st tx in the block
+     * @dev To be called BEFORE minting/burning MAAM in Vault.sol
+     *     @dev Vault parameters get updated only once in the 1st tx in the block
      *     @dev LPer parameters get updated on every call
      *     @dev No-op unless caller is a vaultId
      */
@@ -245,16 +245,16 @@ contract SystemState is ERC20 {
                             ADMIN ISSUANCE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function recalibratePoolsIssuances(
-        address[] calldata pools,
+    function recalibrateVaultsIssuances(
+        address[] calldata vaults,
         bytes16[] memory latestSuppliesMAAM,
         uint256 sumTaxes
     ) public onlySystemControl {
-        // Reset issuance of prev pools
-        for (uint256 i = 0; i < pools.length; i++) {
+        // Reset issuance of prev vaults
+        for (uint256 i = 0; i < vaults.length; i++) {
             // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
             _vaultIssuanceStates[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
-                pools[i],
+                vaults[i],
                 latestSuppliesMAAM[i]
             );
             _vaultIssuanceStates[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
@@ -263,28 +263,28 @@ contract SystemState is ERC20 {
                 _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = 0;
             } else {
                 _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = uint72(
-                    (systemParams.issuanceAllPools * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) / sumTaxes
+                    (systemParams.issuanceAllVaults * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) / sumTaxes
                 );
             }
         }
     }
 
-    function changePoolsIssuances(
-        address[] calldata prevPools,
+    function changeVaultsIssuances(
+        address[] calldata prevVaults,
         bytes16[] memory latestSuppliesMAAM,
         address[] calldata nextVaults,
         uint16[] calldata taxesToDAO,
         uint256 sumTaxes
     ) external onlySystemControl returns (bytes32) {
-        // Reset issuance of prev pools
-        recalibratePoolsIssuances(prevPools, latestSuppliesMAAM, 0);
+        // Reset issuance of prev vaults
+        recalibrateVaultsIssuances(prevVaults, latestSuppliesMAAM, 0);
 
         // Set next issuances
         for (uint256 i = 0; i < nextVaults.length; i++) {
             _vaultIssuanceStates[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
             _vaultIssuanceStates[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
             _vaultIssuanceStates[nextVaults[i]].vaultIssuance.issuance = uint72(
-                (systemParams.issuanceAllPools * taxesToDAO[i]) / sumTaxes
+                (systemParams.issuanceAllVaults * taxesToDAO[i]) / sumTaxes
             );
         }
 
@@ -314,11 +314,11 @@ contract SystemState is ERC20 {
         }
 
         if (allowAnyTotalIssuance) {
-            // Recalibrate pools' issuances
-            systemParams.issuanceAllPools = ISSUANCE - issuanceAllContributors;
+            // Recalibrate vaults' issuances
+            systemParams.issuanceAllVaults = ISSUANCE - issuanceAllContributors;
         } else {
             require(
-                ISSUANCE == issuanceAllContributors + systemParams.issuanceAllPools,
+                ISSUANCE == issuanceAllContributors + systemParams.issuanceAllVaults,
                 "Total issuance must not change"
             );
         }

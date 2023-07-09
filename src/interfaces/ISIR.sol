@@ -11,15 +11,15 @@ interface ISIR is IERC20 {
 
     function contributorsReceivingSIR(uint256) external view returns (address);
 
-    function poolsReceivingSIR(uint256) external view returns (address);
+    function vaultsReceivingSIR(uint256) external view returns (address);
 
     function maxSupply() external view returns (uint256);
 
     function getContributorsIssuanceParams(address) external view returns (uint72 issuance, uint128 rewards);
 
-    function LPerDebt(address pool, address LPer) external view returns (uint128 rewards);
+    function LPerDebt(address vault, address LPer) external view returns (uint128 rewards);
 
-    function getPoolsIssuanceParams(address)
+    function getVaultsIssuanceParams(address)
         external
         view
         returns (uint16 taxToDAO, uint72 issuance, bytes16 cumSIRperMAAM);
@@ -33,7 +33,7 @@ interface ISIR is IERC20 {
         uint72[] calldata contributorsIssuances
     ) external;
 
-    function setPoolsIssuances(address[] calldata poolsReceivingSIR_, uint24[] calldata taxesToDAO) external;
+    function setVaultsIssuances(address[] calldata vaultsReceivingSIR_, uint24[] calldata taxesToDAO) external;
 
     function contributorMint() external;
 
@@ -42,5 +42,5 @@ interface ISIR is IERC20 {
 
     function haultLPersIssuances(bytes16 nonRebasingSupplyMAAM) external;
 
-    function LPerMint(address pool) external;
+    function LPerMint(address vault) external;
 }

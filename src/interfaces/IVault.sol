@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "./IMAAM.sol";
 import "./IFees.sol";
 
-interface IPool is IMAAM {
+interface IVault is IMAAM {
     function parameters() external view returns (address debtToken, address collateralToken, int8 leverageTier);
 
     function syntheticTokens() external view returns (address teaToken, address apeToken);

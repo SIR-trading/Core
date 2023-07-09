@@ -14,8 +14,8 @@ library Fees {
      *     basisFee: indicates the fee in basis points charged to gentlmen/apes per unit of liquidity.
      *     isMint: is true if the fee is computed for minting TEA/APE, or false for burning TEA/APE
      *     collateralInOrOut: is the collateral send or burnt by the user
-     *     reserveSyntheticToken: is the amount of collateral in the pool for gentlemen/apes
-     *     reserveOtherToken: is the amount of collateral in the pool for apes/gentlemen
+     *     reserveSyntheticToken: is the amount of collateral in the vault for gentlemen/apes
+     *     reserveOtherToken: is the amount of collateral in the vault for apes/gentlemen
      *     collateralizationOrLeverageTier: is the collateralization factor or leverage tier
      */
     struct FeesParameters {
