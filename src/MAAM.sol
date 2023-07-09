@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-// Interfaces
-import {IPoolLogic} from "./interfaces/IPoolLogic.sol";
+// Contracts
+import {PoolLogic} from "./PoolLogic.sol";
 
 // Libraries
 import {FloatingPoint} from "./libraries/FloatingPoint.sol";
@@ -55,13 +55,12 @@ abstract contract MAAM {
     event Liquidation(uint256 vaultId, uint256 amount);
     event MintPOL(uint256 vaultId, uint256 amount);
 
-    IPoolLogic internal immutable _POOL_LOGIC;
+    PoolLogic internal immutable _POOL_LOGIC;
 
     /**
      * ERC-1155 state
      */
 
-    mapping(address => mapping(uint256 => uint256)) public balanceOf;
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     /**
@@ -79,7 +78,7 @@ abstract contract MAAM {
      * Constructor
      */
     constructor(address collateralToken, address poolLogic) {
-        _POOL_LOGIC = IPoolLogic(poolLogic);
+        _POOL_LOGIC = PoolLogic(poolLogic);
     }
 
     function setApprovalForAll(address operator, bool approved) public virtual {
@@ -257,9 +256,11 @@ abstract contract MAAM {
     function totalSupply(uint256 id) public view virtual returns (uint256);
 
     function balanceOf(address account, uint256 id) public view returns (uint256) {
-        bytes16 nonRebasingBalance = _nonRebasingBalances[id].get(account);
+        bytes16 nonRebasingBalance = _nonRebasingBalances[id].getBalance(account);
         assert(nonRebasingBalance.cmp(_nonRebasingBalances[id].nonRebasingSupply) <= 0);
-        return nonRebasingBalance.mulDiv(totalSupply(id), _nonRebasingBalances[id].nonRebasingSupply); // Division by 0 not possible because nonRebasingSupply!=0
+
+        if (_nonRebasingBalances[id].nonRebasingSupply == FloatingPoint.ZERO) return 0;
+        return nonRebasingBalance.mulDiv(totalSupply(id), _nonRebasingBalances[id].nonRebasingSupply);
     }
 
     /**
@@ -268,7 +269,7 @@ abstract contract MAAM {
      *  @return the internal floating point balance.
      */
     function nonRebasingBalanceOf(address account, uint256 id) external view returns (bytes16) {
-        bytes16 nonRebasingBalance = _nonRebasingBalances[id].get(account);
+        bytes16 nonRebasingBalance = _nonRebasingBalances[id].getBalance(account);
         assert(nonRebasingBalance.cmp(_nonRebasingBalances[id].nonRebasingSupply) <= 0);
         return nonRebasingBalance;
     }
