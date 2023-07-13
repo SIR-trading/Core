@@ -173,7 +173,7 @@ contract Oracle {
 
         // Get oracle state
         OracleState memory oracleState = oracleStates[tokenA][tokenB];
-        if (oracleState.initialized) revert OracleAlreadyInitialized();
+        if (oracleState.initialized) return; // Reverting would cause SIR to fail creating new vaults
 
         // Get all fee tiers
         UniswapFeeTier[] memory uniswapFeeTiers = getUniswapFeeTiers();
