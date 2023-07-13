@@ -2,9 +2,8 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import "uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
-import "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
-import "./interfaces/IFactory.sol";
+import {IUniswapV3Factory} from "uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
+import {IUniswapV3Pool} from "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
 import "./libraries/FloatingPoint.sol";

@@ -2,16 +2,15 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import "./interfaces/IOracle.sol";
-import "./interfaces/VaultStructs.sol";
+import {Oracle} from "./Oracle.sol";
+import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
 // Libraries
-import "./libraries/TransferHelper.sol";
-import "./libraries/DeployerOfTokens.sol";
+import {TransferHelper} from "./libraries/TransferHelper.sol";
+import {DeployerOfTokens} from "./libraries/DeployerOfTokens.sol";
 
 // Contracts
-import "./MAAM.sol";
-import {VaultLogic} from "./VaultLogic.sol";
+import {MAAM} from "./MAAM.sol";
 
 /**
  * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
@@ -23,43 +22,29 @@ import {VaultLogic} from "./VaultLogic.sol";
 contract Vault is MAAM, VaultStructs {
     using FloatingPoint for bytes16;
 
-    event vaultCreated(address indexed debtToken, address indexed collateralToken, int8 indexed leverageTier);
+    event vaultInitialized(
+        address indexed debtToken,
+        address indexed collateralToken,
+        int8 indexed leverageTier,
+        uint256 indexed vaultId
+    );
 
-    SyntheticToken private immutable _TEA_TOKEN;
-    SyntheticToken private immutable _APE_TOKEN;
+    Oracle public immutable ORACLE;
 
-    address private immutable _DEBT_TOKEN;
-    address private immutable _COLLATERAL_TOKEN;
-    int8 private immutable _LEVERAGE_TIER;
+    mapping(VaultStructs.Parameters => VaultStructs.State) public state;
 
-    IOracle public immutable ORACLE;
-    VaultLogic internal immutable _VAULT_LOGIC;
-
-    VaultStructs.State public state;
-
-    constructor(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier,
-        address oracle,
-        address vaultLogic
-    ) MAAM(collateralToken, vaultLogic) {
-        // Deploy the two synthetic tokens
-        (_TEA_TOKEN, _APE_TOKEN) = DeployerOfTokens.deploy(debtToken, collateralToken, leverageTier);
-
-        // Vault parameters
-        _DEBT_TOKEN = debtToken;
-        _COLLATERAL_TOKEN = collateralToken;
-        _LEVERAGE_TIER = leverageTier;
-
-        // Vault logic
-        _VAULT_LOGIC = VaultLogic(vaultLogic);
-
+    constructor(address vaultLogic, address oracle) MAAM(vaultLogic) {
         // Price oracle
-        ORACLE = IOracle(oracle);
-
-        emit vaultCreated(debtToken, collateralToken, leverageTier);
+        ORACLE = Oracle(oracle);
     }
+
+    /**
+        Initialization is always necessary because we must deploy TEA and APE contracts, and possibly initialize the Oracle.
+        If I require initialization, the vaultId can be chosen sequentially,
+        and stored in the state by squeezing out some bytes from the other state variables.
+        Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
+     */
+    function initialize(address debtToken, address collateralToken, int8 leverageTier) external {}
 
     /*////////////////////////////////////////////////////////////////
                             MINT/BURN FUNCTIONS
@@ -89,7 +74,7 @@ contract Vault is MAAM, VaultStructs {
 
         // Mints
         _TEA_TOKEN.mint(msg.sender, amountTEA); // Mint TEA
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.LPReserve); // Mint POL
+        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
 
         // Store new state reserves
         state = state_;
@@ -116,7 +101,7 @@ contract Vault is MAAM, VaultStructs {
 
         // Mints
         _APE_TOKEN.mint(msg.sender, amountAPE); // Mint TEA
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.LPReserve); // Mint POL
+        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
 
         // Store new state reserves
         state = state_;
@@ -138,7 +123,7 @@ contract Vault is MAAM, VaultStructs {
 
         // Burn TEA, mint POL?
         _TEA_TOKEN.burn(msg.sender, amountTEA);
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.LPReserve); // Mint POL
+        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
 
         // Store new state reserves
         state = state_;
@@ -163,7 +148,7 @@ contract Vault is MAAM, VaultStructs {
 
         // Burn TEA, mint POL?
         _APE_TOKEN.burn(msg.sender, amountAPE);
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.LPReserve); // Mint POL
+        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
 
         // Store new state reserves
         state = state_;
@@ -261,7 +246,7 @@ contract Vault is MAAM, VaultStructs {
     function totalSupply() public view override returns (uint256) {
         bytes16 price = ORACLE.getPrice(_COLLATERAL_TOKEN);
         VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
-        return reserves.LPReserve;
+        return reserves.lpReserve;
     }
 
     // BRING THIS FUNCTION TO PERIPHERY
@@ -291,19 +276,19 @@ contract Vault is MAAM, VaultStructs {
     //         /**
     //             PRICE BELOW PSR
     //          */
-    //         collateralInAPE = reserves.LPReserve;
+    //         collateralInAPE = reserves.lpReserve;
     //     } else if (x.cmp(leverageRatio.inv()) < 0) {
     //         /**
     //             PRICE IN PSR
     //          */
     //         collateralInAPE = FloatingPoint.ONE.mulDiv(state.totalReserves, leverageRatio) - reserves.apesReserve;
-    //         assert((collateralInAPE <= reserves.LPReserve));
-    //         collateralInTEA = reserves.LPReserve - collateralInAPE;
+    //         assert((collateralInAPE <= reserves.lpReserve));
+    //         collateralInTEA = reserves.lpReserve - collateralInAPE;
     //     } else {
     //         /**
     //             PRICE ABOVE PSR
     //          */
-    //         collateralInTEA = reserves.LPReserve;
+    //         collateralInTEA = reserves.lpReserve;
     //     }
     // }
 
@@ -312,12 +297,12 @@ contract Vault is MAAM, VaultStructs {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Multisig/DAOFees withdraws collected _VAULT_LOGIC
+     * @notice Multisig/daoFees withdraws collected _VAULT_LOGIC
      */
-    function withdrawDAOFees() external returns (uint256 DAOFees) {
+    function withdrawDAOFees() external returns (uint256 daoFees) {
         require(msg.sender == _VAULT_LOGIC.SYSTEM_CONTROL());
-        DAOFees = state.DAOFees;
-        state.DAOFees = 0; // No re-entrancy attack
-        TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, DAOFees);
+        daoFees = state.daoFees;
+        state.daoFees = 0; // No re-entrancy attack
+        TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, daoFees);
     }
 }

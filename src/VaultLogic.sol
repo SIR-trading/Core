@@ -139,8 +139,8 @@ contract VaultLogic is SystemState {
         VaultStructs.Reserves memory reserves = getReserves(state, leverageTier, price);
 
         // Update reserves
-        LPReservePre = reserves.LPReserve;
-        reserves.LPReserve += collateralDeposited;
+        LPReservePre = reserves.lpReserve;
+        reserves.lpReserve += collateralDeposited;
 
         // Update state
         _updateState(state, reserves, leverageTier, price);
@@ -156,8 +156,8 @@ contract VaultLogic is SystemState {
         VaultStructs.Reserves memory reserves = getReserves(state, leverageTier, price);
 
         // Update reserves
-        LPReservePre = reserves.LPReserve;
-        reserves.LPReserve -= amountMAAM;
+        LPReservePre = reserves.lpReserve;
+        reserves.lpReserve -= amountMAAM;
 
         // Update state
         _updateState(state, reserves, leverageTier, price);
@@ -186,7 +186,7 @@ contract VaultLogic is SystemState {
         bytes16 price
     ) public pure returns (VaultStructs.Reserves memory reserves) {
         unchecked {
-            reserves.DAOFees = state.DAOFees;
+            reserves.daoFees = state.daoFees;
 
             // RESERVE IS EMPTY
             if (state.totalReserves == 0) return reserves;
@@ -279,7 +279,7 @@ contract VaultLogic is SystemState {
             assert(reserves.gentlemenReserve + reserves.apesReserve <= state.totalReserves);
 
             // COMPUTE LP RESERVE
-            reserves.LPReserve = state.totalReserves - reserves.gentlemenReserve - reserves.apesReserve;
+            reserves.lpReserve = state.totalReserves - reserves.gentlemenReserve - reserves.apesReserve;
         }
     }
 
@@ -294,7 +294,7 @@ contract VaultLogic is SystemState {
         require(!systemParams.onlyWithdrawals);
 
         // Get deposited collateral
-        return IERC20(collateralToken).balanceOf(address(msg.sender)) - state.DAOFees - state.totalReserves;
+        return IERC20(collateralToken).balanceOf(address(msg.sender)) - state.daoFees - state.totalReserves;
     }
 
     function _updateReserves(
@@ -308,7 +308,7 @@ contract VaultLogic is SystemState {
         uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
 
         reservesPost = VaultStructs.Reserves({
-            DAOFees: reservesPre.DAOFees + feeToDAO,
+            daoFees: reservesPre.daoFees + feeToDAO,
             gentlemenReserve: isTEA
                 ? (
                     goesIn
@@ -319,7 +319,7 @@ contract VaultLogic is SystemState {
             apesReserve: isTEA
                 ? reservesPre.apesReserve
                 : (goesIn ? reservesPre.apesReserve + collateralInOrOut : reservesPre.apesReserve - collateralInOrOut),
-            LPReserve: reservesPre.LPReserve + collateralFee - feeToDAO
+            lpReserve: reservesPre.lpReserve + collateralFee - feeToDAO
         });
 
         // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
@@ -334,8 +334,8 @@ contract VaultLogic is SystemState {
     ) private pure {
         (bytes16 leverageRatio, bytes16 collateralizationFactor) = _calculateRatios(leverageTier);
 
-        state.DAOFees = reserves.DAOFees;
-        state.totalReserves = reserves.gentlemenReserve + reserves.apesReserve + reserves.LPReserve;
+        state.daoFees = reserves.daoFees;
+        state.totalReserves = reserves.gentlemenReserve + reserves.apesReserve + reserves.lpReserve;
 
         unchecked {
             if (state.totalReserves == 0) return; // When the reserve is empty, pLow and pHigh are undetermined
@@ -356,12 +356,12 @@ contract VaultLogic is SystemState {
             // COMPUTE pHigh
             if (reserves.apesReserve == 0) {
                 state.pHigh = FloatingPoint.INFINITY;
-            } else if (reserves.LPReserve == 0) {
+            } else if (reserves.lpReserve == 0) {
                 state.pHigh = pLow;
             } else if (price.cmp(pLow) <= 0) {
                 // PRICE BELOW PSR
                 state.pHigh = pLow.div(
-                    FloatingPoint.divu(reserves.apesReserve, reserves.apesReserve + reserves.LPReserve).pow(
+                    FloatingPoint.divu(reserves.apesReserve, reserves.apesReserve + reserves.lpReserve).pow(
                         collateralizationFactor.dec()
                     )
                 );
@@ -371,7 +371,7 @@ contract VaultLogic is SystemState {
                  *                     Righ hand side could still be ∞ because of the power.
                  *                     0 * ∞ not possible because  pLow > price > 0
                  *                 Proof pHigh ≥ pLow
-                 *                     apesReserve + LPReserve ≥ apesReserve
+                 *                     apesReserve + lpReserve ≥ apesReserve
                  */
             } else if (reserves.apesReserve < leverageRatio.inv().mulu(state.totalReserves)) {
                 // PRICE IN PSR
@@ -387,7 +387,7 @@ contract VaultLogic is SystemState {
             } else {
                 // PRICE ABOVE PSR
                 state.pHigh = collateralizationFactor.mul(price).mulDivu(
-                    reserves.gentlemenReserve + reserves.LPReserve,
+                    reserves.gentlemenReserve + reserves.lpReserve,
                     state.totalReserves
                 );
                 /**
@@ -395,7 +395,7 @@ contract VaultLogic is SystemState {
                  *                     Division by 0 not possible because totalReserves != 0
                  *                 Proof pHigh ≥ pLow
                  *                     Yes, because
-                 *                     collateralizationFactor.mul(price).mulDivu(gentlemenReserve + LPReserve,state.totalReserves) >
+                 *                     collateralizationFactor.mul(price).mulDivu(gentlemenReserve + lpReserve,state.totalReserves) >
                  *                     collateralizationFactor.mul(price).mulDivu(gentlemenReserve,state.totalReserves) = pLow
                  */
             }

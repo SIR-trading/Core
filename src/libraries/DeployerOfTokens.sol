@@ -2,21 +2,32 @@
 pragma solidity ^0.8.0;
 
 // Contracts
+import {FullMath} from "./FullMath.sol";
 import {SyntheticToken, IERC20} from "../SyntheticToken.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
 library DeployerOfTokens {
+    bytes16 private constant _SYMBOLS = "0123456789abcdef";
+
     // Deploy TEA and APE tokens
     function deploy(
+        uint256 vaultId,
         address debtToken,
         address collateralToken,
         int8 leverageTier
     ) external returns (SyntheticToken tea, SyntheticToken ape) {
-        tea = new SyntheticToken{salt: hex"00"}();
-        ape = new SyntheticToken{salt: hex"01"}();
+        // Get salts that produce addresses that start with hex chars `7ea` and `a9e`
+        bytes32 saltTEA = _getSaltTEA(vaultId);
+        bytes32 saltAPE = _getSaltAPE(vaultId);
+
+        // Deploy contracts for TEA and APE
+        tea = new SyntheticToken{salt: saltTEA}();
+        ape = new SyntheticToken{salt: saltAPE}();
+
+        // Initialize them
         tea.initialize(
             _generateNameTEA(debtToken, collateralToken, leverageTier),
-            "TEA",
+            _generateSymbol("TEA", vaultId),
             IERC20(debtToken).decimals(),
             debtToken,
             collateralToken,
@@ -24,7 +35,7 @@ library DeployerOfTokens {
         );
         ape.initialize(
             _generateNameAPE(debtToken, collateralToken, leverageTier),
-            "APE",
+            _generateSymbol("APE", vaultId),
             IERC20(collateralToken).decimals(),
             debtToken,
             collateralToken,
@@ -134,6 +145,46 @@ library DeployerOfTokens {
                     " with a ",
                     collateralizationStr,
                     "% collateralization ratio"
+                )
+            );
+    }
+
+    function _generateSymbol(string memory symbolPrefix, uint256 vaultId) private pure returns (string memory) {
+        return string(abi.encodePacked(symbolPrefix, Strings.toString(vaultId)));
+    }
+
+    function _getSaltTEA(uint48 vaultId) private returns (bytes32 saltTEA) {
+        /**
+            DUMMY IMPLEMENTATION
+            I WANT TO GET MINED SALTS THAT RETURN ADDRESSES WITH PREFIXES 7ea AND a9e 
+         */
+        saltTEA = bytes32(vaultId * 2);
+    }
+
+    function _getSaltAPE(uint48 vaultId) private returns (bytes32 saltAPE) {
+        /**
+            DUMMY IMPLEMENTATION
+            I WANT TO GET MINED SALTS THAT RETURN ADDRESSES WITH PREFIXES 7ea AND a9e 
+         */
+        saltAPE = bytes32(vaultId * 2 + 1);
+    }
+
+    function getAddress(uint256 vaultId, bool isTEA) internal returns (address) {
+        bytes32 salt = isTEA ? _getSaltTEA(vaultId) : _getSaltAPE(vaultId);
+
+        return
+            address(
+                uint160(
+                    uint(
+                        keccak256(
+                            abi.encodePacked(
+                                bytes1(0xff),
+                                address(this),
+                                salt,
+                                keccak256(type(SyntheticToken).creationCode) // PRECOMPUTE FOR MAINNET LAUNCH
+                            )
+                        )
+                    )
                 )
             );
     }

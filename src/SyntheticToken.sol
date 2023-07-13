@@ -5,7 +5,6 @@ pragma solidity >=0.8.0;
 import {IERC20} from "uniswap-v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import {TokenNaming} from "./libraries/TokenNaming.sol";
 import {ResettableBalancesUInt216} from "./libraries/ResettableBalancesUInt216.sol";
 
 // Contracts
@@ -87,7 +86,7 @@ abstract contract SyntheticToken is Owned {
         require(bytes(name).length == 0);
 
         name = name_;
-        symbol = TokenNaming._generateSymbol(symbolPrefix, address(msg.sender));
+        symbol = _generateSymbol(symbolPrefix);
         decimals = decimals_;
 
         debtToken = debtToken_;

@@ -6,7 +6,8 @@ import {FloatingPoint} from "./libraries/FloatingPoint.sol";
 import {TokenNaming} from "./libraries/TokenNaming.sol";
 import {ResettableBalancesBytes16} from "./libraries/ResettableBalancesBytes16.sol";
 
-// import "./test/TestFloatingPoint.sol";
+// Contracts
+import {VaultLogic} from "./VaultLogic.sol";
 
 /**
  * @notice MAAM is liquidity providers' token in the SIR protocol. It is also a rebasing token.
@@ -35,7 +36,7 @@ abstract contract MAAM {
         address indexed operator,
         address indexed from,
         address indexed to,
-        uint256 id,
+        uint256 vaultId,
         uint256 amount
     );
 
@@ -43,14 +44,16 @@ abstract contract MAAM {
         address indexed operator,
         address indexed from,
         address indexed to,
-        uint256[] ids,
+        uint256[] vaultIds,
         uint256[] amounts
     );
 
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-    event URI(string value, uint256 indexed id);
-    event Liquidation(uint256 vaultId, uint256 amount);
-    event MintPOL(uint256 vaultId, uint256 amount);
+    event URI(string value, uint256 indexed vaultId);
+    event Liquidation(uint256 indexed vaultId, uint256 amount);
+    event MintPOL(uint256 indexed vaultId, uint256 amount);
+
+    VaultLogic internal immutable _VAULT_LOGIC;
 
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
@@ -59,13 +62,15 @@ abstract contract MAAM {
      *  @notice Internally, balances are still stored as a fixed floating point number.
      *  @return the internal floating point token supply.
      */
-    mapping(uint256 id => ResettableBalancesBytes16.ResettableBalances) private _nonRebasingBalances;
+    mapping(uint256 vaultId => ResettableBalancesBytes16.ResettableBalances) private _nonRebasingBalances;
 
     /*///////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    function _VAULT_LOGIC() internal view virtual returns (VaultLogic);
+    constructor() {
+        _VAULT_LOGIC = VaultLogic(vaultLogic);
+    }
 
     function setApprovalForAll(address operator, bool approved) public virtual {
         isApprovedForAll[msg.sender][operator] = approved;
@@ -76,24 +81,24 @@ abstract contract MAAM {
     function safeTransferFrom(
         address from,
         address to,
-        uint256 id,
+        uint256 vaultId,
         uint256 amount,
         bytes calldata data
     ) public virtual {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
+        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
         // Transfer
-        _nonRebasingBalances[id].transfer(from, to, amount, totalSupply(id));
+        _nonRebasingBalances[vaultId].transfer(from, to, amount, totalSupply(vaultId));
 
-        emit TransferSingle(msg.sender, from, to, id, amount);
+        emit TransferSingle(msg.sender, from, to, vaultId, amount);
 
         require(
             to.code.length == 0
                 ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, id, amount, data) ==
+                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) ==
                     ERC1155TokenReceiver.onERC1155Received.selector,
             "UNSAFE_RECIPIENT"
         );
@@ -102,27 +107,27 @@ abstract contract MAAM {
     function safeBatchTransferFrom(
         address from,
         address to,
-        uint256[] calldata ids,
+        uint256[] calldata vaultIds,
         uint256[] calldata amounts,
         bytes calldata data
     ) public virtual {
-        require(ids.length == amounts.length, "LENGTH_MISMATCH");
+        require(vaultIds.length == amounts.length, "LENGTH_MISMATCH");
 
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Storing these outside the loop saves ~15 gas per iteration.
-        uint256 id;
+        uint256 vaultId;
         uint256 amount;
 
-        for (uint256 i = 0; i < ids.length; ) {
-            id = ids[i];
+        for (uint256 i = 0; i < vaultIds.length; ) {
+            vaultId = vaultIds[i];
             amount = amounts[i];
 
             // Update SIR issuances
-            _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
+            _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
             // Transfer
-            _nonRebasingBalances[id].transfer(from, to, amount, totalSupply(id));
+            _nonRebasingBalances[vaultId].transfer(from, to, amount, totalSupply(vaultId));
 
             // An array can't have a total length
             // larger than the max uint256 value.
@@ -131,33 +136,33 @@ abstract contract MAAM {
             }
         }
 
-        emit TransferBatch(msg.sender, from, to, ids, amounts);
+        emit TransferBatch(msg.sender, from, to, vaultIds, amounts);
 
         require(
             to.code.length == 0
                 ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, ids, amounts, data) ==
+                : ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) ==
                     ERC1155TokenReceiver.onERC1155BatchReceived.selector,
             "UNSAFE_RECIPIENT"
         );
     }
 
-    function safeTransferAllFrom(address from, address to, uint256 id, bytes calldata data) public virtual {
+    function safeTransferAllFrom(address from, address to, uint256 vaultId, bytes calldata data) public virtual {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [from, to]);
+        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
         // Transfer
-        bytes16 nonRebasingAmount = _nonRebasingBalances[id].transferAll(from, to);
-        uint amount = nonRebasingAmount.mulDiv(totalSupply(id), _nonRebasingBalances[id].nonRebasingSupply);
+        bytes16 nonRebasingAmount = _nonRebasingBalances[vaultId].transferAll(from, to);
+        uint amount = nonRebasingAmount.mulDiv(totalSupply(vaultId), _nonRebasingBalances[vaultId].nonRebasingSupply);
 
-        emit TransferSingle(msg.sender, from, to, id, amount);
+        emit TransferSingle(msg.sender, from, to, vaultId, amount);
 
         require(
             to.code.length == 0
                 ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, id, amount, data) ==
+                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) ==
                     ERC1155TokenReceiver.onERC1155Received.selector,
             "UNSAFE_RECIPIENT"
         );
@@ -165,9 +170,9 @@ abstract contract MAAM {
 
     function balanceOfBatch(
         address[] calldata owners,
-        uint256[] calldata ids
+        uint256[] calldata vaultIds
     ) public view virtual returns (uint256[] memory balances) {
-        require(owners.length == ids.length, "LENGTH_MISMATCH");
+        require(owners.length == vaultIds.length, "LENGTH_MISMATCH");
 
         balances = new uint256[](owners.length);
 
@@ -175,7 +180,7 @@ abstract contract MAAM {
         // the array index counter which cannot possibly overflow.
         unchecked {
             for (uint256 i = 0; i < owners.length; ++i) {
-                balances[i] = balanceOf[owners[i]][ids[i]];
+                balances[i] = balanceOf[owners[i]][vaultIds[i]];
             }
         }
     }
@@ -195,39 +200,39 @@ abstract contract MAAM {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function _mint(address to, uint256 id, uint256 amount, bytes memory data) internal virtual {
+    function _mint(address to, uint256 vaultId, uint256 amount, bytes memory data) internal virtual {
         // Update SIR issuance
-        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
+        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [account]);
 
         // Mint and liquidate previous LPers if totalSupply_ is 0
-        uint256 totalSupply_ = totalSupply(id);
-        (bool lpersLiquidated, bool mintedPOL) = _nonRebasingBalances[id].mint(account, amount, totalSupply_);
+        uint256 totalSupply_ = totalSupply(vaultId);
+        (bool lpersLiquidated, bool mintedPOL) = _nonRebasingBalances[vaultId].mint(account, amount, totalSupply_);
         if (lpersLiquidated) {
-            _VAULT_LOGIC.haultIssuance(id);
-            emit Liquidation(id, totalSupply_);
+            _VAULT_LOGIC.haultIssuance(vaultId);
+            emit Liquidation(vaultId, totalSupply_);
         } else if (mintedPOL) {
-            emit MintPOL(id, totalSupply_);
+            emit MintPOL(vaultId, totalSupply_);
         }
 
-        emit TransferSingle(msg.sender, address(0), to, id, amount);
+        emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
 
         require(
             to.code.length == 0
                 ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), id, amount, data) ==
+                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, data) ==
                     ERC1155TokenReceiver.onERC1155Received.selector,
             "UNSAFE_RECIPIENT"
         );
     }
 
-    function _burn(address from, uint256 id, uint256 amount) internal virtual {
+    function _burn(address from, uint256 vaultId, uint256 amount) internal virtual {
         // Update SIR issuance
-        _VAULT_LOGIC.updateIssuance(id, _nonRebasingBalances[id], [account]);
+        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [account]);
 
         // Burn
-        _nonRebasingBalances[id].burn(account, amount, totalSupply(id));
+        _nonRebasingBalances[vaultId].burn(account, amount, totalSupply(vaultId));
 
-        emit TransferSingle(msg.sender, from, address(0), id, amount);
+        emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -235,18 +240,18 @@ abstract contract MAAM {
     ///////////////////////////////////////////////////////////////*/
 
     /**
-     *  @dev To be implemented in Vault.sol. Use a JSON data URI to customize the metadata for each id
+     *  @dev To be implemented in Vault.sol. Use a JSON data URI to customize the metadata for each vaultId
      */
-    function uri(uint256 id) public view virtual returns (string memory);
+    function uri(uint256 vaultId) public view virtual returns (string memory);
 
-    function totalSupply(uint256 id) public view virtual returns (uint256);
+    function totalSupply(uint256 vaultId) public view virtual returns (uint256);
 
-    function balanceOf(address account, uint256 id) public view returns (uint256) {
-        bytes16 nonRebasingBalance = _nonRebasingBalances[id].getBalance(account);
-        assert(nonRebasingBalance.cmp(_nonRebasingBalances[id].nonRebasingSupply) <= 0);
+    function balanceOf(address account, uint256 vaultId) public view returns (uint256) {
+        bytes16 nonRebasingBalance = _nonRebasingBalances[vaultId].getBalance(account);
+        assert(nonRebasingBalance.cmp(_nonRebasingBalances[vaultId].nonRebasingSupply) <= 0);
 
-        if (_nonRebasingBalances[id].nonRebasingSupply == FloatingPoint.ZERO) return 0;
-        return nonRebasingBalance.mulDiv(totalSupply(id), _nonRebasingBalances[id].nonRebasingSupply);
+        if (_nonRebasingBalances[vaultId].nonRebasingSupply == FloatingPoint.ZERO) return 0;
+        return nonRebasingBalance.mulDiv(totalSupply(vaultId), _nonRebasingBalances[vaultId].nonRebasingSupply);
     }
 
     /**
@@ -254,17 +259,17 @@ abstract contract MAAM {
      *  @notice Internally, balances are still stored as a fixed floating point number.
      *  @return the internal floating point balance.
      */
-    function nonRebasingBalanceOf(address account, uint256 id) external view returns (bytes16) {
-        bytes16 nonRebasingBalance = _nonRebasingBalances[id].getBalance(account);
-        assert(nonRebasingBalance.cmp(_nonRebasingBalances[id].nonRebasingSupply) <= 0);
+    function nonRebasingBalanceOf(address account, uint256 vaultId) external view returns (bytes16) {
+        bytes16 nonRebasingBalance = _nonRebasingBalances[vaultId].getBalance(account);
+        assert(nonRebasingBalance.cmp(_nonRebasingBalances[vaultId].nonRebasingSupply) <= 0);
         return nonRebasingBalance;
     }
 
     /**
      * @return number of times MAAM has been liquidated
      */
-    function numberOfLiquidations(uint256 id) external view returns (uint216) {
-        return _nonRebasingBalances[id].numLiquidations;
+    function numberOfLiquidations(uint256 vaultId) external view returns (uint216) {
+        return _nonRebasingBalances[vaultId].numLiquidations;
     }
 }
 

@@ -176,8 +176,8 @@ contract SystemControl is Ownable {
 
     // MAKE A WITHDRAWAL FUNCTION!
     // function withdrawDAOFees(address vault) external onlyOwner returns () {
-    //     DAOFees = state.DAOFees;
-    //     state.DAOFees = 0; // No re-entrancy attack
-    //     TransferHelper.safeTransfer(COLLATERAL_TOKEN, msg.sender, DAOFees);
+    //     daoFees = state.daoFees;
+    //     state.daoFees = 0; // No re-entrancy attack
+    //     TransferHelper.safeTransfer(COLLATERAL_TOKEN, msg.sender, daoFees);
     // }
 }
