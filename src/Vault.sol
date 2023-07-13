@@ -22,20 +22,26 @@ import {MAAM} from "./MAAM.sol";
 contract Vault is MAAM, VaultStructs {
     using FloatingPoint for bytes16;
 
-    event vaultInitialized(
+    error VaultAlreadyInitialized();
+
+    event VaultInitialized(
         address indexed debtToken,
         address indexed collateralToken,
         int8 indexed leverageTier,
         uint256 indexed vaultId
     );
 
-    Oracle public immutable ORACLE;
+    Oracle public immutable oracle;
 
-    mapping(VaultStructs.Parameters => VaultStructs.State) public state;
+    mapping(VaultStructs.Parameters => VaultStructs.State) public state; // Do not use vaultId 0
+    VaultStructs.Parameters[] public paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
     constructor(address vaultLogic, address oracle) MAAM(vaultLogic) {
         // Price oracle
-        ORACLE = Oracle(oracle);
+        oracle = Oracle(oracle);
+
+        // To make sure vault Id 0 is never used, we push one empty element in
+        paramsById.push(VaultStructs.Parameters());
     }
 
     /**
@@ -44,7 +50,24 @@ contract Vault is MAAM, VaultStructs {
         and stored in the state by squeezing out some bytes from the other state variables.
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
      */
-    function initialize(address debtToken, address collateralToken, int8 leverageTier) external {}
+    function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
+        // Initialize oracle if needed
+        oracle.initialize(debtToken, collateralToken);
+
+        // Check the vault is not initialized
+        VaultStructs.State storage state_ = state[VaultStructs.Parameters(debtToken, collateralToken, leverageTier)];
+        if (state_.vaultId != 0) revert VaultAlreadyInitialized();
+
+        // Next vault ID
+        uint256 vaultId = paramsById.length;
+
+        // Deploy TEA and APE tokens, and initialize them
+        DeployerOfTokens.deploy(vaultId, debtToken, collateralToken, leverageTier);
+
+        // Save vaultId and parameters
+        state_.vaultId = vaultId;
+        paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
+    }
 
     /*////////////////////////////////////////////////////////////////
                             MINT/BURN FUNCTIONS
@@ -56,8 +79,8 @@ contract Vault is MAAM, VaultStructs {
      *     @dev All view functions are outsourced to _VAULT_LOGIC
      */
     function mintTEA() external returns (uint256) {
-        // Get price and update ORACLE if necessary
-        bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
+        // Get price and update oracle if necessary
+        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
 
         VaultStructs.State memory state_ = state;
         (VaultStructs.Reserves memory reservesPre, uint256 amountTEA, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
@@ -83,8 +106,8 @@ contract Vault is MAAM, VaultStructs {
     }
 
     function mintAPE() external returns (uint256) {
-        // Get price and update ORACLE if necessary
-        bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
+        // Get price and update oracle if necessary
+        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
 
         VaultStructs.State memory state_ = state;
         (VaultStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
@@ -114,8 +137,8 @@ contract Vault is MAAM, VaultStructs {
      *     @param amountTEA is the amount of TEA the gentleman wishes to burn
      */
     function burnTEA(uint256 amountTEA) external returns (uint256) {
-        // Get price and update ORACLE if necessary
-        bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
+        // Get price and update oracle if necessary
+        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
 
         VaultStructs.State memory state_ = state;
         (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
@@ -139,8 +162,8 @@ contract Vault is MAAM, VaultStructs {
      *     @param amountAPE is the amount of APE the gentleman wishes to burn
      */
     function burnAPE(uint256 amountAPE) external returns (uint256) {
-        // Get price and update ORACLE if necessary
-        bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
+        // Get price and update oracle if necessary
+        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
 
         VaultStructs.State memory state_ = state;
         (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
@@ -166,8 +189,8 @@ contract Vault is MAAM, VaultStructs {
      *     @return LP reserve after mint
      */
     function mintMAAM() external returns (uint256) {
-        // Get price and update ORACLE if necessary
-        bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
+        // Get price and update oracle if necessary
+        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
 
         VaultStructs.State memory state_ = state;
         (uint256 LPReservePre, uint256 collateralDeposited) = _VAULT_LOGIC.quoteMintMAAM(
@@ -193,8 +216,8 @@ contract Vault is MAAM, VaultStructs {
      *     @return LP reserve after burn
      */
     function burnMAAM(uint256 amountMAAM) external returns (uint256) {
-        // Get price and update ORACLE if necessary
-        bytes16 price = ORACLE.updatePriceMemory(_COLLATERAL_TOKEN);
+        // Get price and update oracle if necessary
+        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
 
         // Burn all?
         if (amountMAAM == type(uint256).max) amountMAAM = balanceOf(msg.sender);
@@ -244,7 +267,7 @@ contract Vault is MAAM, VaultStructs {
      *     @dev Override of virtual totalSupply() in MAAM.sol
      */
     function totalSupply() public view override returns (uint256) {
-        bytes16 price = ORACLE.getPrice(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.getPrice(_COLLATERAL_TOKEN);
         VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
         return reserves.lpReserve;
     }
@@ -264,7 +287,7 @@ contract Vault is MAAM, VaultStructs {
 
     // BRING THIS FUNCTION TO PERIPHERY
     // function LPAllocation() external view returns (uint256 collateralInTEA, uint256 collateralInAPE) {
-    //     bytes16 price = ORACLE.getPrice(_COLLATERAL_TOKEN);
+    //     bytes16 price = oracle.getPrice(_COLLATERAL_TOKEN);
     //     VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
 
     //     bytes16 x = FloatingPoint.divu(reserves.apesReserve, state.totalReserves);

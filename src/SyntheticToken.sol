@@ -14,10 +14,6 @@ import {Owned} from "./Owned.sol";
 abstract contract SyntheticToken is Owned {
     using ResettableBalancesUInt216 for ResettableBalancesUInt216.ResettableBalances;
 
-    address public collateralToken;
-    address public debtToken;
-    int8 public leverageTier;
-
     /*///////////////////////////////////////////////////////////////
                                   EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -32,11 +28,9 @@ abstract contract SyntheticToken is Owned {
                              METADATA STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    string public name;
-
-    string public symbol;
-
     uint8 public decimals;
+    string public name;
+    string public symbol;
 
     /*///////////////////////////////////////////////////////////////
                               IERC20 STORAGE
@@ -74,24 +68,13 @@ abstract contract SyntheticToken is Owned {
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
     }
 
-    function initialize(
-        string memory name_,
-        string memory symbolPrefix,
-        uint8 decimals_,
-        address debtToken_,
-        address collateralToken_,
-        int8 leverageTier_
-    ) external {
+    function initialize(string memory name_, string memory symbolPrefix, uint8 decimals_) external {
         // Make sure this function is only called once
         require(bytes(name).length == 0);
 
         name = name_;
         symbol = _generateSymbol(symbolPrefix);
         decimals = decimals_;
-
-        debtToken = debtToken_;
-        collateralToken = collateralToken_;
-        leverageTier = leverageTier_;
     }
 
     /*///////////////////////////////////////////////////////////////
