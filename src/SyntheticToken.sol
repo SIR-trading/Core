@@ -67,13 +67,13 @@ abstract contract SyntheticToken is Owned {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
+    /**
+     * @dev Because the constructor does not have arguments, the deployment bytecode is the same for all tokens.
+     */
     constructor() {
         // Set immutable parameters
-        IVault vault = IVault(msg.sender);
-        (name, symbol, decimals) = vault.tokenParameters(); // ERC-20 required
-        (debtToken, collateralToken, leverageTier) = vault.latestParams(); // Extra information
+        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = IVault(msg.sender).latestTokenParams();
 
-        // Because the constructor does not receive parameters, the deployment bytecode is deterministic
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
     }

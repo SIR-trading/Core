@@ -10,7 +10,7 @@ import {VaultStructs} from "./interfaces/VaultStructs.sol";
 contract DeployerOfTokens {
     bytes16 private constant _SYMBOLS = "0123456789abcdef";
 
-    VaultStructs.TokenParameters public tokenParameters;
+    VaultStructs.TokenParameters internal tokenParameters;
 
     // Deploy TEA and APE tokens
     function deploy(

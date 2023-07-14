@@ -87,7 +87,7 @@ abstract contract MAAM {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [from, to]);
+        _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
         // Transfer
         _nonRebasingBalances[vaultId].transfer(from, to, amount, totalSupply(vaultId));
@@ -123,7 +123,7 @@ abstract contract MAAM {
             amount = amounts[i];
 
             // Update SIR issuances
-            _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [from, to]);
+            _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
             // Transfer
             _nonRebasingBalances[vaultId].transfer(from, to, amount, totalSupply(vaultId));
@@ -150,7 +150,7 @@ abstract contract MAAM {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [from, to]);
+        _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
         // Transfer
         bytes16 nonRebasingAmount = _nonRebasingBalances[vaultId].transferAll(from, to);
@@ -199,12 +199,11 @@ abstract contract MAAM {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function _mint(address to, uint256 vaultId, uint256 amount, bytes memory data) internal virtual {
+    function _mint(address to, uint256 vaultId, uint256 amount, uint256 totalSupply_) internal virtual {
         // Update SIR issuance
-        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [account]);
+        _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [account]);
 
         // Mint and liquidate previous LPers if totalSupply_ is 0
-        uint256 totalSupply_ = totalSupply(vaultId);
         (bool lpersLiquidated, bool mintedPOL) = _nonRebasingBalances[vaultId].mint(account, amount, totalSupply_);
         if (lpersLiquidated) {
             _VAULT_LOGIC.haultIssuance(vaultId);
@@ -218,18 +217,18 @@ abstract contract MAAM {
         require(
             to.code.length == 0
                 ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, data) ==
+                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") ==
                     ERC1155TokenReceiver.onERC1155Received.selector,
             "UNSAFE_RECIPIENT"
         );
     }
 
-    function _burn(address from, uint256 vaultId, uint256 amount) internal virtual {
+    function _burn(address from, uint256 vaultId, uint256 amount, uint256 totalSupply_) internal virtual {
         // Update SIR issuance
-        _VAULT_LOGIC.updateIssuance(vaultId, _nonRebasingBalances[vaultId], [account]);
+        _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [account]);
 
         // Burn
-        _nonRebasingBalances[vaultId].burn(account, amount, totalSupply(vaultId));
+        _nonRebasingBalances[vaultId].burn(account, amount, totalSupply_);
 
         emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
     }

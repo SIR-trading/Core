@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Interfaces
+// Contracts
 import {Oracle} from "./Oracle.sol";
 import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {DeployerOfTokens} from "./DeployerOfTokens.sol";
+import {DeployerOfTokens, SyntheticToken} from "./DeployerOfTokens.sol";
 
 // Contracts
 import {MAAM} from "./MAAM.sol";
@@ -23,6 +23,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     using FloatingPoint for bytes16;
 
     error VaultAlreadyInitialized();
+    error VaultDoesNotExist();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -46,7 +47,22 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         paramsById.push(VaultStructs.Parameters());
     }
 
-    function latestParams() external returns (address debtToken, address collateralToken, int8 leverageTier) {
+    function latestTokenParams()
+        external
+        returns (
+            string memory name,
+            string memory symbol,
+            uint8 decimals,
+            address debtToken,
+            address collateralToken,
+            int8 leverageTier
+        )
+    {
+        TokenParameters memory tokenParams = tokenParameters;
+        name = tokenParams.name;
+        symbol = tokenParams.symbol;
+        decimals = tokenParams.decimals;
+
         VaultStructs.Parameters memory params = paramsById[paramsById.length - 1];
         debtToken = params.debtToken;
         collateralToken = params.collateralToken;
@@ -93,26 +109,35 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      *     @return the minted amount of TEA
      *     @dev All view functions are outsourced to _VAULT_LOGIC
      */
-    function mintTEA() external returns (uint256) {
+    function mintTEA(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
         // Get price and update oracle if necessary
-        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
 
+        // Retrieve state and check it actually exists
         VaultStructs.State memory state_ = state;
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
+
+        // Retrieve TEA contract
+        SyntheticToken tea = SyntheticToken(getAddress(state_.vaultId, true));
+
+        // Compute new state
         (VaultStructs.Reserves memory reservesPre, uint256 amountTEA, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
             state_,
-            _LEVERAGE_TIER,
+            leverageTier,
             price,
-            _TEA_TOKEN.totalSupply(),
-            _COLLATERAL_TOKEN,
+            tea.totalSupply(),
+            collateralToken,
             true
         );
 
         // Liquidate gentlemen if necessary
-        if (reservesPre.gentlemenReserve == 0) _TEA_TOKEN.liquidate();
+        if (reservesPre.gentlemenReserve == 0) tea.liquidate();
 
-        // Mints
-        _TEA_TOKEN.mint(msg.sender, amountTEA); // Mint TEA
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
+        // Mint TEA
+        tea.mint(msg.sender, amountTEA);
+
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
 
         // Store new state reserves
         state = state_;
@@ -120,26 +145,35 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         return amountTEA;
     }
 
-    function mintAPE() external returns (uint256) {
+    function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
         // Get price and update oracle if necessary
-        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
 
+        // Retrieve state and check it actually exists
         VaultStructs.State memory state_ = state;
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
+
+        // Retrieve APE contract
+        SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId, false));
+
+        // Compute new state
         (VaultStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
             state_,
-            _LEVERAGE_TIER,
+            leverageTier,
             price,
-            _APE_TOKEN.totalSupply(),
-            _COLLATERAL_TOKEN,
+            ape.totalSupply(),
+            collateralToken,
             false
         );
 
         // Liquidate apes if necessary
-        if (reservesPre.apesReserve == 0) _APE_TOKEN.liquidate();
+        if (reservesPre.apesReserve == 0) ape.liquidate();
 
-        // Mints
-        _APE_TOKEN.mint(msg.sender, amountAPE); // Mint TEA
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
+        // Mint APE
+        ape.mint(msg.sender, amountAPE);
+
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
 
         // Store new state reserves
         state = state_;
@@ -151,23 +185,37 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      * @notice Users call burn() to burn their TEA in exchange for hard cold collateral
      *     @param amountTEA is the amount of TEA the gentleman wishes to burn
      */
-    function burnTEA(uint256 amountTEA) external returns (uint256) {
+    function burnTEA(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier,
+        uint256 amountTEA
+    ) external returns (uint256) {
         // Get price and update oracle if necessary
-        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
 
+        // Retrieve state and check it actually exists
         VaultStructs.State memory state_ = state;
-        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
-            .quoteBurn(state_, _LEVERAGE_TIER, price, _TEA_TOKEN.totalSupply(), amountTEA, true);
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-        // Burn TEA, mint POL?
-        _TEA_TOKEN.burn(msg.sender, amountTEA);
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
+        // Retrieve TEA contract
+        SyntheticToken tea = SyntheticToken(getAddress(state_.vaultId, true));
+
+        // Compute new state
+        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
+            .quoteBurn(state_, leverageTier, price, tea.totalSupply(), amountTEA, true);
+
+        // Burn TEA
+        tea.burn(msg.sender, amountTEA);
+
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
 
         // Store new state reserves
         state = state_;
 
         // Withdraw collateral to user (after substracting fee)
-        TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, collateralWithdrawn);
+        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWithdrawn);
 
         return collateralWithdrawn;
     }
@@ -176,23 +224,37 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      * @notice Users call burn() to burn their APE in exchange for hard cold collateral
      *     @param amountAPE is the amount of APE the gentleman wishes to burn
      */
-    function burnAPE(uint256 amountAPE) external returns (uint256) {
+    function burnAPE(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier,
+        uint256 amountAPE
+    ) external returns (uint256) {
         // Get price and update oracle if necessary
-        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
 
+        // Retrieve state and check it actually exists
         VaultStructs.State memory state_ = state;
-        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
-            .quoteBurn(state_, _LEVERAGE_TIER, price, _APE_TOKEN.totalSupply(), amountAPE, false);
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-        // Burn TEA, mint POL?
-        _APE_TOKEN.burn(msg.sender, amountAPE);
-        if (feeToPOL > 0) _mint(address(this), feeToPOL, reservesPre.lpReserve); // Mint POL
+        // Retrieve APE contract
+        SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId, false));
+
+        // Compute new state
+        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
+            .quoteBurn(state_, leverageTier, price, ape.totalSupply(), amountAPE, false);
+
+        // Burn TEA
+        ape.burn(msg.sender, amountAPE);
+
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
 
         // Store new state reserves
         state = state_;
 
         // Withdraw collateral to user (after substracting fee)
-        TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, collateralWithdrawn);
+        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWithdrawn);
 
         return collateralWithdrawn;
     }
@@ -205,7 +267,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      */
     function mintMAAM() external returns (uint256) {
         // Get price and update oracle if necessary
-        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
 
         VaultStructs.State memory state_ = state;
         (uint256 LPReservePre, uint256 collateralDeposited) = _VAULT_LOGIC.quoteMintMAAM(
@@ -232,7 +294,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      */
     function burnMAAM(uint256 amountMAAM) external returns (uint256) {
         // Get price and update oracle if necessary
-        bytes16 price = oracle.updatePriceMemory(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
 
         // Burn all?
         if (amountMAAM == type(uint256).max) amountMAAM = balanceOf(msg.sender);
@@ -265,12 +327,6 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     /*/////////////////////f//////////////////////////////////////////
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-
-    function parameters() external view returns (address debtToken, address collateralToken, int8 leverageTier) {
-        debtToken = _DEBT_TOKEN;
-        collateralToken = _COLLATERAL_TOKEN;
-        leverageTier = _LEVERAGE_TIER;
-    }
 
     function syntheticTokens() external view returns (address teaToken, address apeToken) {
         teaToken = address(_TEA_TOKEN);

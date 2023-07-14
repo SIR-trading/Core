@@ -178,7 +178,7 @@ contract SystemState is ERC20 {
      *     @dev LPer parameters get updated on every call
      *     @dev No-op unless caller is a vaultId
      */
-    function updateIssuance(
+    function updateIssuances(
         uint256 vaultId,
         ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
         address[] memory LPers
@@ -263,7 +263,8 @@ contract SystemState is ERC20 {
                 _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = 0;
             } else {
                 _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = uint72(
-                    (systemParams.issuanceAllVaults * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) / sumTaxes
+                    (systemParams.issuanceAllVaults * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) /
+                        sumTaxes
                 );
             }
         }
