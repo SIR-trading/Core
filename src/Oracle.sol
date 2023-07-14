@@ -173,7 +173,7 @@ contract Oracle {
 
         // Get oracle state
         OracleState memory oracleState = oracleStates[tokenA][tokenB];
-        if (oracleState.initialized) return; // Reverting would cause SIR to fail creating new vaults
+        if (oracleState.initialized) return; // No-op return because reverting would cause SIR to fail creating new vaults
 
         // Get all fee tiers
         UniswapFeeTier[] memory uniswapFeeTiers = getUniswapFeeTiers();
@@ -462,7 +462,7 @@ contract Oracle {
              * if so we add a TWAP_DELTA increment taking into consideration that every block takes in average 12 seconds
              */
             if (cardinalityNeeded > cardinalityNext)
-                oracleData.cardinalityToIncrease = cardinalityNext + (TWAP_DELTA - 1) / (12 seconds) + 1;
+                oracleData.cardinalityToIncrease = cardinalityNext + uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
         }
 
         // Compute average liquidity

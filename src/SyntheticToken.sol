@@ -3,6 +3,7 @@ pragma solidity >=0.8.0;
 
 // Interfaces
 import {IERC20} from "uniswap-v2-core/interfaces/IERC20.sol";
+import {IVault} from "./interfaces/IVault.sol";
 
 // Libraries
 import {ResettableBalancesUInt216} from "./libraries/ResettableBalancesUInt216.sol";
@@ -28,9 +29,13 @@ abstract contract SyntheticToken is Owned {
                              METADATA STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    uint8 public decimals;
     string public name;
     string public symbol;
+    uint8 public immutable decimals;
+
+    address public immutable debtToken;
+    address public immutable collateralToken;
+    int8 public immutable leverageTier;
 
     /*///////////////////////////////////////////////////////////////
                               IERC20 STORAGE
@@ -63,18 +68,14 @@ abstract contract SyntheticToken is Owned {
     //////////////////////////////////////////////////////////////*/
 
     constructor() {
+        // Set immutable parameters
+        IVault vault = IVault(msg.sender);
+        (name, symbol, decimals) = vault.tokenParameters(); // ERC-20 required
+        (debtToken, collateralToken, leverageTier) = vault.latestParams(); // Extra information
+
         // Because the constructor does not receive parameters, the deployment bytecode is deterministic
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
-    }
-
-    function initialize(string memory name_, string memory symbolPrefix, uint8 decimals_) external {
-        // Make sure this function is only called once
-        require(bytes(name).length == 0);
-
-        name = name_;
-        symbol = _generateSymbol(symbolPrefix);
-        decimals = decimals_;
     }
 
     /*///////////////////////////////////////////////////////////////

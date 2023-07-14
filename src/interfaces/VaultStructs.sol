@@ -8,6 +8,12 @@ interface VaultStructs {
         int8 leverageTier;
     }
 
+    struct TokenParameters {
+        string memory name,
+        string memory symbol,
+        uint8 decimals
+    }
+
     struct Reserves {
         uint256 daoFees;
         uint256 gentlemenReserve;

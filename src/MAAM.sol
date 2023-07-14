@@ -3,7 +3,6 @@ pragma solidity >=0.8.0;
 
 // Libraries
 import {FloatingPoint} from "./libraries/FloatingPoint.sol";
-import {TokenNaming} from "./libraries/TokenNaming.sol";
 import {ResettableBalancesBytes16} from "./libraries/ResettableBalancesBytes16.sol";
 
 // Contracts

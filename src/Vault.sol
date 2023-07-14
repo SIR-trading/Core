@@ -7,7 +7,7 @@ import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {DeployerOfTokens} from "./libraries/DeployerOfTokens.sol";
+import {DeployerOfTokens} from "./DeployerOfTokens.sol";
 
 // Contracts
 import {MAAM} from "./MAAM.sol";
@@ -19,7 +19,7 @@ import {MAAM} from "./MAAM.sol";
  *  @dev price's range is [0,Infinity], where Infinity is included.
  *  @dev TEA's supply cannot exceed type(uint).max because of its mint() function.
  */
-contract Vault is MAAM, VaultStructs {
+contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     using FloatingPoint for bytes16;
 
     error VaultAlreadyInitialized();
@@ -34,14 +34,23 @@ contract Vault is MAAM, VaultStructs {
     Oracle public immutable oracle;
 
     mapping(VaultStructs.Parameters => VaultStructs.State) public state; // Do not use vaultId 0
-    VaultStructs.Parameters[] public paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
+    VaultStructs.Parameters[] private paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
     constructor(address vaultLogic, address oracle) MAAM(vaultLogic) {
         // Price oracle
         oracle = Oracle(oracle);
 
-        // To make sure vault Id 0 is never used, we push one empty element in
+        /** We rely on vaultId == 0 to test if a particular vault exists.
+         *  To make sure vault Id 0 is never used, we push one empty element as first entry.
+         */
         paramsById.push(VaultStructs.Parameters());
+    }
+
+    function latestParams() external returns (address debtToken, address collateralToken, int8 leverageTier) {
+        VaultStructs.Parameters memory params = paramsById[paramsById.length - 1];
+        debtToken = params.debtToken;
+        collateralToken = params.collateralToken;
+        leverageTier = params.leverageTier;
     }
 
     /**
@@ -51,22 +60,28 @@ contract Vault is MAAM, VaultStructs {
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
      */
     function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
-        // Initialize oracle if needed
+        /**
+         * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
+         * 2. It also will revert if there are no pools with liquidity, which implicitly solves the case where the user
+         *    tries to instantiate an invalid pair of tokens like address(0)
+         */
         oracle.initialize(debtToken, collateralToken);
 
-        // Check the vault is not initialized
+        // Check the vault has not been initialized previously
         VaultStructs.State storage state_ = state[VaultStructs.Parameters(debtToken, collateralToken, leverageTier)];
         if (state_.vaultId != 0) revert VaultAlreadyInitialized();
 
         // Next vault ID
         uint256 vaultId = paramsById.length;
 
+        // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
+        paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
+
         // Deploy TEA and APE tokens, and initialize them
-        DeployerOfTokens.deploy(vaultId, debtToken, collateralToken, leverageTier);
+        deploy(vaultId, debtToken, collateralToken, leverageTier);
 
         // Save vaultId and parameters
         state_.vaultId = vaultId;
-        paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
     }
 
     /*////////////////////////////////////////////////////////////////

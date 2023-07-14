@@ -2,12 +2,15 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {FullMath} from "./FullMath.sol";
-import {SyntheticToken, IERC20} from "../SyntheticToken.sol";
+import {FullMath} from "./libraries/FullMath.sol";
+import {SyntheticToken, IERC20} from "./SyntheticToken.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
+import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
-library DeployerOfTokens {
+contract DeployerOfTokens {
     bytes16 private constant _SYMBOLS = "0123456789abcdef";
+
+    VaultStructs.TokenParameters public tokenParameters;
 
     // Deploy TEA and APE tokens
     function deploy(
@@ -20,27 +23,31 @@ library DeployerOfTokens {
         bytes32 saltTEA = _getSaltTEA(vaultId);
         bytes32 saltAPE = _getSaltAPE(vaultId);
 
-        // Deploy contracts for TEA and APE
+        /**
+         * Set the parameters that will be read during the instantiation of the tokens.
+         * This pattern is used to avoid passing arguments to the constructor explicitly.
+         */
+        tokenParameters = VaultStructs.TransientParameters({
+            name: _generateNameTEA(debtToken, collateralToken, leverageTier),
+            symbol: _generateSymbol("TEA", vaultId),
+            decimals: IERC20(debtToken).decimals()
+        });
+
+        // Deploy TEA
         tea = new SyntheticToken{salt: saltTEA}();
+
+        // Transient storage for APE token
+        tokenParameters = VaultStructs.TransientParameters({
+            name: _generateNameAPE(debtToken, collateralToken, leverageTier),
+            symbol: _generateSymbol("APE", vaultId),
+            decimals: IERC20(collateralToken).decimals()
+        });
+
+        // Deploy APE
         ape = new SyntheticToken{salt: saltAPE}();
 
-        // Initialize them
-        tea.initialize(
-            _generateNameTEA(debtToken, collateralToken, leverageTier),
-            _generateSymbol("TEA", vaultId),
-            IERC20(debtToken).decimals(),
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
-        ape.initialize(
-            _generateNameAPE(debtToken, collateralToken, leverageTier),
-            _generateSymbol("APE", vaultId),
-            IERC20(collateralToken).decimals(),
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
+        // Free memory
+        delete tokenParameters;
     }
 
     /**
