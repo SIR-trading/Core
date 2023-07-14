@@ -153,8 +153,7 @@ abstract contract MAAM {
         _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [from, to]);
 
         // Transfer
-        bytes16 nonRebasingAmount = _nonRebasingBalances[vaultId].transferAll(from, to);
-        uint amount = nonRebasingAmount.mulDiv(totalSupply(vaultId), _nonRebasingBalances[vaultId].nonRebasingSupply);
+        uint256 amount = _nonRebasingBalances[vaultId].transferAll(from, to, totalSupply(vaultId));
 
         emit TransferSingle(msg.sender, from, to, vaultId, amount);
 
@@ -229,6 +228,16 @@ abstract contract MAAM {
 
         // Burn
         _nonRebasingBalances[vaultId].burn(account, amount, totalSupply_);
+
+        emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
+    }
+
+    function _burnAll(address from, uint256 vaultId, uint256 totalSupply_) internal virtual {
+        // Update SIR issuance
+        _VAULT_LOGIC.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [account]);
+
+        // Burn entire balance
+        uint256 amount = _nonRebasingBalances[vaultId].burnAll(account);
 
         emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
     }

@@ -38,11 +38,14 @@ library ResettableBalancesBytes16 {
     function transferAll(
         ResettableBalances storage resettableBalances,
         address from,
-        address to
-    ) internal returns (bytes16 nonRebasingAmount) {
+        address to,
+        uint256 totalSupply
+    ) internal returns (uint amount) {
         if (resettableBalances.nonRebasingSupply == FloatingPoint.ZERO) revert ZeroBalance();
 
-        nonRebasingAmount = getBalance(resettableBalances, from);
+        bytes16 nonRebasingAmount = getBalance(resettableBalances, from);
+        amount = nonRebasingAmount.mulDiv(totalSupply, resettableBalances.nonRebasingSupply);
+
         setBalance(resettableBalances, from, FloatingPoint.ZERO);
         setBalance(resettableBalances, to, getBalance(resettableBalances, to).add(nonRebasingAmount));
     }
@@ -142,5 +145,22 @@ library ResettableBalancesBytes16 {
         resettableBalances.nonRebasingSupply = resettableBalances.nonRebasingSupply.subUp(
             resettableBalances.nonRebasingSupply.mulDivu(amount, totalSupply)
         );
+    }
+
+    function burnAll(
+        ResettableBalances storage resettableBalances,
+        address account,
+        uint256 totalSupply
+    ) internal returns (uint256 amount) {
+        if (resettableBalances.nonRebasingSupply == FloatingPoint.ZERO) revert ZeroBalance();
+
+        bytes16 nonRebasingAmount = getBalance(resettableBalances, account);
+        amount = nonRebasingAmount.mulDiv(totalSupply, resettableBalances.nonRebasingSupply);
+
+        // Nullify balance
+        setBalance(resettableBalances, account, FloatingPoint.ZERO);
+
+        // Update supply
+        resettableBalances.nonRebasingSupply = resettableBalances.nonRebasingSupply.subUp(nonRebasingAmount);
     }
 }
