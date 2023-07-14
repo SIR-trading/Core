@@ -110,21 +110,12 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      *     @dev All view functions are outsourced to _VAULT_LOGIC
      */
     function mintTEA(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        // Get price and update oracle if necessary
-        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
-
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state;
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-        // Until SIR is running, only LPers are allowed to mint (deposit collateral)
-        require(systemParams.tsIssuanceStart > 0);
-
-        // Compute reserves from state
-        VaultStructs.Reserves memory reserves = getReserves(state_, leverageTier, price);
-
-        // Get deposited collateral
-        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
+        (
+            bytes16 price,
+            VaultStructs.State memory state_,
+            VaultStructs.Reserves memory reserves,
+            uint256 collateralDeposited
+        ) = _mintPreprocess(debtToken, collateralToken, leverageTier);
 
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
@@ -138,73 +129,30 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
             })
         );
 
-        // Retrieve TEA contract
-        SyntheticToken tea = SyntheticToken(getAddress(state_.vaultId, true));
-
-        // Liquidate gentlemen if necessary
-        uint256 amountTEA;
-        if (reservesPre.gentlemenReserve == 0) {
-            tea.liquidate();
-            amountTEA = collateralIn;
-        } else {
-            amountTEA = FullMath.mulDiv(tea.totalSupply(), collateralIn, reserves.gentlemenReserve);
-        }
-
-        // Mint TEA
-        tea.mint(msg.sender, amountTEA);
-
-        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feeToPOL = collateralFee / 10;
-
-        // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
-
-        // Update new reserves
-        _updateReserves(reserves, collateralIn, collateralFee, true, true);
-
-        // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, price);
-
-        // Store new state reserves
-        state = state_;
-
-        return amountTEA;
+        return _mintPostprocess(true, leverageTier, state_, reserves, collateralIn, collateralFee);
     }
 
     function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        // Get price and update oracle if necessary
-        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
+        (
+            bytes16 price,
+            VaultStructs.State memory state_,
+            VaultStructs.Reserves memory reserves,
+            uint256 collateralDeposited
+        ) = _mintPreprocess(debtToken, collateralToken, leverageTier);
 
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state;
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-        // Retrieve APE contract
-        SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId, false));
-
-        // Compute new state
-        (VaultStructs.Reserves memory reservesPre, uint256 amountAPE, uint256 feeToPOL) = _VAULT_LOGIC.quoteMint(
-            state_,
-            leverageTier,
-            price,
-            ape.totalSupply(),
-            collateralToken,
-            false
+        // Substract fee
+        (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
+            Fees.FeesParameters({
+                basisFee: systemParams.basisFee,
+                isMint: true,
+                collateralInOrOut: collateralDeposited,
+                reserveSyntheticToken: reserves.apesReserve,
+                reserveOtherToken: reserves.gentlemenReserve,
+                collateralizationOrLeverageTier: leverageTier
+            })
         );
 
-        // Liquidate apes if necessary
-        if (reservesPre.apesReserve == 0) ape.liquidate();
-
-        // Mint APE
-        ape.mint(msg.sender, amountAPE);
-
-        // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
-
-        // Store new state reserves
-        state = state_;
-
-        return amountAPE;
+        return _mintPostprocess(false, leverageTier, state_, reserves, collateralIn, collateralFee);
     }
 
     /**
@@ -494,6 +442,79 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
+
+    function _mintPreprocess(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier
+    )
+        private
+        view
+        returns (
+            bytes16 price,
+            VaultStructs.State memory state_,
+            VaultStructs.Reserves memory reserves,
+            uint256 collateralDeposited
+        )
+    {
+        // Get price and update oracle if necessary
+        price = oracle.updateOracleState(collateralToken, debtToken);
+
+        // Retrieve state and check it actually exists
+        state_ = state;
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
+
+        // Until SIR is running, only LPers are allowed to mint (deposit collateral)
+        require(systemParams.tsIssuanceStart > 0);
+
+        // Compute reserves from state
+        reserves = getReserves(state_, leverageTier, price);
+
+        // Get deposited collateral
+        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
+    }
+
+    function _mintPostprocess(
+        bool isTea,
+        int8 leverageTier,
+        VaultStructs.State memory state_,
+        VaultStructs.Reserves memory reserves,
+        uint256 collateralIn,
+        uint256 collateralFee
+    ) private returns (uint256) {
+        // Retrieve APE contract
+        SyntheticToken token = SyntheticToken(getAddress(state_.vaultId, isTea));
+
+        // Liquidate apes if necessary
+        uint256 reserveToken = isTea ? reserves.gentlemenReserve : reserves.apesReserve;
+        uint256 amount;
+        if (reserveToken == 0) {
+            token.liquidate();
+            amount = collateralIn;
+        } else {
+            amount = FullMath.mulDiv(token.totalSupply(), collateralIn, reserveToken);
+        }
+
+        // Mint APE
+        token.mint(msg.sender, amount);
+
+        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
+        uint256 feeToPOL = collateralFee / 10;
+
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
+
+        // Update new reserves
+        _updateReserves(reserves, collateralIn, collateralFee, isTea, true);
+
+        // Update state from new reserves
+        _updateState(state_, reserves, leverageTier, price);
+
+        // Store new state reserves
+        state = state_;
+
+        return amount;
+    }
 
     function _getCollateralDeposited(
         VaultStructs.State memory state,
