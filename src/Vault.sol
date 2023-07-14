@@ -110,12 +110,14 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      *     @dev All view functions are outsourced to _VAULT_LOGIC
      */
     function mintTEA(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (
-            bytes16 price,
-            VaultStructs.State memory state_,
-            VaultStructs.Reserves memory reserves,
-            uint256 collateralDeposited
-        ) = _mintPreprocess(debtToken, collateralToken, leverageTier);
+        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
+
+        // Get deposited collateral
+        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
 
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
@@ -133,12 +135,14 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     }
 
     function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (
-            bytes16 price,
-            VaultStructs.State memory state_,
-            VaultStructs.Reserves memory reserves,
-            uint256 collateralDeposited
-        ) = _mintPreprocess(debtToken, collateralToken, leverageTier);
+        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
+
+        // Get deposited collateral
+        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
 
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
@@ -165,31 +169,34 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 leverageTier,
         uint256 amountTEA
     ) external returns (uint256) {
-        // Get price and update oracle if necessary
-        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
-
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state;
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
+        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
 
         // Retrieve TEA contract
         SyntheticToken tea = SyntheticToken(getAddress(state_.vaultId, true));
 
-        // Compute new state
-        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
-            .quoteBurn(state_, leverageTier, price, tea.totalSupply(), amountTEA, true);
+        // Get collateralOut
+        uint256 collateralOut = FullMath.mulDiv(reserves.gentlemenReserve, amountTEA, tea.totalSupply());
+
+        // Substract fee
+        (uint256 collateralWithdrawn, uint256 collateralFee) = Fees._hiddenFee(
+            Fees.FeesParameters({
+                basisFee: systemParams.basisFee,
+                isMint: false,
+                collateralInOrOut: collateralOut,
+                reserveSyntheticToken: reserves.gentlemenReserve,
+                reserveOtherToken: reserves.apesReserve,
+                collateralizationOrLeverageTier: -leverageTier
+            })
+        );
 
         // Burn TEA
         tea.burn(msg.sender, amountTEA);
 
-        // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
-
-        // Store new state reserves
-        state = state_;
-
-        // Withdraw collateral to user (after substracting fee)
-        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWithdrawn);
+        _burnPostprocess(true, price, leverageTier, state_, reserves, collateralWithdrawn, collateralFee);
 
         return collateralWithdrawn;
     }
@@ -204,31 +211,34 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 leverageTier,
         uint256 amountAPE
     ) external returns (uint256) {
-        // Get price and update oracle if necessary
-        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
-
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state;
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
+        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
 
         // Retrieve APE contract
         SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId, false));
 
-        // Compute new state
-        (VaultStructs.Reserves memory reservesPre, uint256 collateralWithdrawn, uint256 feeToPOL) = _VAULT_LOGIC
-            .quoteBurn(state_, leverageTier, price, ape.totalSupply(), amountAPE, false);
+        // Get collateralOut
+        uint256 collateralOut = FullMath.mulDiv(reserves.apesReserve, amountAPE, ape.totalSupply());
 
-        // Burn TEA
+        // Substract fee
+        (uint256 collateralWithdrawn, uint256 collateralFee) = Fees._hiddenFee(
+            Fees.FeesParameters({
+                basisFee: systemParams.basisFee,
+                isMint: false,
+                collateralInOrOut: collateralOut,
+                reserveSyntheticToken: reserves.apesReserve,
+                reserveOtherToken: reserves.gentlemenReserve,
+                collateralizationOrLeverageTier: leverageTier
+            })
+        );
+
+        // Burn APE
         ape.burn(msg.sender, amountAPE);
 
-        // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reservesPre.lpReserve);
-
-        // Store new state reserves
-        state = state_;
-
-        // Withdraw collateral to user (after substracting fee)
-        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWithdrawn);
+        _burnPostprocess(false, price, leverageTier, state_, reserves, collateralWithdrawn, collateralFee);
 
         return collateralWithdrawn;
     }
@@ -443,20 +453,11 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _mintPreprocess(
+    function _preprocess(
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    )
-        private
-        view
-        returns (
-            bytes16 price,
-            VaultStructs.State memory state_,
-            VaultStructs.Reserves memory reserves,
-            uint256 collateralDeposited
-        )
-    {
+    ) private view returns (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
         // Get price and update oracle if necessary
         price = oracle.updateOracleState(collateralToken, debtToken);
 
@@ -469,13 +470,11 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
         // Compute reserves from state
         reserves = getReserves(state_, leverageTier, price);
-
-        // Get deposited collateral
-        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
     }
 
     function _mintPostprocess(
         bool isTea,
+        bytes16 price,
         int8 leverageTier,
         VaultStructs.State memory state_,
         VaultStructs.Reserves memory reserves,
@@ -495,7 +494,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
             amount = FullMath.mulDiv(token.totalSupply(), collateralIn, reserveToken);
         }
 
-        // Mint APE
+        // Mint TEA/APE
         token.mint(msg.sender, amount);
 
         // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
@@ -516,6 +515,32 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         return amount;
     }
 
+    function _burnPostprocess(
+        bool isTea,
+        bytes16 price,
+        int8 leverageTier,
+        VaultStructs.State memory state_,
+        VaultStructs.Reserves memory reserves,
+        uint256 collateralWithdrawn,
+        uint256 collateralFee
+    ) {
+        // Mint protocol-owned liquidity if necessary
+        uint256 feeToPOL = collateralFee / 10;
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
+
+        // Update reserves
+        _updateReserves(reserves, collateralOut, collateralFee, isTea, false);
+
+        // Update state
+        _updateState(state_, reserves, leverageTier, price);
+
+        // Store new state reserves
+        state = state_;
+
+        // Withdraw collateral to user (after substracting fee)
+        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWithdrawn);
+    }
+
     function _getCollateralDeposited(
         VaultStructs.State memory state,
         address collateralToken
@@ -530,7 +555,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         VaultStructs.Reserves memory reserves,
         uint256 collateralInOrOut,
         uint256 collateralFee,
-        bool isTEA,
+        bool isTea,
         bool goesIn
     ) private view {
         // Calculate fee to the DAO
@@ -538,14 +563,14 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
         reserves = VaultStructs.Reserves({
             daoFees: reserves.daoFees + feeToDAO,
-            gentlemenReserve: isTEA
+            gentlemenReserve: isTea
                 ? (
                     goesIn
                         ? reserves.gentlemenReserve + collateralInOrOut
                         : reserves.gentlemenReserve - collateralInOrOut
                 ) // Reverts if too much collateral is withdrawn
                 : reserves.gentlemenReserve,
-            apesReserve: isTEA
+            apesReserve: isTea
                 ? reserves.apesReserve
                 : (goesIn ? reserves.apesReserve + collateralInOrOut : reserves.apesReserve - collateralInOrOut),
             lpReserve: reserves.lpReserve + collateralFee - feeToDAO
