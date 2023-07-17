@@ -9,22 +9,26 @@ import {FullMath} from "./FullMath.sol";
  */
 
 /**
-    In 9 months, ETH gained 45% and SQUEETH -3%. Without volatility decay, SQUEETH should have gained 1.45^2, or 110%.
-    This is equivalent to paying an initial fee of 1-0.97/2.1 = 0.54, which is 54%.
-    If we assume the fee would have to scale linearly with time, that is (0.97/2.1)^(1 year/9 months) results in a fee of 64%.
-    So... basisFee = 64/36 = 1.78 or 178% !! For every 1 ETH, we must pay 1.78 ETH in fees.
-    If the leverage ratio was 1.2, then the fee would be 1.78*(1.2-1) = 0.35 or 35%.
-    These are VERY HIGH FEES. Should I add a feethat deters LPers from draining liquidity in expectation of a large move?
-
     In 3 months, ETH remained flat while SQUEETH lost -16%. Without fees and volatility decay, SQUEETH should also have remained flat.
     Compounding the fees for 4 times, we get (1-0.16)^(1 year/3 months) = 50% lost over a year with a flat price a 2x.
     This computation has to be done on flat prices, because when the price moves, SQUEETH has to overpay shorters to stay short.
     In SIR the LPers take the loss when the market moves against them, and viceversa.
-    This implies a basisFee = 100% for 2x constant leverage. At 1.2x, basisFee = 20%.
+    This implies a basisFee = 100% for 2x constant leverage. At 1.2x, fee = 20%.
     BUT this would make overcollateralized stablecoins very expensive unless they mint and burn when they are the minority.
     Yes and no, the gentlemen would need to wait for the right time to cash out.
     If the market consensus is that the price will go up, then the LPers would want to cash out and the apes to stay in, right?
     Not exactly because then the LPers also lose on the ludicrous fees of those that just open a long.
+
+    Make the protocol charge proportionally to the amount of LP liquidity needed to compensate for your actions. So..
+    - Deposit APE when A > (l-1)T => fBasis·(l-1)
+    - Deposit TEA when T > (r-1)A => fBasis·(r-1)
+    - Withdraw APE when A < (l-1)T => fBasis (here APE is acting as liquidity for gentlemen, and removing it is equivalent to removing LP liquidity)
+    - Withdraw TEA when T < (r-1)A => fBasis
+    - Else, => 0
+
+    Even if I chose fBasis=50%, that is still A LOT to pay to exit TEA. Not sure who will use TEA tokens,
+    and if there is any need for including the extra complexity in the system. What if only create the APE token?
+    I could arbitrarily set the TEA fees lower, but it is still not ideal because it relies on the price of other tokens.
 */
 
 library Fees {
