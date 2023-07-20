@@ -16,7 +16,6 @@ interface VaultStructs {
 
     struct Reserves {
         uint256 daoFees;
-        uint256 gentlemenReserve;
         uint256 apesReserve;
         uint256 lpReserve;
     }
@@ -27,10 +26,9 @@ interface VaultStructs {
      * FIRST TEST AS THIS AND THEN CHECK THE OTHER SOLUTIONS TO COMPARE GAS
      */
     struct State {
-        uint48 vaultId; // Allows for 281 trillion vaults.
-        uint232 daoFees;
-        uint232 totalReserves; // totalReserves = gentlemenReserve + apesReserve + lpReserve
-        bytes16 pLiq; // Liquidation price. Lower bound of the Price Stability Region is pLow = pLiq * collateralizationFactor
+        uint128 vaultId; // Allows for 281 trillion vaults.
+        uint256 daoFees;
+        uint256 totalReserves; // totalReserves =  apesReserve + lpReserve
         bytes16 pHigh; // Upper bound of the Price Stability Region
     }
 }

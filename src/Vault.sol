@@ -104,37 +104,6 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
                             MINT/BURN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Upon transfering collateral to the contract, the minter must call this function atomically to mint the corresponding amount of TEA.
-     *     @return the minted amount of TEA
-     *     @dev All view functions are outsourced to _VAULT_LOGIC
-     */
-    function mintTEA(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            true,
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
-
-        // Get deposited collateral
-        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
-
-        // Substract fee
-        (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
-            Fees.FeesParameters({
-                baseFee: systemParams.baseFee,
-                isMint: true,
-                collateralInOrOut: collateralDeposited,
-                reserveSyntheticToken: reserves.gentlemenReserve,
-                reserveOtherToken: reserves.apesReserve,
-                collateralizationOrLeverageTier: -leverageTier
-            })
-        );
-
-        return _mintPostprocess(true, leverageTier, state_, reserves, collateralIn, collateralFee);
-    }
-
     function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
         (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
             true,
@@ -148,65 +117,51 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
-            Fees.FeesParameters({
-                baseFee: systemParams.baseFee,
-                isMint: true,
-                collateralInOrOut: collateralDeposited,
-                reserveSyntheticToken: reserves.apesReserve,
-                reserveOtherToken: reserves.gentlemenReserve,
-                collateralizationOrLeverageTier: leverageTier
-            })
-        );
-
-        return _mintPostprocess(false, leverageTier, state_, reserves, collateralIn, collateralFee);
-    }
-
-    /**
-     * @notice Users call burn() to burn their TEA in exchange for hard cold collateral
-     *     @param amountTEA is the amount of TEA the gentleman wishes to burn
-     */
-    function burnTEA(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier,
-        uint256 amountTEA
-    ) external returns (uint256) {
-        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            false,
-            debtToken,
-            collateralToken,
+            systemParams.baseFee,
+            collateralDeposited,
             leverageTier
         );
 
-        // Retrieve TEA contract
-        SyntheticToken tea = SyntheticToken(getAddress(state_.vaultId, true));
+        // Retrieve APE contract
+        SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId));
 
-        // Get collateralOut
-        uint256 collateralOut = FullMath.mulDiv(reserves.gentlemenReserve, amountTEA, tea.totalSupply());
+        // Liquidate apes if necessary
+        uint256 amount;
+        if (reserves.apesReserve == 0) {
+            ape.liquidate();
+            amount = collateralIn;
+        } else {
+            amount = FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
+        }
 
-        // Substract fee
-        (uint256 collateralWithdrawn, uint256 collateralFee) = Fees._hiddenFee(
-            Fees.FeesParameters({
-                baseFee: systemParams.baseFee,
-                isMint: false,
-                collateralInOrOut: collateralOut,
-                reserveSyntheticToken: reserves.gentlemenReserve,
-                reserveOtherToken: reserves.apesReserve,
-                collateralizationOrLeverageTier: -leverageTier
-            })
-        );
+        // Mint APE
+        ape.mint(msg.sender, amount);
 
-        // Burn TEA
-        tea.burn(msg.sender, amountTEA);
+        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
+        uint256 feeToPOL = collateralFee / 10;
 
-        _burnPostprocess(true, price, leverageTier, state_, reserves, collateralWithdrawn, collateralFee);
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
 
-        return collateralWithdrawn;
+        // Update new reserves
+        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
+        reserves.daoFees += feeToDAO;
+        reserves.apesReserve += collateralIn;
+        reserves.lpReserve += collateralFee - feeToDAO;
+
+        // Update state from new reserves
+        _updateState(state_, reserves, leverageTier, price);
+
+        // Store new state reserves
+        state = state_;
+
+        return amount;
     }
 
     /**
-     * @notice Users call burn() to burn their APE in exchange for hard cold collateral
-     *     @param amountAPE is the amount of APE the gentleman wishes to burn
+     *  @notice Users call burn() to burn their APE in exchange for hard cold collateral
+     *  @param amountAPE is the amount of APE the gentleman wishes to burn
+     *  @dev No fee is charged on exit
      */
     function burnAPE(
         address debtToken,
@@ -227,22 +182,20 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Get collateralOut
         uint256 collateralOut = FullMath.mulDiv(reserves.apesReserve, amountAPE, ape.totalSupply());
 
-        // Substract fee
-        (uint256 collateralWithdrawn, uint256 collateralFee) = Fees._hiddenFee(
-            Fees.FeesParameters({
-                baseFee: systemParams.baseFee,
-                isMint: false,
-                collateralInOrOut: collateralOut,
-                reserveSyntheticToken: reserves.apesReserve,
-                reserveOtherToken: reserves.gentlemenReserve,
-                collateralizationOrLeverageTier: leverageTier
-            })
-        );
-
         // Burn APE
         ape.burn(msg.sender, amountAPE);
 
-        _burnPostprocess(false, price, leverageTier, state_, reserves, collateralWithdrawn, collateralFee);
+        // Update reserves
+        reserves.apesReserve -= collateralOut;
+
+        // Update state
+        _updateState(state_, reserves, leverageTier, price);
+
+        // Store new state reserves
+        state = state_;
+
+        // Withdraw collateral to user (after substracting fee)
+        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralOut);
 
         return collateralWithdrawn;
     }
@@ -332,16 +285,11 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     }
 
     /**
-     * Connections Between State Variables (R,pLow,pHigh) & Reserves (G,A,L)
-     *     where R = Total reserve, G = Gentlemen reserve, A = Apes reserve, L = LP reserve
-     *     (R,pLow,pHigh) ⇔ (G,A,L)
-     *     (R,  0 ,pHigh) ⇔ (0,A,L)
-     *     (R,pLow,  ∞  ) ⇔ (G,0,L)
-     *     (R,pLow, pLow) ⇔ (G,A,0)
-     *     (R,  0 ,  ∞  ) ⇔ (0,0,L)
-     *     (R,  0 ,  0  ) ⇔ (0,A,0)
-     *     (R,pLow,  ∞  ) ⇔ (G,0,0)
-     *     (0,pLow,pHigh) ⇔ (0,0,0)
+     * Connections Between State Variables (R,pHigh) & Reserves (A,L)
+     *     where R = Total reserve, A = Apes reserve, L = LP reserve
+     *     (R,pHigh) ⇔ (A,L)
+     *     (R,  ∞  ) ⇔ (0,L)
+     *     (R,  0  ) ⇔ (A,0)
      */
 
     function getReserves(
@@ -352,82 +300,42 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         unchecked {
             reserves.daoFees = state.daoFees;
 
-            // RESERVE IS EMPTY
+            // Reserve is empty
             if (state.totalReserves == 0) return reserves;
 
-            // All APE
             if (state.pHigh == FloatingPoint.ZERO) {
+                // All apes
                 reserves.apesReserve = state.totalReserves;
                 return reserves;
             }
 
             (bytes16 leverageRatio, bytes16 collateralizationFactor) = _calculateRatios(leverageTier);
-            bytes16 pLow = state.pLiq.mul(collateralizationFactor); // Ape & LPers liquidation price
 
-            // All TEA
-            if (price.cmp(state.pLiq) <= 0) {
-                // pLow == INFINITY <=> pLiq == INFINITY
-                reserves.gentlemenReserve = state.totalReserves;
-                return reserves;
-            }
-
-            // COMPUTE GENTLEMEN RESERVE
-            reserves.gentlemenReserve = state.pLiq.mulDiv(state.totalReserves, price); // From the formula of pLiq, we can derive the gentlemenReserve
-            /**
-             * Numercial Concerns
-             *                 Division by 0 not possible because NEVER price == 0
-             *                 pLiq not Infinity because that case has already been taken taken care
-             *                 gentlemenReserve <= totalReserves BECAUSE price > pLiq
-             */
-
-            // COMPUTE APES RESERVE
-            if (pLow == state.pHigh) {
-                reserves.apesReserve = state.totalReserves - reserves.gentlemenReserve;
-            }
-            // No liquidity providers
-            else if (state.pHigh == FloatingPoint.INFINITY) {
+            if (state.pHigh == FloatingPoint.INFINITY) {
+                // No apes
                 reserves.apesReserve = 0;
-            }
-            // No apes
-            else if (price.cmp(pLow) <= 0) {
-                /**
-                 * PRICE BELOW PSR
-                 *                 LPers are 100% in APE
-                 */
-                reserves.apesReserve = pLow.div(state.pHigh).pow(leverageRatio.dec()).mulu(
-                    state.totalReserves - reserves.gentlemenReserve
-                );
-                /**
-                 * Proof gentlemenReserve + apesReserve ≤ totalReserves
-                 *                     pLow.div(state.pHigh).pow(leverageRatio.dec()) ≤ 1
-                 *                     ⇒ apesReserve ≤ totalReserves - gentlemenReserve
-                 *                 Proof apesReserve ≥ 0
-                 *                     totalReserves ≥ gentlemenReserve
-                 */
             } else if (price.cmp(state.pHigh) < 0) {
                 /**
                  * PRICE IN PSR
-                 *                 Leverage behaves as expected
+                 * Leverage behaves as expected
                  */
                 reserves.apesReserve = price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(
                     state.totalReserves,
                     leverageRatio
                 );
                 /**
-                 * Proof gentlemenReserve + apesReserve ≤ totalReserves
-                 *                     1) price < pHigh ⇒ price.div(pHigh).pow(leverageRatio.dec()).mulDiv(totalReserves,leverageRatio) < totalReserves / leverageRatio
-                 *                     2) gentlemenReserve = pLiq.mulDiv(totalReserves, price)
-                 *                     ⇒ gentlemenReserve ≤ pLow * totalReserves / (price * collateralizationFactor) (because of rounding down)
-                 *                     ⇒ gentlemenReserve ≤ totalReserves / collateralizationFactor
-                 *                     By 1) & 2) apesReserve + gentlemenReserve ≤ totalReserves / leverageRatio + totalReserves / collateralizationFactor = totalReserves
-                 *                 Proof apesReserve ≥ 0
-                 *                     All variables are possitive
+                 * Proof apesReserve ≤ totalReserves:
+                 *      price < pHigh ⇒ price.div(pHigh).pow(leverageRatio.dec()).mulDiv(totalReserves,leverageRatio)
+                 *      < totalReserves / leverageRatio < totalReserves
+                 * Proof apesReserve ≥ 0
+                 *      All variables in the calculation are possitive
                  */
             } else {
                 /**
                  * PRICE ABOVE PSR
-                 *                 LPers are 100% in TEA.
+                 *      LPers are 100% in pegged to debt token.
                  */
+                // TO REDO!!
                 reserves.apesReserve = state.totalReserves - state.pHigh.mulDiv(reserves.gentlemenReserve, pLow);
                 /**
                  * Proof gentlemenReserve + apesReserve ≤ totalReserves
@@ -452,7 +360,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     ////////////////////////////////////////////////////////////////*/
 
     function _preprocess(
-        bool isMintTEAorAPE,
+        bool isMintAPE,
         address debtToken,
         address collateralToken,
         int8 leverageTier
@@ -465,79 +373,10 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         if (state_.vaultId == 0) revert VaultDoesNotExist();
 
         // Until SIR is running, only LPers are allowed to mint (deposit collateral)
-        if (isMintTEAorAPE) require(systemParams.tsIssuanceStart > 0);
+        if (isMintAPE) require(systemParams.tsIssuanceStart > 0);
 
         // Compute reserves from state
         reserves = getReserves(state_, leverageTier, price);
-    }
-
-    function _mintPostprocess(
-        bool isTea,
-        bytes16 price,
-        int8 leverageTier,
-        VaultStructs.State memory state_,
-        VaultStructs.Reserves memory reserves,
-        uint256 collateralIn,
-        uint256 collateralFee
-    ) private returns (uint256) {
-        // Retrieve APE contract
-        SyntheticToken token = SyntheticToken(getAddress(state_.vaultId, isTea));
-
-        // Liquidate apes if necessary
-        uint256 reserveToken = isTea ? reserves.gentlemenReserve : reserves.apesReserve;
-        uint256 amount;
-        if (reserveToken == 0) {
-            token.liquidate();
-            amount = collateralIn;
-        } else {
-            amount = FullMath.mulDiv(token.totalSupply(), collateralIn, reserveToken);
-        }
-
-        // Mint TEA/APE
-        token.mint(msg.sender, amount);
-
-        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feeToPOL = collateralFee / 10;
-
-        // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
-
-        // Update new reserves
-        _updateReserves(reserves, collateralIn, collateralFee, isTea, true);
-
-        // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, price);
-
-        // Store new state reserves
-        state = state_;
-
-        return amount;
-    }
-
-    function _burnPostprocess(
-        bool isTea,
-        bytes16 price,
-        int8 leverageTier,
-        VaultStructs.State memory state_,
-        VaultStructs.Reserves memory reserves,
-        uint256 collateralWithdrawn,
-        uint256 collateralFee
-    ) {
-        // Mint protocol-owned liquidity if necessary
-        uint256 feeToPOL = collateralFee / 10;
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
-
-        // Update reserves
-        _updateReserves(reserves, collateralOut, collateralFee, isTea, false);
-
-        // Update state
-        _updateState(state_, reserves, leverageTier, price);
-
-        // Store new state reserves
-        state = state_;
-
-        // Withdraw collateral to user (after substracting fee)
-        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWithdrawn);
     }
 
     function _getCollateralDeposited(
@@ -548,32 +387,6 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
         // Get deposited collateral
         return IERC20(collateralToken).balanceOf(address(msg.sender)) - state.daoFees - state.totalReserves;
-    }
-
-    function _updateReserves(
-        VaultStructs.Reserves memory reserves,
-        uint256 collateralInOrOut,
-        uint256 collateralFee,
-        bool isTea,
-        bool goesIn
-    ) private view {
-        // Calculate fee to the DAO
-        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
-
-        reserves = VaultStructs.Reserves({
-            daoFees: reserves.daoFees + feeToDAO,
-            gentlemenReserve: isTea
-                ? (
-                    goesIn
-                        ? reserves.gentlemenReserve + collateralInOrOut
-                        : reserves.gentlemenReserve - collateralInOrOut
-                ) // Reverts if too much collateral is withdrawn
-                : reserves.gentlemenReserve,
-            apesReserve: isTea
-                ? reserves.apesReserve
-                : (goesIn ? reserves.apesReserve + collateralInOrOut : reserves.apesReserve - collateralInOrOut),
-            lpReserve: reserves.lpReserve + collateralFee - feeToDAO
-        });
     }
 
     function _updateState(
