@@ -111,6 +111,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      */
     function mintTEA(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
         (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            true,
             debtToken,
             collateralToken,
             leverageTier
@@ -122,7 +123,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
             Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: true,
                 collateralInOrOut: collateralDeposited,
                 reserveSyntheticToken: reserves.gentlemenReserve,
@@ -136,6 +137,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
     function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
         (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            true,
             debtToken,
             collateralToken,
             leverageTier
@@ -147,7 +149,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
             Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: true,
                 collateralInOrOut: collateralDeposited,
                 reserveSyntheticToken: reserves.apesReserve,
@@ -170,6 +172,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         uint256 amountTEA
     ) external returns (uint256) {
         (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            false,
             debtToken,
             collateralToken,
             leverageTier
@@ -184,7 +187,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Substract fee
         (uint256 collateralWithdrawn, uint256 collateralFee) = Fees._hiddenFee(
             Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: false,
                 collateralInOrOut: collateralOut,
                 reserveSyntheticToken: reserves.gentlemenReserve,
@@ -212,6 +215,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         uint256 amountAPE
     ) external returns (uint256) {
         (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            false,
             debtToken,
             collateralToken,
             leverageTier
@@ -226,7 +230,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Substract fee
         (uint256 collateralWithdrawn, uint256 collateralFee) = Fees._hiddenFee(
             Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: false,
                 collateralInOrOut: collateralOut,
                 reserveSyntheticToken: reserves.apesReserve,
@@ -250,15 +254,12 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      *     @return LP reserve after mint
      */
     function mintMAAM(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        // Get price and update oracle if necessary
-        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
-
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state;
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-        // Compute reserves from state
-        VaultStructs.Reserves memory reserves = getReserves(state_, leverageTier, price);
+        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            false,
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
 
         // Get deposited collateral
         collateralDeposited = _getCollateralDeposited(state_, collateralToken);
@@ -290,15 +291,12 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 leverageTier,
         uint256 amountMAAM
     ) external returns (uint256) {
-        // Get price and update oracle if necessary
-        bytes16 price = oracle.updateOracleState(collateralToken, debtToken);
-
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state;
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-        // Compute reserves from state
-        VaultStructs.Reserves memory reserves = getReserves(state_, leverageTier, price);
+        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            false,
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
 
         // Burn MAAM
         if (amountMAAM == type(uint256).max) amountMAAM = _burnAll(msg.sender, reserves.lpReserve);
@@ -454,6 +452,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     ////////////////////////////////////////////////////////////////*/
 
     function _preprocess(
+        bool isMintTEAorAPE,
         address debtToken,
         address collateralToken,
         int8 leverageTier
@@ -466,7 +465,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         if (state_.vaultId == 0) revert VaultDoesNotExist();
 
         // Until SIR is running, only LPers are allowed to mint (deposit collateral)
-        require(systemParams.tsIssuanceStart > 0);
+        if (isMintTEAorAPE) require(systemParams.tsIssuanceStart > 0);
 
         // Compute reserves from state
         reserves = getReserves(state_, leverageTier, price);

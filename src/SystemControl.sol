@@ -44,9 +44,9 @@ contract SystemControl is Ownable {
      *     @notice ownership will be revoked and SIR will be completely immutable
      */
 
-    function setBasisFee(uint16 basisFee) external onlyOwner betaIsOn {
-        require(basisFee <= 1000, "Unreasonably high fee");
-        _SYSTEM_STATE.updateSystemParameters(0, basisFee, false);
+    function setBasisFee(uint16 baseFee) external onlyOwner betaIsOn {
+        require(baseFee <= 1000, "Unreasonably high fee");
+        _SYSTEM_STATE.updateSystemParameters(0, baseFee, false);
     }
 
     function enableMinting() external onlyOwner betaIsOn {

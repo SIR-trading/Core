@@ -48,7 +48,7 @@ contract VaultLogic is SystemState {
         // Substract fee
         Fees.FeesParameters memory feesParams = isTEA
             ? Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: true,
                 collateralInOrOut: collateralDeposited,
                 reserveSyntheticToken: reservesPre.gentlemenReserve,
@@ -56,7 +56,7 @@ contract VaultLogic is SystemState {
                 collateralizationOrLeverageTier: -leverageTier
             })
             : Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: true,
                 collateralInOrOut: collateralDeposited,
                 reserveSyntheticToken: reservesPre.apesReserve,
@@ -99,7 +99,7 @@ contract VaultLogic is SystemState {
         // Substract fee
         Fees.FeesParameters memory feesParams = isTEA
             ? Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: false,
                 collateralInOrOut: collateralOut,
                 reserveSyntheticToken: reservesPre.gentlemenReserve,
@@ -107,7 +107,7 @@ contract VaultLogic is SystemState {
                 collateralizationOrLeverageTier: -leverageTier
             })
             : Fees.FeesParameters({
-                basisFee: systemParams.basisFee,
+                baseFee: systemParams.baseFee,
                 isMint: false,
                 collateralInOrOut: collateralOut,
                 reserveSyntheticToken: reservesPre.apesReserve,

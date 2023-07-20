@@ -43,9 +43,9 @@ contract SystemState is ERC20 {
          *     For example, in a vaultId with 3x target leverage but an actual leverage of 2.9, apes are charged a fee for minting APE, and gentlemen are charged for burning TEA.
          *     If the the actual leverage was higher than the target leverage, then apes would be charged a fee for burning APE, and gentlemen would be charged for minting TEA.
          *     In this particular example, ideally for every unit of collateral backing APE, 2 units of collateral should back TEA.
-         *     Thus the fee charge upon minting APE (if actual leverage is 2.9) is fee = (2 * systemParams.basisFee / 10,000) * collateralDeposited
+         *     Thus the fee charge upon minting APE (if actual leverage is 2.9) is fee = (2 * systemParams.baseFee / 10,000) * collateralDeposited
          */
-        uint16 basisFee;
+        uint16 baseFee;
         uint72 issuanceAllVaults; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
         bool onlyWithdrawals;
     }
@@ -71,7 +71,7 @@ contract SystemState is ERC20 {
     mapping(vaultId => VaultIssuanceState) internal _vaultIssuanceStates;
 
     SystemParameters public systemParams =
-        SystemParameters({tsIssuanceStart: 0, basisFee: 100, onlyWithdrawals: false, issuanceAllVaults: ISSUANCE});
+        SystemParameters({tsIssuanceStart: 0, baseFee: 100, onlyWithdrawals: false, issuanceAllVaults: ISSUANCE});
 
     constructor(address vault, address systemControl) ERC20("Governance token of the SIR protocol", "SIR", 18) {
         VAULT = vault;
@@ -235,7 +235,7 @@ contract SystemState is ERC20 {
             require(systemParams.tsIssuanceStart == 0, "Issuance already started");
             systemParams.tsIssuanceStart = tsIssuanceStart_;
         } else if (basisFee_ > 0) {
-            systemParams.basisFee = basisFee_;
+            systemParams.baseFee = basisFee_;
         } else {
             systemParams.onlyWithdrawals = onlyWithdrawals_;
         }

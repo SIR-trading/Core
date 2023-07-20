@@ -13,7 +13,7 @@ import {FullMath} from "./FullMath.sol";
     Compounding the fees for 4 times, we get (1-0.16)^(1 year/3 months) = 50% lost over a year with a flat price a 2x.
     This computation has to be done on flat prices, because when the price moves, SQUEETH has to overpay shorters to stay short.
     In SIR the LPers take the loss when the market moves against them, and viceversa.
-    This implies a basisFee = 100% for 2x constant leverage. At 1.2x, fee = 20%.
+    This implies a baseFee = 100% for 2x constant leverage. At 1.2x, fee = 20%.
     BUT this would make overcollateralized stablecoins very expensive unless they mint and burn when they are the minority.
     Yes and no, the gentlemen would need to wait for the right time to cash out.
     If the market consensus is that the price will go up, then the LPers would want to cash out and the apes to stay in, right?
@@ -34,7 +34,7 @@ import {FullMath} from "./FullMath.sol";
 library Fees {
     /**
      * FeesParameters compacts all parameters and avoid "stack to deep" compiling errors
-     *     basisFee: indicates the fee in basis points charged to gentlmen/apes per unit of liquidity.
+     *     baseFee: indicates the fee in basis points charged to gentlmen/apes per unit of liquidity.
      *     isMint: is true if the fee is computed for minting TEA/APE, or false for burning TEA/APE
      *     collateralInOrOut: is the collateral send or burnt by the user
      *     reserveSyntheticToken: is the amount of collateral in the vault for gentlemen/apes
@@ -42,7 +42,7 @@ library Fees {
      *     collateralizationOrLeverageTier: is the collateralization factor or leverage tier
      */
     struct FeesParameters {
-        uint16 basisFee;
+        uint16 baseFee;
         bool isMint;
         uint256 collateralInOrOut; // mint => collateralIn; burn => collateralOut
         uint256 reserveSyntheticToken; // TEA => gentlemenReserve; APE => apesReserve
@@ -99,11 +99,11 @@ library Fees {
             uint256 feeNum;
             uint256 feeDen;
             if (feesParams.collateralizationOrLeverageTier >= 0) {
-                feeNum = uint256(feesParams.basisFee) << uint256(feesParams.collateralizationOrLeverageTier);
-                feeDen = 10000 + (uint256(feesParams.basisFee) << uint256(feesParams.collateralizationOrLeverageTier));
+                feeNum = uint256(feesParams.baseFee) << uint256(feesParams.collateralizationOrLeverageTier);
+                feeDen = 10000 + (uint256(feesParams.baseFee) << uint256(feesParams.collateralizationOrLeverageTier));
             } else {
-                feeNum = uint256(feesParams.basisFee);
-                feeDen = (10000 << uint256(-feesParams.collateralizationOrLeverageTier)) + uint256(feesParams.basisFee);
+                feeNum = uint256(feesParams.baseFee);
+                feeDen = (10000 << uint256(-feesParams.collateralizationOrLeverageTier)) + uint256(feesParams.baseFee);
             }
 
             // Split taxableCollateral into comission and collateralDepositedOrWithdrawn
