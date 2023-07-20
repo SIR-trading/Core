@@ -304,54 +304,31 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
             if (state.totalReserves == 0) return reserves;
 
             if (state.pHigh == FloatingPoint.ZERO) {
-                // All apes
+                // No LPers
                 reserves.apesReserve = state.totalReserves;
-                return reserves;
-            }
-
-            (bytes16 leverageRatio, bytes16 collateralizationFactor) = _calculateRatios(leverageTier);
-
-            if (state.pHigh == FloatingPoint.INFINITY) {
+            } else if (state.pHigh == FloatingPoint.INFINITY) {
                 // No apes
-                reserves.apesReserve = 0;
+                reserves.lpReserve = state.totalReserves;
             } else if (price.cmp(state.pHigh) < 0) {
                 /**
                  * PRICE IN PSR
                  * Leverage behaves as expected
                  */
+                bytes16 leverageRatio = _leverageRatio(leverageTier);
                 reserves.apesReserve = price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(
                     state.totalReserves,
                     leverageRatio
                 );
-                /**
-                 * Proof apesReserve ≤ totalReserves:
-                 *      price < pHigh ⇒ price.div(pHigh).pow(leverageRatio.dec()).mulDiv(totalReserves,leverageRatio)
-                 *      < totalReserves / leverageRatio < totalReserves
-                 * Proof apesReserve ≥ 0
-                 *      All variables in the calculation are possitive
-                 */
+                reserves.lpReserve = state.totalReserves - reserves.apesReserve;
             } else {
                 /**
                  * PRICE ABOVE PSR
                  *      LPers are 100% in pegged to debt token.
                  */
-                // TO REDO!!
-                reserves.apesReserve = state.totalReserves - state.pHigh.mulDiv(reserves.gentlemenReserve, pLow);
-                /**
-                 * Proof gentlemenReserve + apesReserve ≤ totalReserves
-                 *                     pHigh / pLow ≥ 1
-                 *                     ⇒ apesReserve ≤ totalReserves - gentlemenReserve
-                 *                 Proof apesReserve ≥ 0
-                 *                     pHigh.mulDiv(gentlemenReserve, pLow) ≤  pHigh / price * totalReserves / collateralizationFactor
-                 *                     ⇒ pHigh.mulDiv(gentlemenReserve, pLow) ≤ totalReserves / collateralizationFactor
-                 *                     ⇒ totalReserves - pHigh.mulDiv(gentlemenReserve, pLow) ≥ 0
-                 */
+                bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
+                reserves.lpReserve = pHigh.mulDiv(state.totalReserves, price.mul(collateralizationFactor));
+                reserves.apesReserve = state.totalReserves - reserves.lpReserve;
             }
-
-            assert(reserves.gentlemenReserve + reserves.apesReserve <= state.totalReserves);
-
-            // COMPUTE LP RESERVE
-            reserves.lpReserve = state.totalReserves - reserves.gentlemenReserve - reserves.apesReserve;
         }
     }
 
@@ -395,85 +372,43 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 leverageTier,
         bytes16 price
     ) private pure {
-        (bytes16 leverageRatio, bytes16 collateralizationFactor) = _calculateRatios(leverageTier);
-
         state.daoFees = reserves.daoFees;
-        state.totalReserves = reserves.gentlemenReserve + reserves.apesReserve + reserves.lpReserve;
+        state.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
         unchecked {
-            if (state.totalReserves == 0) return; // When the reserve is empty, pLow and pHigh are undetermined
+            if (state.totalReserves == 0) return; // When the reserve is empty, pHigh is undetermined
 
-            // COMPUTE pLiq & pLow
-            state.pLiq = reserves.gentlemenReserve == 0
-                ? FloatingPoint.ZERO
-                : price.mulDivuUp(reserves.gentlemenReserve, state.totalReserves);
-            bytes16 pLow = collateralizationFactor.mulUp(state.pLiq);
-            /**
-             * Why round up numerical errors?
-             *                 To enable TEA to become a stablecoin, its price long term should not decay, even if extremely slowly.
-             *                 By rounding up we ensure it decays UP.
-             *             Numerical concerns
-             *                 Division by 0 not possible because totalReserves != 0
-             */
-
-            // COMPUTE pHigh
+            // Compute pHigh
             if (reserves.apesReserve == 0) {
                 state.pHigh = FloatingPoint.INFINITY;
             } else if (reserves.lpReserve == 0) {
-                state.pHigh = pLow;
-            } else if (price.cmp(pLow) <= 0) {
-                // PRICE BELOW PSR
-                state.pHigh = pLow.div(
-                    FloatingPoint.divu(reserves.apesReserve, reserves.apesReserve + reserves.lpReserve).pow(
-                        collateralizationFactor.dec()
-                    )
-                );
-                /**
-                 * Numerical Concerns
-                 *                     Division by 0 not possible because apesReserve != 0
-                 *                     Righ hand side could still be ∞ because of the power.
-                 *                     0 * ∞ not possible because  pLow > price > 0
-                 *                 Proof pHigh ≥ pLow
-                 *                     apesReserve + lpReserve ≥ apesReserve
-                 */
-            } else if (reserves.apesReserve < leverageRatio.inv().mulu(state.totalReserves)) {
-                // PRICE IN PSR
-                state.pHigh = price.div(
-                    leverageRatio.mulDivu(reserves.apesReserve, state.totalReserves).pow(collateralizationFactor.dec())
-                );
-                /**
-                 * Numerical Concerns
-                 *                     Division by 0 not possible because totalReserves != 0
-                 *                 Proof pHigh ≥ pLow
-                 *                     leverageRatio.mulDivu(apesReserve,totalReserves) ≤ 1 & price ≥ pLow
-                 */
+                state.pHigh = FloatingPoint.ZERO;
             } else {
-                // PRICE ABOVE PSR
-                state.pHigh = collateralizationFactor.mul(price).mulDivu(
-                    reserves.gentlemenReserve + reserves.lpReserve,
-                    state.totalReserves
-                );
-                /**
-                 * Numerical Concerns
-                 *                     Division by 0 not possible because totalReserves != 0
-                 *                 Proof pHigh ≥ pLow
-                 *                     Yes, because
-                 *                     collateralizationFactor.mul(price).mulDivu(gentlemenReserve + lpReserve,state.totalReserves) >
-                 *                     collateralizationFactor.mul(price).mulDivu(gentlemenReserve,state.totalReserves) = pLow
-                 */
+                bytes16 leverageRatio = _leverageRatio(leverageTier);
+                if (reserves.apesReserve < leverageRatio.inv().mulu(state.totalReserves)) {
+                    // PRICE IN PSR
+                    state.pHigh = price.div(
+                        leverageRatio.mulDivu(reserves.apesReserve, state.totalReserves).pow(
+                            collateralizationFactor.dec()
+                        )
+                    );
+                } else {
+                    // PRICE ABOVE PSR
+                    bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
+                    state.pHigh = collateralizationFactor.mul(price).mulDivu(reserves.lpReserve, state.totalReserves);
+                }
             }
-
-            assert(pLow.cmp(FloatingPoint.INFINITY) < 0);
-            assert(pLow.cmp(state.pHigh) <= 0);
         }
     }
 
-    function _calculateRatios(
-        int8 leverageTier
-    ) private pure returns (bytes16 leverageRatio, bytes16 collateralizationFactor) {
+    function _leverageRatio(int8 leverageTier) private pure returns (bytes16 leverageRatio) {
+        bytes16 temp = FloatingPoint.fromInt(leverageTier).pow_2();
+        leverageRatio = temp.inc();
+    }
+
+    function _collateralizationFactor(int8 leverageTier) private pure returns (bytes16 collateralizationFactor) {
         bytes16 temp = FloatingPoint.fromInt(leverageTier).pow_2();
         collateralizationFactor = temp.inv().inc();
-        leverageRatio = temp.inc();
     }
 
     /*////////////////////////////////////////////////////////////////
