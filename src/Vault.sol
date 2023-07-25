@@ -7,7 +7,7 @@ import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {DeployerOfTokens, SyntheticToken} from "./DeployerOfTokens.sol";
+import {DeployerOfTokens, APE} from "./DeployerOfTokens.sol";
 
 // Contracts
 import {MAAM} from "./MAAM.sol";
@@ -24,6 +24,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
+    error LiquidityTooLow();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -31,6 +32,13 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 indexed leverageTier,
         uint256 indexed vaultId
     );
+
+    /**
+        To avoid having divisions by 0 due to price fluctuations. If a contracts gets bricked,
+        then it was obviously to risky because the leveraged allowed the actual liquidity to decrease by more than 1M,
+        and therefore it is ok to get bricked.
+     */
+    uint256 private constant _MIN_LIQUIDITY = 1e6;
 
     Oracle public immutable oracle;
 
@@ -93,7 +101,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
         paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
 
-        // Deploy TEA and APE tokens, and initialize them
+        // Deploy APE token, and initialize it
         deploy(vaultId, debtToken, collateralToken, leverageTier);
 
         // Save vaultId and parameters
@@ -113,26 +121,22 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         );
 
         // Get deposited collateral
-        uint256 collateralDeposited = _getCollateralDeposited(state_, collateralToken);
+        uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
 
         // Substract fee
         (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
             systemParams.baseFee,
-            collateralDeposited,
+            collateralIn,
             leverageTier
         );
 
         // Retrieve APE contract
-        SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId));
+        APE ape = APE(getAddress(state_.vaultId));
 
-        // Liquidate apes if necessary
-        uint256 amount;
-        if (reserves.apesReserve == 0) {
-            ape.liquidate();
-            amount = collateralIn;
-        } else {
-            amount = FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
-        }
+        // Compute amount to mint
+        uint256 amount = reserves.apesReserve == 0
+            ? collateralIn
+            : FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
 
         // Mint APE
         ape.mint(msg.sender, amount);
@@ -148,6 +152,9 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         reserves.daoFees += feeToDAO;
         reserves.apesReserve += collateralIn;
         reserves.lpReserve += collateralFee - feeToDAO;
+
+        // Check reserve has enough liquidity
+        if (reserves.apesReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -177,7 +184,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         );
 
         // Retrieve APE contract
-        SyntheticToken ape = SyntheticToken(getAddress(state_.vaultId, false));
+        APE ape = APE(getAddress(state_.vaultId, false));
 
         // Get collateralOut
         uint256 collateralOut = FullMath.mulDiv(reserves.apesReserve, amountAPE, ape.totalSupply());
@@ -188,6 +195,9 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Update reserves
         reserves.apesReserve -= collateralOut;
 
+        // Check reserve has enough liquidity
+        if (reserves.apesReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
+
         // Update state
         _updateState(state_, reserves, leverageTier, price);
 
@@ -197,7 +207,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Withdraw collateral to user (after substracting fee)
         TransferHelper.safeTransfer(collateralToken, msg.sender, collateralOut);
 
-        return collateralWithdrawn;
+        return collateralOut;
     }
 
     /**
@@ -215,13 +225,21 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         );
 
         // Get deposited collateral
-        collateralDeposited = _getCollateralDeposited(state_, collateralToken);
+        uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
+
+        // Compute amount to mint
+        uint256 amount = reserves.lpReserve == 0
+            ? collateralIn
+            : FullMath.mulDiv(_totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
 
         // Mint MAAM
-        _mint(msg.sender, state_.vaultId, collateralDeposited, reserves.lpReserve);
+        _mint(msg.sender, state_.vaultId, amount);
 
         // Update new reserves
         reserves.lpReserve += collateralDeposited;
+
+        // Check reserve has enough liquidity
+        if (reserves.lpReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -229,7 +247,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Store new state
         state = state_;
 
-        return reserves.lpReserve;
+        return amount;
     }
 
     /**
@@ -251,12 +269,17 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
             leverageTier
         );
 
+        // Get collateralOut
+        uint256 collateralOut = FullMath.mulDiv(reserves.lpReserve, amountMAAM, _totalSupply());
+
         // Burn MAAM
-        if (amountMAAM == type(uint256).max) amountMAAM = _burnAll(msg.sender, reserves.lpReserve);
-        else _burn(msg.sender, amountMAAM, reserves.lpReserve);
+        _burn(msg.sender, state_.vaultId, amountMAAM);
 
         // Update new reserves
-        reserves.lpReserve -= amountMAAM;
+        reserves.lpReserve -= collateralOut;
+
+        // Check reserve has enough liquidity
+        if (reserves.lpReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -265,9 +288,9 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         state = state_;
 
         // Send collateral
-        TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, amountMAAM);
+        TransferHelper.safeTransfer(collateralToken, msg.sender, amountMAAM);
 
-        return reserves.lpReserve;
+        return collateralOut;
     }
 
     /*/////////////////////f//////////////////////////////////////////
@@ -279,7 +302,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
      *     @dev Override of virtual totalSupply() in MAAM.sol
      */
     function totalSupply() public view override returns (uint256) {
-        bytes16 price = oracle.getPrice(_COLLATERAL_TOKEN);
+        bytes16 price = oracle.getPrice(collateralToken);
         VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
         return reserves.lpReserve;
     }
@@ -422,6 +445,6 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         require(msg.sender == _VAULT_LOGIC.SYSTEM_CONTROL());
         daoFees = state.daoFees;
         state.daoFees = 0; // No re-entrancy attack
-        TransferHelper.safeTransfer(_COLLATERAL_TOKEN, msg.sender, daoFees);
+        TransferHelper.safeTransfer(collateralToken, msg.sender, daoFees);
     }
 }
