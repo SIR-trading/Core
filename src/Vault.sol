@@ -134,9 +134,14 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         APE ape = APE(getAddress(state_.vaultId));
 
         // Compute amount to mint
-        uint256 amount = reserves.apesReserve == 0
-            ? collateralIn
-            : FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
+        uint256 amount;
+        if (reserves.apesReserve == 0) {
+            // Check min liquidity is added
+            if (collateralIn < _MIN_LIQUIDITY) revert LiquidityTooLow();
+            amount = collateralIn;
+        } else {
+            amount = FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
+        }
 
         // Mint APE
         ape.mint(msg.sender, amount);
@@ -152,9 +157,6 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         reserves.daoFees += feeToDAO;
         reserves.apesReserve += collateralIn;
         reserves.lpReserve += collateralFee - feeToDAO;
-
-        // Check reserve has enough liquidity
-        if (reserves.apesReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -192,11 +194,13 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Burn APE
         ape.burn(msg.sender, amountAPE);
 
-        // Update reserves
-        reserves.apesReserve -= collateralOut;
-
         // Check reserve has enough liquidity
-        if (reserves.apesReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
+        if (reserves.apesReserve < _MIN_LIQUIDITY + collateralOut) revert LiquidityTooLow();
+
+        // Update reserves
+        unchecked {
+            reserves.apesReserve -= collateralOut;
+        }
 
         // Update state
         _updateState(state_, reserves, leverageTier, price);
@@ -228,9 +232,14 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
 
         // Compute amount to mint
-        uint256 amount = reserves.lpReserve == 0
-            ? collateralIn
-            : FullMath.mulDiv(_totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
+        uint256 amount;
+        if (reserves.lpReserve == 0) {
+            // Check min liquidity is added
+            if (collateralIn < _MIN_LIQUIDITY) revert LiquidityTooLow();
+            amount = collateralIn;
+        } else {
+            amount = FullMath.mulDiv(_totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
+        }
 
         // Mint MAAM
         _mint(msg.sender, state_.vaultId, amount);
@@ -275,11 +284,13 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Burn MAAM
         _burn(msg.sender, state_.vaultId, amountMAAM);
 
-        // Update new reserves
-        reserves.lpReserve -= collateralOut;
-
         // Check reserve has enough liquidity
-        if (reserves.lpReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
+        if (reserves.lpReserve < _MIN_LIQUIDITY + collateralOut) revert LiquidityTooLow();
+
+        // Update reserves
+        unchecked {
+            reserves.lpReserve -= collateralOut;
+        }
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -358,6 +369,8 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
+
+    // DON'T LET THE LP OR APE RESERVE GO TO 0. AT LEAST IT MUST BE 1.
 
     function _preprocess(
         bool isMintAPE,
