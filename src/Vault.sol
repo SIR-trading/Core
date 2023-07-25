@@ -353,6 +353,14 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
                     state.totalReserves,
                     leverageRatio
                 );
+
+                // mulDiv rounds down, and leverageRatio>1, so apesReserve != totalReserves, we only need to check the case apesReserve == 0
+                /**
+                 * mulDiv rounds down, and leverageRatio>1 & price<=pHigh, so apesReserve < totalReserves,
+                 * we only need to check the case apesReserve == 0 to ensure no reserve ends up with 0 liquidity
+                 */
+                if (reserves.apesReserve == 0) reserves.apesReserve = 1;
+
                 reserves.lpReserve = state.totalReserves - reserves.apesReserve;
             } else {
                 /**
@@ -361,6 +369,13 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
                  */
                 bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
                 reserves.lpReserve = pHigh.mulDiv(state.totalReserves, price.mul(collateralizationFactor));
+
+                /**
+                 * mulDiv rounds down, and collateralizationFactor>1 & price>=pHigh, so lpReserve < totalReserves,
+                 * we only need to check the case lpReserve == 0 to ensure no reserve ends up with 0 liquidity
+                 */
+                if (reserves.lpReserve == 0) reserves.lpReserve = 1;
+
                 reserves.apesReserve = state.totalReserves - reserves.lpReserve;
             }
         }
