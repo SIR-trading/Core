@@ -238,7 +238,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
             if (collateralIn < _MIN_LIQUIDITY) revert LiquidityTooLow();
             amount = collateralIn;
         } else {
-            amount = FullMath.mulDiv(_totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
+            amount = FullMath.mulDiv(totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
         }
 
         // Mint MAAM
@@ -279,7 +279,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         );
 
         // Get collateralOut
-        uint256 collateralOut = FullMath.mulDiv(reserves.lpReserve, amountMAAM, _totalSupply());
+        uint256 collateralOut = FullMath.mulDiv(reserves.lpReserve, amountMAAM, totalSupply());
 
         // Burn MAAM
         _burn(msg.sender, state_.vaultId, amountMAAM);
@@ -356,7 +356,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
                 // mulDiv rounds down, and leverageRatio>1, so apesReserve != totalReserves, we only need to check the case apesReserve == 0
                 /**
-                 * mulDiv rounds down, and leverageRatio>1 & price<=pHigh, so apesReserve < totalReserves,
+                 * mulDiv rounds down, and leverageRatio>1 & price<pHigh, so apesReserve < totalReserves,
                  * we only need to check the case apesReserve == 0 to ensure no reserve ends up with 0 liquidity
                  */
                 if (reserves.apesReserve == 0) reserves.apesReserve = 1;

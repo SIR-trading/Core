@@ -2,7 +2,7 @@
 pragma solidity >=0.8.0;
 
 // Interfaces
-import {IERC20} from "uniswap-v2-core/interfaces/IERC20.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IVault} from "./interfaces/IVault.sol";
 
 // Libraries
@@ -11,28 +11,7 @@ import {ResettableBalancesUInt216} from "./libraries/ResettableBalancesUInt216.s
 // Contracts
 import {Owned} from "./Owned.sol";
 
-/// @notice Highly modified ERC20 from Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/tokens/IERC20.sol)
-abstract contract SyntheticToken is Owned {
-    using ResettableBalancesUInt216 for ResettableBalancesUInt216.ResettableBalances;
-
-    /*///////////////////////////////////////////////////////////////
-                                  EVENTS
-    //////////////////////////////////////////////////////////////*/
-
-    event Transfer(address indexed from, address indexed to, uint256 amount);
-
-    event Approval(address indexed owner, address indexed spender, uint256 amount);
-
-    event Liquidation(uint256 amount);
-
-    /*///////////////////////////////////////////////////////////////
-                             METADATA STORAGE
-    //////////////////////////////////////////////////////////////*/
-
-    string public name;
-    string public symbol;
-    uint8 public immutable decimals;
-
+abstract contract APE is Owned, ERC20 {
     address public immutable debtToken;
     address public immutable collateralToken;
     int8 public immutable leverageTier;
@@ -44,7 +23,7 @@ abstract contract SyntheticToken is Owned {
     uint256 public totalSupply;
 
     /**
-     * @notice SyntheticToken is the base contract of all TEA & APE tokens because logic-wise TEA and APE are identical.
+     * @notice APE is the base contract of all TEA & APE tokens because logic-wise TEA and APE are identical.
      */
     ResettableBalancesUInt216.ResettableBalances private _balances;
 
