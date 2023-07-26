@@ -124,11 +124,8 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
 
         // Substract fee
-        (uint256 collateralIn, uint256 collateralFee) = Fees._hiddenFee(
-            systemParams.baseFee,
-            collateralIn,
-            leverageTier
-        );
+        uint256 collateralFee;
+        (collateralIn, collateralFee) = Fees._hiddenFee(systemParams.baseFee, collateralIn, leverageTier);
 
         // Retrieve APE contract
         APE ape = APE(getAddress(state_.vaultId));
@@ -191,16 +188,29 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         // Get collateralOut
         uint256 collateralOut = FullMath.mulDiv(reserves.apesReserve, amountAPE, ape.totalSupply());
 
+        // Substract fee
+        uint256 collateralFee;
+        (collateralOut, collateralFee) = Fees._hiddenFee(systemParams.baseFee, collateralOut, leverageTier);
+
         // Burn APE
         ape.burn(msg.sender, amountAPE);
+
+        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
+        uint256 feeToPOL = collateralFee / 10;
+
+        // Mint protocol-owned liquidity if necessary
+        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
 
         // Check reserve has enough liquidity
         if (reserves.apesReserve < _MIN_LIQUIDITY + collateralOut) revert LiquidityTooLow();
 
         // Update reserves
+        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
+        reserves.daoFees += feeToDAO;
         unchecked {
             reserves.apesReserve -= collateralOut;
         }
+        reserves.lpReserve += collateralFee - feeToDAO;
 
         // Update state
         _updateState(state_, reserves, leverageTier, price);

@@ -27,7 +27,7 @@ library Fees {
      */
     function _hiddenFee(
         uint16 baseFee,
-        uint256 collateralIn,
+        uint256 collateralAmount,
         int256 leverageTier
     ) internal pure returns (uint256 collateralDeposited, uint256 comission) {
         unchecked {
@@ -46,9 +46,9 @@ library Fees {
                 feeDen = (10000 << uint256(-leverageTier)) + uint256(baseFee);
             }
 
-            // Split collateralIn into comission and collateralDeposited
-            comission = FullMath.mulDivRoundingUp(collateralIn, feeNum, feeDen);
-            collateralDeposited = collateralIn - comission;
+            // Split collateralAmount into comission and collateralDeposited
+            comission = FullMath.mulDivRoundingUp(collateralAmount, feeNum, feeDen);
+            collateralDeposited = collateralAmount - comission;
         }
     }
 }
