@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Libraries
-import {ResettableBalancesBytes16, FloatingPoint} from "./libraries/ResettableBalancesBytes16.sol";
-
 // Contracts
 import {ERC20} from "solmate/tokens/ERC20.sol";
 
 contract SystemState is ERC20 {
-    using FloatingPoint for bytes16;
-
     struct LPerIssuanceParams {
-        bytes16 cumSIRperMAAM; // Cumulative SIR minted by an LPer per unit of MAAM (it should only be active when his balance is non-zero)
+        uint152 cumSIRperMAAM; // Q104.48, cumulative SIR minted by an LPer per unit of MAAM
         uint104 rewards; // SIR owed to the LPer
-        uint24 indexLiquidations; // For efficiency purposes when searching through vaultIssuanceParams[vaultId]._liquidationsCumSIRperMAAM
     }
 
     struct VaultIssuanceParams {
