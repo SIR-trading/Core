@@ -9,9 +9,9 @@ interface VaultStructs {
     }
 
     struct TokenParameters {
-        string memory name,
-        string memory symbol,
-        uint8 decimals
+        string name;
+        string symbol;
+        uint8 decimals;
     }
 
     struct Reserves {

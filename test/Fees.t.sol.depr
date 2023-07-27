@@ -26,13 +26,9 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(feesParams);
 
-        uint256 expectedComission = (collateralDeposited * basisFee - 1) /
-            10000 +
-            1;
+        uint256 expectedComission = (collateralDeposited * basisFee - 1) / 10000 + 1;
 
         assertEq(comission, expectedComission, "comission is wrong");
 
@@ -50,16 +46,9 @@ contract FeesTest is Test {
         int8 collateralizationTier
     ) public {
         // Make sure not too much collateral is deposited
-        uint256 idealReserveGentlemen = _idealReserveGentlemen(
-            reserveApes,
-            collateralizationTier
-        );
+        uint256 idealReserveGentlemen = _idealReserveGentlemen(reserveApes, collateralizationTier);
         reserveGentlemen = bound(reserveGentlemen, 0, idealReserveGentlemen);
-        collateralIn = bound(
-            collateralIn,
-            0,
-            idealReserveGentlemen - reserveGentlemen
-        );
+        collateralIn = bound(collateralIn, 0, idealReserveGentlemen - reserveGentlemen);
 
         Fees.FeesParameters memory feesParams = Fees.FeesParameters({
             basisFee: basisFee,
@@ -70,15 +59,9 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(feesParams);
 
-        assertEq(
-            collateralIn,
-            collateralDeposited,
-            "collateral deposited is less than collateral in"
-        );
+        assertEq(collateralIn, collateralDeposited, "collateral deposited is less than collateral in");
 
         assertEq(comission, 0, "comission is not zero");
     }
@@ -97,11 +80,7 @@ contract FeesTest is Test {
         );
 
         // Total supply of collateral cannot overflow uint256
-        collateralIn = bound(
-            collateralIn,
-            0,
-            type(uint256).max - reserveGentlemen
-        );
+        collateralIn = bound(collateralIn, 0, type(uint256).max - reserveGentlemen);
 
         Fees.FeesParameters memory feesParams = Fees.FeesParameters({
             basisFee: basisFee,
@@ -112,9 +91,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(feesParams);
 
         assertEq(
             collateralDeposited + comission,
@@ -128,10 +105,10 @@ contract FeesTest is Test {
             "comission is not equal to the expected value"
         );
 
-        (
-            uint256 comissionLowerBound,
-            uint256 comissionUpperBound
-        ) = _comissionBoundsForTEA(collateralDeposited, collateralizationTier);
+        (uint256 comissionLowerBound, uint256 comissionUpperBound) = _comissionBoundsForTEA(
+            collateralDeposited,
+            collateralizationTier
+        );
 
         assertGe(comission, comissionLowerBound, "comission is too low");
         assertLe(comission, comissionUpperBound, "comission is too high");
@@ -144,38 +121,19 @@ contract FeesTest is Test {
         int8 collateralizationTier // int8 to limit the range of tiers
     ) public {
         // Make sure user pays a partial fee
-        uint256 idealReserveGentlemen = _idealReserveGentlemen(
-            reserveApes,
-            collateralizationTier
-        );
-        vm.assume(
-            idealReserveGentlemen != 0 &&
-                idealReserveGentlemen != type(uint256).max
-        );
-        reserveGentlemen = bound(
-            reserveGentlemen,
-            0,
-            idealReserveGentlemen - 1
-        );
+        uint256 idealReserveGentlemen = _idealReserveGentlemen(reserveApes, collateralizationTier);
+        vm.assume(idealReserveGentlemen != 0 && idealReserveGentlemen != type(uint256).max);
+        reserveGentlemen = bound(reserveGentlemen, 0, idealReserveGentlemen - 1);
 
         // Total supply of collateral cannot overflow uint256
-        collateralIn = bound(
-            collateralIn,
-            0,
-            type(uint256).max - reserveGentlemen
-        );
+        collateralIn = bound(collateralIn, 0, type(uint256).max - reserveGentlemen);
 
         // Make sure the user pays a fee
         vm.assume(collateralIn + reserveGentlemen > idealReserveGentlemen);
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralInTaxFree = idealReserveGentlemen - reserveGentlemen;
-        testFuzz_mintTEA_noFee(
-            collateralInTaxFree,
-            reserveGentlemen,
-            reserveApes,
-            collateralizationTier
-        );
+        testFuzz_mintTEA_noFee(collateralInTaxFree, reserveGentlemen, reserveApes, collateralizationTier);
         testFuzz_mintTEA_fullFee(
             collateralIn - collateralInTaxFree,
             idealReserveGentlemen,
@@ -203,13 +161,9 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(feesParams);
 
-        uint256 expectedComission = (collateralDeposited * basisFee - 1) /
-            10000 +
-            1;
+        uint256 expectedComission = (collateralDeposited * basisFee - 1) / 10000 + 1;
 
         assertEq(comission, expectedComission, "comission is wrong");
 
@@ -227,10 +181,7 @@ contract FeesTest is Test {
         int8 leverageTier
     ) public {
         // Make sure not too much collateral is deposited
-        uint256 idealReserveApes = _idealReserveApes(
-            reserveGentlemen,
-            leverageTier
-        );
+        uint256 idealReserveApes = _idealReserveApes(reserveGentlemen, leverageTier);
         reserveApes = bound(reserveApes, 0, idealReserveApes);
         collateralIn = bound(collateralIn, 0, idealReserveApes - reserveApes);
 
@@ -243,15 +194,9 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(feesParams);
 
-        assertEq(
-            collateralIn,
-            collateralDeposited,
-            "collateral deposited is less than collateral in"
-        );
+        assertEq(collateralIn, collateralDeposited, "collateral deposited is less than collateral in");
 
         assertEq(comission, 0, "comission is not zero");
     }
@@ -263,11 +208,7 @@ contract FeesTest is Test {
         int8 leverageTier
     ) public {
         // Make sure the user must pay a fee
-        reserveApes = bound(
-            reserveApes,
-            _idealReserveApes(reserveGentlemen, leverageTier),
-            type(uint256).max
-        );
+        reserveApes = bound(reserveApes, _idealReserveApes(reserveGentlemen, leverageTier), type(uint256).max);
 
         // Total supply of collateral cannot overflow uint256
         collateralIn = bound(collateralIn, 0, type(uint256).max - reserveApes);
@@ -281,9 +222,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralDeposited, uint256 comission) = Fees._hiddenFee(feesParams);
 
         assertEq(
             collateralDeposited + comission,
@@ -297,10 +236,10 @@ contract FeesTest is Test {
             "comission is not equal to the expected value"
         );
 
-        (
-            uint256 comissionLowerBound,
-            uint256 comissionUpperBound
-        ) = _comissionBoundsForAPE(collateralDeposited, leverageTier);
+        (uint256 comissionLowerBound, uint256 comissionUpperBound) = _comissionBoundsForAPE(
+            collateralDeposited,
+            leverageTier
+        );
 
         assertGe(comission, comissionLowerBound, "comission is too low");
         assertLe(comission, comissionUpperBound, "comission is too high");
@@ -313,13 +252,8 @@ contract FeesTest is Test {
         int8 leverageTier // int8 to limit the range of tiers
     ) public {
         // Make sure user pays a partial fee
-        uint256 idealReserveApes = _idealReserveApes(
-            reserveGentlemen,
-            leverageTier
-        );
-        vm.assume(
-            idealReserveApes != 0 && idealReserveApes != type(uint256).max
-        );
+        uint256 idealReserveApes = _idealReserveApes(reserveGentlemen, leverageTier);
+        vm.assume(idealReserveApes != 0 && idealReserveApes != type(uint256).max);
         reserveApes = bound(reserveApes, 0, idealReserveApes - 1);
 
         // Total supply of collateral cannot overflow uint256
@@ -330,18 +264,8 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralInTaxFree = idealReserveApes - reserveApes;
-        testFuzz_mintAPE_noFee(
-            collateralInTaxFree,
-            reserveGentlemen,
-            reserveApes,
-            leverageTier
-        );
-        testFuzz_mintAPE_fullFee(
-            collateralIn - collateralInTaxFree,
-            idealReserveApes,
-            reserveApes,
-            leverageTier
-        );
+        testFuzz_mintAPE_noFee(collateralInTaxFree, reserveGentlemen, reserveApes, leverageTier);
+        testFuzz_mintAPE_fullFee(collateralIn - collateralInTaxFree, idealReserveApes, reserveApes, leverageTier);
     }
 
     /*********************
@@ -355,20 +279,9 @@ contract FeesTest is Test {
         int8 collateralizationTier
     ) public {
         // Make sure not too much collateral is deposited
-        uint256 idealReserveGentlemen = _idealReserveGentlemen(
-            reserveApes,
-            collateralizationTier
-        );
-        reserveGentlemen = bound(
-            reserveGentlemen,
-            idealReserveGentlemen,
-            type(uint256).max
-        );
-        collateralOut = bound(
-            collateralOut,
-            0,
-            reserveGentlemen - idealReserveGentlemen
-        );
+        uint256 idealReserveGentlemen = _idealReserveGentlemen(reserveApes, collateralizationTier);
+        reserveGentlemen = bound(reserveGentlemen, idealReserveGentlemen, type(uint256).max);
+        collateralOut = bound(collateralOut, 0, reserveGentlemen - idealReserveGentlemen);
 
         Fees.FeesParameters memory feesParams = Fees.FeesParameters({
             basisFee: basisFee,
@@ -379,15 +292,9 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(feesParams);
 
-        assertEq(
-            collateralOut,
-            collateralWithdrawn,
-            "collateral deposited is less than collateral in"
-        );
+        assertEq(collateralOut, collateralWithdrawn, "collateral deposited is less than collateral in");
 
         assertEq(comission, 0, "comission is not zero");
     }
@@ -399,11 +306,7 @@ contract FeesTest is Test {
         int8 collateralizationTier // int8 to limit the range of tiers
     ) public {
         // Make sure the user must pay a fee
-        reserveGentlemen = bound(
-            reserveGentlemen,
-            0,
-            _idealReserveGentlemen(reserveApes, collateralizationTier)
-        );
+        reserveGentlemen = bound(reserveGentlemen, 0, _idealReserveGentlemen(reserveApes, collateralizationTier));
 
         collateralOut = bound(collateralOut, 0, reserveGentlemen);
 
@@ -416,9 +319,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: collateralizationTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(feesParams);
 
         assertEq(
             collateralWithdrawn + comission,
@@ -432,10 +333,10 @@ contract FeesTest is Test {
             "comission is not equal to the expected value"
         );
 
-        (
-            uint256 comissionLowerBound,
-            uint256 comissionUpperBound
-        ) = _comissionBoundsForTEA(collateralWithdrawn, collateralizationTier);
+        (uint256 comissionLowerBound, uint256 comissionUpperBound) = _comissionBoundsForTEA(
+            collateralWithdrawn,
+            collateralizationTier
+        );
 
         assertGe(comission, comissionLowerBound, "comission is too low");
         assertLe(comission, comissionUpperBound, "comission is too high");
@@ -448,19 +349,9 @@ contract FeesTest is Test {
         int8 collateralizationTier
     ) public {
         // Make sure user pays a partial fee
-        uint256 idealReserveGentlemen = _idealReserveGentlemen(
-            reserveApes,
-            collateralizationTier
-        );
-        vm.assume(
-            idealReserveGentlemen != 0 &&
-                idealReserveGentlemen != type(uint256).max
-        );
-        reserveGentlemen = bound(
-            reserveGentlemen,
-            idealReserveGentlemen + 1,
-            type(uint256).max
-        );
+        uint256 idealReserveGentlemen = _idealReserveGentlemen(reserveApes, collateralizationTier);
+        vm.assume(idealReserveGentlemen != 0 && idealReserveGentlemen != type(uint256).max);
+        reserveGentlemen = bound(reserveGentlemen, idealReserveGentlemen + 1, type(uint256).max);
 
         // Cannot remove more collateral than available in the reserve
         collateralOut = bound(collateralOut, 0, reserveGentlemen);
@@ -470,12 +361,7 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralOutTaxFree = reserveGentlemen - idealReserveGentlemen;
-        testFuzz_burnTEA_noFee(
-            collateralOutTaxFree,
-            reserveGentlemen,
-            reserveApes,
-            collateralizationTier
-        );
+        testFuzz_burnTEA_noFee(collateralOutTaxFree, reserveGentlemen, reserveApes, collateralizationTier);
         testFuzz_burnTEA_fullFee(
             collateralOut - collateralOutTaxFree,
             idealReserveGentlemen,
@@ -495,10 +381,7 @@ contract FeesTest is Test {
         int8 leverageTier
     ) public {
         // Make sure not too much collateral is deposited
-        uint256 idealReserveApes = _idealReserveApes(
-            reserveGentlemen,
-            leverageTier
-        );
+        uint256 idealReserveApes = _idealReserveApes(reserveGentlemen, leverageTier);
         reserveApes = bound(reserveApes, idealReserveApes, type(uint256).max);
         collateralOut = bound(collateralOut, 0, reserveApes - idealReserveApes);
 
@@ -511,15 +394,9 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(feesParams);
 
-        assertEq(
-            collateralOut,
-            collateralWithdrawn,
-            "collateral deposited is less than collateral in"
-        );
+        assertEq(collateralOut, collateralWithdrawn, "collateral deposited is less than collateral in");
 
         assertEq(comission, 0, "comission is not zero");
     }
@@ -531,11 +408,7 @@ contract FeesTest is Test {
         int8 leverageTier // int8 to limit the range of tiers
     ) public {
         // Make sure the user must pay a fee
-        reserveApes = bound(
-            reserveApes,
-            0,
-            _idealReserveApes(reserveGentlemen, leverageTier)
-        );
+        reserveApes = bound(reserveApes, 0, _idealReserveApes(reserveGentlemen, leverageTier));
 
         collateralOut = bound(collateralOut, 0, reserveApes);
 
@@ -548,9 +421,7 @@ contract FeesTest is Test {
             collateralizationOrLeverageTier: leverageTier
         });
 
-        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(
-            feesParams
-        );
+        (uint256 collateralWithdrawn, uint256 comission) = Fees._hiddenFee(feesParams);
 
         assertEq(
             collateralWithdrawn + comission,
@@ -564,10 +435,10 @@ contract FeesTest is Test {
             "comission is not equal to the expected value"
         );
 
-        (
-            uint256 comissionLowerBound,
-            uint256 comissionUpperBound
-        ) = _comissionBoundsForAPE(collateralWithdrawn, leverageTier);
+        (uint256 comissionLowerBound, uint256 comissionUpperBound) = _comissionBoundsForAPE(
+            collateralWithdrawn,
+            leverageTier
+        );
 
         assertGe(comission, comissionLowerBound, "comission is too low");
         assertLe(comission, comissionUpperBound, "comission is too high");
@@ -580,18 +451,9 @@ contract FeesTest is Test {
         int8 leverageTier
     ) public {
         // Make sure user pays a partial fee
-        uint256 idealReserveApes = _idealReserveApes(
-            reserveGentlemen,
-            leverageTier
-        );
-        vm.assume(
-            idealReserveApes != 0 && idealReserveApes != type(uint256).max
-        );
-        reserveApes = bound(
-            reserveApes,
-            idealReserveApes + 1,
-            type(uint256).max
-        );
+        uint256 idealReserveApes = _idealReserveApes(reserveGentlemen, leverageTier);
+        vm.assume(idealReserveApes != 0 && idealReserveApes != type(uint256).max);
+        reserveApes = bound(reserveApes, idealReserveApes + 1, type(uint256).max);
 
         // Cannot remove more collateral than available in the reserve
         collateralOut = bound(collateralOut, 0, reserveApes);
@@ -601,18 +463,8 @@ contract FeesTest is Test {
 
         // Split the collateral deposited in two parts, one for which the user pays a fee and another for which the user doesn't pay a fee
         uint256 collateralOutTaxFree = reserveApes - idealReserveApes;
-        testFuzz_burnAPE_noFee(
-            collateralOutTaxFree,
-            reserveGentlemen,
-            reserveApes,
-            leverageTier
-        );
-        testFuzz_burnAPE_fullFee(
-            collateralOut - collateralOutTaxFree,
-            idealReserveApes,
-            reserveApes,
-            leverageTier
-        );
+        testFuzz_burnAPE_noFee(collateralOutTaxFree, reserveGentlemen, reserveApes, leverageTier);
+        testFuzz_burnAPE_fullFee(collateralOut - collateralOutTaxFree, idealReserveApes, reserveApes, leverageTier);
     }
 
     /************************
@@ -630,20 +482,13 @@ contract FeesTest is Test {
             reserveGentlemenMax = reserveApes/(1+2^h-1) = reserveApes/2^h
          */
         if (collateralizationTier >= 0) {
-            idealReserveGentlemen =
-                reserveApes /
-                2 ** uint256(int256(collateralizationTier));
+            idealReserveGentlemen = reserveApes / 2 ** uint256(int256(collateralizationTier));
         } else {
             unchecked {
-                idealReserveGentlemen =
-                    reserveApes *
-                    2 ** uint256(-int256(collateralizationTier));
+                idealReserveGentlemen = reserveApes * 2 ** uint256(-int256(collateralizationTier));
             }
-            if (
-                idealReserveGentlemen /
-                    2 ** uint256(-int256(collateralizationTier)) !=
-                reserveApes
-            ) idealReserveGentlemen = type(uint256).max;
+            if (idealReserveGentlemen / 2 ** uint256(-int256(collateralizationTier)) != reserveApes)
+                idealReserveGentlemen = type(uint256).max;
         }
     }
 
@@ -658,19 +503,13 @@ contract FeesTest is Test {
             reserveApesMax = reserveGentlemen/(1+2^k-1) = reserveGentlemen/2^k
          */
         if (leverageTier >= 0) {
-            idealReserveApes =
-                reserveGentlemen /
-                2 ** uint256(int256(leverageTier));
+            idealReserveApes = reserveGentlemen / 2 ** uint256(int256(leverageTier));
         } else {
             unchecked {
-                idealReserveApes =
-                    reserveGentlemen *
-                    2 ** uint256(-int256(leverageTier));
+                idealReserveApes = reserveGentlemen * 2 ** uint256(-int256(leverageTier));
             }
-            if (
-                idealReserveApes / 2 ** uint256(-int256(leverageTier)) !=
-                reserveGentlemen
-            ) idealReserveApes = type(uint256).max;
+            if (idealReserveApes / 2 ** uint256(-int256(leverageTier)) != reserveGentlemen)
+                idealReserveApes = type(uint256).max;
         }
     }
 
@@ -715,11 +554,7 @@ contract FeesTest is Test {
     function _comissionBoundsForTEA(
         uint256 collateralDepositedOrWithdrawn,
         int8 collateralizationTier
-    )
-        internal
-        pure
-        returns (uint256 comissionLowerBound, uint256 comissionUpperBound)
-    {
+    ) internal pure returns (uint256 comissionLowerBound, uint256 comissionUpperBound) {
         /**
             Let x be the collaretal sent by the user minting TEA, y the collateral actually deposited in the pool and z the comission.
             Then, x = y + z, but because of rounding errors the real amounts are x = y_ + z‾ where
@@ -760,11 +595,7 @@ contract FeesTest is Test {
     function _comissionBoundsForAPE(
         uint256 collateralDepositedOrWithdrawn,
         int8 leverageTier
-    )
-        internal
-        pure
-        returns (uint256 comissionLowerBound, uint256 comissionUpperBound)
-    {
+    ) internal pure returns (uint256 comissionLowerBound, uint256 comissionUpperBound) {
         if (leverageTier >= 0) {
             comissionLowerBound = FullMath.mulDivRoundingUp(
                 collateralDepositedOrWithdrawn,
