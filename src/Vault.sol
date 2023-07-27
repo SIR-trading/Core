@@ -151,9 +151,12 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
         // Update new reserves
         uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
-        reserves.daoFees += feeToDAO;
-        reserves.apesReserve += collateralIn;
-        reserves.lpReserve += collateralFee - feeToDAO;
+        unchecked {
+            // The total reserve cannot exceed the totalSupply
+            reserves.daoFees += feeToDAO;
+            reserves.apesReserve += collateralIn;
+            reserves.lpReserve += collateralFee - feeToDAO;
+        }
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -206,11 +209,12 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
 
         // Update reserves
         uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
-        reserves.daoFees += feeToDAO;
         unchecked {
-            reserves.apesReserve -= collateralOut;
+            // The total reserve cannot exceed the totalSupply
+            reserves.daoFees += feeToDAO;
+            reserves.apesReserve -= collateralOut + collateralFee;
+            reserves.lpReserve += collateralFee - feeToDAO;
         }
-        reserves.lpReserve += collateralFee - feeToDAO;
 
         // Update state
         _updateState(state_, reserves, leverageTier, price);
@@ -341,51 +345,53 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 leverageTier,
         bytes16 price
     ) public pure returns (VaultStructs.Reserves memory reserves) {
-        unchecked {
-            reserves.daoFees = state.daoFees;
+        reserves.daoFees = state.daoFees;
 
-            // Reserve is empty
-            if (state.totalReserves == 0) return reserves;
+        // Reserve is empty
+        if (state.totalReserves == 0) return reserves;
 
-            if (state.pHigh == FloatingPoint.ZERO) {
-                // No LPers
-                reserves.apesReserve = state.totalReserves;
-            } else if (state.pHigh == FloatingPoint.INFINITY) {
-                // No apes
-                reserves.lpReserve = state.totalReserves;
-            } else if (price.cmp(state.pHigh) < 0) {
-                /**
-                 * PRICE IN PSR
-                 * Leverage behaves as expected
-                 */
-                bytes16 leverageRatio = _leverageRatio(leverageTier);
-                reserves.apesReserve = price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(
-                    state.totalReserves,
-                    leverageRatio
-                );
+        if (state.pHigh == FloatingPoint.ZERO) {
+            // No LPers
+            reserves.apesReserve = state.totalReserves;
+        } else if (state.pHigh == FloatingPoint.INFINITY) {
+            // No apes
+            reserves.lpReserve = state.totalReserves;
+        } else if (price.cmp(state.pHigh) < 0) {
+            /**
+             * PRICE IN PSR
+             * Leverage behaves as expected
+             */
+            bytes16 leverageRatio = _leverageRatio(leverageTier);
+            reserves.apesReserve = price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(
+                state.totalReserves,
+                leverageRatio
+            );
 
-                // mulDiv rounds down, and leverageRatio>1, so apesReserve != totalReserves, we only need to check the case apesReserve == 0
-                /**
-                 * mulDiv rounds down, and leverageRatio>1 & price<pHigh, so apesReserve < totalReserves,
-                 * we only need to check the case apesReserve == 0 to ensure no reserve ends up with 0 liquidity
-                 */
-                if (reserves.apesReserve == 0) reserves.apesReserve = 1;
+            // mulDiv rounds down, and leverageRatio>1, so apesReserve != totalReserves, we only need to check the case apesReserve == 0
+            /**
+             * mulDiv rounds down, and leverageRatio>1 & price<pHigh, so apesReserve < totalReserves,
+             * we only need to check the case apesReserve == 0 to ensure no reserve ends up with 0 liquidity
+             */
+            if (reserves.apesReserve == 0) reserves.apesReserve = 1;
 
+            unchecked {
                 reserves.lpReserve = state.totalReserves - reserves.apesReserve;
-            } else {
-                /**
-                 * PRICE ABOVE PSR
-                 *      LPers are 100% in pegged to debt token.
-                 */
-                bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-                reserves.lpReserve = pHigh.mulDiv(state.totalReserves, price.mul(collateralizationFactor));
+            }
+        } else {
+            /**
+             * PRICE ABOVE PSR
+             *      LPers are 100% in pegged to debt token.
+             */
+            bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
+            reserves.lpReserve = pHigh.mulDiv(state.totalReserves, price.mul(collateralizationFactor));
 
-                /**
-                 * mulDiv rounds down, and collateralizationFactor>1 & price>=pHigh, so lpReserve < totalReserves,
-                 * we only need to check the case lpReserve == 0 to ensure no reserve ends up with 0 liquidity
-                 */
-                if (reserves.lpReserve == 0) reserves.lpReserve = 1;
+            /**
+             * mulDiv rounds down, and collateralizationFactor>1 & price>=pHigh, so lpReserve < totalReserves,
+             * we only need to check the case lpReserve == 0 to ensure no reserve ends up with 0 liquidity
+             */
+            if (reserves.lpReserve == 0) reserves.lpReserve = 1;
 
+            unchecked {
                 reserves.apesReserve = state.totalReserves - reserves.lpReserve;
             }
         }
@@ -436,28 +442,24 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         state.daoFees = reserves.daoFees;
         state.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
-        unchecked {
-            if (state.totalReserves == 0) return; // When the reserve is empty, pHigh is undetermined
+        if (state.totalReserves == 0) return; // When the reserve is empty, pHigh is undetermined
 
-            // Compute pHigh
-            if (reserves.apesReserve == 0) {
-                state.pHigh = FloatingPoint.INFINITY;
-            } else if (reserves.lpReserve == 0) {
-                state.pHigh = FloatingPoint.ZERO;
+        // Compute pHigh
+        if (reserves.apesReserve == 0) {
+            state.pHigh = FloatingPoint.INFINITY;
+        } else if (reserves.lpReserve == 0) {
+            state.pHigh = FloatingPoint.ZERO;
+        } else {
+            bytes16 leverageRatio = _leverageRatio(leverageTier);
+            if (reserves.apesReserve < leverageRatio.inv().mulu(state.totalReserves)) {
+                // PRICE IN PSR
+                state.pHigh = price.div(
+                    leverageRatio.mulDivu(reserves.apesReserve, state.totalReserves).pow(collateralizationFactor.dec())
+                );
             } else {
-                bytes16 leverageRatio = _leverageRatio(leverageTier);
-                if (reserves.apesReserve < leverageRatio.inv().mulu(state.totalReserves)) {
-                    // PRICE IN PSR
-                    state.pHigh = price.div(
-                        leverageRatio.mulDivu(reserves.apesReserve, state.totalReserves).pow(
-                            collateralizationFactor.dec()
-                        )
-                    );
-                } else {
-                    // PRICE ABOVE PSR
-                    bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-                    state.pHigh = collateralizationFactor.mul(price).mulDivu(reserves.lpReserve, state.totalReserves);
-                }
+                // PRICE ABOVE PSR
+                bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
+                state.pHigh = collateralizationFactor.mul(price).mulDivu(reserves.lpReserve, state.totalReserves);
             }
         }
     }
