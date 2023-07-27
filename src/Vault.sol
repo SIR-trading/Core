@@ -43,7 +43,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     Oracle public immutable oracle;
 
     mapping(VaultStructs.Parameters => VaultStructs.State) public state; // Do not use vaultId 0
-    VaultStructs.Parameters[] private paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
+    VaultStructs.Parameters[] public override paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
     constructor(address vaultLogic, address oracle) MAAM(vaultLogic) {
         // Price oracle
@@ -111,6 +111,11 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
     /*////////////////////////////////////////////////////////////////
                             MINT/BURN FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+
+    /**
+        ADD QUOTING FUNCTIONS TO THE PERIPHERY?
+        ADD GET RESERVES FUNCTION TO THE PERIPHERY?
+     */
 
     function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
         (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(

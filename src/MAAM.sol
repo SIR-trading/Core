@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
+// Libraries
+import {Strings} from "openzeppelin/utils/Strings.sol";
+
 // Contracts
 import {SystemState} from "./SystemState.sol";
 
@@ -8,7 +11,6 @@ import {SystemState} from "./SystemState.sol";
  * @dev Metadata description for ERC-1155 can be bound at https://eips.ethereum.org/EIPS/eip-1155
  * @dev uri(_id) returns the metadata URI for the token type _id, .e.g,
  {
-    "description": "Description of MAAM token",
 	"name": "Super Saiya-jin token",
 	"symbol": "MAAM",
 	"decimals": 18,
@@ -24,7 +26,30 @@ abstract contract MAAM is ERC1155 {
         systemState = SystemState(systemState_);
     }
 
-    function uri(uint256 id) public view override returns (string memory) {}
+    function uri(uint256 vaultId) public view override returns (string memory) {
+        string vaultIdStr = Strings.toString(vaultId);
+        (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
+        return
+            string.concat(
+                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE",
+                vaultIdStr,
+                "%22%2C%22symbol%22%3A%22MAAM",
+                vaultIdStr,
+                "%22%2C%22decimals%22%3A",
+                Strings.toString(IERC20(collateralToken).decimals()),
+                "%2C%22chainId%22%3A1%2C%22debtToken%22%3A%22",
+                Strings.toHexString(debtToken),
+                "%22%2C%22collateralToken%22%3A%22",
+                Strings.toHexString(collateralToken),
+                "%22%2C%22leverageTier%22%3A",
+                Strings.toString(leverageTier),
+                "%7D"
+            );
+    }
+
+    function paramsById(
+        uint256 vaultId
+    ) public view virtual returns (address debtToken, address collateralToken, int8 leverageTier);
 
     function safeTransferFrom(
         address from,

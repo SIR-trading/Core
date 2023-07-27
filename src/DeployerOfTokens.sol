@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 // Contracts
 import {FullMath} from "./libraries/FullMath.sol";
-import {APE, IERC20} from "./APE.sol";
+import {APE, ERC20} from "./APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
@@ -27,7 +27,7 @@ contract DeployerOfTokens {
         tokenParameters = VaultStructs.TransientParameters({
             name: _generateName(debtToken, collateralToken, leverageTier),
             symbol: _generateSymbol("APE", vaultId),
-            decimals: IERC20(collateralToken).decimals()
+            decimals: ERC20(collateralToken).decimals()
         });
 
         // Deploy APE
@@ -71,9 +71,9 @@ contract DeployerOfTokens {
             string(
                 abi.encodePacked(
                     "Tokenized ",
-                    IERC20(addrCollateralToken).symbol(),
+                    ERC20(addrCollateralToken).symbol(),
                     " / ",
-                    IERC20(addrDebtToken).symbol(),
+                    ERC20(addrDebtToken).symbol(),
                     " with x",
                     leverageStr,
                     " leverage"
