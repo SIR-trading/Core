@@ -2,7 +2,6 @@
 pragma solidity >=0.8.0;
 
 // Interfaces
-import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IVault} from "./interfaces/IVault.sol";
 
 // Contracts
@@ -11,7 +10,7 @@ import {Owned} from "./Owned.sol";
 /**
  * @dev Modified from Solmate's ERC20.sol
  */
-abstract contract APE is Owned, ERC20 {
+abstract contract APE is Owned {
     address public immutable debtToken;
     address public immutable collateralToken;
     int8 public immutable leverageTier;
