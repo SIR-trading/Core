@@ -6,8 +6,8 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 
 contract SystemState is ERC20 {
     struct LPerIssuanceParams {
-        uint192 cumSIRperMAAM; // Q64.128, cumulative SIR minted by an LPer per unit of MAAM
-        uint64 rewards; // SIR owed to the LPer
+        uint152 cumSIRperMAAM; // Q104.48, cumulative SIR minted by an LPer per unit of MAAM
+        uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
     struct VaultIssuanceParams {
