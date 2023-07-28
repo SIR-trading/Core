@@ -4,9 +4,6 @@ pragma solidity >=0.8.0;
 // Libraries
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
-// Contracts
-import {SystemState} from "./SystemState.sol";
-
 /**
  * @dev Metadata description for ERC-1155 can be bound at https://eips.ethereum.org/EIPS/eip-1155
  * @dev uri(_id) returns the metadata URI for the token type _id, .e.g,
@@ -17,12 +14,10 @@ import {SystemState} from "./SystemState.sol";
 	"chainId": 1
 }
  */
-abstract contract MAAM is ERC1155, SystemState {
-    mapping(uint256 vaultId => uint256) private _totalSupply;
+abstract contract MAAM is ERC1155 {
+    mapping(uint256 vaultId => uint256) public totalSupply;
 
-    function totalSupply(uint256 vaultId) public view override returns (uint256) {
-        return _totalSupply[vaultId];
-    }
+    function _updateIssuances(uint256 vaultId, address[] memory lpers) internal virtual;
 
     function uri(uint256 vaultId) public view override returns (string memory) {
         string vaultIdStr = Strings.toString(vaultId);
@@ -59,7 +54,7 @@ abstract contract MAAM is ERC1155, SystemState {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        updateIssuances(vaultId, balanceOf, [from, to]);
+        _updateIssuances(vaultId, [from, to]);
 
         // Transfer
         balanceOf[from][id] -= amount;
@@ -96,7 +91,7 @@ abstract contract MAAM is ERC1155, SystemState {
             amount = amounts[i];
 
             // Update SIR issuances
-            updateIssuances(vaultId, balanceOf[vaultId], [from, to]);
+            _updateIssuances(vaultId, [from, to]);
 
             // Transfer
             balanceOf[from][id] -= amount;
@@ -122,10 +117,10 @@ abstract contract MAAM is ERC1155, SystemState {
 
     function _mint(address to, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        updateIssuances(vaultId, balanceOf, [account]);
+        _updateIssuances(vaultId, [account]);
 
         // Mint
-        _totalSupply[vaultId] += amount;
+        totalSupply[vaultId] += amount;
         unchecked {
             balanceOf[to][vaultId] += amount;
         }
@@ -143,10 +138,10 @@ abstract contract MAAM is ERC1155, SystemState {
 
     function _burn(address from, uint256 vaultId, uint256 amount, uint256 totalSupply_) internal override {
         // Update SIR issuance
-        updateIssuances(vaultId, _nonRebasingBalances[vaultId], [account]);
+        _updateIssuances(vaultId, [account]);
 
         // Burn
-        _totalSupply[vaultId] -= amount;
+        totalSupply[vaultId] -= amount;
         unchecked {
             balanceOf[from][id] -= amount;
         }

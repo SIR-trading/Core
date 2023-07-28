@@ -7,7 +7,10 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 // Libraries
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
-contract SystemState is SystemConstants {
+// Contracts
+import {MAAM} from "./MAAM.sol";
+
+contract SystemState is SystemConstants, MAAM {
     struct LPerIssuanceParams {
         uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by an LPer per unit of MAAM
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
@@ -58,8 +61,6 @@ contract SystemState is SystemConstants {
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function totalSupply(uint256 vaultId) public view virtual returns (uint256);
-
     function getVaultsIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
         // Get the vault issuance parameters
         VaultIssuanceParams memory vaultIssuanceParams = vaultsIssuanceParams[vaultId];
@@ -101,7 +102,7 @@ contract SystemState is SystemConstants {
      *     @dev LPer parameters get updated on every call
      *     @dev No-op unless caller is a vaultId
      */
-    function updateIssuances(uint256 vaultId, address[] memory lpers, uint256[] memory balances) internal {
+    function _updateIssuances(uint256 vaultId, address[] memory lpers) internal override {
         // If issuance has not started, return
         if (systemParams.tsIssuanceStart == 0) return;
 
