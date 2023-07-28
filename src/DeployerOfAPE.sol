@@ -29,11 +29,9 @@ library DeployerOfAPE {
          * Set the parameters that will be read during the instantiation of the tokens.
          * This pattern is used to avoid passing arguments to the constructor explicitly.
          */
-        tokenParameters = VaultStructs.TokenParameters({
-            name: _generateName(debtToken, collateralToken, leverageTier),
-            symbol: _generateSymbol("APE", vaultId),
-            decimals: IERC20(collateralToken).decimals()
-        });
+        tokenParameters.name = _generateName(debtToken, collateralToken, leverageTier);
+        tokenParameters.symbol = string.concat("APE-", Strings.toString(vaultId));
+        tokenParameters.decimals = IERC20(collateralToken).decimals();
 
         // Deploy APE
         ape = new APE{salt: saltAPE}();
@@ -81,9 +79,5 @@ library DeployerOfAPE {
                     " leverage"
                 )
             );
-    }
-
-    function _generateSymbol(string memory symbolPrefix, uint256 vaultId) private pure returns (string memory) {
-        return string(abi.encodePacked(symbolPrefix, Strings.toString(vaultId)));
     }
 }
