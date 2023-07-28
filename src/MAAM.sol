@@ -17,13 +17,11 @@ import {SystemState} from "./SystemState.sol";
 	"chainId": 1
 }
  */
-abstract contract MAAM is ERC1155 {
-    SystemState internal immutable systemState;
+abstract contract MAAM is ERC1155, SystemState {
+    mapping(uint256 vaultId => uint256) private _totalSupply;
 
-    mapping(uint256 vaultId => uint256) public totalSupply;
-
-    constructor(address systemState_) {
-        systemState = SystemState(systemState_);
+    function totalSupply(uint256 vaultId) public view override returns (uint256) {
+        return _totalSupply[vaultId];
     }
 
     function uri(uint256 vaultId) public view override returns (string memory) {
@@ -61,7 +59,7 @@ abstract contract MAAM is ERC1155 {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        systemState.updateIssuances(vaultId, balanceOf, [from, to]);
+        updateIssuances(vaultId, balanceOf, [from, to]);
 
         // Transfer
         balanceOf[from][id] -= amount;
@@ -98,7 +96,7 @@ abstract contract MAAM is ERC1155 {
             amount = amounts[i];
 
             // Update SIR issuances
-            systemState.updateIssuances(vaultId, balanceOf[vaultId], [from, to]);
+            updateIssuances(vaultId, balanceOf[vaultId], [from, to]);
 
             // Transfer
             balanceOf[from][id] -= amount;
@@ -124,10 +122,10 @@ abstract contract MAAM is ERC1155 {
 
     function _mint(address to, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        systemState.updateIssuances(vaultId, balanceOf, [account]);
+        updateIssuances(vaultId, balanceOf, [account]);
 
         // Mint
-        totalSupply[vaultId] += amount;
+        _totalSupply[vaultId] += amount;
         unchecked {
             balanceOf[to][vaultId] += amount;
         }
@@ -145,10 +143,10 @@ abstract contract MAAM is ERC1155 {
 
     function _burn(address from, uint256 vaultId, uint256 amount, uint256 totalSupply_) internal override {
         // Update SIR issuance
-        systemState.updateIssuances(vaultId, _nonRebasingBalances[vaultId], [account]);
+        updateIssuances(vaultId, _nonRebasingBalances[vaultId], [account]);
 
         // Burn
-        totalSupply[vaultId] -= amount;
+        _totalSupply[vaultId] -= amount;
         unchecked {
             balanceOf[from][id] -= amount;
         }
