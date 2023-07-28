@@ -10,7 +10,7 @@ import {Owned} from "./Owned.sol";
 /**
  * @dev Modified from Solmate's ERC20.sol
  */
-abstract contract APE is Owned {
+contract APE is Owned {
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 

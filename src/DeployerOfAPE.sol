@@ -1,40 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Contracts
-import {FullMath} from "./libraries/FullMath.sol";
-import {APE, ERC20} from "./APE.sol";
-import {Strings} from "openzeppelin/utils/Strings.sol";
+// Interfaces
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
-contract DeployerOfTokens {
-    VaultStructs.TokenParameters internal tokenParameters;
+// Libraries
+import {SaltedAddress} from "./libraries/SaltedAddress.sol";
+import {FullMath} from "./libraries/FullMath.sol";
 
-    // Deploy TEA and APE tokens
+// Contracts
+import {APE} from "./APE.sol";
+import {Strings} from "openzeppelin/utils/Strings.sol";
+
+library DeployerOfAPE {
+    // Deploy APE token
     function deploy(
+        VaultStructs.TokenParameters storage tokenParameters,
         uint256 vaultId,
         address debtToken,
         address collateralToken,
         int8 leverageTier
     ) external returns (APE ape) {
         // Get salts that produce addresses that start with hex chars `a9e`
-        bytes32 saltAPE = _getSalt(vaultId);
+        bytes32 saltAPE = SaltedAddress.getSalt(vaultId);
 
         /**
          * Set the parameters that will be read during the instantiation of the tokens.
          * This pattern is used to avoid passing arguments to the constructor explicitly.
          */
-        tokenParameters = VaultStructs.TransientParameters({
+        tokenParameters = VaultStructs.TokenParameters({
             name: _generateName(debtToken, collateralToken, leverageTier),
             symbol: _generateSymbol("APE", vaultId),
-            decimals: ERC20(collateralToken).decimals()
+            decimals: IERC20(collateralToken).decimals()
         });
 
         // Deploy APE
         ape = new APE{salt: saltAPE}();
-
-        // Free memory
-        delete tokenParameters;
     }
 
     /**
@@ -71,9 +73,9 @@ contract DeployerOfTokens {
             string(
                 abi.encodePacked(
                     "Tokenized ",
-                    ERC20(addrCollateralToken).symbol(),
+                    IERC20(addrCollateralToken).symbol(),
                     " / ",
-                    ERC20(addrDebtToken).symbol(),
+                    IERC20(addrDebtToken).symbol(),
                     " with x",
                     leverageStr,
                     " leverage"
@@ -83,33 +85,5 @@ contract DeployerOfTokens {
 
     function _generateSymbol(string memory symbolPrefix, uint256 vaultId) private pure returns (string memory) {
         return string(abi.encodePacked(symbolPrefix, Strings.toString(vaultId)));
-    }
-
-    function _getSalt(uint48 vaultId) private returns (bytes32 saltAPE) {
-        /**
-            DUMMY IMPLEMENTATION
-            I WANT TO GET MINED SALTS THAT RETURN ADDRESSES WITH PREFIXES a9e 
-         */
-        saltAPE = bytes32(vaultId);
-    }
-
-    function getAddress(uint256 vaultId) internal returns (address) {
-        bytes32 salt = _getSalt(vaultId);
-
-        return
-            address(
-                uint160(
-                    uint(
-                        keccak256(
-                            abi.encodePacked(
-                                bytes1(0xff),
-                                address(this),
-                                salt,
-                                keccak256(type(APE).creationCode) // PRECOMPUTE FOR MAINNET LAUNCH
-                            )
-                        )
-                    )
-                )
-            );
     }
 }
