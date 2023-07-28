@@ -6,8 +6,8 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 
 contract SystemState is ERC20 {
     struct LPerIssuanceParams {
-        uint152 cumSIRperMAAM; // Q104.48, cumulative SIR minted by an LPer per unit of MAAM
-        uint104 rewards; // SIR owed to the LPer
+        uint192 cumSIRperMAAM; // Q64.128, cumulative SIR minted by an LPer per unit of MAAM
+        uint64 rewards; // SIR owed to the LPer
     }
 
     struct VaultIssuanceParams {
@@ -55,7 +55,13 @@ contract SystemState is ERC20 {
     }
 
     // Tokens issued per second
-    uint72 public constant ISSUANCE = 1e2 * 1e18;
+    /**
+     *  100 SIR/s issued forever. To allow enough precission for cumSIRperMAAM, we only use 6 decimals in SIR
+     *  which implies that we only need 64 bits to fit up to +1000 years of issued supply.
+     *  If LPerIssuanceParams is stored in 1 word, we are left with 128 bits for decimals digits in cumSIRperMAAAM
+     *  which is enough even in vault where tokens with really large supply.
+     */
+    uint72 public constant ISSUANCE = 1e2 * 1e6;
     uint256 private constant _THREE_YEARS = 365 * 24 * 60 * 60;
 
     address public immutable SYSTEM_CONTROL;
