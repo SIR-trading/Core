@@ -11,6 +11,9 @@ import {Owned} from "./Owned.sol";
  * @dev Modified from Solmate's ERC20.sol
  */
 abstract contract APE is Owned {
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
+
     address public immutable debtToken;
     address public immutable collateralToken;
     int8 public immutable leverageTier;
@@ -57,7 +60,7 @@ abstract contract APE is Owned {
         return true;
     }
 
-    function transfer(address to, uint256 amount) public virtual returns (bool) {
+    function transfer(address to, uint256 amount) external returns (bool) {
         balanceOf[msg.sender] -= amount;
 
         // Cannot overflow because the sum of all user
@@ -71,7 +74,7 @@ abstract contract APE is Owned {
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount) public virtual returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
 
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
@@ -101,7 +104,7 @@ abstract contract APE is Owned {
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) public virtual {
+    ) external {
         require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
 
         // Unchecked because the only math done is incrementing
@@ -139,11 +142,11 @@ abstract contract APE is Owned {
         emit Approval(owner, spender, value);
     }
 
-    function DOMAIN_SEPARATOR() public view virtual returns (bytes32) {
-        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : computeDomainSeparator();
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : _computeDomainSeparator();
     }
 
-    function computeDomainSeparator() internal view virtual returns (bytes32) {
+    function _computeDomainSeparator() private view returns (bytes32) {
         return
             keccak256(
                 abi.encode(
