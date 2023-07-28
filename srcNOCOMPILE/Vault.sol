@@ -7,7 +7,7 @@ import {VaultStructs} from "./interfaces/VaultStructs.sol";
 
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {DeployerOfTokens, APE} from "./DeployerOfTokens.sol";
+import {DeployerOfAPE, APE} from "./DeployerOfAPE.sol";
 
 // Contracts
 import {MAAM} from "./MAAM.sol";
@@ -19,7 +19,7 @@ import {MAAM} from "./MAAM.sol";
  *  @dev price's range is [0,Infinity], where Infinity is included.
  *  @dev TEA's supply cannot exceed type(uint).max because of its mint() function.
  */
-contract Vault is MAAM, DeployerOfTokens, VaultStructs {
+contract Vault is MAAM {
     using FloatingPoint for bytes16;
 
     error VaultAlreadyInitialized();
@@ -32,6 +32,9 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         int8 indexed leverageTier,
         uint256 indexed vaultId
     );
+
+    // Used to pass parameters to the APE token constructor
+    VaultStructs.TokenParameters private _transientTokenParameters;
 
     /**
         To avoid having divisions by 0 due to price fluctuations. If a contracts gets bricked,
@@ -66,10 +69,9 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
             int8 leverageTier
         )
     {
-        TokenParameters memory tokenParams = tokenParameters;
-        name = tokenParams.name;
-        symbol = tokenParams.symbol;
-        decimals = tokenParams.decimals;
+        name = _transientTokenParameters.name;
+        symbol = _transientTokenParameters.symbol;
+        decimals = _transientTokenParameters.decimals;
 
         VaultStructs.Parameters memory params = paramsById[paramsById.length - 1];
         debtToken = params.debtToken;
@@ -102,7 +104,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
 
         // Deploy APE token, and initialize it
-        deploy(vaultId, debtToken, collateralToken, leverageTier);
+        DeployerOfAPE.deploy(_transientTokenParameters, vaultId, debtToken, collateralToken, leverageTier);
 
         // Save vaultId and parameters
         state_.vaultId = vaultId;
@@ -406,8 +408,6 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // DON'T LET THE LP OR APE RESERVE GO TO 0. AT LEAST IT MUST BE 1.
-
     function _preprocess(
         bool isMintAPE,
         address debtToken,
@@ -432,7 +432,7 @@ contract Vault is MAAM, DeployerOfTokens, VaultStructs {
         VaultStructs.State memory state,
         address collateralToken
     ) private view returns (uint256) {
-        require(!systemParams.onlyWithdrawals);
+        require(!systemParams.emergencyStop);
 
         // Get deposited collateral
         return IERC20(collateralToken).balanceOf(address(msg.sender)) - state.daoFees - state.totalReserves;

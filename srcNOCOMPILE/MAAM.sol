@@ -33,7 +33,7 @@ abstract contract MAAM is ERC1155 {
             string.concat(
                 "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE",
                 vaultIdStr,
-                "%22%2C%22symbol%22%3A%22MAAM",
+                "%22%2C%22symbol%22%3A%22MAAM-",
                 vaultIdStr,
                 "%22%2C%22decimals%22%3A",
                 Strings.toString(IERC20(collateralToken).decimals()),

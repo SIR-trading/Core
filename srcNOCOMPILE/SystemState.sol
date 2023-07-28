@@ -2,30 +2,27 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {ERC20} from "solmate/tokens/ERC20.sol";
-
-contract SystemState is ERC20 {
+contract SystemState {
     struct LPerIssuanceParams {
-        uint152 cumSIRperMAAM; // Q104.48, cumulative SIR minted by an LPer per unit of MAAM
+        uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by an LPer per unit of MAAM
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
     struct VaultIssuanceParams {
-        uint16 taxToDAO; // [‱] A value of 1e4 means that the vaultId pays 10% of its fee revenue to the DAO.
-        uint72 issuance;
+        uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
+        uint72 issuance; // [SIR/s] Assert that issuance <= ISSUANCE
         uint40 tsLastUpdate; // timestamp of the last time cumSIRperMAAM was updated. 0 => use systemParams.tsIssuanceStart instead
-        bytes16 cumSIRperMAAM; // Cumulative SIR minted by the vaultId per unit of MAAM.
+        uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by the vaultId per unit of MAAM.
     }
 
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
-        uint128 rewards; // SIR owed to the contributor
+        uint104 rewards; // SIR owed to the contributor
     }
 
     struct VaultIssuanceState {
         VaultIssuanceParams vaultIssuance;
-        bytes16[] liquidationsCumSIRperMAAM;
         mapping(address => LPerIssuanceParams) lpersIssuances;
     }
 
@@ -33,15 +30,12 @@ contract SystemState is ERC20 {
         // Timestamp when issuance (re)started. 0 => issuance has not started yet
         uint40 tsIssuanceStart;
         /**
-         * Base fee in basis points charged to gentlmen/apes per unit of liquidity.
-         *     For example, in a vaultId with 3x target leverage but an actual leverage of 2.9, apes are charged a fee for minting APE, and gentlemen are charged for burning TEA.
-         *     If the the actual leverage was higher than the target leverage, then apes would be charged a fee for burning APE, and gentlemen would be charged for minting TEA.
-         *     In this particular example, ideally for every unit of collateral backing APE, 2 units of collateral should back TEA.
-         *     Thus the fee charge upon minting APE (if actual leverage is 2.9) is fee = (2 * systemParams.baseFee / 10,000) * collateralDeposited
+         * Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
+         * For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
          */
-        uint16 baseFee;
-        uint72 issuanceAllVaults; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
-        bool onlyWithdrawals;
+        uint16 baseFee; // Given type(uint16).max, the max baseFee is 655.35%.
+        uint72 issuanceTotalVaults; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
+        bool emergencyStop;
     }
 
     modifier onlySystemControl() {
@@ -49,83 +43,62 @@ contract SystemState is ERC20 {
         _;
     }
 
-    modifier onlyVault() {
-        _onlyVault();
-        _;
-    }
-
     // Tokens issued per second
-    /**
-     *  100 SIR/s issued forever. To allow enough precission for cumSIRperMAAM, we only use 6 decimals in SIR
-     *  which implies that we only need 64 bits to fit up to +1000 years of issued supply.
-     *  If LPerIssuanceParams is stored in 1 word, we are left with 128 bits for decimals digits in cumSIRperMAAAM
-     *  which is enough even in vault where tokens with really large supply.
-     */
-    uint72 public constant ISSUANCE = 1e2 * 1e6;
-    uint256 private constant _THREE_YEARS = 365 * 24 * 60 * 60;
+    uint72 public constant ISSUANCE = 1e2 * 1e18;
+    uint40 private constant _THREE_YEARS = 3 * 365 days;
 
-    address public immutable SYSTEM_CONTROL;
-    address public immutable VAULT;
+    address public immutable systemControl;
 
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
-    mapping(vaultId => VaultIssuanceState) internal _vaultIssuanceStates;
+    mapping(uint256 vaultId => VaultIssuanceState) internal _vaultIssuanceStates;
 
     SystemParameters public systemParams =
-        SystemParameters({tsIssuanceStart: 0, baseFee: 100, onlyWithdrawals: false, issuanceAllVaults: ISSUANCE});
+        SystemParameters({
+            tsIssuanceStart: 0,
+            baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
+            emergencyStop: false, // Emergency stop is off
+            issuanceTotalVaults: ISSUANCE // All issuance go to the vaults by default (no contributors)
+        });
 
-    constructor(address vault, address systemControl) ERC20("Governance token of the SIR protocol", "SIR", 18) {
-        VAULT = vault;
-        SYSTEM_CONTROL = systemControl;
+    constructor(address systemControl_) {
+        systemControl = systemControl_;
     }
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function maxSupply() public view returns (uint256) {
+    // MOVE IT TO SIR CONTRACT????
+    function maxSupplySIR() external view returns (uint256) {
         if (systemParams.tsIssuanceStart == 0) return 0;
 
         return ISSUANCE * (block.timestamp - systemParams.tsIssuanceStart);
     }
 
-    function getContributorIssuance(
-        address contributor
-    ) public view returns (ContributorIssuanceParams memory contributorParams) {
+    function getContributorIssuance(address contributor) public view returns (ContributorIssuanceParams memory) {
         if (systemParams.tsIssuanceStart == 0) return contributorParams; // Issuance has not started yet
 
-        contributorParams = _contributorsIssuances[contributor];
+        ContributorIssuanceParams memory contributorParams = _contributorsIssuances[contributor];
 
-        if (block.timestamp < systemParams.tsIssuanceStart + _THREE_YEARS) {
-            // Still within the 3 years that contributors receive rewards
-            contributorParams.rewards +=
-                contributorParams.issuance *
-                uint128(
-                    block.timestamp -
-                        (
-                            systemParams.tsIssuanceStart > contributorParams.tsLastUpdate
-                                ? systemParams.tsIssuanceStart
-                                : contributorParams.tsLastUpdate
-                        )
-                );
-        } else {
-            // Already exceeded 3 years
-            if (contributorParams.tsLastUpdate < systemParams.tsIssuanceStart + _THREE_YEARS) {
-                // Update the rewards up to 3 yeards
-                contributorParams.rewards +=
-                    contributorParams.issuance *
-                    uint128(
-                        systemParams.tsIssuanceStart +
-                            _THREE_YEARS -
-                            (
-                                systemParams.tsIssuanceStart > contributorParams.tsLastUpdate
-                                    ? systemParams.tsIssuanceStart
-                                    : contributorParams.tsLastUpdate
-                            )
-                    );
-            }
-            contributorParams.issuance = 0;
-        }
+        // Last date of rewards
+        uint40 tsIssuanceEnd = systemParams.tsIssuanceStart + _THREE_YEARS;
 
+        // If rewards have already been updated for the last time
+        if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
+
+        // If  issuance is over but rewards have not been updated for the last time
+        bool issuanceIsOver = uint40(block.timestamp) >= tsIssuanceEnd;
+
+        // If rewards have never been updated
+        bool rewardsNeverUpdated = systemParams.tsIssuanceStart > contributorParams.tsLastUpdate;
+
+        contributorParams.rewards +=
+            contributorParams.issuance *
+            uint72(
+                (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
+                    (rewardsNeverUpdated ? systemParams.tsIssuanceStart : contributorParams.tsLastUpdate)
+            );
+        contributorParams.issuance = 0;
         contributorParams.tsLastUpdate = uint40(block.timestamp);
     }
 
@@ -182,7 +155,7 @@ contract SystemState is ERC20 {
         uint256 vaultId,
         ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
         address[] memory LPers
-    ) external onlyVault {
+    ) internal {
         // Issuances has not started
         if (systemParams.tsIssuanceStart == 0) return;
 
@@ -210,7 +183,7 @@ contract SystemState is ERC20 {
         }
     }
 
-    function haultIssuance(uint256 vaultId) external onlyVault {
+    function haultIssuance(uint256 vaultId) internal {
         if (systemParams.tsIssuanceStart == 0 || _vaultIssuanceStates[vaultId].vaultIssuance.issuance == 0) return; // This vault gets no SIR anyway
 
         // Record the value of cumSIRperMAAM at the time of the liquidation event
@@ -237,7 +210,7 @@ contract SystemState is ERC20 {
         } else if (basisFee_ > 0) {
             systemParams.baseFee = basisFee_;
         } else {
-            systemParams.onlyWithdrawals = onlyWithdrawals_;
+            systemParams.emergencyStop = onlyWithdrawals_;
         }
     }
 
@@ -263,7 +236,7 @@ contract SystemState is ERC20 {
                 _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = 0;
             } else {
                 _vaultIssuanceStates[vaultId[i]].vaultIssuance.issuance = uint72(
-                    (systemParams.issuanceAllVaults * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) /
+                    (systemParams.issuanceTotalVaults * _vaultIssuanceStates[vaultId[i]].vaultIssuance.taxToDAO) /
                         sumTaxes
                 );
             }
@@ -285,7 +258,7 @@ contract SystemState is ERC20 {
             _vaultIssuanceStates[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
             _vaultIssuanceStates[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
             _vaultIssuanceStates[nextVaults[i]].vaultIssuance.issuance = uint72(
-                (systemParams.issuanceAllVaults * taxesToDAO[i]) / sumTaxes
+                (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
             );
         }
 
@@ -316,10 +289,10 @@ contract SystemState is ERC20 {
 
         if (allowAnyTotalIssuance) {
             // Recalibrate vaults' issuances
-            systemParams.issuanceAllVaults = ISSUANCE - issuanceAllContributors;
+            systemParams.issuanceTotalVaults = ISSUANCE - issuanceAllContributors;
         } else {
             require(
-                ISSUANCE == issuanceAllContributors + systemParams.issuanceAllVaults,
+                ISSUANCE == issuanceAllContributors + systemParams.issuanceTotalVaults,
                 "Total issuance must not change"
             );
         }
@@ -424,10 +397,6 @@ contract SystemState is ERC20 {
     }
 
     function _onlySystemControl() private view {
-        require(msg.sender == SYSTEM_CONTROL);
-    }
-
-    function _onlyVault() private view {
-        require(msg.sender == VAULT);
+        require(msg.sender == systemControl);
     }
 }

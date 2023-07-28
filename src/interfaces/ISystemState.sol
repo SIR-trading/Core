@@ -8,7 +8,7 @@ import "./IFees.sol";
 interface ISystemState is IFees, ISIR {
     function SYSTEM_CONTROL() external returns (address);
 
-    function onlyWithdrawals() external view returns (bool);
+    function emergencyStop() external view returns (bool);
 
     function updateSystemParameters(uint40 tsIssuanceStart_, uint16 basisFee_, bool onlyWithdrawals_) external;
 
@@ -24,8 +24,11 @@ interface ISystemState is IFees, ISIR {
         uint256 sumTaxes
     ) external returns (bytes32);
 
-    function recalibrateVaultsIssuances(address[] calldata vaults, bytes16[] memory latestSuppliesMAAM, uint256 sumTaxes)
-        external;
+    function recalibrateVaultsIssuances(
+        address[] calldata vaults,
+        bytes16[] memory latestSuppliesMAAM,
+        uint256 sumTaxes
+    ) external;
 
     function changeContributorsIssuances(
         address[] calldata prevContributors,
