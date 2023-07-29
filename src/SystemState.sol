@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Interfaces
-import {IERC20} from "v2-core/interfaces/IERC20.sol";
-
 // Contracts
-import {MAAM} from "./MAAM.sol";
+import {MAAM, IERC20} from "./MAAM.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 
-contract SystemState is SystemCommons, MAAM {
+abstract contract SystemState is SystemCommons, MAAM {
     struct LPerIssuanceParams {
         uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by an LPer per unit of MAAM
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
@@ -51,85 +48,93 @@ contract SystemState is SystemCommons, MAAM {
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function vaultsIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
+    function vaultIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
         // Get the vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams = _vaultsIssuanceParams[vaultId];
+        VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
         // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
         if (
             systemParams.tsIssuanceStart == 0 ||
-            vaultIssuanceParams.issuance == 0 ||
-            vaultIssuanceParams.tsLastUpdate == uint40(block.timestamp)
-        ) return vaultIssuanceParams;
+            vaultIssuanceParams_.issuance == 0 ||
+            vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
+        ) return vaultIssuanceParams_;
 
         // Compute the cumulative SIR per unit of MAAM, if it has not been updated in this block
-        bool rewardsNeverUpdated = systemParams.tsIssuanceStart > vaultIssuanceParams.tsLastUpdate;
-        vaultIssuanceParams.cumSIRperMAAM +=
-            ((
-                uint128(vaultIssuanceParams.issuance) *
-                    uint128(
-                        uint40(block.timestamp) -
-                            (rewardsNeverUpdated ? systemParams.tsIssuanceStart : contributorParams.tsLastUpdate)
-                    ),
-                b,
-                denominator
-            ) << 24) /
-            totalSupply[vaultId];
+        bool rewardsNeverUpdated = systemParams.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate;
+        vaultIssuanceParams_.cumSIRperMAAM += uint128(
+            ((uint256(vaultIssuanceParams_.issuance) *
+                uint256(
+                    uint40(block.timestamp) -
+                        (rewardsNeverUpdated ? systemParams.tsIssuanceStart : vaultIssuanceParams_.tsLastUpdate)
+                )) << 24) / totalSupply[vaultId]
+        );
 
         // Update timestamp
-        vaultIssuanceParams.tsLastUpdate = uint40(block.timestamp);
+        vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
 
-        return vaultIssuanceParams;
+        return vaultIssuanceParams_;
     }
 
-    function lperIssuanceParams(
+    function lperIssuanceParams(uint256 vaultId, address lper) external view returns (LPerIssuanceParams memory) {
+        return _lperIssuanceParams(vaultId, lper, vaultIssuanceParams(vaultId));
+    }
+
+    function _lperIssuanceParams(
         uint256 vaultId,
-        address lper
-    ) public view returns (LPerIssuanceParams memory lperIssuanceParams) {
+        address lper,
+        VaultIssuanceParams memory vaultIssuanceParams_
+    ) private view returns (LPerIssuanceParams memory lperIssuanceParams_) {
         // Get the lper issuance parameters
-        lperIssuanceParams = _lpersIssuances[vaultId][lper];
+        lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
 
         // Get the LPer balance of MAAM
         uint256 balance = balanceOf[lper][vaultId];
 
         // If LPer has no MAAM
-        if (balance == 0) return lperIssuanceParams;
+        if (balance == 0) return lperIssuanceParams_;
 
         // If rewards need to be updated
-        VaultIssuanceParams memory vaultIssuanceParams = _vaultsIssuanceParams[vaultId];
-        if (vaultIssuanceParams.cumSIRperMAAM != lperIssuanceParams.cumSIRperMAAM) {
-            lperIssuanceParams.rewards += uint104(
-                (balance * uint256(vaultIssuanceParams.cumSIRperMAAM - lperIssuanceParams.cumSIRperMAAM)) >> 24
+        if (vaultIssuanceParams_.cumSIRperMAAM != lperIssuanceParams_.cumSIRperMAAM) {
+            lperIssuanceParams_.rewards += uint104(
+                (balance * uint256(vaultIssuanceParams_.cumSIRperMAAM - lperIssuanceParams_.cumSIRperMAAM)) >> 24
             );
-            lperIssuanceParams.cumSIRperMAAM = vaultIssuanceParams.cumSIRperMAAM;
+            lperIssuanceParams_.cumSIRperMAAM = vaultIssuanceParams_.cumSIRperMAAM;
         }
     }
 
     /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-
     /**
-     * @dev To be called BEFORE minting/burning MAAM in Vault.sol
-     *     @dev Vault parameters get updated only once in the 1st tx in the block
-     *     @dev LPer parameters get updated on every call
-     *     @dev No-op unless caller is a vaultId
+     * @dev To be called BEFORE minting/burning MAAM
      */
-    function _updateIssuances(uint256 vaultId, address[] memory lpers) internal override {
+    function _updateIssuanceParams(uint256 vaultId, address lper) internal override {
         // If issuance has not started, return
         if (systemParams.tsIssuanceStart == 0) return;
 
-        // Get the vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams = vaultsIssuanceParams(vaultId);
+        // Retrieve updated vault issuance parameters
+        VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
 
         // Update storage
-        _vaultsIssuanceParams[vaultId] = vaultIssuanceParams;
+        _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
+
+        // Update LPer issuances params
+        _lpersIssuances[vaultId][lper] = _lperIssuanceParams(vaultId, lper, vaultIssuanceParams_);
+    }
+
+    /**
+     * @dev To be called BEFORE transfering MAAM
+     */
+    function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal override {
+        // If issuance has not started, return
+        if (systemParams.tsIssuanceStart == 0) return;
+
+        // Retrieve updated vault issuance parameters
+        VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
 
         // Update lpers issuances params
-        for (uint256 i = 0; i < lpers.length; i++) {
-            LPerIssuanceParams memory lperIssuanceParams = lperIssuanceParams(vaultId, lpers[i]);
-            _lpersIssuances[vaultId][lpers[i]] = lperIssuance;
-        }
+        _lpersIssuances[vaultId][lper0] = _lperIssuanceParams(vaultId, lper0, vaultIssuanceParams_);
+        _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -140,134 +145,72 @@ contract SystemState is SystemCommons, MAAM {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Only one parameter can be updated at one. We use a single function to reduce bytecode size.
-     */
-    function updateSystemParameters(
-        uint40 tsIssuanceStart_,
-        uint16 basisFee_,
-        bool onlyWithdrawals_
-    ) external onlySystemControl {
-        if (tsIssuanceStart_ > 0) {
-            require(systemParams.tsIssuanceStart == 0, "Issuance already started");
-            systemParams.tsIssuanceStart = tsIssuanceStart_;
-        } else if (basisFee_ > 0) {
-            systemParams.baseFee = basisFee_;
-        } else {
-            systemParams.emergencyStop = onlyWithdrawals_;
-        }
-    }
+    // /**
+    //  * @dev Only one parameter can be updated at one. We use a single function to reduce bytecode size.
+    //  */
+    // function updateSystemParameters(
+    //     uint40 tsIssuanceStart_,
+    //     uint16 basisFee_,
+    //     bool onlyWithdrawals_
+    // ) external onlySystemControl {
+    //     if (tsIssuanceStart_ > 0) {
+    //         require(systemParams.tsIssuanceStart == 0, "Issuance already started");
+    //         systemParams.tsIssuanceStart = tsIssuanceStart_;
+    //     } else if (basisFee_ > 0) {
+    //         systemParams.baseFee = basisFee_;
+    //     } else {
+    //         systemParams.emergencyStop = onlyWithdrawals_;
+    //     }
+    // }
 
     /*////////////////////////////////////////////////////////////////
                             ADMIN ISSUANCE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function recalibrateVaultsIssuances(
-        address[] calldata vaults,
-        bytes16[] memory latestSuppliesMAAM,
-        uint256 sumTaxes
-    ) public onlySystemControl {
-        // Reset issuance of prev vaults
-        for (uint256 i = 0; i < vaults.length; i++) {
-            // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
-            _vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
-                vaults[i],
-                latestSuppliesMAAM[i]
-            );
-            _vaultsIssuanceParams[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-            if (sumTaxes == 0) {
-                _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO = 0;
-                _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = 0;
-            } else {
-                _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = uint72(
-                    (systemParams.issuanceTotalVaults * _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO) /
-                        sumTaxes
-                );
-            }
-        }
-    }
+    // function recalibrateVaultsIssuances(
+    //     address[] calldata vaults,
+    //     bytes16[] memory latestSuppliesMAAM,
+    //     uint256 sumTaxes
+    // ) public onlySystemControl {
+    //     // Reset issuance of prev vaults
+    //     for (uint256 i = 0; i < vaults.length; i++) {
+    //         // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
+    //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
+    //             vaults[i],
+    //             latestSuppliesMAAM[i]
+    //         );
+    //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+    //         if (sumTaxes == 0) {
+    //             _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO = 0;
+    //             _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = 0;
+    //         } else {
+    //             _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = uint72(
+    //                 (systemParams.issuanceTotalVaults * _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO) /
+    //                     sumTaxes
+    //             );
+    //         }
+    //     }
+    // }
 
-    function changeVaultsIssuances(
-        address[] calldata prevVaults,
-        bytes16[] memory latestSuppliesMAAM,
-        address[] calldata nextVaults,
-        uint16[] calldata taxesToDAO,
-        uint256 sumTaxes
-    ) external onlySystemControl returns (bytes32) {
-        // Reset issuance of prev vaults
-        recalibrateVaultsIssuances(prevVaults, latestSuppliesMAAM, 0);
+    // function changeVaultsIssuances(
+    //     address[] calldata prevVaults,
+    //     bytes16[] memory latestSuppliesMAAM,
+    //     address[] calldata nextVaults,
+    //     uint16[] calldata taxesToDAO,
+    //     uint256 sumTaxes
+    // ) external onlySystemControl returns (bytes32) {
+    //     // Reset issuance of prev vaults
+    //     recalibrateVaultsIssuances(prevVaults, latestSuppliesMAAM, 0);
 
-        // Set next issuances
-        for (uint256 i = 0; i < nextVaults.length; i++) {
-            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
-            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
-                (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
-            );
-        }
+    //     // Set next issuances
+    //     for (uint256 i = 0; i < nextVaults.length; i++) {
+    //         _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+    //         _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
+    //         _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
+    //             (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
+    //         );
+    //     }
 
-        return keccak256(abi.encodePacked(nextVaults));
-    }
-
-    /*////////////////////////////////////////////////////////////////
-                            INTERNAL FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
-
-    function _getLPerIssuance(
-        uint256 vaultId,
-        ResettableBalancesBytes16.ResettableBalances memory nonRebasingBalances,
-        address LPer,
-        bytes16 nonRebasingSupplyExcVault
-    ) internal view returns (LPerIssuanceParams memory lperIssuance) {
-        /**
-         * Update cumSIRperMAAM
-         */
-        lperIssuance.cumSIRperMAAM = _getCumSIRperMAAM(vaultId, nonRebasingSupplyExcVault);
-
-        /**
-         * Update lperIssuance.rewards taking into account any possible liquidation events
-         */
-        // Find event that liquidated the LPer if it existed
-        uint256 i = _vaultsIssuanceParams[vaultId]._lpersIssuances[LPer].indexLiquidations;
-        while (
-            i < _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length &&
-            _vaultsIssuanceParams[vaultId]._lpersIssuances[LPer].cumSIRperMAAM.cmp(
-                _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i]
-            ) >=
-            0
-        ) {
-            i++;
-        }
-
-        /**
-         * Find out if we must use
-         *             nonRebasingBalances.get(LPer)
-         *             lperIssuance.cumSIRperMAAM
-         *         or
-         *             nonRebasingBalances.timestampedBalances[LPer].balance
-         *             _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i]
-         */
-        bool liquidated = i < _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length;
-
-        // Compute rewards
-        lperIssuance.rewards =
-            _vaultsIssuanceParams[vaultId]._lpersIssuances[LPer].rewards +
-            uint104(
-                (liquidated ? _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i] : lperIssuance.cumSIRperMAAM)
-                    .mul(
-                        liquidated
-                            ? nonRebasingBalances.timestampedBalances[LPer].balance
-                            : nonRebasingBalances.get(LPer)
-                    )
-                    .toUInt()
-            );
-
-        /**
-         * Update lperIssuance.indexLiquidations
-         */
-        lperIssuance.indexLiquidations = _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length <
-            type(uint24).max
-            ? uint24(_vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length)
-            : type(uint24).max;
-    }
+    //     return keccak256(abi.encodePacked(nextVaults));
+    // }
 }

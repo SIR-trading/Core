@@ -10,7 +10,7 @@ import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {DeployerOfAPE, APE} from "./DeployerOfAPE.sol";
 
 // Contracts
-import {MAAM} from "./MAAM.sol";
+import {SystemState} from "./SystemState.sol";
 
 /**
  * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
@@ -19,7 +19,7 @@ import {MAAM} from "./MAAM.sol";
  *  @dev price's range is [0,Infinity], where Infinity is included.
  *  @dev TEA's supply cannot exceed type(uint).max because of its mint() function.
  */
-contract Vault is MAAM {
+contract Vault is SystemState {
     using FloatingPoint for bytes16;
 
     error VaultAlreadyInitialized();
@@ -48,7 +48,7 @@ contract Vault is MAAM {
     mapping(VaultStructs.Parameters => VaultStructs.State) public state; // Do not use vaultId 0
     VaultStructs.Parameters[] public override paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
-    constructor(address vaultLogic, address oracle) MAAM(vaultLogic) {
+    constructor(address vaultLogic, address oracle) SystemState(vaultLogic) {
         // Price oracle
         oracle = Oracle(oracle);
 
@@ -112,7 +112,7 @@ contract Vault is MAAM {
 
     /*////////////////////////////////////////////////////////////////
                             MINT/BURN FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
+    ////////////////////////////////////////////////////////////////*/
 
     /**
         ADD QUOTING FUNCTIONS TO THE PERIPHERY?

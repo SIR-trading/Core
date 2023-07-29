@@ -97,38 +97,38 @@ contract SIR is ERC20, SystemCommons {
         _vaultIssuanceStates[vaultId].lpersIssuances[msg.sender] = lperIssuance;
     }
 
-    function changeContributorsIssuances(
-        address[] calldata prevContributors,
-        address[] calldata nextContributors,
-        uint72[] calldata issuances,
-        bool allowAnyTotalIssuance
-    ) external onlySystemControl returns (bytes32) {
-        // Stop issuance of previous contributors
-        for (uint256 i = 0; i < prevContributors.length; i++) {
-            ContributorIssuanceParams memory contributorParams = getContributorIssuance(prevContributors[i]);
-            contributorParams.issuance = 0;
-            _contributorsIssuances[prevContributors[i]] = contributorParams;
-        }
+    // function changeContributorsIssuances(
+    //     address[] calldata prevContributors,
+    //     address[] calldata nextContributors,
+    //     uint72[] calldata issuances,
+    //     bool allowAnyTotalIssuance
+    // ) external onlySystemControl returns (bytes32) {
+    //     // Stop issuance of previous contributors
+    //     for (uint256 i = 0; i < prevContributors.length; i++) {
+    //         ContributorIssuanceParams memory contributorParams = getContributorIssuance(prevContributors[i]);
+    //         contributorParams.issuance = 0;
+    //         _contributorsIssuances[prevContributors[i]] = contributorParams;
+    //     }
 
-        // Set next issuances
-        uint72 issuanceAllContributors = 0;
-        for (uint256 i = 0; i < nextContributors.length; i++) {
-            _contributorsIssuances[nextContributors[i]].issuance = issuances[i];
-            _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(block.timestamp);
+    //     // Set next issuances
+    //     uint72 issuanceAllContributors = 0;
+    //     for (uint256 i = 0; i < nextContributors.length; i++) {
+    //         _contributorsIssuances[nextContributors[i]].issuance = issuances[i];
+    //         _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(block.timestamp);
 
-            issuanceAllContributors += issuances[i]; // Check total issuance does not change
-        }
+    //         issuanceAllContributors += issuances[i]; // Check total issuance does not change
+    //     }
 
-        if (allowAnyTotalIssuance) {
-            // Recalibrate vaults' issuances
-            systemParams.issuanceTotalVaults = ISSUANCE - issuanceAllContributors;
-        } else {
-            require(
-                ISSUANCE == issuanceAllContributors + systemParams.issuanceTotalVaults,
-                "Total issuance must not change"
-            );
-        }
+    //     if (allowAnyTotalIssuance) {
+    //         // Recalibrate vaults' issuances
+    //         systemParams.issuanceTotalVaults = ISSUANCE - issuanceAllContributors;
+    //     } else {
+    //         require(
+    //             ISSUANCE == issuanceAllContributors + systemParams.issuanceTotalVaults,
+    //             "Total issuance must not change"
+    //         );
+    //     }
 
-        return keccak256(abi.encodePacked(nextContributors));
-    }
+    //     return keccak256(abi.encodePacked(nextContributors));
+    // }
 }

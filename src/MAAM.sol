@@ -1,8 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
+// Interfaces
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
+
 // Libraries
 import {Strings} from "openzeppelin/utils/Strings.sol";
+
+// Contracts
+import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 /**
  * @dev Metadata description for ERC-1155 can be bound at https://eips.ethereum.org/EIPS/eip-1155
@@ -17,10 +23,8 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 abstract contract MAAM is ERC1155 {
     mapping(uint256 vaultId => uint256) public totalSupply;
 
-    function _updateIssuances(uint256 vaultId, address[] memory lpers) internal virtual;
-
     function uri(uint256 vaultId) public view override returns (string memory) {
-        string vaultIdStr = Strings.toString(vaultId);
+        string memory vaultIdStr = Strings.toString(vaultId);
         (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
         return
             string.concat(
@@ -40,10 +44,6 @@ abstract contract MAAM is ERC1155 {
             );
     }
 
-    function paramsById(
-        uint256 vaultId
-    ) public view virtual returns (address debtToken, address collateralToken, int8 leverageTier);
-
     function safeTransferFrom(
         address from,
         address to,
@@ -54,11 +54,11 @@ abstract contract MAAM is ERC1155 {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _updateIssuances(vaultId, [from, to]);
+        _updateLPerIssuanceParams(vaultId, from, to);
 
         // Transfer
-        balanceOf[from][id] -= amount;
-        balanceOf[to][id] += amount;
+        balanceOf[from][vaultId] -= amount;
+        balanceOf[to][vaultId] += amount;
 
         emit TransferSingle(msg.sender, from, to, vaultId, amount);
 
@@ -91,11 +91,11 @@ abstract contract MAAM is ERC1155 {
             amount = amounts[i];
 
             // Update SIR issuances
-            _updateIssuances(vaultId, [from, to]);
+            _updateLPerIssuanceParams(vaultId, from, to);
 
             // Transfer
-            balanceOf[from][id] -= amount;
-            balanceOf[to][id] += amount;
+            balanceOf[from][vaultId] -= amount;
+            balanceOf[to][vaultId] += amount;
 
             // An array can't have a total length
             // larger than the max uint256 value.
@@ -117,7 +117,7 @@ abstract contract MAAM is ERC1155 {
 
     function _mint(address to, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        _updateIssuances(vaultId, [account]);
+        _updateIssuanceParams(vaultId, to);
 
         // Mint
         totalSupply[vaultId] += amount;
@@ -136,16 +136,28 @@ abstract contract MAAM is ERC1155 {
         );
     }
 
-    function _burn(address from, uint256 vaultId, uint256 amount, uint256 totalSupply_) internal override {
+    function _burn(address from, uint256 vaultId, uint256 amount) internal override {
         // Update SIR issuance
-        _updateIssuances(vaultId, [account]);
+        _updateIssuanceParams(vaultId, from);
 
         // Burn
         totalSupply[vaultId] -= amount;
         unchecked {
-            balanceOf[from][id] -= amount;
+            balanceOf[from][vaultId] -= amount;
         }
 
         emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
     }
+
+    /*////////////////////////////////////////////////////////////////
+                            VIRTUAL FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    function _updateIssuanceParams(uint256 vaultId, address lper) internal virtual;
+
+    function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal virtual;
+
+    function paramsById(
+        uint256 vaultId
+    ) public view virtual returns (address debtToken, address collateralToken, int8 leverageTier);
 }
