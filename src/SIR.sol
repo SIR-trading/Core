@@ -1,31 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {SystemConstants} from "./libraries/SystemConstants.sol";
-
 // Contracts
+import {SystemCommons} from "./SystemCommons.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
-contract SIR is ERC20, SystemConstants {
+contract SIR is ERC20, SystemCommons {
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
         uint104 rewards; // SIR owed to the contributor
     }
 
-    modifier onlySystemControl() {
-        _onlySystemControl();
-        _;
-    }
-
-    address public immutable systemControl;
-
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
-    constructor(address systemControl_) {
-        systemControl = systemControl_;
-    }
+    constructor(address systemControl_) SystemCommons(systemControl_) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
@@ -105,10 +95,6 @@ contract SIR is ERC20, SystemConstants {
         // Update state
         lperIssuance.rewards = 0;
         _vaultIssuanceStates[vaultId].lpersIssuances[msg.sender] = lperIssuance;
-    }
-
-    function _onlySystemControl() private view {
-        require(msg.sender == systemControl);
     }
 
     function changeContributorsIssuances(

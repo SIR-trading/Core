@@ -4,18 +4,17 @@ pragma solidity ^0.8.0;
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
-// Libraries
-import {SystemConstants} from "./libraries/SystemConstants.sol";
-
 // Contracts
 import {MAAM} from "./MAAM.sol";
+import {SystemCommons} from "./SystemCommons.sol";
 
-contract SystemState is SystemConstants, MAAM {
+contract SystemState is SystemCommons, MAAM {
     struct LPerIssuanceParams {
         uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by an LPer per unit of MAAM
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
+    // ADD tsEnd TO EASILY FINISH ISSUANCE?!
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
         uint72 issuance; // [SIR/s] Assert that issuance <= ISSUANCE
@@ -35,15 +34,8 @@ contract SystemState is SystemConstants, MAAM {
         bool emergencyStop;
     }
 
-    modifier onlySystemControl() {
-        _onlySystemControl();
-        _;
-    }
-
-    address public immutable systemControl;
-
-    mapping(uint256 vaultId => VaultIssuanceParams) internal vaultsIssuanceParams;
-    mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) internal lpersIssuances;
+    mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
+    mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) internal _lpersIssuances;
 
     SystemParameters public systemParams =
         SystemParameters({
@@ -53,17 +45,15 @@ contract SystemState is SystemConstants, MAAM {
             issuanceTotalVaults: ISSUANCE // All issuance go to the vaults by default (no contributors)
         });
 
-    constructor(address systemControl_) {
-        systemControl = systemControl_;
-    }
+    constructor(address systemControl_) SystemCommons(systemControl_) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function getVaultsIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
+    function vaultsIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
         // Get the vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams = vaultsIssuanceParams[vaultId];
+        VaultIssuanceParams memory vaultIssuanceParams = _vaultsIssuanceParams[vaultId];
 
         // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
         if (
@@ -84,12 +74,35 @@ contract SystemState is SystemConstants, MAAM {
                 b,
                 denominator
             ) << 24) /
-            totalSupply(vaultId);
+            totalSupply[vaultId];
 
         // Update timestamp
         vaultIssuanceParams.tsLastUpdate = uint40(block.timestamp);
 
         return vaultIssuanceParams;
+    }
+
+    function lperIssuanceParams(
+        uint256 vaultId,
+        address lper
+    ) public view returns (LPerIssuanceParams memory lperIssuanceParams) {
+        // Get the lper issuance parameters
+        lperIssuanceParams = _lpersIssuances[vaultId][lper];
+
+        // Get the LPer balance of MAAM
+        uint256 balance = balanceOf[lper][vaultId];
+
+        // If LPer has no MAAM
+        if (balance == 0) return lperIssuanceParams;
+
+        // If rewards need to be updated
+        VaultIssuanceParams memory vaultIssuanceParams = _vaultsIssuanceParams[vaultId];
+        if (vaultIssuanceParams.cumSIRperMAAM != lperIssuanceParams.cumSIRperMAAM) {
+            lperIssuanceParams.rewards += uint104(
+                (balance * uint256(vaultIssuanceParams.cumSIRperMAAM - lperIssuanceParams.cumSIRperMAAM)) >> 24
+            );
+            lperIssuanceParams.cumSIRperMAAM = vaultIssuanceParams.cumSIRperMAAM;
+        }
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -107,21 +120,15 @@ contract SystemState is SystemConstants, MAAM {
         if (systemParams.tsIssuanceStart == 0) return;
 
         // Get the vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams = getVaultsIssuanceParams(vaultId);
+        VaultIssuanceParams memory vaultIssuanceParams = vaultsIssuanceParams(vaultId);
 
         // Update storage
-        vaultsIssuanceParams[vaultId] = vaultIssuanceParams;
+        _vaultsIssuanceParams[vaultId] = vaultIssuanceParams;
 
         // Update lpers issuances params
-        // REDO THIS!!!!!!!!
         for (uint256 i = 0; i < lpers.length; i++) {
-            LPerIssuanceParams memory lperIssuance = _getLPerIssuance(
-                vaultId,
-                nonRebasingBalances,
-                lpers[i],
-                nonRebasingSupplyExcVault
-            );
-            vaultsIssuanceParams[vaultId].lpersIssuances[lpers[i]] = lperIssuance;
+            LPerIssuanceParams memory lperIssuanceParams = lperIssuanceParams(vaultId, lpers[i]);
+            _lpersIssuances[vaultId][lpers[i]] = lperIssuance;
         }
     }
 
@@ -163,17 +170,17 @@ contract SystemState is SystemConstants, MAAM {
         // Reset issuance of prev vaults
         for (uint256 i = 0; i < vaults.length; i++) {
             // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
-            vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
+            _vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
                 vaults[i],
                 latestSuppliesMAAM[i]
             );
-            vaultsIssuanceParams[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+            _vaultsIssuanceParams[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
             if (sumTaxes == 0) {
-                vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO = 0;
-                vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = 0;
+                _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO = 0;
+                _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = 0;
             } else {
-                vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = uint72(
-                    (systemParams.issuanceTotalVaults * vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO) /
+                _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = uint72(
+                    (systemParams.issuanceTotalVaults * _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO) /
                         sumTaxes
                 );
             }
@@ -192,9 +199,9 @@ contract SystemState is SystemConstants, MAAM {
 
         // Set next issuances
         for (uint256 i = 0; i < nextVaults.length; i++) {
-            vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-            vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
-            vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
+            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
+            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
                 (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
             );
         }
@@ -221,11 +228,11 @@ contract SystemState is SystemConstants, MAAM {
          * Update lperIssuance.rewards taking into account any possible liquidation events
          */
         // Find event that liquidated the LPer if it existed
-        uint256 i = vaultsIssuanceParams[vaultId].lpersIssuances[LPer].indexLiquidations;
+        uint256 i = _vaultsIssuanceParams[vaultId]._lpersIssuances[LPer].indexLiquidations;
         while (
-            i < vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length &&
-            vaultsIssuanceParams[vaultId].lpersIssuances[LPer].cumSIRperMAAM.cmp(
-                vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i]
+            i < _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length &&
+            _vaultsIssuanceParams[vaultId]._lpersIssuances[LPer].cumSIRperMAAM.cmp(
+                _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i]
             ) >=
             0
         ) {
@@ -238,15 +245,15 @@ contract SystemState is SystemConstants, MAAM {
          *             lperIssuance.cumSIRperMAAM
          *         or
          *             nonRebasingBalances.timestampedBalances[LPer].balance
-         *             vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i]
+         *             _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i]
          */
-        bool liquidated = i < vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length;
+        bool liquidated = i < _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length;
 
         // Compute rewards
         lperIssuance.rewards =
-            vaultsIssuanceParams[vaultId].lpersIssuances[LPer].rewards +
+            _vaultsIssuanceParams[vaultId]._lpersIssuances[LPer].rewards +
             uint104(
-                (liquidated ? vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i] : lperIssuance.cumSIRperMAAM)
+                (liquidated ? _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM[i] : lperIssuance.cumSIRperMAAM)
                     .mul(
                         liquidated
                             ? nonRebasingBalances.timestampedBalances[LPer].balance
@@ -258,13 +265,9 @@ contract SystemState is SystemConstants, MAAM {
         /**
          * Update lperIssuance.indexLiquidations
          */
-        lperIssuance.indexLiquidations = vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length <
+        lperIssuance.indexLiquidations = _vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length <
             type(uint24).max
-            ? uint24(vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length)
+            ? uint24(_vaultsIssuanceParams[vaultId].liquidationsCumSIRperMAAM.length)
             : type(uint24).max;
-    }
-
-    function _onlySystemControl() private view {
-        require(msg.sender == systemControl);
     }
 }
