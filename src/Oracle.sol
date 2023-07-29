@@ -6,11 +6,11 @@ import {IUniswapV3Factory} from "uniswap-v3-core/interfaces/IUniswapV3Factory.so
 import {IUniswapV3Pool} from "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
-import "./libraries/FloatingPoint.sol";
-import "./libraries/UniswapPoolAddress.sol";
+import {FloatingPoint} from "./libraries/FloatingPoint.sol";
+import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 
 // Contracts
-import "./libraries/Addresses.sol";
+import {Addresses} from "./libraries/Addresses.sol";
 
 /**
  * @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
