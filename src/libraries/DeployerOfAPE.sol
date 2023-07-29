@@ -3,14 +3,14 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
-import {VaultStructs} from "./interfaces/VaultStructs.sol";
+import {VaultStructs} from "../interfaces/VaultStructs.sol";
 
 // Libraries
-import {SaltedAddress} from "./libraries/SaltedAddress.sol";
-import {FullMath} from "./libraries/FullMath.sol";
+import {SaltedAddress} from "./SaltedAddress.sol";
+import {FullMath} from "./FullMath.sol";
 
 // Contracts
-import {APE} from "./APE.sol";
+import {APE} from "../APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
 library DeployerOfAPE {

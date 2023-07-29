@@ -25,7 +25,7 @@ library Fees {
      *  @return collateralDeposited
      *  @return comission to LPers
      */
-    function _hiddenFee(
+    function hiddenFee(
         uint16 baseFee,
         uint256 collateralAmount,
         int256 leverageTier

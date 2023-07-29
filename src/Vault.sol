@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Contracts
-import {Oracle} from "./Oracle.sol";
-import {VaultStructs} from "./interfaces/VaultStructs.sol";
+// Interfaces
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {DeployerOfAPE, APE} from "./DeployerOfAPE.sol";
+import {DeployerOfAPE, APE, SaltedAddress, FullMath} from "./libraries/DeployerOfAPE.sol";
+import {FloatingPoint} from "./libraries/FloatingPoint.sol";
+import {Fees} from "./libraries/Fees.sol";
 
 // Contracts
+import {Oracle} from "./Oracle.sol";
+import {VaultStructs} from "./interfaces/VaultStructs.sol";
 import {SystemState} from "./SystemState.sol";
 
 /**
@@ -29,29 +32,42 @@ contract Vault is SystemState {
         address indexed debtToken,
         address indexed collateralToken,
         int8 indexed leverageTier,
-        uint256 indexed vaultId
+        uint256 vaultId
     );
+
+    bytes32 private immutable _hashCreationCodeAPE;
 
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
 
     Oracle public immutable oracle;
 
-    mapping(VaultStructs.Parameters => VaultStructs.State) public state; // Do not use vaultId 0
-    VaultStructs.Parameters[] public override paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
+    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
+        public state; // Do not use vaultId 0
+    VaultStructs.Parameters[] private _paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
-    constructor(address vaultLogic, address oracle) SystemState(vaultLogic) {
+    constructor(address systemControl_, address oracle_, bytes32 hashCreationCodeAPE) SystemState(systemControl_) {
         // Price oracle
-        oracle = Oracle(oracle);
+        oracle = Oracle(oracle_);
+        _hashCreationCodeAPE = hashCreationCodeAPE;
 
         /** We rely on vaultId == 0 to test if a particular vault exists.
          *  To make sure vault Id 0 is never used, we push one empty element as first entry.
          */
-        paramsById.push(VaultStructs.Parameters());
+        _paramsById.push(VaultStructs.Parameters(address(0), address(0), 0));
+    }
+
+    function paramsById(
+        uint256 vaultId
+    ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {
+        debtToken = _paramsById[vaultId].debtToken;
+        collateralToken = _paramsById[vaultId].collateralToken;
+        leverageTier = _paramsById[vaultId].leverageTier;
     }
 
     function latestTokenParams()
         external
+        view
         returns (
             string memory name,
             string memory symbol,
@@ -65,7 +81,7 @@ contract Vault is SystemState {
         symbol = _transientTokenParameters.symbol;
         decimals = _transientTokenParameters.decimals;
 
-        VaultStructs.Parameters memory params = paramsById[paramsById.length - 1];
+        VaultStructs.Parameters memory params = _paramsById[_paramsById.length - 1];
         debtToken = params.debtToken;
         collateralToken = params.collateralToken;
         leverageTier = params.leverageTier;
@@ -86,20 +102,20 @@ contract Vault is SystemState {
         oracle.initialize(debtToken, collateralToken);
 
         // Check the vault has not been initialized previously
-        VaultStructs.State storage state_ = state[VaultStructs.Parameters(debtToken, collateralToken, leverageTier)];
+        VaultStructs.State storage state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId != 0) revert VaultAlreadyInitialized();
 
         // Next vault ID
-        uint256 vaultId = paramsById.length;
+        uint256 vaultId = _paramsById.length;
 
         // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
-        paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
+        _paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
 
         // Deploy APE token, and initialize it
         DeployerOfAPE.deploy(_transientTokenParameters, vaultId, debtToken, collateralToken, leverageTier);
 
         // Save vaultId and parameters
-        state_.vaultId = vaultId;
+        state_.vaultId = uint128(vaultId);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -124,10 +140,10 @@ contract Vault is SystemState {
 
         // Substract fee
         uint256 collateralFee;
-        (collateralIn, collateralFee) = Fees._hiddenFee(systemParams.baseFee, collateralIn, leverageTier);
+        (collateralIn, collateralFee) = Fees.hiddenFee(systemParams.baseFee, collateralIn, leverageTier);
 
         // Retrieve APE contract
-        APE ape = APE(getAddress(state_.vaultId));
+        APE ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
 
         // Compute amount of APE to mint
         uint256 amount = reserves.apesReserve == 0
@@ -137,19 +153,15 @@ contract Vault is SystemState {
         // Mint APE
         ape.mint(msg.sender, amount);
 
-        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feePOL = collateralFee / 10;
-
-        // Compute amount MAAM to mint as POL
-        uint256 amountPOL = reserves.lpReserve == 0
-            ? feePOL
-            : FullMath.mulDiv(totalSupply(state_.vaultId), feePOL, reserves.lpReserve);
-
-        // Mint protocol-owned liquidity if necessary
-        _mint(address(this), state_.vaultId, amountPOL);
+        // Mint protocol-owned liquidity if necessary (10% of the fee)
+        _mintPol(state_.vaultId, collateralFee, reserves.lpReserve);
 
         // Update new reserves
-        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
+        uint256 feeToDAO = FullMath.mulDiv(
+            collateralFee,
+            _vaultsIssuanceParams[state_.vaultId].taxToDAO, // taxToDAO is an uint16
+            10 * type(uint).max
+        );
         unchecked {
             // The total reserve cannot exceed the totalSupply
             reserves.daoFees += feeToDAO;
@@ -161,7 +173,7 @@ contract Vault is SystemState {
         _updateState(state_, reserves, leverageTier, price);
 
         // Store new state reserves
-        state = state_;
+        state[debtToken][collateralToken][leverageTier] = state_;
 
         return amount;
     }
@@ -185,31 +197,27 @@ contract Vault is SystemState {
         );
 
         // Retrieve APE contract
-        APE ape = APE(getAddress(state_.vaultId, false));
+        APE ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
 
         // Get collateralOut
         uint256 collateralOut = FullMath.mulDiv(reserves.apesReserve, amountAPE, ape.totalSupply());
 
         // Substract fee
         uint256 collateralFee;
-        (collateralOut, collateralFee) = Fees._hiddenFee(systemParams.baseFee, collateralOut, leverageTier);
+        (collateralOut, collateralFee) = Fees.hiddenFee(systemParams.baseFee, collateralOut, leverageTier);
 
         // Burn APE
         ape.burn(msg.sender, amountAPE);
 
-        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feePOL = collateralFee / 10;
-
-        // Compute amount MAAM to mint as POL
-        uint256 amountPOL = reserves.lpReserve == 0
-            ? feePOL
-            : FullMath.mulDiv(totalSupply(state_.vaultId), feePOL, reserves.lpReserve);
-
-        // Mint protocol-owned liquidity if necessary
-        _mint(address(this), state_.vaultId, amountPOL);
+        // Mint protocol-owned liquidity if necessary (10% of the fee)
+        _mintPol(state_.vaultId, collateralFee, reserves.lpReserve);
 
         // Update reserves
-        uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
+        uint256 feeToDAO = FullMath.mulDiv(
+            collateralFee,
+            _vaultsIssuanceParams[state_.vaultId].taxToDAO, // taxToDAO is an uint16
+            10 * type(uint).max
+        );
         reserves.apesReserve -= collateralOut + collateralFee;
         unchecked {
             // The total reserve cannot exceed the totalSupply
@@ -221,7 +229,7 @@ contract Vault is SystemState {
         _updateState(state_, reserves, leverageTier, price);
 
         // Store new state reserves
-        state = state_;
+        state[debtToken][collateralToken][leverageTier] = state_;
 
         // Withdraw collateral to user (after substracting fee)
         TransferHelper.safeTransfer(collateralToken, msg.sender, collateralOut);
@@ -249,21 +257,21 @@ contract Vault is SystemState {
         // Compute amount to mint
         uint256 amount = reserves.lpReserve == 0
             ? collateralIn
-            : FullMath.mulDiv(totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
+            : FullMath.mulDiv(totalSupply[state_.vaultId], collateralIn, reserves.lpReserve);
 
         // Mint MAAM
         _mint(msg.sender, state_.vaultId, amount);
 
         // Update new reserves
         unchecked {
-            reserves.lpReserve += collateralDeposited;
+            reserves.lpReserve += collateralIn;
         }
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
 
         // Store new state
-        state = state_;
+        state[debtToken][collateralToken][leverageTier] = state_;
 
         return amount;
     }
@@ -288,7 +296,7 @@ contract Vault is SystemState {
         );
 
         // Get collateralOut
-        uint256 collateralOut = FullMath.mulDiv(reserves.lpReserve, amountMAAM, totalSupply());
+        uint256 collateralOut = FullMath.mulDiv(reserves.lpReserve, amountMAAM, totalSupply[state_.vaultId]);
 
         // Burn MAAM
         _burn(msg.sender, state_.vaultId, amountMAAM);
@@ -300,7 +308,7 @@ contract Vault is SystemState {
         _updateState(state_, reserves, leverageTier, price);
 
         // Store new state
-        state = state_;
+        state[debtToken][collateralToken][leverageTier] = state_;
 
         // Send collateral
         TransferHelper.safeTransfer(collateralToken, msg.sender, amountMAAM);
@@ -313,16 +321,6 @@ contract Vault is SystemState {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @return total supply of MAAM (which is pegged to the collateral)
-     *     @dev Override of virtual totalSupply() in MAAM.sol
-     */
-    function totalSupply() public view override returns (uint256) {
-        bytes16 price = oracle.getPrice(collateralToken);
-        VaultStructs.Reserves memory reserves = _VAULT_LOGIC.getReserves(state, _LEVERAGE_TIER, price);
-        return reserves.lpReserve;
-    }
-
-    /**
      * Connections Between State Variables (R,pHigh) & Reserves (A,L)
      *     where R = Total reserve, A = Apes reserve, L = LP reserve
      *     (R,pHigh) ⇔ (A,L)
@@ -331,29 +329,29 @@ contract Vault is SystemState {
      */
 
     function getReserves(
-        VaultStructs.State memory state,
+        VaultStructs.State memory state_,
         int8 leverageTier,
         bytes16 price
     ) public pure returns (VaultStructs.Reserves memory reserves) {
-        reserves.daoFees = state.daoFees;
+        reserves.daoFees = state_.daoFees;
 
         // Reserve is empty
-        if (state.totalReserves == 0) return reserves;
+        if (state_.totalReserves == 0) return reserves;
 
-        if (state.pHigh == FloatingPoint.ZERO) {
+        if (state_.pHigh == FloatingPoint.ZERO) {
             // No LPers
-            reserves.apesReserve = state.totalReserves;
-        } else if (state.pHigh == FloatingPoint.INFINITY) {
+            reserves.apesReserve = state_.totalReserves;
+        } else if (state_.pHigh == FloatingPoint.INFINITY) {
             // No apes
-            reserves.lpReserve = state.totalReserves;
-        } else if (price.cmp(state.pHigh) < 0) {
+            reserves.lpReserve = state_.totalReserves;
+        } else if (price.cmp(state_.pHigh) < 0) {
             /**
              * PRICE IN PSR
              * Leverage behaves as expected
              */
             bytes16 leverageRatio = _leverageRatio(leverageTier);
-            reserves.apesReserve = price.div(state.pHigh).pow(leverageRatio.dec()).mulDiv(
-                state.totalReserves,
+            reserves.apesReserve = price.div(state_.pHigh).pow(leverageRatio.dec()).mulDiv(
+                state_.totalReserves,
                 leverageRatio
             );
 
@@ -365,7 +363,7 @@ contract Vault is SystemState {
             if (reserves.apesReserve == 0) reserves.apesReserve = 1;
 
             unchecked {
-                reserves.lpReserve = state.totalReserves - reserves.apesReserve;
+                reserves.lpReserve = state_.totalReserves - reserves.apesReserve;
             }
         } else {
             /**
@@ -373,7 +371,7 @@ contract Vault is SystemState {
              *      LPers are 100% in pegged to debt token.
              */
             bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-            reserves.lpReserve = pHigh.mulDiv(state.totalReserves, price.mul(collateralizationFactor));
+            reserves.lpReserve = state_.pHigh.mulDiv(state_.totalReserves, price.mul(collateralizationFactor));
 
             /**
              * mulDiv rounds down, and collateralizationFactor>1 & price>=pHigh, so lpReserve < totalReserves,
@@ -382,7 +380,7 @@ contract Vault is SystemState {
             if (reserves.lpReserve == 0) reserves.lpReserve = 1;
 
             unchecked {
-                reserves.apesReserve = state.totalReserves - reserves.lpReserve;
+                reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
             }
         }
     }
@@ -391,17 +389,28 @@ contract Vault is SystemState {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    function _mintPol(uint256 vaultId, uint256 collateralFee, uint256 lpReserve) private {
+        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
+        uint256 feePOL = collateralFee / 10;
+
+        // Compute amount MAAM to mint as POL
+        uint256 amountPOL = lpReserve == 0 ? feePOL : FullMath.mulDiv(totalSupply[vaultId], feePOL, lpReserve);
+
+        // Mint protocol-owned liquidity if necessary
+        _mint(address(this), vaultId, amountPOL);
+    }
+
     function _preprocess(
         bool isMintAPE,
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) private view returns (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
+    ) private returns (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
         // Get price and update oracle if necessary
         price = oracle.updateOracleState(collateralToken, debtToken);
 
         // Retrieve state and check it actually exists
-        state_ = state;
+        state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId == 0) revert VaultDoesNotExist();
 
         // Until SIR is running, only LPers are allowed to mint (deposit collateral)
@@ -412,42 +421,42 @@ contract Vault is SystemState {
     }
 
     function _getCollateralDeposited(
-        VaultStructs.State memory state,
+        VaultStructs.State memory state_,
         address collateralToken
     ) private view returns (uint256) {
         require(!systemParams.emergencyStop);
 
         // Get deposited collateral
-        return IERC20(collateralToken).balanceOf(address(msg.sender)) - state.daoFees - state.totalReserves;
+        return IERC20(collateralToken).balanceOf(address(msg.sender)) - state_.daoFees - state_.totalReserves;
     }
 
     function _updateState(
-        VaultStructs.State memory state,
+        VaultStructs.State memory state_,
         VaultStructs.Reserves memory reserves,
         int8 leverageTier,
         bytes16 price
     ) private pure {
-        state.daoFees = reserves.daoFees;
-        state.totalReserves = reserves.apesReserve + reserves.lpReserve;
+        state_.daoFees = reserves.daoFees;
+        state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
-        if (state.totalReserves == 0) return; // When the reserve is empty, pHigh is undetermined
+        if (state_.totalReserves == 0) return; // When the reserve is empty, pHigh is undetermined
 
         // Compute pHigh
         if (reserves.apesReserve == 0) {
-            state.pHigh = FloatingPoint.INFINITY;
+            state_.pHigh = FloatingPoint.INFINITY;
         } else if (reserves.lpReserve == 0) {
-            state.pHigh = FloatingPoint.ZERO;
+            state_.pHigh = FloatingPoint.ZERO;
         } else {
             bytes16 leverageRatio = _leverageRatio(leverageTier);
-            if (reserves.apesReserve < leverageRatio.inv().mulu(state.totalReserves)) {
+            bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
+            if (reserves.apesReserve < leverageRatio.inv().mulu(state_.totalReserves)) {
                 // PRICE IN PSR
-                state.pHigh = price.div(
-                    leverageRatio.mulDivu(reserves.apesReserve, state.totalReserves).pow(collateralizationFactor.dec())
+                state_.pHigh = price.div(
+                    leverageRatio.mulDivu(reserves.apesReserve, state_.totalReserves).pow(collateralizationFactor.dec())
                 );
             } else {
                 // PRICE ABOVE PSR
-                bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-                state.pHigh = collateralizationFactor.mul(price).mulDivu(reserves.lpReserve, state.totalReserves);
+                state_.pHigh = collateralizationFactor.mul(price).mulDivu(reserves.lpReserve, state_.totalReserves);
             }
         }
     }
@@ -462,17 +471,17 @@ contract Vault is SystemState {
         collateralizationFactor = temp.inv().inc();
     }
 
-    /*////////////////////////////////////////////////////////////////
-                            ADMIN FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
+    // /*////////////////////////////////////////////////////////////////
+    //                         ADMIN FUNCTIONS
+    // ////////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Multisig/daoFees withdraws collected _VAULT_LOGIC
-     */
-    function withdrawDAOFees() external returns (uint256 daoFees) {
-        require(msg.sender == _VAULT_LOGIC.SYSTEM_CONTROL());
-        daoFees = state.daoFees;
-        state.daoFees = 0; // No re-entrancy attack
-        TransferHelper.safeTransfer(collateralToken, msg.sender, daoFees);
-    }
+    // /**
+    //  * @notice Multisig/daoFees withdraws collected _VAULT_LOGIC
+    //  */
+    // function withdrawDAOFees() external returns (uint256 daoFees) {
+    //     require(msg.sender == _VAULT_LOGIC.SYSTEM_CONTROL());
+    //     daoFees = state.daoFees;
+    //     state.daoFees = 0; // No re-entrancy attack
+    //     TransferHelper.safeTransfer(collateralToken, msg.sender, daoFees);
+    // }
 }

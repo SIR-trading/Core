@@ -27,8 +27,8 @@ interface VaultStructs {
      */
     struct State {
         uint128 vaultId; // Allows for 281 trillion vaults.
+        bytes16 pHigh; // Upper bound of the Price Stability Region
         uint256 daoFees;
         uint256 totalReserves; // totalReserves =  apesReserve + lpReserve
-        bytes16 pHigh; // Upper bound of the Price Stability Region
     }
 }
