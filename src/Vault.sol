@@ -18,9 +18,7 @@ import {SystemState} from "./SystemState.sol";
 /**
  * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
  *  @dev The price of the collateral vs rewards token is also represented as FP.
- *  @dev THE RULE is that rounding should be applied so that an equal or smaller amount is owed. In this way the protocol will never owe more than it controls.
  *  @dev price's range is [0,Infinity], where Infinity is included.
- *  @dev TEA's supply cannot exceed type(uint).max because of its mint() function.
  */
 contract Vault is SystemState {
     using FloatingPoint for bytes16;
@@ -160,7 +158,7 @@ contract Vault is SystemState {
         uint256 feeToDAO = FullMath.mulDiv(
             collateralFee,
             _vaultsIssuanceParams[state_.vaultId].taxToDAO, // taxToDAO is an uint16
-            10 * type(uint).max
+            10 * type(uint16).max
         );
         unchecked {
             // The total reserve cannot exceed the totalSupply
@@ -216,7 +214,7 @@ contract Vault is SystemState {
         uint256 feeToDAO = FullMath.mulDiv(
             collateralFee,
             _vaultsIssuanceParams[state_.vaultId].taxToDAO, // taxToDAO is an uint16
-            10 * type(uint).max
+            10 * type(uint16).max
         );
         reserves.apesReserve -= collateralOut + collateralFee;
         unchecked {
