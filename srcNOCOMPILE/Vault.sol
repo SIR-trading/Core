@@ -24,7 +24,6 @@ contract Vault is SystemState {
 
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
-    error LiquidityTooLow();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -35,13 +34,6 @@ contract Vault is SystemState {
 
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
-
-    /**
-        To avoid having divisions by 0 due to price fluctuations. If a contracts gets bricked,
-        then it was obviously to risky because the leveraged allowed the actual liquidity to decrease by more than 1M,
-        and therefore it is ok to get bricked.
-     */
-    uint256 private constant _MIN_LIQUIDITY = 1e6;
 
     Oracle public immutable oracle;
 
@@ -137,24 +129,24 @@ contract Vault is SystemState {
         // Retrieve APE contract
         APE ape = APE(getAddress(state_.vaultId));
 
-        // Compute amount to mint
-        uint256 amount;
-        if (reserves.apesReserve == 0) {
-            // Check min liquidity is added
-            if (collateralIn < _MIN_LIQUIDITY) revert LiquidityTooLow();
-            amount = collateralIn;
-        } else {
-            amount = FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
-        }
+        // Compute amount of APE to mint
+        uint256 amount = reserves.apesReserve == 0
+            ? collateralIn
+            : FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
 
         // Mint APE
         ape.mint(msg.sender, amount);
 
         // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feeToPOL = collateralFee / 10;
+        uint256 feePOL = collateralFee / 10;
+
+        // Compute amount MAAM to mint as POL
+        uint256 amountPOL = reserves.lpReserve == 0
+            ? feePOL
+            : FullMath.mulDiv(totalSupply(state_.vaultId), feePOL, reserves.lpReserve);
 
         // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
+        _mint(address(this), state_.vaultId, amountPOL);
 
         // Update new reserves
         uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
@@ -206,20 +198,22 @@ contract Vault is SystemState {
         ape.burn(msg.sender, amountAPE);
 
         // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feeToPOL = collateralFee / 10;
+        uint256 feePOL = collateralFee / 10;
+
+        // Compute amount MAAM to mint as POL
+        uint256 amountPOL = reserves.lpReserve == 0
+            ? feePOL
+            : FullMath.mulDiv(totalSupply(state_.vaultId), feePOL, reserves.lpReserve);
 
         // Mint protocol-owned liquidity if necessary
-        if (feeToPOL > 0) _mint(address(this), state_.vaultId, feeToPOL, reserves.lpReserve);
-
-        // Check reserve has enough liquidity
-        if (reserves.apesReserve < _MIN_LIQUIDITY + collateralOut) revert LiquidityTooLow();
+        _mint(address(this), state_.vaultId, amountPOL);
 
         // Update reserves
         uint256 feeToDAO = FullMath.mulDiv(collateralFee, _vaultsIssuances[msg.sender].taxToDAO, 1e5);
+        reserves.apesReserve -= collateralOut + collateralFee;
         unchecked {
             // The total reserve cannot exceed the totalSupply
             reserves.daoFees += feeToDAO;
-            reserves.apesReserve -= collateralOut + collateralFee;
             reserves.lpReserve += collateralFee - feeToDAO;
         }
 
@@ -253,23 +247,17 @@ contract Vault is SystemState {
         uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
 
         // Compute amount to mint
-        uint256 amount;
-        if (reserves.lpReserve == 0) {
-            // Check min liquidity is added
-            if (collateralIn < _MIN_LIQUIDITY) revert LiquidityTooLow();
-            amount = collateralIn;
-        } else {
-            amount = FullMath.mulDiv(totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
-        }
+        uint256 amount = reserves.lpReserve == 0
+            ? collateralIn
+            : FullMath.mulDiv(totalSupply(state_.vaultId), collateralIn, reserves.lpReserve);
 
         // Mint MAAM
         _mint(msg.sender, state_.vaultId, amount);
 
         // Update new reserves
-        reserves.lpReserve += collateralDeposited;
-
-        // Check reserve has enough liquidity
-        if (reserves.lpReserve < _MIN_LIQUIDITY) revert LiquidityTooLow();
+        unchecked {
+            reserves.lpReserve += collateralDeposited;
+        }
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);
@@ -305,13 +293,8 @@ contract Vault is SystemState {
         // Burn MAAM
         _burn(msg.sender, state_.vaultId, amountMAAM);
 
-        // Check reserve has enough liquidity
-        if (reserves.lpReserve < _MIN_LIQUIDITY + collateralOut) revert LiquidityTooLow();
-
         // Update reserves
-        unchecked {
-            reserves.lpReserve -= collateralOut;
-        }
+        reserves.lpReserve -= collateralOut;
 
         // Update state from new reserves
         _updateState(state_, reserves, leverageTier, price);

@@ -10,16 +10,6 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 // Contracts
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
-/**
- * @dev Metadata description for ERC-1155 can be bound at https://eips.ethereum.org/EIPS/eip-1155
- * @dev uri(_id) returns the metadata URI for the token type _id, .e.g,
- {
-	"name": "Super Saiya-jin token",
-	"symbol": "MAAM",
-	"decimals": 18,
-	"chainId": 1
-}
- */
 abstract contract MAAM is ERC1155 {
     mapping(uint256 vaultId => uint256) public totalSupply;
 
