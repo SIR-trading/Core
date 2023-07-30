@@ -6,7 +6,7 @@ import {IUniswapV3Factory} from "uniswap-v3-core/interfaces/IUniswapV3Factory.so
 import {IUniswapV3Pool} from "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
-import {FloatingPoint} from "./libraries/FloatingPoint.sol";
+import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 
 // Contracts
@@ -36,15 +36,25 @@ import {Addresses} from "./libraries/Addresses.sol";
  *     For more information read https://uniswap.org/blog/uniswap-v3-oracles
  *
  *
- *     ANALYSIS OF ORACLE ATTACK IN SIR TRADING
+ *     MITIGATION OF MULTI-BLOCK ORACLE ATTACK ON SIR TRADING
  *
- *     To analyze SIR, we look at worst case scenarios. If the attacker wanted to manipulate the price up, the worse case scenario for SIR would be when there are only
- *     gentlemen because minting fresh APE or MAAM will have maximum leverage. That is totalReserve = gentlemenReserve. Since LPers do not pay fees to mint,
- *     the steps of an attack maximizing profit are:
- *     1. Attacker mints MAAM with collateral
- *     2. Attacker manipulates price up
- *     3. Attacker burns MAAM getting more collateral in return
- *     4. Attacker returns price to market price
+ *     To analyze SIR, we look at the worst case scenario.
+ *
+ *     It is cheaper to use an LP position in SIR because minting and burning MAAM
+ *     costs no fee. Assume:
+ *     - Gas fees are negligible
+ *     - The attacker has inifinite capital
+ *     - The attack performs a multi-block attack, and because of the design of Uniswap v3, it can keep the price for up to 5 blocks
+ *       in the most extreme tick.
+ *     - All liquidity in the Uniswap pool used by the oracle is concentrated at the current price.
+ *     - We assume that the only cost of this attack is the fees paid in Uniswap v3 to manipulate the price.
+ *
+ *     The sequence of actions of the attacker is as follows:
+ *     1. Attacker mints MAAM
+ *     2. Attacker moves oracle price to its lowest tick for 5 consecutive blocks (costing a fee proportional to the fee tier),
+ *        moving the TWAP down, and consequently, causing a loss to the Apes and a gain to the LPers.
+ *     3. Attacker burns MAAM getting more collateral in return.
+ *     4. Attacker returns price to market price (costing a fee proportional to the fee tier).
  *
  *     Let z denote value of the LPer's minted MAAM, let R be the value of the total reserve, let T be the amoung of minted TEA, and let p be the price of the collateral.
  *     A) After minting MAAM, R' = R + z = T/p + z
@@ -84,14 +94,13 @@ contract Oracle {
     event PriceUpdated(address tokenA, address tokenB, bytes16 price);
     event PriceTruncated(address tokenA, address tokenB, bytes16 price);
 
-    using FloatingPoint for bytes16;
-
     /**
      * Parameters of a Uniswap v3 tier.
      */
     struct UniswapFeeTier {
         uint24 fee;
         int24 tickSpacing;
+        int24 tickMaxIncrement;
     }
 
     /**
@@ -104,11 +113,8 @@ contract Oracle {
         uint16 cardinalityToIncrease; // Cardinality suggested for increase
     }
 
-    /**
-     * The following 4 state variables only take 1 slot
-     */
     struct OracleState {
-        bytes16 price; // Last stored price
+        int24 tickPrice; // Last stored price
         uint40 timeStamp; // Timestamp of the last stored price
         uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
         uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
@@ -290,11 +296,16 @@ contract Oracle {
                             READ-ONLY FUNCTIONS
     /////////////////////////////////////////////////////////////////*/
 
+    // USE THIS TO PICK THE BEST FEE TIER https://twitter.com/guil_lambert/status/1679971498361081856 ?????
+
     function getUniswapFeeTiers() public view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
         // Find out # of all possible fee tiers
         uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
         uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
 
+        /**
+         * To compute tickMaxIncrement we use the formula maxPriceGain = (1-2*fee)^(-timeIncrement/60sec)
+         */
         uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
         uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
         uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
@@ -487,10 +498,10 @@ contract Oracle {
             FloatingPoint.fromUInt(block.timestamp - oracleState.timeStamp)
         );
 
-        bytes16 priceMax = price.div(maxPriceAttenuation);
+        bytes16 priceMax = oracleState.price.div(maxPriceAttenuation);
         if (price.cmp(priceMax) > 0) return (priceMax, true);
 
-        bytes16 priceMin = price.mul(maxPriceAttenuation);
+        bytes16 priceMin = oracleState.price.mul(maxPriceAttenuation);
         if (price.cmp(priceMin) < 0) return (priceMin, true);
 
         return (price, false);
