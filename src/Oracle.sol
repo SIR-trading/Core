@@ -13,14 +13,12 @@ import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 import {Addresses} from "./libraries/Addresses.sol";
 
 /**
- * @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
- *     @dev Gas cost: Around 10k gas for calling Uniswap v3 oracle, plus 10k gas for each different fee pool, making a min gas of approx 20k. For reference a Uniswap trade costs around 120k. Thus, calling the Uniswap v3 oracle is relatively cheap. Use a max liquidity approach rather than a weighted average.
- *     @dev Long vs short TWAP: E.g., a 120s-TWAP would decrease the price oscillation in a block by 10. Thus, a buy & sell time arbitrage would require a price change of 10*0.3%*2 = 6%!
+ *     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
+ *     @dev Gas cost: Around 10k gas for calling Uniswap v3 oracle, plus 10k gas for each different fee pool, making a min gas of approx 20k. For reference a Uniswap trade costs around 120k.
  *     @dev Extending the TWAP memory costs 20k per slot, so divide TWAPinSeconds / 12 * 20k. So 5h TWAP at 10 gwei/gas woulc cost 0.3 ETH.
- */
-
-/**
- * ON MULTI-BLOCK ORALCE ATTACK
+ *
+ *
+ *     ON MULTI-BLOCK ORALCE ATTACK
  *
  *     Oracle manipulation is a problem that has plagued the DeFi space since the beginning.
  *     The problem is that a malicious actor can manipulate the price of an asset by front-running a transaction and then reverting it.
@@ -33,46 +31,90 @@ import {Addresses} from "./libraries/Addresses.sol";
  *     This means that the price of an asset is less susceptible to manipulation because the price of an asset is the average price over a certain amount of time.
  *     The longer the TWAP, the less susceptible the price is to manipulation.
  *
+ *     However, the TWAP solution is not as good as it used to be in Uniswap v2 because of the concetrated liquidity idiosyncratic to v3.
+ *     For example, if all the liquidity in a hypothetical pool was concentrated around the current market price, once an attacker manages
+ *     to pierce throught the current price, he can the move the price of the pool to the most extreme tick at no cost. This is different to v2
+ *     where the liquidity is spread in the price range 0 to ∞.
  *     For more information read https://uniswap.org/blog/uniswap-v3-oracles
  *
  *
- *     MITIGATION OF MULTI-BLOCK ORACLE ATTACK ON SIR TRADING
+ *     SOLUTION : TWAP WITH PRICE TRUNCATION
  *
- *     To analyze SIR, we look at the worst case scenario.
+ *     To mitigate multi-block oracle attacks in Ethereum PoS, we implement price bounds for the TWAP. That is we allow price to increase
+ *     (or decrease) up to a maximum factor. However, we still want to allow for normal market fluctuations so the bounds have to be
+ *     chosen very careffuly. Assume 12s blocks, and denote
+ *          h = maximum organic price increase in 1 minute [min^-1]
+ *          D = duration of the TWAP
+ *          p & p' = TWAP price before and after 1 minute
+ *     Given that h is the max price increase in 1 minute, h^(1/5) is the maximum price increase in a 12s block because 5 blocks are mined in 1 minute,
+ *     or alternatively, in the "tick domain", it is log_1.0001(h^(1/5)) = log_1.0001(h)/5.
+ *     With this in mind the maximum TWAP price increase is
+ *          g ≥ p'/p = 1.0001^[12s/D*Σ_{i=1}^5 i*log_1.0001(h)/5] = 1.0001^[45s/D*log_1.0001(h)] = h^(45s/D)
+ *     where g is the gain where truncation occurs, or
+ *          G ≥ log_1.0001(p'/p) = 45s/D*log_1.0001(h)
+ *     in the "tick domain".
  *
- *     It is cheaper to use an LP position in SIR because minting and burning MAAM
- *     costs no fee. Assume:
- *     - Gas fees are negligible
- *     - The attacker has inifinite capital
- *     - The attack performs a multi-block attack, and because of the design of Uniswap v3, it can keep the price for up to 5 blocks
- *       in the most extreme tick.
- *     - All liquidity in the Uniswap pool used by the oracle is concentrated at the current price.
- *     - We assume that the only cost of this attack is the fees paid in Uniswap v3 to manipulate the price.
+ *     For example, if we believe that the maximum price increase in 1 minute is 10% and the TWAP duration is 1h
+ *          h=1.1 |
+ *                |=> G ≥ 11.91 tick/min or g ≥ 1.0012 min^-1
+ *          D=1h  |
+ *     where g denotes the maximum TWAP organic price increase, and G in the "tick domain". For example,
+ *          h=1.1 |
+ *                |=> G ≥ 5.96 tick/min or g ≥ 1.00060 min^-1
+ *          D=2h  |
  *
- *     The sequence of actions of the attacker is as follows:
- *     1. Attacker mints MAAM
- *     2. Attacker moves oracle price to its lowest tick for 5 consecutive blocks (costing a fee proportional to the fee tier),
- *        moving the TWAP down, and consequently, causing a loss to the Apes and a gain to the LPers.
+ *          h=1.2 |
+ *                |=> G ≥ 22.79 tick/min
+ *          D=1h  |
+ *
+ *
+ *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS MAAM
+ *
+ *     Sequence of actions of the attacker:
+ *     1. Attacker mints MAAM (no previous MAAM minted, so attacker recives all profits)
+ *     2. Attacker moves oracle price to its lowest tick for 5 consecutive blocks, moving the TWAP price down,
+ *        and consequently, causing a loss to the Apes and a gain to the LPers.
  *     3. Attacker burns MAAM getting more collateral in return.
- *     4. Attacker returns price to market price (costing a fee proportional to the fee tier).
+ *     4. Attacker returns price to market price.
  *
- *     Let z denote value of the LPer's minted MAAM, let R be the value of the total reserve, let T be the amoung of minted TEA, and let p be the price of the collateral.
- *     A) After minting MAAM, R' = R + z = T/p + z
- *     B) As price goes up, the LPer's new holding is: z' = R' - T/p' = z + T(1/p - 1/p')
- *     C) Upon defining the price gain as g = p'/p, we get that the attacker's profit is z'-z = R(1-1/g)
+ *     Assumptions:
+ *     - Gas fees are negligible
+ *     - The fees paid to Uniswap are negligible.
+ *     - The missed profits from not taking Uniswap transactions as block builder are negligible.
+ *     - The attacker has inifinite capital.
+ *     - The attacker performs a multi-block attack, and because of the design of Uniswap v3,
+ *       it can keep the price for up to 5 blocks (1 minute) in the most extreme tick.
  *
- *     Neglecting the cost of capital, the cost of this attack is the cost of manipulating the Uniswap v3 TWAP.
- *     In the worse case scenario, all Uni v3 liquidity (say Q) is concentrated just above the current price.
- *     D) So the cost of manipulating the price are the trading fees: 2*Q*f where f is the fee portion charged counted twice because the attacker must eventually revert the trade.
+ *     The best case scenario for the attacker is when no MAAM has been minted before him, and so he is the receiver of all apes' losses.
+ *     There exist two scenarios, let's tackle them separately. In the first case, the vault operates in the power zone,
+ *     and in the second case it operates in the saturation zone.
  *
- *     Furthermore, we assume the attacker can maintain this attack for 5 straight blocks without suffering arbitrage losses, which would in a normal situation incurs in huge losses.
- *     The total profit of the attacker under these assumptions is:
- *     E) R(1-1/g) - 2*Q*f
+ *     Power Zone
+ *     ──────────
+ *     In the power zone, the apes' reserves follow
+ *          A' = (p'/p)^(l-1)A
+ *     where l>1. The attacker deposits a total of L to mint MAAM and manipulates the price down so that apes lose
+ *          Attacker wins = A-A' = A-A/g^(l-1) = A(1-1/g^(l-1))
+ *     The cost of this attack are the fees paid. In the case of MAAM, fees are paid only on burning MAAM. In order to
+ *     to operate in the power zone, we know L ≥ (l-1)A.
+ *          Attacker loses = L'*fmaam = (L+A-A')*fmaam ≥ L*fmaam ≥ (l-1)A*fmaam
+ *     To ensure the attacker is not profitable, we must enforce:
+ *          (l-1)A*fmaam ≥ A(1-1/g^(l-1))
+ *     We know by Taylor series that 1/g^(l-1) ≥ 1+(l-1)(1/g) around g≈1, and so a tighter condition is
+ *          (l-1)A*fmaam ≥ A(l-1)(1-1/g)
+ *     Which results in the following equivalent conditions:
+ *          fmaam ≥ 1-1/g      OR      g ≤ 1/(1-fmaam)      G ≤ -log_1.0001(1-fmaam)
  *
- *     If we wish to make this attack unprofitable whenever R ≤ Q, we get that the maximum price gain allowed over 5 blocks must not be greater than
- *     gmax = 1/(1-2f)
- *     For instance, if f = 0.05%, then gmax = 1/(1-2*0.0005) = 1.001, which means that the TWAP can only go up by 0.1% in 1 minute.
- *     For a 1h TWAP, the instance price would be allowed to increase 34% from block-to-block.
+ *     For example,
+ *          fmaam=0.01 (1% charged upon burning MAAM) |=> G ≤ 100.5 tick/min
+ *          fmaam=0.001 (0.1%) |=> G ≤ 10.0 tick/min
+ *
+ *
+ *     Saturation Zone
+ *     ───────────────
+ *
+ *
+ *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS APE
  *
  *
  *     ABOUT PRICE CALCULATION ACROSS FEE TIERS
