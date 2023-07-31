@@ -58,14 +58,18 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          h=1.1 |
  *                |=> G ≥ 11.91 tick/min or g ≥ 1.0012 min^-1
  *          D=1h  |
- *     where g denotes the maximum TWAP organic price increase, and G in the "tick domain". For example,
+ *     where g denotes the maximum TWAP organic price increase, and G in the "tick domain". More examples,
  *          h=1.1 |
- *                |=> G ≥ 5.96 tick/min or g ≥ 1.00060 min^-1
+ *                |=> G ≥ 5.96 tick/min
  *          D=2h  |
  *
  *          h=1.2 |
  *                |=> G ≥ 22.79 tick/min
  *          D=1h  |
+ *
+ *          h=1.1   |
+ *                  |=> G ≥ 23.83 tick/min
+ *          D=30min |
  *
  *
  *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS MAAM
@@ -109,9 +113,17 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          fmaam=0.01 (1% charged upon burning MAAM) |=> G ≤ 100.5 tick/min
  *          fmaam=0.001 (0.1%) |=> G ≤ 10.0 tick/min
  *
- *
  *     Saturation Zone
  *     ───────────────
+ *     In the saturation zone, the LP reserve follows
+ *          L' = (p/p')L
+ *     The attacker deposits a total of L to mint MAAM and manipulates the price down so that apes lose
+ *          Attacker wins = L'-L = L(g-1)
+ *     The attacker pays some fees proportional to L' to withdraw his collateral:
+ *          Attacker loses = L'*fmaam = g*L*fmaam
+ *     Thus, the condition for an unprofitable attack is
+ *          g*L*fmaam ≥ L(g-1)
+ *     Which results in the same conditions than the previous section.
  *
  *
  *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS APE
