@@ -104,7 +104,7 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          Attacker loses = L'*fmaam = (L+A-A')*fmaam ≥ L*fmaam ≥ (l-1)A*fmaam
  *     To ensure the attacker is not profitable, we must enforce:
  *          (l-1)A*fmaam ≥ A(1-1/g^(l-1))
- *     We know by Taylor series that 1/g^(l-1) ≥ 1+(l-1)(1/g) around g≈1, and so a tighter condition is
+ *     We know by Taylor series that 1/g^(l-1) ≥ 1+(l-1)(1/g-1) around g≈1, and so a tighter condition is
  *          (l-1)A*fmaam ≥ A(l-1)(1-1/g)
  *     Which results in the following equivalent conditions:
  *          fmaam ≥ 1-1/g      OR      g ≤ 1/(1-fmaam)      G ≤ -log_1.0001(1-fmaam)
@@ -128,6 +128,26 @@ import {Addresses} from "./libraries/Addresses.sol";
  *
  *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS APE
  *
+ *     Sequence of actions of the attacker:
+ *     1. Attacker mints APE
+ *     2. Attacker moves oracle price to its highest tick for 5 consecutive blocks, moving the TWAP price up,
+ *        and consequently, causing apes to win over the LPers.
+ *     3. Attacker burns APE getting more collateral in return.
+ *     4. Attacker returns price to market price.
+ *
+ *     We assume the price is in the power zone where it increases polynomially,
+ *          A' = (p'/p)^(l-1)A
+ *     where l>1 and A is minted by the attacker.
+ *          Attacker wins = A'-A = A*g^(l-1)-A = A(g^(l-1)-1)
+ *     The cost of this attack are the fees paid upon minting and burning APE.
+ *          Attacker loses = (A'+A)(l-1)fbase = A((g^(l-1)+1))(l-1)fbase
+ *     To ensure the attacker is not profitable, we must enforce:
+ *          A((g^(l-1)+1))(l-1)fbase ≥ A(g^(l-1)-1)
+ *     Given that g^(l-1) approx 1+(l-1)(g-1), the condition simplifies to
+ *          fbase ≥ (g-1) / [2+(l-1)(g-1)]
+ *     l,g>1, so a sufficient condition is
+ *          fbase ≥ (g-1)/2
+ *     which is easily satisfied given that the values we are contemplating are around g=0.5 (50%)
  *
  *     ABOUT PRICE CALCULATION ACROSS FEE TIERS
  *
