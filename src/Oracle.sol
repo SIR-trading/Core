@@ -74,12 +74,16 @@ import {Addresses} from "./libraries/Addresses.sol";
  *
  *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS MAAM
  *
- *     Sequence of actions of the attacker:
- *     1. Attacker mints MAAM (no previous MAAM minted, so attacker recives all profits)
- *     2. Attacker moves oracle price to its lowest tick for 5 consecutive blocks, moving the TWAP price down,
- *        and consequently, causing a loss to the Apes and a gain to the LPers.
- *     3. Attacker burns MAAM getting more collateral in return.
- *     4. Attacker returns price to market price.
+ *     Sequence of actions for an attacker that wishes to mint MAAM at a cheaper price:
+ *     1. Attacker moves oracle price up to its highest tick, moving the TWAP price up
+ *     2. Attacker mints MAAM (no previous MAAM minted, so attacker will receive all fees)
+ *     3. Attacker returns price to market price, profiting from the apes' losses.
+ *
+ *     Alternative similar attack:
+ *     1. Attacker moves oracle price to its lowest tick for 5 consecutive blocks, moving the TWAP price down,
+ *        profiting from the apes' losses.
+ *     2. Attacker burns his MAAM (we assume he was the only LPer).
+ *     3. Attacker returns price to market price, profiting from the apes' losses.
  *
  *     Assumptions:
  *     - Gas fees are negligible
@@ -99,9 +103,10 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          A' = (p'/p)^(l-1)A
  *     where l>1. The attacker deposits a total of L to mint MAAM and manipulates the price down so that apes lose
  *          Attacker wins = A-A' = A-A/g^(l-1) = A(1-1/g^(l-1))
- *     The cost of this attack are the fees paid. In the case of MAAM, fees are paid only on burning MAAM. In order to
- *     to operate in the power zone, we know L ≥ (l-1)A.
- *          Attacker loses = L'*fmaam = (L+A-A')*fmaam ≥ L*fmaam ≥ (l-1)A*fmaam
+ *     The cost of this attack are the fees paid when minting/burning MAAM. In order to
+ *     to operate in the power zone, we know L ≥ (l-1)A. Two cases:
+ *          1) Attacker loses = L'*fmaam = (L+A-A')*fmaam ≥ L*fmaam ≥ (l-1)A*fmaam
+ *          2) Attacker loses = L*fmaam ≥ (l-1)A*fmaam
  *     To ensure the attacker is not profitable, we must enforce:
  *          (l-1)A*fmaam ≥ A(1-1/g^(l-1))
  *     We know by Taylor series that 1/g^(l-1) ≥ 1+(l-1)(1/g-1) around g≈1, and so a tighter condition is
@@ -120,9 +125,10 @@ import {Addresses} from "./libraries/Addresses.sol";
  *     The attacker deposits a total of L to mint MAAM and manipulates the price down so that apes lose
  *          Attacker wins = L'-L = L(g-1)
  *     The attacker pays some fees proportional to L' to withdraw his collateral:
- *          Attacker loses = L'*fmaam = g*L*fmaam
+ *          1) Attacker loses = L'*fmaam = g*L*fmaam
+ *          2) Attacker loses = L*fmaam = L*fmaam
  *     Thus, the condition for an unprofitable attack is
- *          g*L*fmaam ≥ L(g-1)
+ *          g*L*fmaam ≥ L(g-1)  OR  L*fmaam ≥ L(g-1)
  *     Which results in the same conditions than the previous section.
  *
  *
@@ -143,9 +149,9 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          Attacker loses = (A'+A)(l-1)fbase = A((g^(l-1)+1))(l-1)fbase
  *     To ensure the attacker is not profitable, we must enforce:
  *          A((g^(l-1)+1))(l-1)fbase ≥ A(g^(l-1)-1)
- *     Given that g^(l-1) approx 1+(l-1)(g-1), the condition simplifies to
+ *     Given that g^(l-1)≈1+(l-1)(g-1), the condition simplifies to
  *          fbase ≥ (g-1) / [2+(l-1)(g-1)]
- *     l,g>1, so a sufficient condition is
+ *     where l,g>1. A simpler sufficient condition is
  *          fbase ≥ (g-1)/2
  *     which is easily satisfied given that the values we are contemplating are around g=0.5 (50%)
  *
@@ -165,8 +171,8 @@ contract Oracle {
     event UniswapFeeTierAdded(uint24 fee);
     event OracleInitialized(address tokenA, address tokenB, uint24 feeTier);
     event OracleFeeTierChanged(address tokenA, address tokenB, uint24 feeTier);
-    event PriceUpdated(address tokenA, address tokenB, bytes16 price);
-    event PriceTruncated(address tokenA, address tokenB, bytes16 price);
+    event PriceUpdated(address tokenA, address tokenB, int24 price);
+    event PriceTruncated(address tokenA, address tokenB, int24 price);
 
     /**
      * Parameters of a Uniswap v3 tier.
@@ -174,14 +180,13 @@ contract Oracle {
     struct UniswapFeeTier {
         uint24 fee;
         int24 tickSpacing;
-        int24 tickMaxIncrement;
     }
 
     /**
      * This struct is used to pass data between function.
      */
     struct UniswapOracleData {
-        int64 aggLogPrice; // Aggregated log price over the period
+        int56 aggLogPrice; // Aggregated log price over the period
         uint160 avLiquidity; // Average in-range liquidity over the period
         uint40 period; // Duration of the current TWAP
         uint16 cardinalityToIncrease; // Cardinality suggested for increase
@@ -199,10 +204,9 @@ contract Oracle {
     /**
      * Constants
      */
-    bytes16 private constant _ONE_DIV_SIXTY = 0x3ff91111111111111111111111111111;
-    bytes16 private constant _LOG2_OF_TICK_FP = 0x3ff22e8a3a504218b0777ee4f3ff131c; // log2(1.0001)
-    uint32 public constant TWAP_DELTA = 10 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
-    uint32 public constant TWAP_DURATION = 1 hours;
+    int24 private constant _MAX_TICK_INC_PER_SEC = 1;
+    uint32 public constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
+    uint32 public constant TWAP_DURATION = 30 minutes;
 
     /**
      * State variables
@@ -300,7 +304,7 @@ contract Oracle {
      * @notice Update the oracle state for the pair of tokens
      * @notice The order of the tokens does not matter for updating the oracle state, it only matters if we need to retrie the price
      */
-    function updateOracleState(address collateralToken, address debtToken) external returns (bytes16) {
+    function updateOracleState(address collateralToken, address debtToken) external returns (int24) {
         (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle state
@@ -309,7 +313,7 @@ contract Oracle {
 
         // Update price
         UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee, false);
-        if (_updatePrice(oracleState, oracleData)) emit PriceTruncated(tokenA, tokenB, oracleState.price);
+        if (_updatePrice(oracleState, oracleData)) emit PriceTruncated(tokenA, tokenB, oracleState.tickPrice);
 
         // Fee tier is updated once per block at most
         if (oracleState.timeStamp != uint32(block.timestamp)) {
@@ -359,11 +363,11 @@ contract Oracle {
 
         // Save new oracle state to storage
         oracleStates[tokenA][tokenB] = oracleState;
-        emit PriceUpdated(tokenA, tokenB, oracleState.price);
+        emit PriceUpdated(tokenA, tokenB, oracleState.tickPrice);
 
         // Invert price if necessary
-        if (collateralToken == tokenB) return oracleState.price.inv();
-        return oracleState.price;
+        if (collateralToken == tokenB) return -oracleState.tickPrice;
+        return oracleState.tickPrice;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -377,9 +381,6 @@ contract Oracle {
         uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
         uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
 
-        /**
-         * To compute tickMaxIncrement we use the formula maxPriceGain = (1-2*fee)^(-timeIncrement/60sec)
-         */
         uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
         uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
         uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
@@ -402,7 +403,7 @@ contract Oracle {
     /**
      * @return the TWAP price of the pair of tokens
      */
-    function getPrice(address collateralToken, address debtToken) external view returns (bytes16) {
+    function getPrice(address collateralToken, address debtToken) external view returns (int24) {
         (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle state
@@ -414,8 +415,8 @@ contract Oracle {
         _updatePrice(oracleState, oracleData);
 
         // Invert price if necessary
-        if (collateralToken == tokenB) return oracleState.price.inv();
-        return oracleState.price;
+        if (collateralToken == tokenB) return -oracleState.tickPrice;
+        return oracleState.tickPrice;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -429,14 +430,21 @@ contract Oracle {
         OracleState memory oracleState,
         UniswapOracleData memory oracleData
     ) internal view returns (bool truncated) {
-        // Compute price
-        bytes16 price = FloatingPoint
-            .fromInt(oracleData.aggLogPrice / int256(uint256(oracleData.period)))
-            .mul(_LOG2_OF_TICK_FP)
-            .pow_2();
+        unchecked {
+            // Compute price
+            int24 tickPrice = int24(oracleData.aggLogPrice / int56(uint56(oracleData.period)));
 
-        // Truncate price if moves too fast
-        (oracleState.price, truncated) = _truncatePrice(price, oracleState); // Oracle attack protection
+            // Truncate price if necessary
+            int24 tickMaxIncrement = _MAX_TICK_INC_PER_SEC *
+                int24(int40((uint40(block.timestamp) - oracleState.timeStamp)));
+            if (tickPrice > oracleState.tickPrice + tickMaxIncrement) {
+                oracleState.tickPrice += tickMaxIncrement;
+                truncated = true;
+            } else if (tickPrice < oracleState.tickPrice - tickMaxIncrement) {
+                oracleState.tickPrice -= tickMaxIncrement;
+                truncated = true;
+            } else oracleState.tickPrice = tickPrice;
+        }
     }
 
     function _uniswapFeeTier(uint8 indexFeeTier) internal view returns (UniswapFeeTier memory uniswapFeeTier) {
@@ -558,27 +566,6 @@ contract Oracle {
 
         // Duration of the observation
         oracleData.period = interval[0];
-    }
-
-    /**
-     * @dev https://uniswap.org/blog/uniswap-v3-oracles#potential-oracle-innovations
-     */
-    function _truncatePrice(bytes16 price, OracleState memory oracleState) internal view returns (bytes16, bool) {
-        bytes16 maxPriceAttenPerSec = FloatingPoint
-            .ONE
-            .sub(FloatingPoint.divu(oracleState.uniswapFeeTier.fee, 0.5 * 10 ** 6))
-            .pow(_ONE_DIV_SIXTY); // 5 blocks of 12s = 60s
-        bytes16 maxPriceAttenuation = maxPriceAttenPerSec.pow(
-            FloatingPoint.fromUInt(block.timestamp - oracleState.timeStamp)
-        );
-
-        bytes16 priceMax = oracleState.price.div(maxPriceAttenuation);
-        if (price.cmp(priceMax) > 0) return (priceMax, true);
-
-        bytes16 priceMin = oracleState.price.mul(maxPriceAttenuation);
-        if (price.cmp(priceMin) < 0) return (priceMin, true);
-
-        return (price, false);
     }
 
     function _orderTokens(address tokenA, address tokenB) private pure returns (address, address) {
