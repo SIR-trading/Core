@@ -6,7 +6,7 @@ import {IUniswapV3Factory} from "uniswap-v3-core/interfaces/IUniswapV3Factory.so
 import {IUniswapV3Pool} from "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
-import {TickMath} from "v3-core/libraries/TickMath.sol";
+import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 
 // Contracts
@@ -171,8 +171,8 @@ contract Oracle {
     event UniswapFeeTierAdded(uint24 fee);
     event OracleInitialized(address tokenA, address tokenB, uint24 feeTier);
     event OracleFeeTierChanged(address tokenA, address tokenB, uint24 feeTier);
-    event PriceUpdated(address tokenA, address tokenB, int24 price);
-    event PriceTruncated(address tokenA, address tokenB, int24 price);
+    event PriceUpdated(address tokenA, address tokenB, int64 priceTick);
+    event PriceTruncated(address tokenA, address tokenB, int64 priceTick);
 
     /**
      * Parameters of a Uniswap v3 tier.
@@ -193,7 +193,7 @@ contract Oracle {
     }
 
     struct OracleState {
-        int24 tickPrice; // Last stored price
+        int64 tickPriceX42; // Last stored price. Q21.42
         uint40 timeStamp; // Timestamp of the last stored price
         uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
         uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
