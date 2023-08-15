@@ -7,7 +7,7 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {DeployerOfAPE, APE, SaltedAddress, FullMath} from "./libraries/DeployerOfAPE.sol";
-import {FloatingPoint} from "./libraries/FloatingPoint.sol";
+import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {Fees} from "./libraries/Fees.sol";
 
 // Contracts
@@ -21,10 +21,9 @@ import {SystemState} from "./SystemState.sol";
  *  @dev price's range is [0,Infinity], where Infinity is included.
  */
 contract Vault is SystemState {
-    using FloatingPoint for bytes16;
-
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
+    error LeverageTierOutOfRange();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -92,6 +91,8 @@ contract Vault is SystemState {
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
      */
     function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
+        if (leverageTier >= 8 || leverageTier <= -8) revert LeverageTierOutOfRange();
+
         /**
          * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
          * 2. It also will revert if there are no pools with liquidity, which implicitly solves the case where the user
