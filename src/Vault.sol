@@ -91,7 +91,7 @@ contract Vault is SystemState {
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
      */
     function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
-        if (leverageTier >= 8 || leverageTier <= -8) revert LeverageTierOutOfRange();
+        if (leverageTier > 10 || leverageTier < -6) revert LeverageTierOutOfRange();
 
         /**
          * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
