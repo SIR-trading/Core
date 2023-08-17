@@ -15,9 +15,9 @@ library VaultStructs {
     }
 
     struct Reserves {
-        uint256 daoFees;
-        uint256 apesReserve;
-        uint256 lpReserve;
+        uint216 daoFees;
+        uint216 apesReserve;
+        uint216 lpReserve;
     }
 
     /**
@@ -26,7 +26,7 @@ library VaultStructs {
     struct State {
         uint40 vaultId; // Allows creation of 1 trillion vaults approx
         uint216 totalReserves; // totalReserves =  apesReserve + lpReserve
-        int64 tickPriceSaturationX42; // Price at the border of the power and saturation zone. Q21.42 - Fixed point number with 42 bits of precision after the comma.
+        int64 tickPriceSatX42; // Price at the border of the power and saturation zone. Q21.42 - Fixed point number with 42 bits of precision after the comma.
         uint192 daoFees; // If the uint192 is close to overflow, the DAO can withdraw the fees to unlock the pool
     }
 }

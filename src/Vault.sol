@@ -341,7 +341,8 @@ contract Vault is SystemState {
             if (state_.tickPriceSatX42 == 0) {
                 // No LPers
                 reserves.apesReserve = state_.totalReserves;
-            } else if (state_.tickPriceSatX42 == type(int64).max) {
+            } else if (state_.tickPriceSatX42 == type(int64).max) // type(int64).max represents infinity
+            {
                 // No apes
                 reserves.lpReserve = state_.totalReserves;
             } else {
@@ -456,7 +457,7 @@ contract Vault is SystemState {
         VaultStructs.State memory state_,
         VaultStructs.Reserves memory reserves,
         int8 leverageTier,
-        bytes16 tickPriceX42
+        int64 tickPriceX42
     ) private pure {
         state_.daoFees = reserves.daoFees;
         state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
@@ -465,19 +466,54 @@ contract Vault is SystemState {
 
         // Compute tickPriceSatX42
         if (reserves.apesReserve == 0) {
-            state_.tickPriceSatX42 = FloatingPoint.INFINITY;
+            state_.tickPriceSatX42 = type(int64).max;
         } else if (reserves.lpReserve == 0) {
-            state_.tickPriceSatX42 = FloatingPoint.ZERO;
+            state_.tickPriceSatX42 = type(int64).min;
         } else {
+            /**
+             * Decide if we are in the power or saturation zone
+             * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
+             */
+            uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+            bool isPowerZone;
+            if (leverageTier > 0) {
+                if (
+                    uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
+                ) // Cannot OF because apesReserve is an uint216, and |leverageTier|<=10
+                {
+                    isPowerZone = true;
+                } else {
+                    isPowerZone = false;
+                }
+            } else {
+                if (
+                    reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
+                ) // Cannot OF because apesReserve is an uint216, and |leverageTier|<=10
+                {
+                    isPowerZone = true;
+                } else {
+                    isPowerZone = false;
+                }
+            }
+
             bytes16 leverageRatio = _leverageRatio(leverageTier);
             bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-            if (reserves.apesReserve < leverageRatio.inv().mulu(state_.totalReserves)) {
-                // PRICE IN PSR
-                state_.tickPriceSatX42 = tickPriceX42.div(
-                    leverageRatio.mulDivu(reserves.apesReserve, state_.totalReserves).pow(collateralizationFactor.dec())
+            if (isPowerZone) {
+                // PRICE IN POWER ZONE
+                int64 tickRatioX42 = TickMathPrecision.getTickAtRatio(
+                    leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier,
+                    (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve
                 );
+
+                state_.tickPriceSatX42 =
+                    tickPriceX42 +
+                    (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier); // THIS MAY OVERFLOW!
+
+                // state_.tickPriceSatX42 = tickPriceX42.div(
+                //     leverageRatio.mulDivu(reserves.apesReserve, state_.totalReserves).pow(collateralizationFactor.dec())
+                // );
             } else {
-                // PRICE ABOVE PSR
+                // PRICE IN SATURATION ZONE
                 state_.tickPriceSatX42 = collateralizationFactor.mul(tickPriceX42).mulDivu(
                     reserves.lpReserve,
                     state_.totalReserves

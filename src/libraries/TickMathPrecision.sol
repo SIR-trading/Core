@@ -6,10 +6,15 @@ import "./FullMath.sol";
 /// @notice Modified from Uniswap v3 TickMath
 /// @notice Math library for computing log_1.0001(x/y) and 1.0001^z where x and y are uint and z is Q21.42
 library TickMathPrecision {
-    function getRatioAtTick(int64 tickX42) internal pure returns (uint128) {
+    // I NEED TO HANDLE OF/UF ON BOTH FUNCTIONS!!!
+
+    int64 private constant _MAX_TICK = 1951133415219145403; // log_1.0001((2^128-1(/2^64))*2^42
+
+    /// @return a bool that is true if the result OF, and the result
+    function getRatioAtTick(int64 tickX42) internal pure returns (bool, uint128) {
         assert(tickX42 >= 0);
-        // CHECK THE LIMITS
-        // MUST BE POSITIVE TICK
+
+        if (tickX42 > _MAX_TICK) return (true, 0);
 
         uint256 ratioX64 = tickX42 & 0x1 != 0 ? 0x100000000000001A3 : 0x10000000000000000;
         if (tickX42 & 0x2 != 0) ratioX64 = (ratioX64 * 0x10000000000000346) >> 64; // 42th bit after the comma
@@ -76,7 +81,7 @@ library TickMathPrecision {
         if (tickX42 & 0x4000000000000000 != 0)
             ratioX64 = (ratioX64 * 0x9A5741F372F8FF89A6E21EE87E9D34BB06995021F74FC62066806D) >> 64; // 21st bit before the comma
 
-        return uint128(ratioX64);
+        return (false, uint128(ratioX64));
     }
 
     /// @return tickX42 Q21.42 (+1 bit for sign)
