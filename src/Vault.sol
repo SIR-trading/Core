@@ -17,8 +17,8 @@ import {SystemState} from "./SystemState.sol";
 
 /**
  * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
- *  @dev The price of the collateral vs rewards token is also represented as FP.
- *  @dev price's range is [0,Infinity], where Infinity is included.
+ *  @dev The tickPriceX42 of the collateral vs rewards token is also represented as FP.
+ *  @dev tickPriceX42's range is [0,Infinity], where Infinity is included.
  */
 contract Vault is SystemState {
     error VaultAlreadyInitialized();
@@ -127,7 +127,7 @@ contract Vault is SystemState {
      */
 
     function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
             true,
             debtToken,
             collateralToken,
@@ -169,7 +169,7 @@ contract Vault is SystemState {
         }
 
         // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, price);
+        _updateState(state_, reserves, leverageTier, tickPriceX42);
 
         // Store new state reserves
         state[debtToken][collateralToken][leverageTier] = state_;
@@ -188,7 +188,7 @@ contract Vault is SystemState {
         int8 leverageTier,
         uint256 amountAPE
     ) external returns (uint256) {
-        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
             false,
             debtToken,
             collateralToken,
@@ -225,7 +225,7 @@ contract Vault is SystemState {
         }
 
         // Update state
-        _updateState(state_, reserves, leverageTier, price);
+        _updateState(state_, reserves, leverageTier, tickPriceX42);
 
         // Store new state reserves
         state[debtToken][collateralToken][leverageTier] = state_;
@@ -238,12 +238,12 @@ contract Vault is SystemState {
 
     /**
      * @notice Upon transfering collateral to the contract, the minter must call this function atomically to mint the corresponding amount of MAAM.
-     *     @notice Because MAAM is a rebasing token, the minted amount will always be collateralDeposited regardless of price fluctuations.
+     *     @notice Because MAAM is a rebasing token, the minted amount will always be collateralDeposited regardless of tickPriceX42 fluctuations.
      *     @notice To control the slippage it returns the final value of the LP reserves.
      *     @return LP reserve after mint
      */
     function mintMAAM(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
             false,
             debtToken,
             collateralToken,
@@ -267,7 +267,7 @@ contract Vault is SystemState {
         }
 
         // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, price);
+        _updateState(state_, reserves, leverageTier, tickPriceX42);
 
         // Store new state
         state[debtToken][collateralToken][leverageTier] = state_;
@@ -287,7 +287,7 @@ contract Vault is SystemState {
         int8 leverageTier,
         uint256 amountMAAM
     ) external returns (uint256) {
-        (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
             false,
             debtToken,
             collateralToken,
@@ -304,7 +304,7 @@ contract Vault is SystemState {
         reserves.lpReserve -= collateralOut;
 
         // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, price);
+        _updateState(state_, reserves, leverageTier, tickPriceX42);
 
         // Store new state
         state[debtToken][collateralToken][leverageTier] = state_;
@@ -320,9 +320,9 @@ contract Vault is SystemState {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * Connections Between State Variables (R,pHigh) & Reserves (A,L)
+     * Connections Between State Variables (R,priceSat) & Reserves (A,L)
      *     where R = Total reserve, A = Apes reserve, L = LP reserve
-     *     (R,pHigh) ⇔ (A,L)
+     *     (R,priceSat) ⇔ (A,L)
      *     (R,  ∞  ) ⇔ (0,L)
      *     (R,  0  ) ⇔ (A,0)
      */
@@ -330,55 +330,65 @@ contract Vault is SystemState {
     function getReserves(
         VaultStructs.State memory state_,
         int8 leverageTier,
-        bytes16 price
+        int64 tickPriceX42
     ) public pure returns (VaultStructs.Reserves memory reserves) {
-        reserves.daoFees = state_.daoFees;
+        unchecked {
+            reserves.daoFees = state_.daoFees;
 
-        // Reserve is empty
-        if (state_.totalReserves == 0) return reserves;
+            // Reserve is empty
+            if (state_.totalReserves == 0) return reserves;
 
-        if (state_.pHigh == FloatingPoint.ZERO) {
-            // No LPers
-            reserves.apesReserve = state_.totalReserves;
-        } else if (state_.pHigh == FloatingPoint.INFINITY) {
-            // No apes
-            reserves.lpReserve = state_.totalReserves;
-        } else if (price.cmp(state_.pHigh) < 0) {
-            /**
-             * PRICE IN PSR
-             * Leverage behaves as expected
-             */
-            bytes16 leverageRatio = _leverageRatio(leverageTier);
-            reserves.apesReserve = price.div(state_.pHigh).pow(leverageRatio.dec()).mulDiv(
-                state_.totalReserves,
-                leverageRatio
-            );
+            if (state_.tickPriceSatX42 == 0) {
+                // No LPers
+                reserves.apesReserve = state_.totalReserves;
+            } else if (state_.tickPriceSatX42 == type(int64).max) {
+                // No apes
+                reserves.lpReserve = state_.totalReserves;
+            } else if (tickPriceX42 < state_.tickPriceSatX42) {
+                /**
+                 * PRICE IN PSR
+                 * Power zone
+                 * A = (price/priceSat)^(l-1) R/l
+                 * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+                 * We use the fact that l = 1+2^leverageTier
+                 * apesReserve is rounded up
+                 */
+                bytes16 leverageRatio = _leverageRatio(leverageTier);
+                uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+                uint256 den = uint256(
+                    TickMathPrecision.getRatioAtTick(
+                        leverageTier > 0
+                            ? (state_.tickPriceSatX42 - tickPriceX42) << absLeverageTier
+                            : (state_.tickPriceSatX42 - tickPriceX42) >> absLeverageTier
+                    )
+                );
+                den += den << absLeverageTier;
+                reserves.apesReserve = FullMath.mulDivRoundingUp(
+                    state_.totalReserves,
+                    2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
+                    den
+                );
 
-            // mulDiv rounds down, and leverageRatio>1, so apesReserve != totalReserves, we only need to check the case apesReserve == 0
-            /**
-             * mulDiv rounds down, and leverageRatio>1 & price<pHigh, so apesReserve < totalReserves,
-             * we only need to check the case apesReserve == 0 to ensure no reserve ends up with 0 liquidity
-             */
-            if (reserves.apesReserve == 0) reserves.apesReserve = 1;
+                assert(reserves.apesReserve != 0);
 
-            unchecked {
                 reserves.lpReserve = state_.totalReserves - reserves.apesReserve;
-            }
-        } else {
-            /**
-             * PRICE ABOVE PSR
-             *      LPers are 100% in pegged to debt token.
-             */
-            bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-            reserves.lpReserve = state_.pHigh.mulDiv(state_.totalReserves, price.mul(collateralizationFactor));
+            } else {
+                /**
+                 * PRICE ABOVE PSR
+                 *      LPers are 100% in pegged to debt token.
+                 */
+                bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
+                reserves.lpReserve = state_.tickPriceSatX42.mulDiv(
+                    state_.totalReserves,
+                    tickPriceX42.mul(collateralizationFactor)
+                );
 
-            /**
-             * mulDiv rounds down, and collateralizationFactor>1 & price>=pHigh, so lpReserve < totalReserves,
-             * we only need to check the case lpReserve == 0 to ensure no reserve ends up with 0 liquidity
-             */
-            if (reserves.lpReserve == 0) reserves.lpReserve = 1;
+                /**
+                 * mulDiv rounds down, and collateralizationFactor>1 & tickPriceX42>=tickPriceSatX42, so lpReserve < totalReserves,
+                 * we only need to check the case lpReserve == 0 to ensure no reserve ends up with 0 liquidity
+                 */
+                if (reserves.lpReserve == 0) reserves.lpReserve = 1;
 
-            unchecked {
                 reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
             }
         }
@@ -404,9 +414,9 @@ contract Vault is SystemState {
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) private returns (bytes16 price, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
-        // Get price and update oracle if necessary
-        price = oracle.updateOracleState(collateralToken, debtToken);
+    ) private returns (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
+        // Get tickPriceX42 and update oracle if necessary
+        tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
 
         // Retrieve state and check it actually exists
         state_ = state[debtToken][collateralToken][leverageTier];
@@ -416,7 +426,7 @@ contract Vault is SystemState {
         if (isMintAPE) require(systemParams.tsIssuanceStart > 0);
 
         // Compute reserves from state
-        reserves = getReserves(state_, leverageTier, price);
+        reserves = getReserves(state_, leverageTier, tickPriceX42);
     }
 
     function _getCollateralDeposited(
@@ -433,29 +443,32 @@ contract Vault is SystemState {
         VaultStructs.State memory state_,
         VaultStructs.Reserves memory reserves,
         int8 leverageTier,
-        bytes16 price
+        bytes16 tickPriceX42
     ) private pure {
         state_.daoFees = reserves.daoFees;
         state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
-        if (state_.totalReserves == 0) return; // When the reserve is empty, pHigh is undetermined
+        if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined
 
-        // Compute pHigh
+        // Compute tickPriceSatX42
         if (reserves.apesReserve == 0) {
-            state_.pHigh = FloatingPoint.INFINITY;
+            state_.tickPriceSatX42 = FloatingPoint.INFINITY;
         } else if (reserves.lpReserve == 0) {
-            state_.pHigh = FloatingPoint.ZERO;
+            state_.tickPriceSatX42 = FloatingPoint.ZERO;
         } else {
             bytes16 leverageRatio = _leverageRatio(leverageTier);
             bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
             if (reserves.apesReserve < leverageRatio.inv().mulu(state_.totalReserves)) {
                 // PRICE IN PSR
-                state_.pHigh = price.div(
+                state_.tickPriceSatX42 = tickPriceX42.div(
                     leverageRatio.mulDivu(reserves.apesReserve, state_.totalReserves).pow(collateralizationFactor.dec())
                 );
             } else {
                 // PRICE ABOVE PSR
-                state_.pHigh = collateralizationFactor.mul(price).mulDivu(reserves.lpReserve, state_.totalReserves);
+                state_.tickPriceSatX42 = collateralizationFactor.mul(tickPriceX42).mulDivu(
+                    reserves.lpReserve,
+                    state_.totalReserves
+                );
             }
         }
     }
