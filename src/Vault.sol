@@ -344,52 +344,65 @@ contract Vault is SystemState {
             } else if (state_.tickPriceSatX42 == type(int64).max) {
                 // No apes
                 reserves.lpReserve = state_.totalReserves;
-            } else if (tickPriceX42 < state_.tickPriceSatX42) {
-                /**
-                 * PRICE IN PSR
-                 * Power zone
-                 * A = (price/priceSat)^(l-1) R/l
-                 * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
-                 * We use the fact that l = 1+2^leverageTier
-                 * apesReserve is rounded up
-                 */
-                bytes16 leverageRatio = _leverageRatio(leverageTier);
+            } else {
                 uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
-                uint256 den = uint256(
-                    TickMathPrecision.getRatioAtTick(
+
+                if (tickPriceX42 < state_.tickPriceSatX42) {
+                    /**
+                     * POWER ZONE
+                     * A = (price/priceSat)^(l-1) R/l
+                     * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+                     * We use the fact that l = 1+2^leverageTier
+                     * apesReserve is rounded up
+                     */
+                    (bool OF, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
                         leverageTier > 0
                             ? (state_.tickPriceSatX42 - tickPriceX42) << absLeverageTier
                             : (state_.tickPriceSatX42 - tickPriceX42) >> absLeverageTier
-                    )
-                );
-                den += den << absLeverageTier;
-                reserves.apesReserve = FullMath.mulDivRoundingUp(
-                    state_.totalReserves,
-                    2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
-                    den
-                );
+                    );
 
-                assert(reserves.apesReserve != 0);
+                    if (OF) {
+                        reserves.apesReserve = 1;
+                    } else {
+                        uint256 den = poweredPriceRatio + (poweredPriceRatio << absLeverageTier);
+                        reserves.apesReserve = FullMath.mulDivRoundingUp(
+                            state_.totalReserves,
+                            2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
+                            den
+                        );
 
-                reserves.lpReserve = state_.totalReserves - reserves.apesReserve;
-            } else {
-                /**
-                 * PRICE ABOVE PSR
-                 *      LPers are 100% in pegged to debt token.
-                 */
-                bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-                reserves.lpReserve = state_.tickPriceSatX42.mulDiv(
-                    state_.totalReserves,
-                    tickPriceX42.mul(collateralizationFactor)
-                );
+                        assert(reserves.apesReserve != 0); // It should not be ever 0 because it's rounded up. Important for the protocol that it is at least 1.
+                    }
 
-                /**
-                 * mulDiv rounds down, and collateralizationFactor>1 & tickPriceX42>=tickPriceSatX42, so lpReserve < totalReserves,
-                 * we only need to check the case lpReserve == 0 to ensure no reserve ends up with 0 liquidity
-                 */
-                if (reserves.lpReserve == 0) reserves.lpReserve = 1;
+                    reserves.lpReserve = state_.totalReserves - reserves.apesReserve;
+                } else {
+                    /**
+                     * SATURATION ZONE
+                     * LPers are 100% pegged to debt token.
+                     * L = (priceSat/price) R/r
+                     * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+                     * We use the fact that lr = 1+2^-leverageTier
+                     * lpReserve is rounded up
+                     */
+                    (bool OF, uint256 priceRatio) = TickMathPrecision.getRatioAtTick(
+                        tickPriceX42 - state_.tickPriceSatX42
+                    );
 
-                reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
+                    if (OF) {
+                        reserves.lpReserve = 1;
+                    } else {
+                        uint256 den = priceRatio + (priceRatio << absLeverageTier);
+                        reserves.lpReserve = FullMath.mulDivRoundingUp(
+                            state_.totalReserves,
+                            2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
+                            den
+                        );
+
+                        assert(reserves.lpReserve != 0);
+                    }
+
+                    reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
+                }
             }
         }
     }
