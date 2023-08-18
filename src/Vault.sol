@@ -91,7 +91,7 @@ contract Vault is SystemState {
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
      */
     function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
-        if (leverageTier > 10 || leverageTier < -6) revert LeverageTierOutOfRange();
+        if (leverageTier > 1 || leverageTier < -3) revert LeverageTierOutOfRange();
 
         /**
          * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
@@ -499,7 +499,10 @@ contract Vault is SystemState {
             bytes16 leverageRatio = _leverageRatio(leverageTier);
             bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
             if (isPowerZone) {
-                // PRICE IN POWER ZONE
+                /**
+                 * PRICE IN POWER ZONE
+                 * priceSat = price*(R/(lA))^(r-1)
+                 */
                 int64 tickRatioX42 = TickMathPrecision.getTickAtRatio(
                     leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier,
                     (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve
