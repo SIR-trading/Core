@@ -386,12 +386,15 @@ contract Vault is SystemState {
                         reserves.apesReserve = 1;
                     } else {
                         uint256 den = poweredPriceRatio + (poweredPriceRatio << absLeverageTier);
-                        reserves.apesReserve = FullMath.mulDivRoundingUp( // NO NEED FOR FULLMATH!!
-                            state_.totalReserves,
-                            2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
-                            den
+                        /** Rounds up.
+                            Cannot OF.
+                            64 bits because getRatioAtTick returns a Q64.64 number.
+                         */
+                        reserves.apesReserve = uint152(
+                            (uint256(state_.totalReserves) * 2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier) - 1) /
+                                den +
+                                1
                         );
-
                         assert(reserves.apesReserve != 0); // It should not be ever 0 because it's rounded up. Important for the protocol that it is at least 1.
                     }
 
@@ -413,10 +416,14 @@ contract Vault is SystemState {
                         reserves.lpReserve = 1;
                     } else {
                         uint256 den = priceRatio + (priceRatio << absLeverageTier);
-                        reserves.lpReserve = FullMath.mulDivRoundingUp(
-                            state_.totalReserves,
-                            2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
-                            den
+                        /** Rounds up.
+                            Cannot OF.
+                            64 bits because getRatioAtTick returns a Q64.64 number.
+                         */
+                        reserves.lpReserve = uint152(
+                            (uint256(state_.totalReserves) * 2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier) - 1) /
+                                den +
+                                1
                         );
 
                         assert(reserves.lpReserve != 0);
