@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Libraries
-import {FullMath} from "./FullMath.sol";
-
 /**
  * @notice	Smart contract for computing fees in SIR.
  */
@@ -27,19 +24,14 @@ library Fees {
      */
     function hiddenFee(
         uint16 baseFee,
-        uint256 collateralAmount,
+        uint152 collateralAmount,
         int256 leverageTier
-    ) internal pure returns (uint256 collateralDeposited, uint256 comission) {
+    ) internal pure returns (uint152, uint152) {
         unchecked {
-            assert(
-                // Negative of such value would cause revert
-                leverageTier != type(int256).min
-            );
-
             uint256 feeNum;
             uint256 feeDen;
             if (leverageTier >= 0) {
-                feeNum = uint256(baseFee) << uint256(leverageTier);
+                feeNum = uint256(baseFee) << uint256(leverageTier); // baseFee is uint16, leverageTier is int8, so feeNum does not require more than 24 bits
                 feeDen = 10000 + (uint256(baseFee) << uint256(leverageTier));
             } else {
                 feeNum = uint256(baseFee);
@@ -47,8 +39,10 @@ library Fees {
             }
 
             // Split collateralAmount into comission and collateralDeposited
-            comission = FullMath.mulDivRoundingUp(collateralAmount, feeNum, feeDen);
-            collateralDeposited = collateralAmount - comission;
+            uint256 comission = (collateralAmount * feeNum) / feeDen; // Cannot overflow 256 bits because feeNum takes at most 24 bits
+            uint256 collateralDeposited = collateralAmount - comission;
+
+            return (uint152(collateralDeposited), uint152(comission));
         }
     }
 }
