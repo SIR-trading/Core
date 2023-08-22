@@ -88,9 +88,7 @@ library TickMathPrecision {
     /// @notice The result is never positive, but it is returned as an int for compatibilty with other negative ticks.
     function getTickAtRatio(uint256 num, uint256 den) internal pure returns (int64 tickX42) {
         assert(num >= den);
-        // require(sqrtPriceX96 >= MIN_SQRT_RATIO && sqrtPriceX96 < MAX_SQRT_RATIO, "R");
-
-        if (num == 0) return type(int64).max; // This will overflow outer operations, effectively behaving like ∞
+        assert(den != 0);
 
         uint256 ratio;
         unchecked {

@@ -39,7 +39,7 @@ library Fees {
             }
 
             // Split collateralAmount into comission and collateralDeposited
-            uint256 comission = (collateralAmount * feeNum) / feeDen; // Cannot overflow 256 bits because feeNum takes at most 24 bits
+            uint256 comission = (uint256(collateralAmount) * feeNum) / feeDen; // Cannot overflow 256 bits because feeNum takes at most 24 bits
             uint256 collateralDeposited = collateralAmount - comission;
 
             return (uint152(collateralDeposited), uint152(comission));

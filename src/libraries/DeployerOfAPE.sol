@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
-import {VaultStructs} from "../interfaces/VaultStructs.sol";
+import {VaultStructs} from "../libraries/VaultStructs.sol";
 
 // Libraries
 import {SaltedAddress} from "./SaltedAddress.sol";

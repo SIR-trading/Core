@@ -9,10 +9,10 @@ import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {DeployerOfAPE, APE, SaltedAddress, FullMath} from "./libraries/DeployerOfAPE.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {Fees} from "./libraries/Fees.sol";
+import {VaultStructs} from "./libraries/VaultStructs.sol";
 
 // Contracts
 import {Oracle} from "./Oracle.sol";
-import {VaultStructs} from "./interfaces/VaultStructs.sol";
 import {SystemState} from "./SystemState.sol";
 
 /**
@@ -24,6 +24,7 @@ contract Vault is SystemState {
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
     error LeverageTierOutOfRange();
+    error Overflow();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -91,7 +92,7 @@ contract Vault is SystemState {
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
      */
     function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
-        if (leverageTier > 1 || leverageTier < -3) revert LeverageTierOutOfRange();
+        if (leverageTier > 2 || leverageTier < -3) revert LeverageTierOutOfRange();
 
         /**
          * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
@@ -106,6 +107,7 @@ contract Vault is SystemState {
 
         // Next vault ID
         uint256 vaultId = _paramsById.length;
+        require(vaultId <= type(uint40).max); // It has to fit in a uint40
 
         // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
         _paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
@@ -114,7 +116,7 @@ contract Vault is SystemState {
         DeployerOfAPE.deploy(_transientTokenParameters, vaultId, debtToken, collateralToken, leverageTier);
 
         // Save vaultId and parameters
-        state_.vaultId = uint128(vaultId);
+        state_.vaultId = uint40(vaultId);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -126,50 +128,100 @@ contract Vault is SystemState {
         ADD GET RESERVES FUNCTION TO THE PERIPHERY?
      */
 
-    function mintAPE(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            true,
+    /** @notice Function for minting APE or MAAM
+     */
+    function mint(
+        bool isAPE,
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier
+    ) external returns (uint256) {
+        (VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+            false,
             debtToken,
             collateralToken,
             leverageTier
         );
 
-        // Get deposited collateral
-        uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
-
-        // Substract fee
-        uint256 collateralFee;
-        (collateralIn, collateralFee) = Fees.hiddenFee(systemParams.baseFee, collateralIn, leverageTier);
-
-        // Retrieve APE contract
-        APE ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
-
-        // Compute amount of APE to mint
-        uint256 amount = reserves.apesReserve == 0
-            ? collateralIn
-            : FullMath.mulDiv(ape.totalSupply(), collateralIn, reserves.apesReserve);
-
-        // Mint APE
-        ape.mint(msg.sender, amount);
-
-        // Mint protocol-owned liquidity if necessary (10% of the fee)
-        _mintPol(state_.vaultId, collateralFee, reserves.lpReserve);
-
-        // Update new reserves
-        uint256 feeToDAO = FullMath.mulDiv(
-            collateralFee,
-            _vaultsIssuanceParams[state_.vaultId].taxToDAO, // taxToDAO is an uint16
-            10 * type(uint16).max
-        );
-        unchecked {
-            // The total reserve cannot exceed the totalSupply
-            reserves.daoFees += feeToDAO;
-            reserves.apesReserve += collateralIn;
-            reserves.lpReserve += collateralFee - feeToDAO;
+        /** COMPUTE PARAMETERS
+            ape                   - The token contract of APE if necessary
+            syntheticTokenReserve - Collateral reserve backing APE or MAAM
+            syntheticTokenSupply  - Supply of APE or MAAM
+         */
+        APE ape;
+        uint152 syntheticTokenReserve;
+        uint256 syntheticTokenSupply;
+        if (isAPE) {
+            ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
+            syntheticTokenReserve = reserves.apesReserve;
+            syntheticTokenSupply = ape.totalSupply();
+        } else {
+            syntheticTokenReserve = reserves.lpReserve;
+            syntheticTokenSupply = totalSupply[state_.vaultId];
         }
 
+        /** COMPUTE AMOUNTS
+            collateralIn  - The amount of collateral that has been sent to the contract
+            collateralFee - The amount of collateral paid in fees
+            amount        - The amount of APE/MAAM minted for the user
+            feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
+            feeToDAO      - The amount of fees (collateral) diverged to the DAO
+            amountPOL     - The amount of MAAM minted to protocol owned liquidity (POL)
+         */
+
+        // Get deposited collateral
+        uint152 collateralIn = _getCollateralDeposited(state_, collateralToken);
+
+        // Substract fee
+        uint152 collateralFee;
+        (collateralIn, collateralFee) = Fees.hiddenFee(
+            isAPE ? systemParams.baseFee : systemParams.lpFee,
+            collateralIn,
+            isAPE ? leverageTier : int8(0)
+        );
+
+        // Compute amount MAAM or APE to mint for the user
+        uint256 amount = syntheticTokenReserve == 0
+            ? collateralIn
+            : FullMath.mulDiv(syntheticTokenSupply, collateralIn, syntheticTokenReserve);
+
+        // Compute amount MAAM to mint as POL (max 10% of collateralFee)
+        uint152 feeToPOL = collateralFee / 10;
+        uint256 amountPOL = reserves.lpReserve == 0
+            ? feeToPOL
+            : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
+
+        // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
+        uint152 feeToDAO;
+        unchecked {
+            feeToDAO = uint152(
+                (collateralFee * _vaultsIssuanceParams[state_.vaultId].taxToDAO) / (10 * type(uint16).max)
+            ); // Cannot OF cuz collateralFee is uint152 and taxToDAO is uint16
+        }
+
+        /** MINTING
+            1. Mint APE or MAAM for the user
+            2. Mint MAAM to protocol owned liquidity (POL)
+         */
+
+        // Mint APE/MAAM
+        isAPE ? ape.mint(msg.sender, amount) : _mint(msg.sender, state_.vaultId, amount);
+
+        // Mint protocol-owned liquidity if necessary
+        _mint(address(this), state_.vaultId, amountPOL);
+
+        /** UPDATE THE RESERVES
+            1. DAO collects up to 10% of the fees
+            2. The LPers collect the rest of the fees
+            3. The reserve of the synthetic token is increased
+         */
+        reserves.daoFees += feeToDAO;
+        reserves.lpReserve += collateralFee - feeToDAO;
+        if (isAPE) reserves.apesReserve += collateralIn;
+        else reserves.lpReserve += collateralIn;
+
         // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, tickPriceX42);
+        _updateState(state_, reserves, leverageTier);
 
         // Store new state reserves
         state[debtToken][collateralToken][leverageTier] = state_;
@@ -177,142 +229,110 @@ contract Vault is SystemState {
         return amount;
     }
 
-    /**
-     *  @notice Users call burn() to burn their APE in exchange for hard cold collateral
-     *  @param amountAPE is the amount of APE the gentleman wishes to burn
-     *  @dev No fee is charged on exit
+    /** @notice Function for burning APE or MAAM
      */
-    function burnAPE(
+    function burn(
+        bool isAPE,
         address debtToken,
         address collateralToken,
         int8 leverageTier,
-        uint256 amountAPE
-    ) external returns (uint256) {
-        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
+        uint256 amountToken
+    ) external returns (uint152) {
+        (VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
             false,
             debtToken,
             collateralToken,
             leverageTier
         );
 
-        // Retrieve APE contract
-        APE ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
+        /** COMPUTE PARAMETERS
+            ape                   - The token contract of APE if necessary
+            syntheticTokenReserve - Collateral reserve backing APE or MAAM
+            syntheticTokenSupply  - Supply of APE or MAAM
+         */
+        APE ape;
+        uint152 syntheticTokenReserve;
+        uint256 syntheticTokenSupply;
+        if (isAPE) {
+            ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
+            syntheticTokenReserve = reserves.apesReserve;
+            syntheticTokenSupply = ape.totalSupply();
+        } else {
+            syntheticTokenReserve = reserves.lpReserve;
+            syntheticTokenSupply = totalSupply[state_.vaultId];
+        }
+
+        /** COMPUTE AMOUNTS
+            collateralOut - The amount of collateral that is removed from the reserve
+            collateralWidthdrawn - The amount of collateral that is actually withdrawn by the user
+            collateralFee - The amount of collateral paid in fees
+            feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
+            feeToDAO      - The amount of fees (collateral) diverged to the DAO
+            amountPOL     - The amount of MAAM minted to protocol owned liquidity (POL)
+         */
 
         // Get collateralOut
-        uint256 collateralOut = FullMath.mulDiv(reserves.apesReserve, amountAPE, ape.totalSupply());
+        uint152 collateralOut = uint152(FullMath.mulDiv(syntheticTokenReserve, amountToken, syntheticTokenSupply));
 
         // Substract fee
-        uint256 collateralFee;
-        (collateralOut, collateralFee) = Fees.hiddenFee(systemParams.baseFee, collateralOut, leverageTier);
-
-        // Burn APE
-        ape.burn(msg.sender, amountAPE);
-
-        // Mint protocol-owned liquidity if necessary (10% of the fee)
-        _mintPol(state_.vaultId, collateralFee, reserves.lpReserve);
-
-        // Update reserves
-        uint256 feeToDAO = FullMath.mulDiv(
-            collateralFee,
-            _vaultsIssuanceParams[state_.vaultId].taxToDAO, // taxToDAO is an uint16
-            10 * type(uint16).max
+        (uint152 collateralWidthdrawn, uint152 collateralFee) = Fees.hiddenFee(
+            isAPE ? systemParams.baseFee : systemParams.lpFee,
+            collateralOut,
+            isAPE ? leverageTier : int8(0)
         );
-        reserves.apesReserve -= collateralOut + collateralFee;
+
+        // Compute amount MAAM to mint as POL (max 10% of collateralFee)
+        uint152 feeToPOL = collateralFee / 10;
+        uint256 amountPOL = reserves.lpReserve == 0
+            ? feeToPOL
+            : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
+
+        // At most 10% of the collected fees go to the DAO
+        uint152 feeToDAO;
         unchecked {
-            // The total reserve cannot exceed the totalSupply
-            reserves.daoFees += feeToDAO;
-            reserves.lpReserve += collateralFee - feeToDAO;
+            feeToDAO = uint152(
+                (collateralFee * _vaultsIssuanceParams[state_.vaultId].taxToDAO) / (10 * type(uint16).max)
+            ); // Cannot OF cuz collateralFee is uint152 and taxToDAO is uint16
         }
 
-        // Update state
-        _updateState(state_, reserves, leverageTier, tickPriceX42);
+        /** BURNING AND MINTING
+            1. Burn APE or MAAM from the user
+            2. Mint MAAM to protocol owned liquidity (POL)
+         */
 
-        // Store new state reserves
-        state[debtToken][collateralToken][leverageTier] = state_;
+        // Burn APE/MAAM
+        isAPE ? ape.burn(msg.sender, amountToken) : _burn(msg.sender, state_.vaultId, amountToken);
 
-        // Withdraw collateral to user (after substracting fee)
-        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralOut);
+        // Mint protocol-owned liquidity if necessary
+        _mint(address(this), state_.vaultId, amountPOL);
 
-        return collateralOut;
-    }
+        /** UPDATE THE RESERVES
+            1. DAO collects up to 10% of the fees
+            2. The LPers collect the rest of the fees
+            3. The reserve of the synthetic token is reduced
+         */
 
-    /**
-     * @notice Upon transfering collateral to the contract, the minter must call this function atomically to mint the corresponding amount of MAAM.
-     *     @notice Because MAAM is a rebasing token, the minted amount will always be collateralDeposited regardless of tickPriceX42 fluctuations.
-     *     @notice To control the slippage it returns the final value of the LP reserves.
-     *     @return LP reserve after mint
-     */
-    function mintMAAM(address debtToken, address collateralToken, int8 leverageTier) external returns (uint256) {
-        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            false,
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
+        reserves.daoFees += feeToDAO;
+        reserves.lpReserve += collateralFee - feeToDAO;
+        if (isAPE) reserves.apesReserve -= collateralOut;
+        else reserves.lpReserve -= collateralOut;
 
-        // Get deposited collateral
-        uint256 collateralIn = _getCollateralDeposited(state_, collateralToken);
-
-        // Compute amount to mint
-        uint256 amount = reserves.lpReserve == 0
-            ? collateralIn
-            : FullMath.mulDiv(totalSupply[state_.vaultId], collateralIn, reserves.lpReserve);
-
-        // Mint MAAM
-        _mint(msg.sender, state_.vaultId, amount);
-
-        // Update new reserves
-        unchecked {
-            reserves.lpReserve += collateralIn;
-        }
+        /** REMAINING TASKS
+            1. Update state from new reserves
+            2. Store new state
+            3. Send collateral
+         */
 
         // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, tickPriceX42);
-
-        // Store new state
-        state[debtToken][collateralToken][leverageTier] = state_;
-
-        return amount;
-    }
-
-    /**
-     * @notice LPers call burnMAAM() to burn their MAAM in exchange for hard cold collateral
-     *     @param amountMAAM the LPer wishes to burn
-     *     @notice To control the slippage it returns the final value of the LP reserves.
-     *     @return LP reserve after burn
-     */
-    function burnMAAM(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier,
-        uint256 amountMAAM
-    ) external returns (uint256) {
-        (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            false,
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
-
-        // Get collateralOut
-        uint256 collateralOut = FullMath.mulDiv(reserves.lpReserve, amountMAAM, totalSupply[state_.vaultId]);
-
-        // Burn MAAM
-        _burn(msg.sender, state_.vaultId, amountMAAM);
-
-        // Update reserves
-        reserves.lpReserve -= collateralOut;
-
-        // Update state from new reserves
-        _updateState(state_, reserves, leverageTier, tickPriceX42);
+        _updateState(state_, reserves, leverageTier);
 
         // Store new state
         state[debtToken][collateralToken][leverageTier] = state_;
 
         // Send collateral
-        TransferHelper.safeTransfer(collateralToken, msg.sender, amountMAAM);
+        TransferHelper.safeTransfer(collateralToken, msg.sender, amountToken);
 
-        return collateralOut;
+        return collateralWidthdrawn;
     }
 
     /*/////////////////////f//////////////////////////////////////////
@@ -329,8 +349,7 @@ contract Vault is SystemState {
 
     function getReserves(
         VaultStructs.State memory state_,
-        int8 leverageTier,
-        int64 tickPriceX42
+        int8 leverageTier
     ) public pure returns (VaultStructs.Reserves memory reserves) {
         unchecked {
             reserves.daoFees = state_.daoFees;
@@ -338,7 +357,7 @@ contract Vault is SystemState {
             // Reserve is empty
             if (state_.totalReserves == 0) return reserves;
 
-            if (state_.tickPriceSatX42 == 0) {
+            if (state_.tickPriceSatX42 == type(int64).min) {
                 // No LPers
                 reserves.apesReserve = state_.totalReserves;
             } else if (state_.tickPriceSatX42 == type(int64).max) // type(int64).max represents infinity
@@ -348,7 +367,7 @@ contract Vault is SystemState {
             } else {
                 uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
 
-                if (tickPriceX42 < state_.tickPriceSatX42) {
+                if (state_.tickPriceX42 < state_.tickPriceSatX42) {
                     /**
                      * POWER ZONE
                      * A = (price/priceSat)^(l-1) R/l
@@ -356,17 +375,18 @@ contract Vault is SystemState {
                      * We use the fact that l = 1+2^leverageTier
                      * apesReserve is rounded up
                      */
+                    // USE Q128.128!!
                     (bool OF, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
                         leverageTier > 0
-                            ? (state_.tickPriceSatX42 - tickPriceX42) << absLeverageTier
-                            : (state_.tickPriceSatX42 - tickPriceX42) >> absLeverageTier
+                            ? (state_.tickPriceSatX42 - state_.tickPriceX42) << absLeverageTier
+                            : (state_.tickPriceSatX42 - state_.tickPriceX42) >> absLeverageTier
                     );
 
                     if (OF) {
                         reserves.apesReserve = 1;
                     } else {
                         uint256 den = poweredPriceRatio + (poweredPriceRatio << absLeverageTier);
-                        reserves.apesReserve = FullMath.mulDivRoundingUp(
+                        reserves.apesReserve = FullMath.mulDivRoundingUp( // NO NEED FOR FULLMATH!!
                             state_.totalReserves,
                             2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier), // 64 bits because getRatioAtTick returns a Q64.64 number
                             den
@@ -386,7 +406,7 @@ contract Vault is SystemState {
                      * lpReserve is rounded up
                      */
                     (bool OF, uint256 priceRatio) = TickMathPrecision.getRatioAtTick(
-                        tickPriceX42 - state_.tickPriceSatX42
+                        state_.tickPriceX42 - state_.tickPriceSatX42
                     );
 
                     if (OF) {
@@ -412,127 +432,125 @@ contract Vault is SystemState {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _mintPol(uint256 vaultId, uint256 collateralFee, uint256 lpReserve) private {
-        // A chunk of the LP fee is diverged to Protocol Owned Liquidity (POL)
-        uint256 feePOL = collateralFee / 10;
-
-        // Compute amount MAAM to mint as POL
-        uint256 amountPOL = lpReserve == 0 ? feePOL : FullMath.mulDiv(totalSupply[vaultId], feePOL, lpReserve);
-
-        // Mint protocol-owned liquidity if necessary
-        _mint(address(this), vaultId, amountPOL);
-    }
-
     function _preprocess(
         bool isMintAPE,
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) private returns (bytes16 tickPriceX42, VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
-        // Get tickPriceX42 and update oracle if necessary
-        tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
-
+    ) private returns (VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
         // Retrieve state and check it actually exists
         state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId == 0) revert VaultDoesNotExist();
+
+        // Retrieve price from oracle if not retrieved in a previous tx in this block
+        if (state_.timeStampPrice != block.timestamp) {
+            state_.tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
+            state_.timeStampPrice = uint40(block.timestamp);
+        }
 
         // Until SIR is running, only LPers are allowed to mint (deposit collateral)
         if (isMintAPE) require(systemParams.tsIssuanceStart > 0);
 
         // Compute reserves from state
-        reserves = getReserves(state_, leverageTier, tickPriceX42);
+        reserves = getReserves(state_, leverageTier);
     }
 
     function _getCollateralDeposited(
         VaultStructs.State memory state_,
         address collateralToken
-    ) private view returns (uint256) {
+    ) private view returns (uint152) {
         require(!systemParams.emergencyStop);
 
         // Get deposited collateral
-        return IERC20(collateralToken).balanceOf(address(msg.sender)) - state_.daoFees - state_.totalReserves;
+        unchecked {
+            uint256 balance = IERC20(collateralToken).balanceOf(address(msg.sender)) -
+                state_.daoFees -
+                state_.totalReserves;
+
+            if (uint152(balance) != balance) revert Overflow();
+            return uint152(balance);
+        }
     }
 
     function _updateState(
         VaultStructs.State memory state_,
         VaultStructs.Reserves memory reserves,
-        int8 leverageTier,
-        int64 tickPriceX42
+        int8 leverageTier
     ) private pure {
-        state_.daoFees = reserves.daoFees;
-        state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
+        unchecked {
+            state_.daoFees = reserves.daoFees;
+            state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
-        if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined
+            if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined
 
-        // Compute tickPriceSatX42
-        if (reserves.apesReserve == 0) {
-            state_.tickPriceSatX42 = type(int64).max;
-        } else if (reserves.lpReserve == 0) {
-            state_.tickPriceSatX42 = type(int64).min;
-        } else {
-            /**
-             * Decide if we are in the power or saturation zone
-             * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
-             */
-            uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
-            bool isPowerZone;
-            if (leverageTier > 0) {
-                if (
-                    uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
-                ) // Cannot OF because apesReserve is an uint216, and |leverageTier|<=10
-                {
-                    isPowerZone = true;
-                } else {
-                    isPowerZone = false;
-                }
+            // Compute tickPriceSatX42
+            if (reserves.apesReserve == 0) {
+                state_.tickPriceSatX42 = type(int64).max;
+            } else if (reserves.lpReserve == 0) {
+                state_.tickPriceSatX42 = type(int64).min;
             } else {
-                if (
-                    reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
-                ) // Cannot OF because apesReserve is an uint216, and |leverageTier|<=10
-                {
-                    isPowerZone = true;
-                } else {
-                    isPowerZone = false;
-                }
-            }
-
-            bytes16 leverageRatio = _leverageRatio(leverageTier);
-            bytes16 collateralizationFactor = _collateralizationFactor(leverageTier);
-            if (isPowerZone) {
                 /**
-                 * PRICE IN POWER ZONE
-                 * priceSat = price*(R/(lA))^(r-1)
+                 * Decide if we are in the power or saturation zone
+                 * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
                  */
-                int64 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                    leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier,
-                    (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve
-                );
+                uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+                bool isPowerZone;
+                if (leverageTier > 0) {
+                    if (
+                        uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
+                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=2
+                    {
+                        isPowerZone = true;
+                    } else {
+                        isPowerZone = false;
+                    }
+                } else {
+                    if (
+                        reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
+                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=2
+                    {
+                        isPowerZone = true;
+                    } else {
+                        isPowerZone = false;
+                    }
+                }
 
-                state_.tickPriceSatX42 =
-                    tickPriceX42 +
-                    (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier); // THIS MAY OVERFLOW!
+                if (isPowerZone) {
+                    /**
+                     * PRICE IN POWER ZONE
+                     * priceSat = price*(R/(lA))^(r-1)
+                     */
+                    int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
+                        leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier, // Cannot OF cuz totalReserves is uint152, and |leverageTier|<=2
+                        (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve // Cannot OF cuz apesReserve is uint152, and |leverageTier|<=2
+                    );
 
-                // state_.tickPriceSatX42 = tickPriceX42.div(
-                //     leverageRatio.mulDivu(reserves.apesReserve, state_.totalReserves).pow(collateralizationFactor.dec())
-                // );
-            } else {
-                // PRICE IN SATURATION ZONE
-                state_.tickPriceSatX42 = collateralizationFactor.mul(tickPriceX42).mulDivu(
-                    reserves.lpReserve,
-                    state_.totalReserves
-                );
+                    // Compute saturation price
+                    int256 temptickPriceSatX42 = state_.tickPriceX42 +
+                        (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier);
+
+                    // Check if overflow
+                    if (temptickPriceSatX42 > type(int64).max) state_.tickPriceSatX42 = type(int64).max;
+                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
+                } else {
+                    /**
+                     * PRICE IN SATURATION ZONE
+                     * priceSat = r*price*L/R
+                     */
+                    int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
+                        leverageTier >= 0 ? uint256(state_.totalReserves) << absLeverageTier : state_.totalReserves,
+                        (uint256(reserves.lpReserve) << absLeverageTier) + reserves.lpReserve
+                    );
+
+                    // Compute saturation price
+                    int256 temptickPriceSatX42 = state_.tickPriceX42 - tickRatioX42;
+
+                    // Check if underflow
+                    if (temptickPriceSatX42 < type(int64).min) state_.tickPriceSatX42 = type(int64).min;
+                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
+                }
             }
         }
-    }
-
-    function _leverageRatio(int8 leverageTier) private pure returns (bytes16 leverageRatio) {
-        bytes16 temp = FloatingPoint.fromInt(leverageTier).pow_2();
-        leverageRatio = temp.inc();
-    }
-
-    function _collateralizationFactor(int8 leverageTier) private pure returns (bytes16 collateralizationFactor) {
-        bytes16 temp = FloatingPoint.fromInt(leverageTier).pow_2();
-        collateralizationFactor = temp.inv().inc();
     }
 
     // /*////////////////////////////////////////////////////////////////

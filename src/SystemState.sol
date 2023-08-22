@@ -26,7 +26,8 @@ abstract contract SystemState is SystemCommons, MAAM {
          * Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
          * For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
          */
-        uint16 baseFee; // Given type(uint16).max, the max baseFee is 655.35%.
+        uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
+        uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
         uint72 issuanceTotalVaults; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
         bool emergencyStop;
     }
