@@ -136,12 +136,14 @@ contract Vault is SystemState {
         address collateralToken,
         int8 leverageTier
     ) external returns (uint256) {
-        (VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            false,
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
+        // Until SIR is running, only LPers are allowed to mint (deposit collateral)
+        if (isAPE) require(systemParams.tsIssuanceStart > 0);
+
+        // Get the state
+        VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
+
+        // Compute reserves from state
+        VaultStructs.Reserves memory reserves = _getReserves(state_, leverageTier);
 
         /** COMPUTE PARAMETERS
             ape                   - The token contract of APE if necessary
@@ -238,12 +240,11 @@ contract Vault is SystemState {
         int8 leverageTier,
         uint256 amountToken
     ) external returns (uint152) {
-        (VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) = _preprocess(
-            false,
-            debtToken,
-            collateralToken,
-            leverageTier
-        );
+        // Get the state
+        VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
+
+        // Compute reserves from state
+        VaultStructs.Reserves memory reserves = _getReserves(state_, leverageTier);
 
         /** COMPUTE PARAMETERS
             ape                   - The token contract of APE if necessary
@@ -348,9 +349,24 @@ contract Vault is SystemState {
      */
 
     function getReserves(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier
+    ) external pure returns (VaultStructs.Reserves memory) {
+        // Get the state
+        VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
+
+        return _getReserves(state_, leverageTier);
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                            PRIVATE FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    function _getReserves(
         VaultStructs.State memory state_,
         int8 leverageTier
-    ) public pure returns (VaultStructs.Reserves memory reserves) {
+    ) private pure returns (VaultStructs.Reserves memory reserves) {
         unchecked {
             reserves.daoFees = state_.daoFees;
 
@@ -358,12 +374,19 @@ contract Vault is SystemState {
             if (state_.totalReserves == 0) return reserves;
 
             if (state_.tickPriceSatX42 == type(int64).min) {
-                // No LPers
-                reserves.apesReserve = state_.totalReserves;
-            } else if (state_.tickPriceSatX42 == type(int64).max) // type(int64).max represents infinity
-            {
-                // No apes
-                reserves.lpReserve = state_.totalReserves;
+                if (totalSupply[state_.vaultId] == 0) {
+                    reserves.apesReserve = state_.totalReserves; // type(int64).min represents -∞ => lpReserve = 0
+                } else {
+                    reserves.apesReserve = state_.totalReserves - 1;
+                    reserves.lpReserve = 1;
+                }
+            } else if (state_.tickPriceSatX42 == type(int64).max) {
+                if (APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE)).totalSupply() == 0) {
+                    reserves.lpReserve = state_.totalReserves; // type(int64).max represents +∞ => apesReserve = 0
+                } else {
+                    reserves.apesReserve = 1;
+                    reserves.lpReserve = state_.totalReserves - 1;
+                }
             } else {
                 uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
 
@@ -435,16 +458,11 @@ contract Vault is SystemState {
         }
     }
 
-    /*////////////////////////////////////////////////////////////////
-                            PRIVATE FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
-
-    function _preprocess(
-        bool isMintAPE,
+    function _getState(
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) private returns (VaultStructs.State memory state_, VaultStructs.Reserves memory reserves) {
+    ) private view returns (VaultStructs.State memory state_) {
         // Retrieve state and check it actually exists
         state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId == 0) revert VaultDoesNotExist();
@@ -454,12 +472,6 @@ contract Vault is SystemState {
             state_.tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
             state_.timeStampPrice = uint40(block.timestamp);
         }
-
-        // Until SIR is running, only LPers are allowed to mint (deposit collateral)
-        if (isMintAPE) require(systemParams.tsIssuanceStart > 0);
-
-        // Compute reserves from state
-        reserves = getReserves(state_, leverageTier);
     }
 
     function _getCollateralDeposited(
