@@ -72,17 +72,17 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          D=30min |
  *
  *
- *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS MAAM
+ *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS TEA
  *
- *     Sequence of actions for an attacker that wishes to mint MAAM at a cheaper price:
+ *     Sequence of actions for an attacker that wishes to mint TEA at a cheaper price:
  *     1. Attacker moves oracle price up to its highest tick, moving the TWAP price up
- *     2. Attacker mints MAAM (no previous MAAM minted, so attacker will receive all fees)
+ *     2. Attacker mints TEA (no previous TEA minted, so attacker will receive all fees)
  *     3. Attacker returns price to market price, profiting from the apes' losses.
  *
  *     Alternative similar attack:
  *     1. Attacker moves oracle price to its lowest tick for 5 consecutive blocks, moving the TWAP price down,
  *        profiting from the apes' losses.
- *     2. Attacker burns his MAAM (we assume he was the only LPer).
+ *     2. Attacker burns his TEA (we assume he was the only LPer).
  *     3. Attacker returns price to market price, profiting from the apes' losses.
  *
  *     Assumptions:
@@ -93,7 +93,7 @@ import {Addresses} from "./libraries/Addresses.sol";
  *     - The attacker performs a multi-block attack, and because of the design of Uniswap v3,
  *       it can keep the price for up to 5 blocks (1 minute) in the most extreme tick.
  *
- *     The best case scenario for the attacker is when no MAAM has been minted before him, and so he is the receiver of all apes' losses.
+ *     The best case scenario for the attacker is when no TEA has been minted before him, and so he is the receiver of all apes' losses.
  *     There exist two scenarios, let's tackle them separately. In the first case, the vault operates in the power zone,
  *     and in the second case it operates in the saturation zone.
  *
@@ -101,9 +101,9 @@ import {Addresses} from "./libraries/Addresses.sol";
  *     ──────────
  *     In the power zone, the apes' reserves follow
  *          A' = (p'/p)^(l-1)A
- *     where l>1. The attacker deposits a total of L to mint MAAM and manipulates the price down so that apes lose
+ *     where l>1. The attacker deposits a total of L to mint TEA and manipulates the price down so that apes lose
  *          Attacker wins = A-A' = A-A/g^(l-1) = A(1-1/g^(l-1))
- *     The cost of this attack are the fees paid when minting/burning MAAM. In order to
+ *     The cost of this attack are the fees paid when minting/burning TEA. In order to
  *     to operate in the power zone, we know L ≥ (l-1)A. Two cases:
  *          1) Attacker loses = L'*fmaam = (L+A-A')*fmaam ≥ L*fmaam ≥ (l-1)A*fmaam
  *          2) Attacker loses = L*fmaam ≥ (l-1)A*fmaam
@@ -115,14 +115,14 @@ import {Addresses} from "./libraries/Addresses.sol";
  *          fmaam ≥ 1-1/g      OR      g ≤ 1/(1-fmaam)      G ≤ -log_1.0001(1-fmaam)
  *
  *     For example,
- *          fmaam=0.01 (1% charged upon burning MAAM) |=> G ≤ 100.5 tick/min
+ *          fmaam=0.01 (1% charged upon burning TEA) |=> G ≤ 100.5 tick/min
  *          fmaam=0.001 (0.1%) |=> G ≤ 10.0 tick/min
  *
  *     Saturation Zone
  *     ───────────────
  *     In the saturation zone, the LP reserve follows
  *          L' = (p/p')L
- *     The attacker deposits a total of L to mint MAAM and manipulates the price down so that apes lose
+ *     The attacker deposits a total of L to mint TEA and manipulates the price down so that apes lose
  *          Attacker wins = L'-L = L(g-1)
  *     The attacker pays some fees proportional to L' to withdraw his collateral:
  *          1) Attacker loses = L'*fmaam = g*L*fmaam

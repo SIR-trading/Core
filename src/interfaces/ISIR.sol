@@ -21,7 +21,7 @@ interface ISIR is IERC20 {
 
     function getVaultsIssuanceParams(
         address
-    ) external view returns (uint16 taxToDAO, uint72 issuance, bytes16 cumSIRperMAAM);
+    ) external view returns (uint16 taxToDAO, uint72 issuance, bytes16 cumSIRperTEA);
 
     //////////////////////////////////////////////////////
 
@@ -40,10 +40,10 @@ interface ISIR is IERC20 {
         address LPer,
         bytes16 lastNonZeroBalance,
         bytes16 latestBalance,
-        bytes16 latestSupplyMAAM
+        bytes16 latestSupplyTEA
     ) external;
 
-    function haultLPersIssuances(bytes16 nonRebasingSupplyMAAM) external;
+    function haultLPersIssuances(bytes16 nonRebasingSupplyTEA) external;
 
     function LPerMint(address vault) external;
 }

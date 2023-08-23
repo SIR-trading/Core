@@ -85,10 +85,10 @@ contract SystemControl is Ownable {
         // Check the array of prev vaults is correct
         require(keccak256(abi.encodePacked(prevVaults)) == hashVaults, "Incorrect list of vaults");
 
-        // Get the MAAM supplies of all the previous vaults
-        bytes16[] memory latestSuppliesMAAM = new bytes16[](prevVaults.length);
+        // Get the TEA supplies of all the previous vaults
+        bytes16[] memory latestSuppliesTEA = new bytes16[](prevVaults.length);
         for (uint256 i = 0; i < prevVaults.length; i++) {
-            latestSuppliesMAAM[i] = IVault(prevVaults[i]).nonRebasingSupplyExcludePOL();
+            latestSuppliesTEA[i] = IVault(prevVaults[i]).nonRebasingSupplyExcludePOL();
         }
 
         /**
@@ -116,7 +116,7 @@ contract SystemControl is Ownable {
         // Set new issuances
         hashVaults = _SYSTEM_STATE.changeVaultsIssuances(
             prevVaults,
-            latestSuppliesMAAM,
+            latestSuppliesTEA,
             nextVaults,
             taxesToDAO,
             sumTaxesToDAO
@@ -164,14 +164,14 @@ contract SystemControl is Ownable {
             true
         );
 
-        // Get the MAAM supplies of all the previous vaults
-        bytes16[] memory latestSuppliesMAAM = new bytes16[](vaults.length);
+        // Get the TEA supplies of all the previous vaults
+        bytes16[] memory latestSuppliesTEA = new bytes16[](vaults.length);
         for (uint256 i = 0; i < vaults.length; i++) {
-            latestSuppliesMAAM[i] = IVault(vaults[i]).nonRebasingSupplyExcludePOL();
+            latestSuppliesTEA[i] = IVault(vaults[i]).nonRebasingSupplyExcludePOL();
         }
 
         // Becaues the total vault issuance has change, the vaults need to be recalibrated
-        _SYSTEM_STATE.recalibrateVaultsIssuances(vaults, latestSuppliesMAAM, _sumTaxesToDAO);
+        _SYSTEM_STATE.recalibrateVaultsIssuances(vaults, latestSuppliesTEA, _sumTaxesToDAO);
     }
 
     // MAKE A WITHDRAWAL FUNCTION!

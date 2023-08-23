@@ -37,11 +37,9 @@ library DeployerOfAPE {
         ape = new APE{salt: saltAPE}();
     }
 
-    /**
-     * @param addrDebtToken Address of the rewards token
-     *     @param addrCollateralToken Address of the collateral token
-     *     @param leverageTier Ranges between -3 to 10.
-     *     @notice The target collateralization ratio for TEA is given by r = 1+2**(-2*leverageTier-1).
+    /** @param addrDebtToken Address of the rewards token
+        @param addrCollateralToken Address of the collateral token
+        @param leverageTier Ranges between -3 to 2.
      */
 
     function _generateName(

@@ -2,12 +2,12 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {MAAM, IERC20} from "./MAAM.sol";
+import {TEA, IERC20} from "./TEA.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 
-abstract contract SystemState is SystemCommons, MAAM {
+abstract contract SystemState is SystemCommons, TEA {
     struct LPerIssuanceParams {
-        uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by an LPer per unit of MAAM
+        uint128 cumSIRperTEA; // Q104.24, cumulative SIR minted by an LPer per unit of TEA
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
@@ -15,8 +15,8 @@ abstract contract SystemState is SystemCommons, MAAM {
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
         uint72 issuance; // [SIR/s] Assert that issuance <= ISSUANCE
-        uint40 tsLastUpdate; // timestamp of the last time cumSIRperMAAM was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint128 cumSIRperMAAM; // Q104.24, cumulative SIR minted by the vaultId per unit of MAAM.
+        uint40 tsLastUpdate; // timestamp of the last time cumSIRperTEA was updated. 0 => use systemParams.tsIssuanceStart instead
+        uint128 cumSIRperTEA; // Q104.24, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
     struct SystemParameters {
@@ -60,9 +60,9 @@ abstract contract SystemState is SystemCommons, MAAM {
             vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
         ) return vaultIssuanceParams_;
 
-        // Compute the cumulative SIR per unit of MAAM, if it has not been updated in this block
+        // Compute the cumulative SIR per unit of TEA, if it has not been updated in this block
         bool rewardsNeverUpdated = systemParams.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate;
-        vaultIssuanceParams_.cumSIRperMAAM += uint128(
+        vaultIssuanceParams_.cumSIRperTEA += uint128(
             ((uint256(vaultIssuanceParams_.issuance) *
                 uint256(
                     uint40(block.timestamp) -
@@ -88,18 +88,18 @@ abstract contract SystemState is SystemCommons, MAAM {
         // Get the lper issuance parameters
         lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
 
-        // Get the LPer balance of MAAM
+        // Get the LPer balance of TEA
         uint256 balance = balanceOf[lper][vaultId];
 
-        // If LPer has no MAAM
+        // If LPer has no TEA
         if (balance == 0) return lperIssuanceParams_;
 
         // If rewards need to be updated
-        if (vaultIssuanceParams_.cumSIRperMAAM != lperIssuanceParams_.cumSIRperMAAM) {
+        if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
             lperIssuanceParams_.rewards += uint104(
-                (balance * uint256(vaultIssuanceParams_.cumSIRperMAAM - lperIssuanceParams_.cumSIRperMAAM)) >> 24
+                (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 24
             );
-            lperIssuanceParams_.cumSIRperMAAM = vaultIssuanceParams_.cumSIRperMAAM;
+            lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
         }
     }
 
@@ -107,7 +107,7 @@ abstract contract SystemState is SystemCommons, MAAM {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
     /**
-     * @dev To be called BEFORE minting/burning MAAM
+     * @dev To be called BEFORE minting/burning TEA
      */
     function _updateIssuanceParams(uint256 vaultId, address lper) internal override {
         // If issuance has not started, return
@@ -124,7 +124,7 @@ abstract contract SystemState is SystemCommons, MAAM {
     }
 
     /**
-     * @dev To be called BEFORE transfering MAAM
+     * @dev To be called BEFORE transfering TEA
      */
     function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal override {
         // If issuance has not started, return
@@ -170,15 +170,15 @@ abstract contract SystemState is SystemCommons, MAAM {
 
     // function recalibrateVaultsIssuances(
     //     address[] calldata vaults,
-    //     bytes16[] memory latestSuppliesMAAM,
+    //     bytes16[] memory latestSuppliesTEA,
     //     uint256 sumTaxes
     // ) public onlySystemControl {
     //     // Reset issuance of prev vaults
     //     for (uint256 i = 0; i < vaults.length; i++) {
-    //         // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperMAAM)
-    //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperMAAM = _getCumSIRperMAAM(
+    //         // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperTEA)
+    //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperTEA = _getCumSIRperTEA(
     //             vaults[i],
-    //             latestSuppliesMAAM[i]
+    //             latestSuppliesTEA[i]
     //         );
     //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
     //         if (sumTaxes == 0) {
@@ -195,13 +195,13 @@ abstract contract SystemState is SystemCommons, MAAM {
 
     // function changeVaultsIssuances(
     //     address[] calldata prevVaults,
-    //     bytes16[] memory latestSuppliesMAAM,
+    //     bytes16[] memory latestSuppliesTEA,
     //     address[] calldata nextVaults,
     //     uint16[] calldata taxesToDAO,
     //     uint256 sumTaxes
     // ) external onlySystemControl returns (bytes32) {
     //     // Reset issuance of prev vaults
-    //     recalibrateVaultsIssuances(prevVaults, latestSuppliesMAAM, 0);
+    //     recalibrateVaultsIssuances(prevVaults, latestSuppliesTEA, 0);
 
     //     // Set next issuances
     //     for (uint256 i = 0; i < nextVaults.length; i++) {

@@ -10,7 +10,7 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 // Contracts
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
-abstract contract MAAM is ERC1155 {
+abstract contract TEA is ERC1155 {
     mapping(uint256 vaultId => uint256) public totalSupply;
 
     function uri(uint256 vaultId) public view override returns (string memory) {
@@ -20,7 +20,7 @@ abstract contract MAAM is ERC1155 {
             string.concat(
                 "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE",
                 vaultIdStr,
-                "%22%2C%22symbol%22%3A%22MAAM-",
+                "%22%2C%22symbol%22%3A%22TEA-",
                 vaultIdStr,
                 "%22%2C%22decimals%22%3A",
                 Strings.toString(IERC20(collateralToken).decimals()),

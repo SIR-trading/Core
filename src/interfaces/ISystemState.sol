@@ -18,7 +18,7 @@ interface ISystemState is IFees, ISIR {
 
     function changeVaultsIssuances(
         address[] calldata prevVaults,
-        bytes16[] memory latestSuppliesMAAM,
+        bytes16[] memory latestSuppliesTEA,
         address[] calldata nextVaults,
         uint16[] calldata taxesToDAO,
         uint256 sumTaxes
@@ -26,7 +26,7 @@ interface ISystemState is IFees, ISIR {
 
     function recalibrateVaultsIssuances(
         address[] calldata vaults,
-        bytes16[] memory latestSuppliesMAAM,
+        bytes16[] memory latestSuppliesTEA,
         uint256 sumTaxes
     ) external;
 

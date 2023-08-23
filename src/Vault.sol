@@ -16,7 +16,7 @@ import {Oracle} from "./Oracle.sol";
 import {SystemState} from "./SystemState.sol";
 
 /**
- * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (MAAM tokens).
+ * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (TEA tokens).
  *  @dev The tickPriceX42 of the collateral vs rewards token is also represented as FP.
  *  @dev tickPriceX42's range is [0,Infinity], where Infinity is included.
  */
@@ -86,7 +86,7 @@ contract Vault is SystemState {
     }
 
     /**
-        Initialization is always necessary because we must deploy TEA and APE contracts, and possibly initialize the Oracle.
+        Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
         If I require initialization, the vaultId can be chosen sequentially,
         and stored in the state by squeezing out some bytes from the other state variables.
         Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
@@ -128,7 +128,7 @@ contract Vault is SystemState {
         ADD GET RESERVES FUNCTION TO THE PERIPHERY?
      */
 
-    /** @notice Function for minting APE or MAAM
+    /** @notice Function for minting APE or TEA
      */
     function mint(
         bool isAPE,
@@ -147,8 +147,8 @@ contract Vault is SystemState {
 
         /** COMPUTE PARAMETERS
             ape                   - The token contract of APE if necessary
-            syntheticTokenReserve - Collateral reserve backing APE or MAAM
-            syntheticTokenSupply  - Supply of APE or MAAM
+            syntheticTokenReserve - Collateral reserve backing APE or TEA
+            syntheticTokenSupply  - Supply of APE or TEA
          */
         APE ape;
         uint152 syntheticTokenReserve;
@@ -165,10 +165,10 @@ contract Vault is SystemState {
         /** COMPUTE AMOUNTS
             collateralIn  - The amount of collateral that has been sent to the contract
             collateralFee - The amount of collateral paid in fees
-            amount        - The amount of APE/MAAM minted for the user
+            amount        - The amount of APE/TEA minted for the user
             feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
             feeToDAO      - The amount of fees (collateral) diverged to the DAO
-            amountPOL     - The amount of MAAM minted to protocol owned liquidity (POL)
+            amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
          */
 
         // Get deposited collateral
@@ -182,12 +182,12 @@ contract Vault is SystemState {
             isAPE ? leverageTier : int8(0)
         );
 
-        // Compute amount MAAM or APE to mint for the user
+        // Compute amount TEA or APE to mint for the user
         uint256 amount = syntheticTokenReserve == 0
             ? collateralIn
             : FullMath.mulDiv(syntheticTokenSupply, collateralIn, syntheticTokenReserve);
 
-        // Compute amount MAAM to mint as POL (max 10% of collateralFee)
+        // Compute amount TEA to mint as POL (max 10% of collateralFee)
         uint152 feeToPOL = collateralFee / 10;
         uint256 amountPOL = reserves.lpReserve == 0
             ? feeToPOL
@@ -202,11 +202,11 @@ contract Vault is SystemState {
         }
 
         /** MINTING
-            1. Mint APE or MAAM for the user
-            2. Mint MAAM to protocol owned liquidity (POL)
+            1. Mint APE or TEA for the user
+            2. Mint TEA to protocol owned liquidity (POL)
          */
 
-        // Mint APE/MAAM
+        // Mint APE/TEA
         isAPE ? ape.mint(msg.sender, amount) : _mint(msg.sender, state_.vaultId, amount);
 
         // Mint protocol-owned liquidity if necessary
@@ -231,7 +231,7 @@ contract Vault is SystemState {
         return amount;
     }
 
-    /** @notice Function for burning APE or MAAM
+    /** @notice Function for burning APE or TEA
      */
     function burn(
         bool isAPE,
@@ -248,8 +248,8 @@ contract Vault is SystemState {
 
         /** COMPUTE PARAMETERS
             ape                   - The token contract of APE if necessary
-            syntheticTokenReserve - Collateral reserve backing APE or MAAM
-            syntheticTokenSupply  - Supply of APE or MAAM
+            syntheticTokenReserve - Collateral reserve backing APE or TEA
+            syntheticTokenSupply  - Supply of APE or TEA
          */
         APE ape;
         uint152 syntheticTokenReserve;
@@ -269,7 +269,7 @@ contract Vault is SystemState {
             collateralFee - The amount of collateral paid in fees
             feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
             feeToDAO      - The amount of fees (collateral) diverged to the DAO
-            amountPOL     - The amount of MAAM minted to protocol owned liquidity (POL)
+            amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
          */
 
         // Get collateralOut
@@ -282,7 +282,7 @@ contract Vault is SystemState {
             isAPE ? leverageTier : int8(0)
         );
 
-        // Compute amount MAAM to mint as POL (max 10% of collateralFee)
+        // Compute amount TEA to mint as POL (max 10% of collateralFee)
         uint152 feeToPOL = collateralFee / 10;
         uint256 amountPOL = reserves.lpReserve == 0
             ? feeToPOL
@@ -297,11 +297,11 @@ contract Vault is SystemState {
         }
 
         /** BURNING AND MINTING
-            1. Burn APE or MAAM from the user
-            2. Mint MAAM to protocol owned liquidity (POL)
+            1. Burn APE or TEA from the user
+            2. Mint TEA to protocol owned liquidity (POL)
          */
 
-        // Burn APE/MAAM
+        // Burn APE/TEA
         isAPE ? ape.burn(msg.sender, amountToken) : _burn(msg.sender, state_.vaultId, amountToken);
 
         // Mint protocol-owned liquidity if necessary
@@ -398,7 +398,7 @@ contract Vault is SystemState {
                      * We use the fact that l = 1+2^leverageTier
                      * apesReserve is rounded up
                      */
-                    // USE Q128.128!!
+                    // CAN IT OVERFLOW?!?!
                     (bool OF, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
                         leverageTier > 0
                             ? (state_.tickPriceSatX42 - state_.tickPriceX42) << absLeverageTier
@@ -539,9 +539,10 @@ contract Vault is SystemState {
                      * PRICE IN POWER ZONE
                      * priceSat = price*(R/(lA))^(r-1)
                      */
+
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier, // Cannot OF cuz totalReserves is uint152, and |leverageTier|<=2
-                        (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve // Cannot OF cuz apesReserve is uint152, and |leverageTier|<=2
+                        leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier, // Cannot OF cuz totalReserves is uint152, and |leverageTier|<=3
+                        (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve // Cannot OF cuz apesReserve is uint152, and |leverageTier|<=3
                     );
 
                     // Compute saturation price

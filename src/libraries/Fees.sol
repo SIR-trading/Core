@@ -18,7 +18,6 @@ pragma solidity ^0.8.0;
 
 library Fees {
     /**
-     *  @notice The user mints/burns TEA/APE and a fee is substracted
      *  @return collateralDeposited
      *  @return comission to LPers
      */
