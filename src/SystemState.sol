@@ -6,17 +6,19 @@ import {TEA, IERC20} from "./TEA.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 
 abstract contract SystemState is SystemCommons, TEA {
+    event IssuanceStart(uint40 tsIssuanceStart);
+
     struct LPerIssuanceParams {
-        uint128 cumSIRperTEA; // Q104.24, cumulative SIR minted by an LPer per unit of TEA
+        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
-    // ADD tsEnd TO EASILY FINISH ISSUANCE?!
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
-        uint72 issuance; // [SIR/s] Assert that issuance <= ISSUANCE
+        uint16 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
         uint40 tsLastUpdate; // timestamp of the last time cumSIRperTEA was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint128 cumSIRperTEA; // Q104.24, cumulative SIR minted by the vaultId per unit of TEA.
+        uint32 indexTsEndIssuance; // Points to the last timestamp in iussanceChanges that is smaller or equal than tsLastUpdate
+        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
     struct SystemParameters {
@@ -28,10 +30,19 @@ abstract contract SystemState is SystemCommons, TEA {
          */
         uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
         uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
-        uint72 issuanceTotalVaults; // Tokens issued per second excluding tokens issued to contributorsReceivingSIR
         bool emergencyStop;
     }
 
+    struct IssuanceChange {
+        uint40 timeStamp; // Time the issuance changed
+        uint72 issuanceAggVaults; // SIR issued per second excluding contributors
+    }
+
+    /** iussanceChanges is an array of timestamps. Each timestamp corresponds to the end time of an issuance.
+        Issuance of a vault ends at time min(t : tsLastUpdate < t , t ∈ iussanceChanges )
+        A new timestamp is pused to iussanceChanges every time issuances are recalibrated, to end previous issuances. 
+     */
+    IssuanceChange[] iussanceChanges;
     mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) internal _lpersIssuances;
 
@@ -39,6 +50,7 @@ abstract contract SystemState is SystemCommons, TEA {
         SystemParameters({
             tsIssuanceStart: 0,
             baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
+            lpFee: 50,
             emergencyStop: false, // Emergency stop is off
             issuanceTotalVaults: ISSUANCE // All issuance go to the vaults by default (no contributors)
         });
@@ -50,30 +62,77 @@ abstract contract SystemState is SystemCommons, TEA {
     ////////////////////////////////////////////////////////////////*/
 
     function vaultIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
-        // Get the vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
+        unchecked {
+            // Get the vault issuance parameters
+            VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
-        // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
-        if (
-            systemParams.tsIssuanceStart == 0 ||
-            vaultIssuanceParams_.issuance == 0 ||
-            vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
-        ) return vaultIssuanceParams_;
+            // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
+            if (
+                systemParams.tsIssuanceStart == 0 ||
+                vaultIssuanceParams_.taxToDAO == 0 ||
+                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
+            ) return vaultIssuanceParams_;
 
-        // Compute the cumulative SIR per unit of TEA, if it has not been updated in this block
-        bool rewardsNeverUpdated = systemParams.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate;
-        vaultIssuanceParams_.cumSIRperTEA += uint128(
-            ((uint256(vaultIssuanceParams_.issuance) *
-                uint256(
-                    uint40(block.timestamp) -
-                        (rewardsNeverUpdated ? systemParams.tsIssuanceStart : vaultIssuanceParams_.tsLastUpdate)
-                )) << 24) / totalSupply[vaultId]
-        );
+            // Find starting time to compute cumulative SIR per unit of TEA
+            uint40 tsStart = systemParams.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
+                ? systemParams.tsIssuanceStart
+                : vaultIssuanceParams_.tsLastUpdate;
 
-        // Update timestamp
-        vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
+            // Find issuance change events that happened after tsStart
+            uint256 lenTsEndIssuance = iussanceChanges.length;
 
-        return vaultIssuanceParams_;
+            // Find the first issuance change that is relevant
+            uint32 i;
+            for (
+                i = vaultIssuanceParams_.indexTsEndIssuance;
+                i < lenTsEndIssuance && tsStart >= iussanceChanges[i].timeStamp;
+                ++i
+            ) {}
+            // uint40 tsEnd = i == lenTsEndIssuance ? uint40(block.timestamp) : iussanceChanges[i];
+
+            // Aggregate the SIR issued taking into account the the issuance changes
+            uint40 tsEnd = uint40(block.timestamp);
+            uint256 issuance;
+            for (; i < lenTsEndIssuance; ++i) {
+                // Compute the implicity issuance given taxToDAO
+                issuance =
+                    (uint256(iussanceChanges[i - 1].issuanceAggVaults) * vaultIssuanceParams_.taxToDAO) /
+                    vaultIssuanceParams_.aggTaxesToDAO;
+
+                // If it has not been updated in this block, compute the cumulative SIR per unit of TEA
+                vaultIssuanceParams_.cumSIRperTEA += uint152(
+                    ((issuance * (iussanceChanges[i].timeStamp - tsStart)) << 48) / totalSupply[vaultId]
+                );
+
+                // For the next iteration
+                tsStart = iussanceChanges[i].timeStamp;
+
+                if (iussanceChanges[i].issuanceAggVaults == 0) {
+                    tsEnd = iussanceChanges[i].timeStamp;
+                    break;
+                }
+            }
+
+            // Aggregate remaining SIR issued if issuance has not ended
+            if (i == lenTsEndIssuance) {
+                issuance =
+                    (uint256(iussanceChanges[lenTsEndIssuance - 1].issuanceAggVaults) * vaultIssuanceParams_.taxToDAO) /
+                    vaultIssuanceParams_.aggTaxesToDAO;
+
+                vaultIssuanceParams_.cumSIRperTEA += uint152(
+                    ((issuance * (uint40(block.timestamp) - tsStart)) << 48) / totalSupply[vaultId]
+                );
+            }
+
+            // Next time we start from this index
+            vaultIssuanceParams_.indexTsEndIssuance = lenTsEndIssuance;
+            // VERY IMPORTANT THAT WHEN DOING A NEW ISSUANCE ALLOCATION, ALL NEW POOLS ARE UPDATED WITH THIS FUNCTION
+
+            // Update timestamp
+            vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
+
+            return vaultIssuanceParams_;
+        }
     }
 
     function lperIssuanceParams(uint256 vaultId, address lper) external view returns (LPerIssuanceParams memory) {
@@ -97,7 +156,7 @@ abstract contract SystemState is SystemCommons, TEA {
         // If rewards need to be updated
         if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
             lperIssuanceParams_.rewards += uint104(
-                (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 24
+                (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 48
             );
             lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
         }
@@ -146,23 +205,32 @@ abstract contract SystemState is SystemCommons, TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // /**
-    //  * @dev Only one parameter can be updated at one. We use a single function to reduce bytecode size.
-    //  */
-    // function updateSystemParameters(
-    //     uint40 tsIssuanceStart_,
-    //     uint16 basisFee_,
-    //     bool onlyWithdrawals_
-    // ) external onlySystemControl {
-    //     if (tsIssuanceStart_ > 0) {
-    //         require(systemParams.tsIssuanceStart == 0, "Issuance already started");
-    //         systemParams.tsIssuanceStart = tsIssuanceStart_;
-    //     } else if (basisFee_ > 0) {
-    //         systemParams.baseFee = basisFee_;
-    //     } else {
-    //         systemParams.emergencyStop = onlyWithdrawals_;
-    //     }
-    // }
+    /**
+     * @dev Only one parameter can be updated at one. We use a single function to reduce bytecode size.
+     */
+    function updateSystemParameters(
+        uint40 tsIssuanceStart,
+        uint16 baseFee,
+        uint8 lpFee,
+        uint72 issuanceTotalVaults,
+        bool emergencyStop
+    ) external onlySystemControl {
+        SystemParameters memory systemParams_ = systemParams;
+
+        if (systemParams_.tsIssuanceStart == 0 && tsIssuanceStart > 0) {
+            systemParams_.tsIssuanceStart = tsIssuanceStart;
+            emit IssuanceStart(tsIssuanceStart);
+        }
+
+        if (tsIssuanceStart_ > 0) {
+            require(systemParams.tsIssuanceStart == 0, "Issuance already started");
+            systemParams.tsIssuanceStart = tsIssuanceStart_;
+        } else if (basisFee_ > 0) {
+            systemParams.baseFee = basisFee_;
+        } else {
+            systemParams.emergencyStop = onlyWithdrawals_;
+        }
+    }
 
     /*////////////////////////////////////////////////////////////////
                             ADMIN ISSUANCE FUNCTIONS

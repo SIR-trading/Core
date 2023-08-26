@@ -15,11 +15,6 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {Oracle} from "./Oracle.sol";
 import {SystemState} from "./SystemState.sol";
 
-/**
- * @dev Floating point (FP) numbers are necessary for rebasing balances of LP (TEA tokens).
- *  @dev The tickPriceX42 of the collateral vs rewards token is also represented as FP.
- *  @dev tickPriceX42's range is [0,Infinity], where Infinity is included.
- */
 contract Vault is SystemState {
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
