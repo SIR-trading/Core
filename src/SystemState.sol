@@ -7,6 +7,8 @@ import {SystemCommons} from "./SystemCommons.sol";
 
 abstract contract SystemState is SystemCommons, TEA {
     event IssuanceStart(uint40 tsIssuanceStart);
+    event EmergencyStop(bool indexed);
+    event NewFees(uint16 baseFee, uint8 lpFee);
 
     struct LPerIssuanceParams {
         uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
@@ -42,17 +44,16 @@ abstract contract SystemState is SystemCommons, TEA {
         Issuance of a vault ends at time min(t : tsLastUpdate < t , t ∈ iussanceChanges )
         A new timestamp is pused to iussanceChanges every time issuances are recalibrated, to end previous issuances. 
      */
-    IssuanceChange[] iussanceChanges;
-    mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
-    mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) internal _lpersIssuances;
+    IssuanceChange[] private iussanceChanges = [IssuanceChange({timeStamp: 0, issuanceAggVaults: ISSUANCE})];
+    mapping(uint256 vaultId => VaultIssuanceParams) private _vaultsIssuanceParams;
+    mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
     SystemParameters public systemParams =
         SystemParameters({
             tsIssuanceStart: 0,
             baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
             lpFee: 50,
-            emergencyStop: false, // Emergency stop is off
-            issuanceTotalVaults: ISSUANCE // All issuance go to the vaults by default (no contributors)
+            emergencyStop: false // Emergency stop is off
         });
 
     constructor(address systemControl_) SystemCommons(systemControl_) {}
@@ -88,7 +89,6 @@ abstract contract SystemState is SystemCommons, TEA {
                 i < lenTsEndIssuance && tsStart >= iussanceChanges[i].timeStamp;
                 ++i
             ) {}
-            // uint40 tsEnd = i == lenTsEndIssuance ? uint40(block.timestamp) : iussanceChanges[i];
 
             // Aggregate the SIR issued taking into account the the issuance changes
             uint40 tsEnd = uint40(block.timestamp);
@@ -205,31 +205,32 @@ abstract contract SystemState is SystemCommons, TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Only one parameter can be updated at one. We use a single function to reduce bytecode size.
-     */
-    function updateSystemParameters(
-        uint40 tsIssuanceStart,
-        uint16 baseFee,
-        uint8 lpFee,
-        uint72 issuanceTotalVaults,
-        bool emergencyStop
-    ) external onlySystemControl {
-        SystemParameters memory systemParams_ = systemParams;
-
-        if (systemParams_.tsIssuanceStart == 0 && tsIssuanceStart > 0) {
-            systemParams_.tsIssuanceStart = tsIssuanceStart;
-            emit IssuanceStart(tsIssuanceStart);
-        }
-
-        if (tsIssuanceStart_ > 0) {
-            require(systemParams.tsIssuanceStart == 0, "Issuance already started");
+    function startIssuance() external onlySystemControl {
+        if (systemParams.tsIssuanceStart == 0) {
+            uint40 tsIssuanceStart_ = uint40(block.timestamp);
             systemParams.tsIssuanceStart = tsIssuanceStart_;
-        } else if (basisFee_ > 0) {
-            systemParams.baseFee = basisFee_;
-        } else {
-            systemParams.emergencyStop = onlyWithdrawals_;
-        }
+            emit IssuanceStart(tsIssuanceStart_);
+        } else revert();
+    }
+
+    function emergencyStop() external onlySystemControl {
+        if (!systemParams.emergencyStop) {
+            systemParams.emergencyStop = true;
+            emit EmergencyStop(true);
+        } else revert();
+    }
+
+    function resumeSystem() external onlySystemControl {
+        if (systemParams.emergencyStop) {
+            systemParams.emergencyStop = false;
+            emit EmergencyStop(false);
+        } else revert();
+    }
+
+    function updateFees(uint16 baseFee, uint8 lpFee) external onlySystemControl {
+        systemParams.baseFee = baseFee;
+        systemParams.lpFee = lpFee;
+        emit NewFees(baseFee, lpFee);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -261,25 +262,25 @@ abstract contract SystemState is SystemCommons, TEA {
     //     }
     // }
 
-    // function changeVaultsIssuances(
-    //     address[] calldata prevVaults,
-    //     bytes16[] memory latestSuppliesTEA,
-    //     address[] calldata nextVaults,
-    //     uint16[] calldata taxesToDAO,
-    //     uint256 sumTaxes
-    // ) external onlySystemControl returns (bytes32) {
-    //     // Reset issuance of prev vaults
-    //     recalibrateVaultsIssuances(prevVaults, latestSuppliesTEA, 0);
+    function newVaultsIssuances(
+        address[] calldata prevVaults,
+        bytes16[] memory latestSuppliesTEA,
+        address[] calldata nextVaults,
+        uint16[] calldata taxesToDAO,
+        uint256 sumTaxes
+    ) external onlySystemControl returns (bytes32) {
+        // Reset issuance of prev vaults
+        recalibrateVaultsIssuances(prevVaults, latestSuppliesTEA, 0);
 
-    //     // Set next issuances
-    //     for (uint256 i = 0; i < nextVaults.length; i++) {
-    //         _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-    //         _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
-    //         _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
-    //             (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
-    //         );
-    //     }
+        // Set next issuances
+        for (uint256 i = 0; i < nextVaults.length; i++) {
+            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
+            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
+            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
+                (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
+            );
+        }
 
-    //     return keccak256(abi.encodePacked(nextVaults));
-    // }
+        return keccak256(abi.encodePacked(nextVaults));
+    }
 }

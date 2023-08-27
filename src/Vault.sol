@@ -33,7 +33,7 @@ contract Vault is SystemState {
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
 
-    Oracle public immutable oracle;
+    Oracle private immutable oracle;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
         public state; // Do not use vaultId 0
@@ -131,6 +131,8 @@ contract Vault is SystemState {
         address collateralToken,
         int8 leverageTier
     ) external returns (uint256) {
+        require(!systemParams.emergencyStop);
+
         // Until SIR is running, only LPers are allowed to mint (deposit collateral)
         if (isAPE) require(systemParams.tsIssuanceStart > 0);
 
@@ -473,8 +475,6 @@ contract Vault is SystemState {
         VaultStructs.State memory state_,
         address collateralToken
     ) private view returns (uint152) {
-        require(!systemParams.emergencyStop);
-
         // Get deposited collateral
         unchecked {
             uint256 balance = IERC20(collateralToken).balanceOf(address(msg.sender)) -
