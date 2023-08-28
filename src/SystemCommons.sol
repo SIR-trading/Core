@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 // Contracts
 abstract contract SystemCommons {
     modifier onlySystemControl() {
-        _onlySystemControl();
+        require(msg.sender == systemControl);
         _;
     }
 
@@ -19,9 +19,5 @@ abstract contract SystemCommons {
 
     constructor(address systemControl_) {
         systemControl = systemControl_;
-    }
-
-    function _onlySystemControl() private view {
-        require(msg.sender == systemControl);
     }
 }

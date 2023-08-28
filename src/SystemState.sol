@@ -205,82 +205,74 @@ abstract contract SystemState is SystemCommons, TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function startIssuance() external onlySystemControl {
-        if (systemParams.tsIssuanceStart == 0) {
-            uint40 tsIssuanceStart_ = uint40(block.timestamp);
-            systemParams.tsIssuanceStart = tsIssuanceStart_;
-            emit IssuanceStart(tsIssuanceStart_);
-        } else revert();
-    }
-
-    function emergencyStop() external onlySystemControl {
-        if (!systemParams.emergencyStop) {
-            systemParams.emergencyStop = true;
-            emit EmergencyStop(true);
-        } else revert();
-    }
-
-    function resumeSystem() external onlySystemControl {
-        if (systemParams.emergencyStop) {
-            systemParams.emergencyStop = false;
-            emit EmergencyStop(false);
-        } else revert();
-    }
-
-    function updateFees(uint16 baseFee, uint8 lpFee) external onlySystemControl {
-        systemParams.baseFee = baseFee;
-        systemParams.lpFee = lpFee;
-        emit NewFees(baseFee, lpFee);
-    }
-
-    /*////////////////////////////////////////////////////////////////
-                            ADMIN ISSUANCE FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
-
-    // function recalibrateVaultsIssuances(
-    //     address[] calldata vaults,
-    //     bytes16[] memory latestSuppliesTEA,
-    //     uint256 sumTaxes
-    // ) public onlySystemControl {
-    //     // Reset issuance of prev vaults
-    //     for (uint256 i = 0; i < vaults.length; i++) {
-    //         // Update vaultId issuance params (they only get updated once per block thanks to function getCumSIRperTEA)
-    //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.cumSIRperTEA = _getCumSIRperTEA(
-    //             vaults[i],
-    //             latestSuppliesTEA[i]
-    //         );
-    //         _vaultsIssuanceParams[vaultId[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-    //         if (sumTaxes == 0) {
-    //             _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO = 0;
-    //             _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = 0;
-    //         } else {
-    //             _vaultsIssuanceParams[vaultId[i]].vaultIssuance.issuance = uint72(
-    //                 (systemParams.issuanceTotalVaults * _vaultsIssuanceParams[vaultId[i]].vaultIssuance.taxToDAO) /
-    //                     sumTaxes
-    //             );
-    //         }
-    //     }
+    /// @dev Implement these functions in systemControl
+    // function startIssuance() external onlySystemControl {
+    //     if (systemParams.tsIssuanceStart == 0) {
+    //         uint40 tsIssuanceStart_ = uint40(block.timestamp);
+    //         systemParams.tsIssuanceStart = tsIssuanceStart_;
+    //         emit IssuanceStart(tsIssuanceStart_);
+    //     } else revert();
     // }
 
-    function newVaultsIssuances(
-        address[] calldata prevVaults,
-        bytes16[] memory latestSuppliesTEA,
-        address[] calldata nextVaults,
-        uint16[] calldata taxesToDAO,
-        uint256 sumTaxes
-    ) external onlySystemControl returns (bytes32) {
-        // Reset issuance of prev vaults
-        recalibrateVaultsIssuances(prevVaults, latestSuppliesTEA, 0);
+    // function emergencyStop() external onlySystemControl {
+    //     if (!systemParams.emergencyStop) {
+    //         systemParams.emergencyStop = true;
+    //         emit EmergencyStop(true);
+    //     } else revert();
+    // }
 
-        // Set next issuances
-        for (uint256 i = 0; i < nextVaults.length; i++) {
-            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.tsLastUpdate = uint40(block.timestamp);
-            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.taxToDAO = taxesToDAO[i];
-            _vaultsIssuanceParams[nextVaults[i]].vaultIssuance.issuance = uint72(
-                (systemParams.issuanceTotalVaults * taxesToDAO[i]) / sumTaxes
-            );
+    // function resumeSystem() external onlySystemControl {
+    //     if (systemParams.emergencyStop) {
+    //         systemParams.emergencyStop = false;
+    //         emit EmergencyStop(false);
+    //     } else revert();
+    // }
+
+    // function updateFees(uint16 baseFee, uint8 lpFee) external onlySystemControl {
+    //     systemParams.baseFee = baseFee;
+    //     systemParams.lpFee = lpFee;
+    //     emit NewFees(baseFee, lpFee);
+    // }
+
+    /// @dev CHECKS ARE DONE IN SYSTEM CONTROL!
+    function updateSystemParameters(
+        uint40 tsIssuanceStart,
+        uint16 baseFee,
+        uint8 lpFee,
+        bool emergencyStop
+    ) external onlySystemControl {
+        SystemParameters memory systemParams_ = systemParams;
+        if (tsIssuanceStart != systemParams_.tsIssuanceStart) emit IssuanceStart(tsIssuanceStart);
+        if (baseFee != systemParams.baseFee || lpFee != systemParams.lpFee) emit NewFees(baseFee, lpFee);
+        if (emergencyStop != systemParams_.emergencyStop) emit EmergencyStop(emergencyStop);
+
+        systemParams = SystemParameters({
+            tsIssuanceStart: tsIssuanceStart,
+            baseFee: baseFee,
+            lpFee: lpFee,
+            emergencyStop: emergencyStop
+        });
+    }
+
+    /// @dev The checks are taken care in the systemControl contract
+    function newVaultIssuances(
+        uint72 newIssuanceAggVaults,
+        uint40[] calldata vaultIds,
+        uint16[] calldata taxesToDAO
+    ) external onlySystemControl returns (bytes32) {
+        // Hault all issuances
+        iussanceChanges.push(IssuanceChange({timeStamp: uint40(block.timestamp), issuanceAggVaults: 0}));
+
+        // Update parameters on all new pools that will get rewards
+        // require(vaultIds.length == taxesToDAO.length); // MAKE THIS CHECKS IN SYSTEMCONTROL!!
+        for (uint256 i = 0; i < vaultIds.length; ++i) {
+            _vaultsIssuanceParams[vaultIds[i]] = vaultIssuanceParams(vaultIds[i]);
         }
 
-        return keccak256(abi.encodePacked(nextVaults));
+        // Start new issuance
+        // require(newIssuanceAggVaults <= ISSUANCE); // MAKE THIS CHECKS IN SYSTEMCONTROL!!
+        iussanceChanges.push(
+            IssuanceChange({timeStamp: uint40(block.timestamp), issuanceAggVaults: newIssuanceAggVaults})
+        );
     }
 }
