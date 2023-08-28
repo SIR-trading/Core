@@ -11,7 +11,7 @@ abstract contract SystemState is SystemCommons, TEA {
     event NewFees(uint16 baseFee, uint8 lpFee);
 
     struct LPerIssuanceParams {
-        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
+        uint144 cumSIRperTEA; // Q104.40, cumulative SIR minted by an LPer per unit of TEA
         uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
@@ -19,8 +19,8 @@ abstract contract SystemState is SystemCommons, TEA {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
         uint16 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
         uint40 tsLastUpdate; // timestamp of the last time cumSIRperTEA was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint32 indexTsEndIssuance; // Points to the last timestamp in iussanceChanges that is smaller or equal than tsLastUpdate
-        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by the vaultId per unit of TEA.
+        uint40 tsIssuanceEnd; // timestamp when issuance ends. 0 => continue forever
+        uint144 cumSIRperTEA; // Q104.40, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
     struct SystemParameters {
@@ -35,16 +35,7 @@ abstract contract SystemState is SystemCommons, TEA {
         bool emergencyStop;
     }
 
-    struct IssuanceChange {
-        uint40 timeStamp; // Time the issuance changed
-        uint72 issuanceAggVaults; // SIR issued per second excluding contributors
-    }
-
-    /** iussanceChanges is an array of timestamps. Each timestamp corresponds to the end time of an issuance.
-        Issuance of a vault ends at time min(t : tsLastUpdate < t , t ∈ iussanceChanges )
-        A new timestamp is pused to iussanceChanges every time issuances are recalibrated, to end previous issuances. 
-     */
-    IssuanceChange[] private iussanceChanges = [IssuanceChange({timeStamp: 0, issuanceAggVaults: ISSUANCE})];
+    uint256[] activeVaults;
     mapping(uint256 vaultId => VaultIssuanceParams) private _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
@@ -71,7 +62,9 @@ abstract contract SystemState is SystemCommons, TEA {
             if (
                 systemParams.tsIssuanceStart == 0 ||
                 vaultIssuanceParams_.taxToDAO == 0 ||
-                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
+                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp) ||
+                (vaultIssuanceParams_.tsIssuanceEnd != 0 &&
+                    vaultIssuanceParams_.tsLastUpdate >= vaultIssuanceParams_.tsIssuanceEnd)
             ) return vaultIssuanceParams_;
 
             // Find starting time to compute cumulative SIR per unit of TEA
@@ -79,54 +72,30 @@ abstract contract SystemState is SystemCommons, TEA {
                 ? systemParams.tsIssuanceStart
                 : vaultIssuanceParams_.tsLastUpdate;
 
-            // Find issuance change events that happened after tsStart
-            uint256 lenTsEndIssuance = iussanceChanges.length;
+            // Find ending time to compute cumulative SIR per unit of TEA
+            uint40 tsEnd = vaultIssuanceParams_.tsIssuanceEnd == 0 ||
+                vaultIssuanceParams_.tsIssuanceEnd > block.timestamp
+                ? uint40(block.timestamp)
+                : vaultIssuanceParams_.tsIssuanceEnd;
 
-            // Find the first issuance change that is relevant
-            uint32 i;
-            for (
-                i = vaultIssuanceParams_.indexTsEndIssuance;
-                i < lenTsEndIssuance && tsStart >= iussanceChanges[i].timeStamp;
-                ++i
-            ) {}
-
-            // Aggregate the SIR issued taking into account the the issuance changes
-            uint40 tsEnd = uint40(block.timestamp);
-            uint256 issuance;
-            for (; i < lenTsEndIssuance; ++i) {
-                // Compute the implicity issuance given taxToDAO
-                issuance =
-                    (uint256(iussanceChanges[i - 1].issuanceAggVaults) * vaultIssuanceParams_.taxToDAO) /
+            // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
+            uint40 ts3Years = systemParams.tsIssuanceStart + _THREE_YEARS;
+            if (tsStart < ts3Years) {
+                uint256 issuance = (uint256(_AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
                     vaultIssuanceParams_.aggTaxesToDAO;
-
-                // If it has not been updated in this block, compute the cumulative SIR per unit of TEA
-                vaultIssuanceParams_.cumSIRperTEA += uint152(
-                    ((issuance * (iussanceChanges[i].timeStamp - tsStart)) << 48) / totalSupply[vaultId]
-                );
-
-                // For the next iteration
-                tsStart = iussanceChanges[i].timeStamp;
-
-                if (iussanceChanges[i].issuanceAggVaults == 0) {
-                    tsEnd = iussanceChanges[i].timeStamp;
-                    break;
-                }
-            }
-
-            // Aggregate remaining SIR issued if issuance has not ended
-            if (i == lenTsEndIssuance) {
-                issuance =
-                    (uint256(iussanceChanges[lenTsEndIssuance - 1].issuanceAggVaults) * vaultIssuanceParams_.taxToDAO) /
-                    vaultIssuanceParams_.aggTaxesToDAO;
-
-                vaultIssuanceParams_.cumSIRperTEA += uint152(
-                    ((issuance * (uint40(block.timestamp) - tsStart)) << 48) / totalSupply[vaultId]
+                vaultIssuanceParams_.cumSIRperTEA += uint144(
+                    ((issuance * ((tsEnd > ts3Years ? ts3Years : tsEnd) - tsStart)) << 40) / totalSupply[vaultId]
                 );
             }
 
-            // Next time we start from this index
-            vaultIssuanceParams_.indexTsEndIssuance = lenTsEndIssuance;
-            // VERY IMPORTANT THAT WHEN DOING A NEW ISSUANCE ALLOCATION, ALL NEW POOLS ARE UPDATED WITH THIS FUNCTION
+            // Aggregate SIR issued after the first 3 years
+            if (tsEnd > ts3Years) {
+                uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) /
+                    vaultIssuanceParams_.aggTaxesToDAO;
+                vaultIssuanceParams_.cumSIRperTEA += uint144(
+                    ((issuance * (tsEnd - (tsStart > ts3Years ? tsStart : ts3Years))) << 40) / totalSupply[vaultId]
+                );
+            }
 
             // Update timestamp
             vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
@@ -156,7 +125,7 @@ abstract contract SystemState is SystemCommons, TEA {
         // If rewards need to be updated
         if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
             lperIssuanceParams_.rewards += uint104(
-                (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 48
+                (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 40
             );
             lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
         }
@@ -205,36 +174,8 @@ abstract contract SystemState is SystemCommons, TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /// @dev Implement these functions in systemControl
-    // function startIssuance() external onlySystemControl {
-    //     if (systemParams.tsIssuanceStart == 0) {
-    //         uint40 tsIssuanceStart_ = uint40(block.timestamp);
-    //         systemParams.tsIssuanceStart = tsIssuanceStart_;
-    //         emit IssuanceStart(tsIssuanceStart_);
-    //     } else revert();
-    // }
+    // I INCLUDE CHECKS HERE, BUT MOVE THEM TO SYSTEMCONTROL IF CONTRACT IS TOO LARGE OR JUST MAKE SURE IT CANNOT HAPPEN.
 
-    // function emergencyStop() external onlySystemControl {
-    //     if (!systemParams.emergencyStop) {
-    //         systemParams.emergencyStop = true;
-    //         emit EmergencyStop(true);
-    //     } else revert();
-    // }
-
-    // function resumeSystem() external onlySystemControl {
-    //     if (systemParams.emergencyStop) {
-    //         systemParams.emergencyStop = false;
-    //         emit EmergencyStop(false);
-    //     } else revert();
-    // }
-
-    // function updateFees(uint16 baseFee, uint8 lpFee) external onlySystemControl {
-    //     systemParams.baseFee = baseFee;
-    //     systemParams.lpFee = lpFee;
-    //     emit NewFees(baseFee, lpFee);
-    // }
-
-    /// @dev CHECKS ARE DONE IN SYSTEM CONTROL!
     function updateSystemParameters(
         uint40 tsIssuanceStart,
         uint16 baseFee,
@@ -242,37 +183,51 @@ abstract contract SystemState is SystemCommons, TEA {
         bool emergencyStop
     ) external onlySystemControl {
         SystemParameters memory systemParams_ = systemParams;
+
+        require(tsIssuanceStart == 0 || (systemParams_.tsIssuanceStart == 0 && tsIssuanceStart >= block.timestamp));
+
         if (tsIssuanceStart != systemParams_.tsIssuanceStart) emit IssuanceStart(tsIssuanceStart);
         if (baseFee != systemParams.baseFee || lpFee != systemParams.lpFee) emit NewFees(baseFee, lpFee);
         if (emergencyStop != systemParams_.emergencyStop) emit EmergencyStop(emergencyStop);
 
         systemParams = SystemParameters({
-            tsIssuanceStart: tsIssuanceStart,
+            tsIssuanceStart: tsIssuanceStart == 0 ? systemParams_.tsIssuanceStart : tsIssuanceStart,
             baseFee: baseFee,
             lpFee: lpFee,
             emergencyStop: emergencyStop
         });
     }
 
-    /// @dev The checks are taken care in the systemControl contract
-    function newVaultIssuances(
-        uint72 newIssuanceAggVaults,
-        uint40[] calldata vaultIds,
-        uint16[] calldata taxesToDAO
-    ) external onlySystemControl returns (bytes32) {
-        // Hault all issuances
-        iussanceChanges.push(IssuanceChange({timeStamp: uint40(block.timestamp), issuanceAggVaults: 0}));
+    /** @dev Imperative this calls less gas than newVaultIssuances to ensure issuances can always be changed.
+        @dev So if newVaultIssuances costs less gas than 1 block, so does stopVaultIssuances.
+     */
+    function stopVaultIssuances(uint40 tsStop) external onlySystemControl returns (bytes32) {
+        uint256 lenActiveVaults = activeVaults.length;
+        for (uint256 i = 0; i < lenActiveVaults; ++i) _vaultsIssuanceParams[i].tsIssuanceEnd = uint40(block.timestamp);
 
-        // Update parameters on all new pools that will get rewards
-        // require(vaultIds.length == taxesToDAO.length); // MAKE THIS CHECKS IN SYSTEMCONTROL!!
-        for (uint256 i = 0; i < vaultIds.length; ++i) {
-            _vaultsIssuanceParams[vaultIds[i]] = vaultIssuanceParams(vaultIds[i]);
+        delete activeVaults;
+    }
+
+    /// @dev Important to call stopVaultIssuances before calling this function
+    function newVaultIssuances(uint40[] calldata vaults, uint16[] calldata taxesToDAO) external onlySystemControl {
+        uint256 lenVaults = vaults.length;
+        require(lenVaults == taxesToDAO.length);
+
+        // Compute aggregated taxes
+        uint16 aggTaxesToDAO;
+        for (uint256 i = 0; i < lenVaults; ++i) aggTaxesToDAO += taxesToDAO[i];
+
+        // Start new issuances
+        VaultIssuanceParams memory vaultIssuanceParams_;
+        for (uint256 i = 0; i < lenVaults; ++i) {
+            vaultIssuanceParams_ = vaultIssuanceParams(vaults[i]);
+
+            vaultIssuanceParams_.taxToDAO = taxesToDAO[i]; // New issuance allocation
+            vaultIssuanceParams_.aggTaxesToDAO = aggTaxesToDAO;
+            vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
+            vaultIssuanceParams_.tsIssuanceEnd = 0; // No forseable end to the allocation
+
+            _vaultsIssuanceParams[vaults[i]] = vaultIssuanceParams_;
         }
-
-        // Start new issuance
-        // require(newIssuanceAggVaults <= ISSUANCE); // MAKE THIS CHECKS IN SYSTEMCONTROL!!
-        iussanceChanges.push(
-            IssuanceChange({timeStamp: uint40(block.timestamp), issuanceAggVaults: newIssuanceAggVaults})
-        );
     }
 }
