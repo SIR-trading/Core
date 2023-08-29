@@ -130,99 +130,105 @@ contract Vault is SystemState {
         address collateralToken,
         int8 leverageTier
     ) external returns (uint256) {
-        require(!systemParams.emergencyStop);
+        unchecked {
+            require(!systemParams.emergencyStop);
 
-        // Until SIR is running, only LPers are allowed to mint (deposit collateral)
-        if (isAPE) require(systemParams.tsIssuanceStart > 0);
+            // Until SIR is running, only LPers are allowed to mint (deposit collateral)
+            if (isAPE) require(systemParams.tsIssuanceStart > 0);
 
-        // Get the state
-        VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
+            // Get the state
+            VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
 
-        // Compute reserves from state
-        VaultStructs.Reserves memory reserves = _getReserves(state_, leverageTier);
+            // Compute reserves from state
+            VaultStructs.Reserves memory reserves = _getReserves(state_, leverageTier);
 
-        uint256 amount;
-        // Too avoid stack too deep
-        {
-            /** COMPUTE PARAMETERS
-            ape                   - The token contract of APE if necessary
-            syntheticTokenReserve - Collateral reserve backing APE or TEA
-            syntheticTokenSupply  - Supply of APE or TEA
-         */
-            APE ape;
-            uint152 syntheticTokenReserve;
-            uint256 syntheticTokenSupply;
-            (ape, syntheticTokenReserve, syntheticTokenSupply) = _getSupplies(isAPE, state_, reserves);
+            uint256 amount;
+            // Too avoid stack too deep
+            {
+                /** COMPUTE PARAMETERS
+                    ape                   - The token contract of APE if necessary
+                    syntheticTokenReserve - Collateral reserve backing APE or TEA
+                    syntheticTokenSupply  - Supply of APE or TEA
+                */
+                APE ape;
+                uint152 syntheticTokenReserve;
+                uint256 syntheticTokenSupply;
+                (ape, syntheticTokenReserve, syntheticTokenSupply) = _getSupplies(isAPE, state_, reserves);
 
-            /** COMPUTE AMOUNTS
-                collateralIn  - The amount of collateral that has been sent to the contract
-                collateralFee - The amount of collateral paid in fees
-                amount        - The amount of APE/TEA minted for the user
-                feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
-                feeToDAO      - The amount of fees (collateral) diverged to the DAO
-                amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
-            */
+                /** COMPUTE AMOUNTS
+                    collateralIn  - The amount of collateral that has been sent to the contract
+                    collateralFee - The amount of collateral paid in fees
+                    amount        - The amount of APE/TEA minted for the user
+                    feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
+                    feeToDAO      - The amount of fees (collateral) diverged to the DAO
+                    amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
+                */
 
-            // Get deposited collateral
-            uint152 collateralIn = _getCollateralDeposited(state_, collateralToken);
+                // Get deposited collateral
+                uint152 collateralIn = _getCollateralDeposited(state_, collateralToken);
 
-            // Substract fee
-            uint152 collateralFee;
-            (collateralIn, collateralFee) = Fees.hiddenFee(
-                isAPE ? systemParams.baseFee : systemParams.lpFee,
-                collateralIn,
-                isAPE ? leverageTier : int8(0)
-            );
+                // Too avoid stack too deep
+                {
+                    // Ensures we can do unchecked math for the entire function.
+                    uint256 temp = collateralIn + state_.totalReserves + state_.daoFees;
+                    require(uint152(temp) == temp); // Sufficient but not necessary condition to avoid OF in the remaining operation.
+                }
 
-            // Compute amount TEA or APE to mint for the user
-            amount = syntheticTokenReserve == 0
-                ? collateralIn
-                : FullMath.mulDiv(syntheticTokenSupply, collateralIn, syntheticTokenReserve);
+                // Substract fee
+                uint152 collateralFee;
+                (collateralIn, collateralFee) = Fees.hiddenFee(
+                    isAPE ? systemParams.baseFee : systemParams.lpFee,
+                    collateralIn,
+                    isAPE ? leverageTier : int8(0)
+                );
 
-            // Compute amount TEA to mint as POL (max 10% of collateralFee)
-            uint152 feeToPOL = collateralFee / 10;
-            uint256 amountPOL = reserves.lpReserve == 0
-                ? feeToPOL
-                : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
+                // Compute amount TEA or APE to mint for the user
+                amount = syntheticTokenReserve == 0
+                    ? collateralIn
+                    : FullMath.mulDiv(syntheticTokenSupply, collateralIn, syntheticTokenReserve);
 
-            // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
-            uint152 feeToDAO;
-            unchecked {
-                feeToDAO = uint152(
+                // Compute amount TEA to mint as POL (max 10% of collateralFee)
+                uint152 feeToPOL = collateralFee / 10;
+                uint256 amountPOL = reserves.lpReserve == 0
+                    ? feeToPOL
+                    : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
+
+                // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
+                uint152 feeToDAO = uint152(
                     (collateralFee * _vaultsIssuanceParams[state_.vaultId].taxToDAO) / (10 * type(uint16).max)
                 ); // Cannot OF cuz collateralFee is uint152 and taxToDAO is uint16
+
+                /** MINTING
+                    1. Mint APE or TEA for the user
+                    2. Mint TEA to protocol owned liquidity (POL)
+                */
+
+                // Mint APE/TEA
+                if (isAPE) ape.mint(msg.sender, amount);
+                else _mint(msg.sender, state_.vaultId, amount);
+
+                // Mint protocol-owned liquidity if necessary
+                _mint(address(this), state_.vaultId, amountPOL);
+
+                /** UPDATE THE RESERVES
+                    1. DAO collects up to 10% of the fees
+                    2. The LPers collect the rest of the fees
+                    3. The reserve of the synthetic token is increased
+                */
+                reserves.daoFees += feeToDAO;
+                reserves.lpReserve += collateralFee - feeToDAO;
+                if (isAPE) reserves.apesReserve += collateralIn;
+                else reserves.lpReserve += collateralIn;
             }
 
-            /** MINTING
-            1. Mint APE or TEA for the user
-            2. Mint TEA to protocol owned liquidity (POL)
-         */
+            // Update state from new reserves
+            _updateState(state_, reserves, leverageTier);
 
-            // Mint APE/TEA
-            if (isAPE) ape.mint(msg.sender, amount);
-            else _mint(msg.sender, state_.vaultId, amount);
+            // Store new state reserves
+            state[debtToken][collateralToken][leverageTier] = state_;
 
-            // Mint protocol-owned liquidity if necessary
-            _mint(address(this), state_.vaultId, amountPOL);
-
-            /** UPDATE THE RESERVES
-            1. DAO collects up to 10% of the fees
-            2. The LPers collect the rest of the fees
-            3. The reserve of the synthetic token is increased
-         */
-            reserves.daoFees += feeToDAO;
-            reserves.lpReserve += collateralFee - feeToDAO;
-            if (isAPE) reserves.apesReserve += collateralIn;
-            else reserves.lpReserve += collateralIn;
+            return amount;
         }
-
-        // Update state from new reserves
-        _updateState(state_, reserves, leverageTier);
-
-        // Store new state reserves
-        state[debtToken][collateralToken][leverageTier] = state_;
-
-        return amount;
     }
 
     /** @notice Function for burning APE or TEA
@@ -313,8 +319,14 @@ contract Vault is SystemState {
 
         reserves.daoFees += feeToDAO;
         reserves.lpReserve += collateralFee - feeToDAO;
-        if (isAPE) reserves.apesReserve -= collateralOut;
-        else reserves.lpReserve -= collateralOut;
+        /** Cannot UF because
+            (1) burn() of APE/TEA ensures amountToken ≤ syntheticTokenSupply => collateralOut ≤ syntheticTokenReserve
+            (2) isAPE==true => syntheticTokenReserve == apesReserve & isAPE==false => syntheticTokenReserve == lpReserve
+         */
+        unchecked {
+            if (isAPE) reserves.apesReserve -= collateralOut;
+            else reserves.lpReserve -= collateralOut;
+        }
 
         /** REMAINING TASKS
             1. Update state from new reserves
@@ -346,23 +358,24 @@ contract Vault is SystemState {
      *     (R,  0  ) ⇔ (A,0)
      */
 
-    function getReserves(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) external view returns (VaultStructs.Reserves memory) {
-        // Get the state and check it actually exists
-        VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
+    // getReserves CAN GO TO THE PERIPHERY!!
+    // function getReserves(
+    //     address debtToken,
+    //     address collateralToken,
+    //     int8 leverageTier
+    // ) external view returns (VaultStructs.Reserves memory) {
+    //     // Get the state and check it actually exists
+    //     VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
+    //     if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-        // Retrieve price from oracle if not retrieved in a previous tx in this block
-        if (state_.timeStampPrice != block.timestamp) {
-            state_.tickPriceX42 = oracle.getPrice(collateralToken, debtToken);
-            state_.timeStampPrice = uint40(block.timestamp);
-        }
+    //     // Retrieve price from oracle if not retrieved in a previous tx in this block
+    //     if (state_.timeStampPrice != block.timestamp) {
+    //         state_.tickPriceX42 = oracle.getPrice(collateralToken, debtToken);
+    //         state_.timeStampPrice = uint40(block.timestamp);
+    //     }
 
-        return _getReserves(state_, leverageTier);
-    }
+    //     return _getReserves(state_, leverageTier);
+    // }
 
     /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
@@ -418,7 +431,6 @@ contract Vault is SystemState {
                      * We use the fact that l = 1+2^leverageTier
                      * apesReserve is rounded up
                      */
-                    // CAN IT OVERFLOW?!?!
                     (bool OF, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
                         leverageTier > 0
                             ? (state_.tickPriceSatX42 - state_.tickPriceX42) << absLeverageTier
@@ -507,6 +519,7 @@ contract Vault is SystemState {
         }
     }
 
+    /// @dev Make sure before calling that apesReserve + lpReserve does not OF uint152
     function _updateState(
         VaultStructs.State memory state_,
         VaultStructs.Reserves memory reserves,

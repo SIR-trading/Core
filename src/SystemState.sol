@@ -47,7 +47,7 @@ abstract contract SystemState is SystemCommons, TEA {
             emergencyStop: false // Emergency stop is off
         });
 
-    constructor(address systemControl_) SystemCommons(systemControl_) {}
+    constructor(address systemControl) SystemCommons(systemControl) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
@@ -113,21 +113,27 @@ abstract contract SystemState is SystemCommons, TEA {
         address lper,
         VaultIssuanceParams memory vaultIssuanceParams_
     ) private view returns (LPerIssuanceParams memory lperIssuanceParams_) {
-        // Get the lper issuance parameters
-        lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
+        unchecked {
+            // Get the lper issuance parameters
+            lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
 
-        // Get the LPer balance of TEA
-        uint256 balance = balanceOf[lper][vaultId];
+            // Get the LPer balance of TEA
+            uint256 balance = balanceOf[lper][vaultId];
 
-        // If LPer has no TEA
-        if (balance == 0) return lperIssuanceParams_;
+            // If LPer has no TEA
+            if (balance == 0) return lperIssuanceParams_;
 
-        // If rewards need to be updated
-        if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
-            lperIssuanceParams_.rewards += uint104(
-                (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 40
-            );
-            lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
+            // If rewards need to be updated
+            if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
+                /** Cannot OF/UF because:
+                    (1) balance * vaultIssuanceParams_.cumSIRperTEA ≤ issuance * 1000 years * 2^40 ≤ 2^104 * 2^40
+                    (2) vaultIssuanceParams_.cumSIRperTEA ≥ lperIssuanceParams_.cumSIRperTEA
+                 */
+                lperIssuanceParams_.rewards += uint104(
+                    (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 40
+                );
+                lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
+            }
         }
     }
 
