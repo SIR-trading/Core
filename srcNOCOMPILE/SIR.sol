@@ -13,9 +13,13 @@ contract SIR is ERC20, SystemCommons {
         uint104 rewards; // SIR owed to the contributor
     }
 
+    address private immutable _SYSTEM_STATE;
+
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
-    constructor(address systemControl_) SystemCommons(systemControl_) {}
+    constructor(address systemState, address systemControl) SystemCommons(systemControl) {
+        _SYSTEM_STATE = systemState;
+    }
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS

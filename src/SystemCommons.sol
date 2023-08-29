@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 // Contracts
 abstract contract SystemCommons {
     modifier onlySystemControl() {
-        require(msg.sender == systemControl);
+        require(msg.sender == _SYSTEM_CONTROL);
         _;
     }
 
@@ -17,9 +17,9 @@ abstract contract SystemCommons {
 
     address internal constant _ADDR_UNISWAPV3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
 
-    address private immutable systemControl;
+    address private immutable _SYSTEM_CONTROL;
 
-    constructor(address systemControl_) {
-        systemControl = systemControl_;
+    constructor(address systemControl) {
+        _SYSTEM_CONTROL = systemControl;
     }
 }

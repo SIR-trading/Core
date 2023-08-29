@@ -36,7 +36,7 @@ abstract contract SystemState is SystemCommons, TEA {
     }
 
     uint256[] activeVaults;
-    mapping(uint256 vaultId => VaultIssuanceParams) private _vaultsIssuanceParams;
+    mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
     SystemParameters public systemParams =
@@ -201,7 +201,7 @@ abstract contract SystemState is SystemCommons, TEA {
     /** @dev Imperative this calls less gas than newVaultIssuances to ensure issuances can always be changed.
         @dev So if newVaultIssuances costs less gas than 1 block, so does stopVaultIssuances.
      */
-    function stopVaultIssuances(uint40 tsStop) external onlySystemControl returns (bytes32) {
+    function stopVaultIssuances() external onlySystemControl {
         uint256 lenActiveVaults = activeVaults.length;
         for (uint256 i = 0; i < lenActiveVaults; ++i) _vaultsIssuanceParams[i].tsIssuanceEnd = uint40(block.timestamp);
 
