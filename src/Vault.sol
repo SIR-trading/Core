@@ -38,7 +38,12 @@ contract Vault is SystemState {
         public state; // Do not use vaultId 0
     VaultStructs.Parameters[] private _paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
-    constructor(address systemControl_, address oracle_, bytes32 hashCreationCodeAPE) SystemState(systemControl_) {
+    constructor(
+        address systemControl_,
+        address sir,
+        address oracle_,
+        bytes32 hashCreationCodeAPE
+    ) SystemState(systemControl_, sir) {
         // Price oracle
         oracle = Oracle(oracle_);
         _hashCreationCodeAPE = hashCreationCodeAPE;

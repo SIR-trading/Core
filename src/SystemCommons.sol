@@ -8,6 +8,11 @@ abstract contract SystemCommons {
         _;
     }
 
+    struct LPerIssuanceParams {
+        uint144 cumSIRperTEA; // Q104.40, cumulative SIR minted by an LPer per unit of TEA
+        uint104 unclaimedRewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
+    }
+
     // Tokens issued per second
     uint72 public constant ISSUANCE = 1e2 ether; // Not really "ether" but we use it anyway to simulate 18 decimals
 

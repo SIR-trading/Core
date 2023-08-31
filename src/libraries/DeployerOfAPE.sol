@@ -37,7 +37,7 @@ library DeployerOfAPE {
         ape = new APE{salt: saltAPE}();
     }
 
-    /** @param addrDebtToken Address of the rewards token
+    /** @param addrDebtToken Address of the unclaimedRewards token
         @param addrCollateralToken Address of the collateral token
         @param leverageTier Ranges between -3 to 2.
      */

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Contracts
+import {SystemState} from "./SystemState.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 
@@ -10,53 +11,61 @@ contract SIR is ERC20, SystemCommons {
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
-        uint104 rewards; // SIR owed to the contributor
+        uint104 unclaimedRewards; // SIR owed to the contributor
     }
 
-    address private immutable _SYSTEM_STATE;
+    SystemState private immutable _SYSTEM_STATE;
 
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
-    constructor(address systemState, address systemControl) SystemCommons(systemControl) {
-        _SYSTEM_STATE = systemState;
+    constructor(
+        address systemState,
+        address systemControl
+    ) ERC20("Synthetics Implemented Right", "SIR", 18) SystemCommons(systemControl) {
+        _SYSTEM_STATE = SystemState(systemState);
     }
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /// @notice Not all tokens may be in circulation. This function outputs the total supply if ALL tokens where in circulation.
     function maxTotalSupply() external view returns (uint256) {
-        if (systemParams.tsIssuanceStart == 0) return 0;
+        (uint40 tsIssuanceStart, , , ) = _SYSTEM_STATE.systemParams();
 
-        return ISSUANCE * (block.timestamp - systemParams.tsIssuanceStart);
+        if (tsIssuanceStart == 0) return 0;
+        return ISSUANCE * (block.timestamp - tsIssuanceStart);
     }
 
     function getContributorIssuance(
         address contributor
     ) public view returns (ContributorIssuanceParams memory contributorParams) {
-        // If issuance has not started yet
-        if (systemParams.tsIssuanceStart == 0) return contributorParams;
+        (uint40 tsIssuanceStart, , , ) = _SYSTEM_STATE.systemParams();
 
+        // If issuance has not started yet
+        if (tsIssuanceStart == 0) return contributorParams;
+
+        // Copy the parameters to memory
         contributorParams = _contributorsIssuances[contributor];
 
-        // Last date of rewards
-        uint40 tsIssuanceEnd = systemParams.tsIssuanceStart + _THREE_YEARS;
+        // Last date of unclaimedRewards
+        uint40 tsIssuanceEnd = tsIssuanceStart + _THREE_YEARS;
 
-        // If issuance is over and rewards have already been updated
+        // If issuance is over and unclaimedRewards have already been updated
         if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
 
-        // If issuance is over but rewards have not been updated
+        // If issuance is over but unclaimedRewards have not been updated
         bool issuanceIsOver = uint40(block.timestamp) >= tsIssuanceEnd;
 
-        // If rewards have never been updated
-        bool rewardsNeverUpdated = systemParams.tsIssuanceStart > contributorParams.tsLastUpdate;
+        // If unclaimedRewards have never been updated
+        bool unclaimedRewardsNeverUpdated = tsIssuanceStart > contributorParams.tsLastUpdate;
 
         // Update contributorParams
-        contributorParams.rewards +=
+        contributorParams.unclaimedRewards +=
             uint104(contributorParams.issuance) *
             uint104(
                 (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
-                    (rewardsNeverUpdated ? systemParams.tsIssuanceStart : contributorParams.tsLastUpdate)
+                    (unclaimedRewardsNeverUpdated ? tsIssuanceStart : contributorParams.tsLastUpdate)
             );
         if (issuanceIsOver) contributorParams.issuance = 0;
         contributorParams.tsLastUpdate = uint40(block.timestamp);
@@ -70,12 +79,14 @@ contract SIR is ERC20, SystemCommons {
         // Get contributor issuance parameters
         ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
 
-        // Mint if any rewards
-        require(contributorParams.rewards > 0);
-        _mint(msg.sender, contributorParams.rewards);
+        // Mint if any unclaimedRewards
+        require(contributorParams.unclaimedRewards > 0);
+        _mint(msg.sender, contributorParams.unclaimedRewards);
+
+        // Reset unclaimedRewards
+        contributorParams.unclaimedRewards = 0;
 
         // Update state
-        contributorParams.rewards = 0;
         _contributorsIssuances[msg.sender] = contributorParams;
     }
 
@@ -86,19 +97,12 @@ contract SIR is ERC20, SystemCommons {
         Assume issuances have been updated just before. The periphery would take care of this.
      */
     function LPerMint(uint256 vaultId) external {
-        // Check issuance data is up to date
-        require(_vaultIssuanceStates[vaultId].vaultIssuance.tsLastUpdate == uint40(block.timestamp));
-
         // Get LPer issuance parameters
-        LPerIssuanceParams memory lperIssuance = _vaultIssuanceStates[vaultId].lpersIssuances[msg.sender];
+        uint104 unclaimedRewards = _SYSTEM_STATE._updateLPerIssuanceParams(vaultId, msg.sender);
 
-        // Mint if any rewards
-        require(lperIssuance.rewards > 0);
-        _mint(msg.sender, lperIssuance.rewards);
-
-        // Update state
-        lperIssuance.rewards = 0;
-        _vaultIssuanceStates[vaultId].lpersIssuances[msg.sender] = lperIssuance;
+        // Mint if any unclaimedRewards
+        require(unclaimedRewards > 0);
+        _mint(msg.sender, unclaimedRewards);
     }
 
     // function changeContributorsIssuances(
@@ -135,4 +139,8 @@ contract SIR is ERC20, SystemCommons {
 
     //     return keccak256(abi.encodePacked(nextContributors));
     // }
+
+    /*////////////////////////////////////////////////////////////////
+                            PRIVATE FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
 }

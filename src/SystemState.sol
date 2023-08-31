@@ -10,11 +10,6 @@ abstract contract SystemState is SystemCommons, TEA {
     event EmergencyStop(bool indexed);
     event NewFees(uint16 baseFee, uint8 lpFee);
 
-    struct LPerIssuanceParams {
-        uint144 cumSIRperTEA; // Q104.40, cumulative SIR minted by an LPer per unit of TEA
-        uint104 rewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
-    }
-
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
         uint16 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
@@ -35,6 +30,8 @@ abstract contract SystemState is SystemCommons, TEA {
         bool emergencyStop;
     }
 
+    address private immutable _SIR;
+
     uint256[] activeVaults;
     mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
@@ -47,7 +44,9 @@ abstract contract SystemState is SystemCommons, TEA {
             emergencyStop: false // Emergency stop is off
         });
 
-    constructor(address systemControl) SystemCommons(systemControl) {}
+    constructor(address systemControl, address sir) SystemCommons(systemControl) {
+        _SIR = sir;
+    }
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
@@ -123,13 +122,13 @@ abstract contract SystemState is SystemCommons, TEA {
             // If LPer has no TEA
             if (balance == 0) return lperIssuanceParams_;
 
-            // If rewards need to be updated
+            // If unclaimedRewards need to be updated
             if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
                 /** Cannot OF/UF because:
                     (1) balance * vaultIssuanceParams_.cumSIRperTEA ≤ issuance * 1000 years * 2^40 ≤ 2^104 * 2^40
                     (2) vaultIssuanceParams_.cumSIRperTEA ≥ lperIssuanceParams_.cumSIRperTEA
                  */
-                lperIssuanceParams_.rewards += uint104(
+                lperIssuanceParams_.unclaimedRewards += uint104(
                     (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 40
                 );
                 lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
@@ -172,9 +171,23 @@ abstract contract SystemState is SystemCommons, TEA {
         _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
     }
 
-    /*////////////////////////////////////////////////////////////////
-                            VAULT ACCESS FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
+    function _updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
+        require(msg.sender == _SIR);
+
+        // If issuance has not started, return
+        if (systemParams.tsIssuanceStart == 0) return 0;
+
+        // Retrieve updated vault issuance parameters
+        VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
+
+        // Retrieve updated LPer issuance parameters
+        LPerIssuanceParams memory lperIssuanceParams_ = _lperIssuanceParams(vaultId, lper, vaultIssuanceParams_);
+        unclaimedRewards = lperIssuanceParams_.unclaimedRewards;
+
+        // Update lpers issuances params
+        lperIssuanceParams_.unclaimedRewards = 0;
+        _lpersIssuances[vaultId][lper] = _lperIssuanceParams(vaultId, lper, vaultIssuanceParams_);
+    }
 
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
@@ -182,58 +195,77 @@ abstract contract SystemState is SystemCommons, TEA {
 
     // I INCLUDE CHECKS HERE, BUT MOVE THEM TO SYSTEMCONTROL IF CONTRACT IS TOO LARGE OR JUST MAKE SURE IT CANNOT HAPPEN.
 
-    function updateSystemParameters(
-        uint40 tsIssuanceStart,
-        uint16 baseFee,
-        uint8 lpFee,
-        bool emergencyStop
+    // function updateSystemParameters(
+    //     uint40 tsIssuanceStart,
+    //     uint16 baseFee,
+    //     uint8 lpFee,
+    //     bool emergencyStop
+    // ) external onlySystemControl {
+    //     SystemParameters memory systemParams_ = systemParams;
+
+    //     require(tsIssuanceStart == 0 || (systemParams_.tsIssuanceStart == 0 && tsIssuanceStart >= block.timestamp));
+
+    //     if (tsIssuanceStart != systemParams_.tsIssuanceStart) emit IssuanceStart(tsIssuanceStart);
+    //     if (baseFee != systemParams.baseFee || lpFee != systemParams.lpFee) emit NewFees(baseFee, lpFee);
+    //     if (emergencyStop != systemParams_.emergencyStop) emit EmergencyStop(emergencyStop);
+
+    //     systemParams = SystemParameters({
+    //         tsIssuanceStart: tsIssuanceStart == 0 ? systemParams_.tsIssuanceStart : tsIssuanceStart,
+    //         baseFee: baseFee,
+    //         lpFee: lpFee,
+    //         emergencyStop: emergencyStop
+    //     });
+    // }
+
+    // /** @dev Imperative this calls less gas than newVaultIssuances to ensure issuances can always be changed.
+    //     @dev So if newVaultIssuances costs less gas than 1 block, so does stopVaultIssuances.
+    //  */
+    // function stopVaultIssuances() external onlySystemControl {
+    //     uint256 lenActiveVaults = activeVaults.length;
+    //     for (uint256 i = 0; i < lenActiveVaults; ++i)
+    //         _vaultsIssuanceParams[activeVaults[i]].tsIssuanceEnd = uint40(block.timestamp);
+
+    //     delete activeVaults;
+    // }
+
+    // /// @dev Important to call stopVaultIssuances before calling this function
+    // function newVaultIssuances(uint40[] calldata vaults, uint16[] calldata taxesToDAO) external onlySystemControl {
+    //     uint256 lenVaults = vaults.length;
+    //     require(lenVaults == taxesToDAO.length);
+
+    //     // Compute aggregated taxes
+    //     uint16 aggTaxesToDAO;
+    //     for (uint256 i = 0; i < lenVaults; ++i) aggTaxesToDAO += taxesToDAO[i];
+
+    //     // Start new issuances
+    //     VaultIssuanceParams memory vaultIssuanceParams_;
+    //     for (uint256 i = 0; i < lenVaults; ++i) {
+    //         vaultIssuanceParams_ = vaultIssuanceParams(vaults[i]);
+
+    //         vaultIssuanceParams_.taxToDAO = taxesToDAO[i]; // New issuance allocation
+    //         vaultIssuanceParams_.aggTaxesToDAO = aggTaxesToDAO;
+    //         vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
+    //         vaultIssuanceParams_.tsIssuanceEnd = 0; // No forseable end to the allocation
+
+    //         _vaultsIssuanceParams[vaults[i]] = vaultIssuanceParams_;
+    //     }
+    // }
+
+    function updateSystemState(
+        SystemParameters calldata systemParams_,
+        uint40[] calldata vaults,
+        VaultIssuanceParams[] calldata vaultIssuanceParams_
     ) external onlySystemControl {
-        SystemParameters memory systemParams_ = systemParams;
+        if (
+            systemParams_.tsIssuanceStart == 0 &&
+            systemParams_.baseFee == 0 &&
+            systemParams_.lpFee == 0 &&
+            systemParams_.emergencyStop == false
+        ) systemParams = systemParams_;
 
-        require(tsIssuanceStart == 0 || (systemParams_.tsIssuanceStart == 0 && tsIssuanceStart >= block.timestamp));
-
-        if (tsIssuanceStart != systemParams_.tsIssuanceStart) emit IssuanceStart(tsIssuanceStart);
-        if (baseFee != systemParams.baseFee || lpFee != systemParams.lpFee) emit NewFees(baseFee, lpFee);
-        if (emergencyStop != systemParams_.emergencyStop) emit EmergencyStop(emergencyStop);
-
-        systemParams = SystemParameters({
-            tsIssuanceStart: tsIssuanceStart == 0 ? systemParams_.tsIssuanceStart : tsIssuanceStart,
-            baseFee: baseFee,
-            lpFee: lpFee,
-            emergencyStop: emergencyStop
-        });
-    }
-
-    /** @dev Imperative this calls less gas than newVaultIssuances to ensure issuances can always be changed.
-        @dev So if newVaultIssuances costs less gas than 1 block, so does stopVaultIssuances.
-     */
-    function stopVaultIssuances() external onlySystemControl {
-        uint256 lenActiveVaults = activeVaults.length;
-        for (uint256 i = 0; i < lenActiveVaults; ++i) _vaultsIssuanceParams[i].tsIssuanceEnd = uint40(block.timestamp);
-
-        delete activeVaults;
-    }
-
-    /// @dev Important to call stopVaultIssuances before calling this function
-    function newVaultIssuances(uint40[] calldata vaults, uint16[] calldata taxesToDAO) external onlySystemControl {
         uint256 lenVaults = vaults.length;
-        require(lenVaults == taxesToDAO.length);
-
-        // Compute aggregated taxes
-        uint16 aggTaxesToDAO;
-        for (uint256 i = 0; i < lenVaults; ++i) aggTaxesToDAO += taxesToDAO[i];
-
-        // Start new issuances
-        VaultIssuanceParams memory vaultIssuanceParams_;
         for (uint256 i = 0; i < lenVaults; ++i) {
-            vaultIssuanceParams_ = vaultIssuanceParams(vaults[i]);
-
-            vaultIssuanceParams_.taxToDAO = taxesToDAO[i]; // New issuance allocation
-            vaultIssuanceParams_.aggTaxesToDAO = aggTaxesToDAO;
-            vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
-            vaultIssuanceParams_.tsIssuanceEnd = 0; // No forseable end to the allocation
-
-            _vaultsIssuanceParams[vaults[i]] = vaultIssuanceParams_;
+            _vaultsIssuanceParams[vaults[i]] = vaultIssuanceParams_[i];
         }
     }
 }
