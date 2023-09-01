@@ -9,14 +9,14 @@ abstract contract SystemCommons {
     }
 
     struct LPerIssuanceParams {
-        uint144 cumSIRperTEA; // Q104.40, cumulative SIR minted by an LPer per unit of TEA
+        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
         uint104 unclaimedRewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
     // Tokens issued per second
     uint72 public constant ISSUANCE = 1e2 ether; // Not really "ether" but we use it anyway to simulate 18 decimals
 
-    uint72 internal constant _AGG_ISSUANCE_VAULTS = ISSUANCE / 10;
+    uint72 internal constant _AGG_ISSUANCE_VAULTS = (ISSUANCE * 9) / 10;
 
     uint40 internal constant _THREE_YEARS = 3 * 365 days;
 

@@ -12,10 +12,8 @@ abstract contract SystemState is SystemCommons, TEA {
 
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
-        uint16 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
         uint40 tsLastUpdate; // timestamp of the last time cumSIRperTEA was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint40 tsIssuanceEnd; // timestamp when issuance ends. 0 => continue forever
-        uint144 cumSIRperTEA; // Q104.40, cumulative SIR minted by the vaultId per unit of TEA.
+        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
     struct SystemParameters {
@@ -28,11 +26,11 @@ abstract contract SystemState is SystemCommons, TEA {
         uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
         uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
         bool emergencyStop;
+        uint184 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
     }
 
     address private immutable _SIR;
 
-    uint256[] activeVaults;
     mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
@@ -41,8 +39,19 @@ abstract contract SystemState is SystemCommons, TEA {
             tsIssuanceStart: 0,
             baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
             lpFee: 50,
-            emergencyStop: false // Emergency stop is off
+            emergencyStop: false, // Emergency stop is off
+            aggTaxesToDAO: 0
         });
+
+    /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
+        before new issuance parameters are stored. This is more gas efficient that storing all active vaults
+        in an arry, but it requires that system control keeps track of the active vaults.
+        If the vaults were in an unknown order, it maybe be problem because the hash would change.
+        So by default the vaults must be ordered in increasing order.
+
+        The default value is the hash of an empty array.
+     */
+    // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     constructor(address systemControl, address sir) SystemCommons(systemControl) {
         _SIR = sir;
@@ -54,45 +63,41 @@ abstract contract SystemState is SystemCommons, TEA {
 
     function vaultIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
         unchecked {
+            SystemParameters memory systemParams_ = systemParams;
+
             // Get the vault issuance parameters
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
             // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
             if (
-                systemParams.tsIssuanceStart == 0 ||
+                systemParams_.tsIssuanceStart == 0 ||
                 vaultIssuanceParams_.taxToDAO == 0 ||
-                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp) ||
-                (vaultIssuanceParams_.tsIssuanceEnd != 0 &&
-                    vaultIssuanceParams_.tsLastUpdate >= vaultIssuanceParams_.tsIssuanceEnd)
+                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
             ) return vaultIssuanceParams_;
 
             // Find starting time to compute cumulative SIR per unit of TEA
-            uint40 tsStart = systemParams.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
-                ? systemParams.tsIssuanceStart
+            uint40 tsStart = systemParams_.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
+                ? systemParams_.tsIssuanceStart
                 : vaultIssuanceParams_.tsLastUpdate;
 
-            // Find ending time to compute cumulative SIR per unit of TEA
-            uint40 tsEnd = vaultIssuanceParams_.tsIssuanceEnd == 0 ||
-                vaultIssuanceParams_.tsIssuanceEnd > block.timestamp
-                ? uint40(block.timestamp)
-                : vaultIssuanceParams_.tsIssuanceEnd;
-
             // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
-            uint40 ts3Years = systemParams.tsIssuanceStart + _THREE_YEARS;
+            uint40 ts3Years = systemParams_.tsIssuanceStart + _THREE_YEARS;
             if (tsStart < ts3Years) {
                 uint256 issuance = (uint256(_AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
-                    vaultIssuanceParams_.aggTaxesToDAO;
-                vaultIssuanceParams_.cumSIRperTEA += uint144(
-                    ((issuance * ((tsEnd > ts3Years ? ts3Years : tsEnd) - tsStart)) << 40) / totalSupply[vaultId]
+                    systemParams_.aggTaxesToDAO;
+                vaultIssuanceParams_.cumSIRperTEA += uint152(
+                    ((issuance *
+                        ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) << 48) /
+                        totalSupply[vaultId]
                 );
             }
 
             // Aggregate SIR issued after the first 3 years
-            if (tsEnd > ts3Years) {
-                uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) /
-                    vaultIssuanceParams_.aggTaxesToDAO;
-                vaultIssuanceParams_.cumSIRperTEA += uint144(
-                    ((issuance * (tsEnd - (tsStart > ts3Years ? tsStart : ts3Years))) << 40) / totalSupply[vaultId]
+            if (uint40(block.timestamp) > ts3Years) {
+                uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.aggTaxesToDAO;
+                vaultIssuanceParams_.cumSIRperTEA += uint152(
+                    ((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
+                        totalSupply[vaultId]
                 );
             }
 
@@ -125,11 +130,11 @@ abstract contract SystemState is SystemCommons, TEA {
             // If unclaimedRewards need to be updated
             if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
                 /** Cannot OF/UF because:
-                    (1) balance * vaultIssuanceParams_.cumSIRperTEA ≤ issuance * 1000 years * 2^40 ≤ 2^104 * 2^40
+                    (1) balance * vaultIssuanceParams_.cumSIRperTEA ≤ issuance * 1000 years * 2^48 ≤ 2^104 * 2^48
                     (2) vaultIssuanceParams_.cumSIRperTEA ≥ lperIssuanceParams_.cumSIRperTEA
                  */
                 lperIssuanceParams_.unclaimedRewards += uint104(
-                    (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 40
+                    (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 48
                 );
                 lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
             }
@@ -251,21 +256,145 @@ abstract contract SystemState is SystemCommons, TEA {
     //     }
     // }
 
+    /// @dev We use the same function to update system parameters and the vault's issuances to minimize bytecode size
+    // function updateSystemState(
+    //     SystemParameters calldata systemParams_,
+    //     uint40[] calldata oldVaults,
+    //     uint40[] calldata newVaults,
+    //     uint16[] calldata newTaxes
+    // ) external onlySystemControl {
+    //     require(systemParams_.aggTaxesToDAO == 0);
+
+    //     if (
+    //         systemParams_.tsIssuanceStart == 0 &&
+    //         systemParams_.baseFee == 0 &&
+    //         systemParams_.lpFee == 0 &&
+    //         systemParams_.emergencyStop == false
+    //     ) {
+    //         require(_hashActiveVaults == keccak256(abi.encodePacked(oldVaults)));
+
+    //         VaultIssuanceParams memory vaultIssuanceParams_;
+
+    //         // Stop old issuances
+    //         uint256 lenVaults = oldVaults.length;
+    //         for (uint256 i = 0; i < lenVaults; ++i) {
+    //             // Retrieve the vault's current issuance state and parameters
+    //             vaultIssuanceParams_ = vaultIssuanceParams(oldVaults[i]);
+
+    //             // Nul tax, and consequently nul issuance
+    //             vaultIssuanceParams_.taxToDAO = 0;
+
+    //             // Update storage
+    //             _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
+    //         }
+
+    //         // Aggregate taxes and squared taxes
+    //         lenVaults = newVaults.length;
+    //         uint184 aggTaxesToDAO;
+    //         uint32 aggSquaredTaxesToDAO;
+    //         for (uint256 i = 0; i < lenVaults; ++i) {
+    //             aggTaxesToDAO += newTaxes[i];
+    //             aggSquaredTaxesToDAO += uint32(newTaxes[i]) ** 2;
+    //         }
+
+    //         // Condition on squares
+    //         require(aggSquaredTaxesToDAO <= uint32(type(uint16).max) ** 2);
+
+    //         // Start new issuances
+    //         for (uint256 i = 0; i < lenVaults; ++i) {
+    //             if (i > 0) require(newVaults[i] > newVaults[i - 1]); // Ensure increasing order
+
+    //             // Retrieve the vault's current issuance state and parameters
+    //             vaultIssuanceParams_ = vaultIssuanceParams(newVaults[i]);
+
+    //             // Nul tax, and consequently nul issuance
+    //             vaultIssuanceParams_.taxToDAO = newTaxes[i];
+
+    //             // Update storage
+    //             _vaultsIssuanceParams[newVaults[i]] = vaultIssuanceParams_;
+    //         }
+
+    //         // Update storage
+    //         systemParams.aggTaxesToDAO = aggTaxesToDAO;
+    //         _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
+    //     } else {
+    //         require(
+    //             systemParams_.tsIssuanceStart == 0 ||
+    //                 (systemParams.tsIssuanceStart == 0 && systemParams_.tsIssuanceStart >= block.timestamp)
+    //         );
+
+    //         systemParams = systemParams_;
+    //     }
+    // }
+
     function updateSystemState(
         SystemParameters calldata systemParams_,
-        uint40[] calldata vaults,
-        VaultIssuanceParams[] calldata vaultIssuanceParams_
+        uint40[] calldata oldVaults,
+        uint40[] calldata newVaults,
+        uint16[] calldata newTaxes,
+        uint184 aggTaxesToDAO
     ) external onlySystemControl {
+        require(systemParams_.aggTaxesToDAO == 0);
+
         if (
             systemParams_.tsIssuanceStart == 0 &&
             systemParams_.baseFee == 0 &&
             systemParams_.lpFee == 0 &&
             systemParams_.emergencyStop == false
-        ) systemParams = systemParams_;
+        ) {
+            // require(_hashActiveVaults == keccak256(abi.encodePacked(oldVaults)));
 
-        uint256 lenVaults = vaults.length;
-        for (uint256 i = 0; i < lenVaults; ++i) {
-            _vaultsIssuanceParams[vaults[i]] = vaultIssuanceParams_[i];
+            VaultIssuanceParams memory vaultIssuanceParams_;
+
+            // Stop old issuances
+            uint256 lenVaults = oldVaults.length;
+            for (uint256 i = 0; i < lenVaults; ++i) {
+                // Retrieve the vault's current issuance state and parameters
+                vaultIssuanceParams_ = vaultIssuanceParams(oldVaults[i]);
+
+                // Nul tax, and consequently nul issuance
+                vaultIssuanceParams_.taxToDAO = 0;
+
+                // Update storage
+                _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
+            }
+
+            // // Aggregate taxes and squared taxes
+            // lenVaults = newVaults.length;
+            // uint184 aggTaxesToDAO;
+            // uint32 aggSquaredTaxesToDAO;
+            // for (uint256 i = 0; i < lenVaults; ++i) {
+            //     aggTaxesToDAO += newTaxes[i];
+            //     aggSquaredTaxesToDAO += uint32(newTaxes[i]) ** 2;
+            // }
+
+            // // Condition on squares
+            // require(aggSquaredTaxesToDAO <= uint32(type(uint16).max) ** 2);
+
+            // Start new issuances
+            for (uint256 i = 0; i < lenVaults; ++i) {
+                // if (i > 0) require(newVaults[i] > newVaults[i - 1]); // Ensure increasing order
+
+                // Retrieve the vault's current issuance state and parameters
+                vaultIssuanceParams_ = vaultIssuanceParams(newVaults[i]);
+
+                // Nul tax, and consequently nul issuance
+                vaultIssuanceParams_.taxToDAO = newTaxes[i];
+
+                // Update storage
+                _vaultsIssuanceParams[newVaults[i]] = vaultIssuanceParams_;
+            }
+
+            // Update storage
+            systemParams.aggTaxesToDAO = aggTaxesToDAO;
+            // _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
+        } else {
+            require(
+                systemParams_.tsIssuanceStart == 0 ||
+                    (systemParams.tsIssuanceStart == 0 && systemParams_.tsIssuanceStart >= block.timestamp)
+            );
+
+            systemParams = systemParams_;
         }
     }
 }

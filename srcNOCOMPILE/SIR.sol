@@ -8,6 +8,9 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
 contract SIR is ERC20, SystemCommons {
+    error ArraysLengthMismatch();
+    error ContributorsIssuanceExceedsMaxIssuance();
+
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
@@ -16,6 +19,9 @@ contract SIR is ERC20, SystemCommons {
 
     SystemState private immutable _SYSTEM_STATE;
 
+    uint72 public agg_issuance_contributors; // agg_issuance_contributors <= ISSUANCE - _AGG_ISSUANCE_VAULTS
+
+    address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
     constructor(
@@ -40,35 +46,37 @@ contract SIR is ERC20, SystemCommons {
     function getContributorIssuance(
         address contributor
     ) public view returns (ContributorIssuanceParams memory contributorParams) {
-        (uint40 tsIssuanceStart, , , ) = _SYSTEM_STATE.systemParams();
+        unchecked {
+            (uint40 tsIssuanceStart, , , ) = _SYSTEM_STATE.systemParams();
 
-        // If issuance has not started yet
-        if (tsIssuanceStart == 0) return contributorParams;
+            // If issuance has not started yet
+            if (tsIssuanceStart == 0) return contributorParams;
 
-        // Copy the parameters to memory
-        contributorParams = _contributorsIssuances[contributor];
+            // Copy the parameters to memory
+            contributorParams = _contributorsIssuances[contributor];
 
-        // Last date of unclaimedRewards
-        uint40 tsIssuanceEnd = tsIssuanceStart + _THREE_YEARS;
+            // Last date of unclaimedRewards
+            uint40 tsIssuanceEnd = tsIssuanceStart + _THREE_YEARS;
 
-        // If issuance is over and unclaimedRewards have already been updated
-        if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
+            // If issuance is over and unclaimedRewards have already been updated
+            if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
 
-        // If issuance is over but unclaimedRewards have not been updated
-        bool issuanceIsOver = uint40(block.timestamp) >= tsIssuanceEnd;
+            // If issuance is over but unclaimedRewards have not been updated
+            bool issuanceIsOver = uint40(block.timestamp) >= tsIssuanceEnd;
 
-        // If unclaimedRewards have never been updated
-        bool unclaimedRewardsNeverUpdated = tsIssuanceStart > contributorParams.tsLastUpdate;
+            // If unclaimedRewards have never been updated
+            bool unclaimedRewardsNeverUpdated = tsIssuanceStart > contributorParams.tsLastUpdate;
 
-        // Update contributorParams
-        contributorParams.unclaimedRewards +=
-            uint104(contributorParams.issuance) *
-            uint104(
-                (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
-                    (unclaimedRewardsNeverUpdated ? tsIssuanceStart : contributorParams.tsLastUpdate)
+            // Update contributorParams
+            contributorParams.unclaimedRewards += uint104(
+                uint256(
+                    (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
+                        (unclaimedRewardsNeverUpdated ? tsIssuanceStart : contributorParams.tsLastUpdate)
+                ) * contributorParams.issuance
             );
-        if (issuanceIsOver) contributorParams.issuance = 0;
-        contributorParams.tsLastUpdate = uint40(block.timestamp);
+            if (issuanceIsOver) contributorParams.issuance = 0;
+            contributorParams.tsLastUpdate = uint40(block.timestamp);
+        }
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -90,12 +98,6 @@ contract SIR is ERC20, SystemCommons {
         _contributorsIssuances[msg.sender] = contributorParams;
     }
 
-    /**
-        TO CHANGE: PERIPHERY IN CHARGE OF UPDATING VAULT ISSUANCE STATE
-        SO WE CAN PASS FIRST REQUIRE
-        Don't query vault here but just check its issuance has been updated.
-        Assume issuances have been updated just before. The periphery would take care of this.
-     */
     function LPerMint(uint256 vaultId) external {
         // Get LPer issuance parameters
         uint104 unclaimedRewards = _SYSTEM_STATE._updateLPerIssuanceParams(vaultId, msg.sender);
@@ -103,6 +105,29 @@ contract SIR is ERC20, SystemCommons {
         // Mint if any unclaimedRewards
         require(unclaimedRewards > 0);
         _mint(msg.sender, unclaimedRewards);
+    }
+
+    // JUST PASS A LONG LIST OF VAULTS OR CONTRIBUTORS WITH NEW ISSUANCES, AND FUNCTION FIGUREST OUT THE REST
+    function changeContributorsIssuances(address[] calldata contributors_, uint72[] issuance) {
+        uint256 lenContributors = contributors_.length;
+        if (lenContributors != issuance.length) revert ArraysLengthMismatch();
+
+        uint72 agg_issuance_contributors_ = agg_issuance_contributors;
+        // TODO
+        for (uint256 i = 0; i < lenContributors; i++) {
+            // Get contributor issuance parameters
+            ContributorIssuanceParams memory contributorParams = getContributorIssuance(contributors_[i]);
+
+            // Update issuance
+            contributorParams.issuance = issuance[i];
+            contributorParams.tsLastUpdate = uint40(block.timestamp);
+
+            // Update state
+            _contributorsIssuances[contributors_[i]] = contributorParams;
+        }
+
+        if (agg_issuance_contributors_ > ISSUANCE - _AGG_ISSUANCE_VAULTS)
+            revert ContributorsIssuanceExceedsMaxIssuance();
     }
 
     // function changeContributorsIssuances(
