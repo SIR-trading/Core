@@ -6,10 +6,6 @@ import {TEA, IERC20} from "./TEA.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 
 abstract contract SystemState is SystemCommons, TEA {
-    event IssuanceStart(uint40 tsIssuanceStart);
-    event EmergencyStop(bool indexed);
-    event NewFees(uint16 baseFee, uint8 lpFee);
-
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
         uint40 tsLastUpdate; // timestamp of the last time cumSIRperTEA was updated. 0 => use systemParams.tsIssuanceStart instead
@@ -68,6 +64,9 @@ abstract contract SystemState is SystemCommons, TEA {
             // Get the vault issuance parameters
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
+            // Update timestamp
+            vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
+
             // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
             if (
                 systemParams_.tsIssuanceStart == 0 ||
@@ -100,9 +99,6 @@ abstract contract SystemState is SystemCommons, TEA {
                         totalSupply[vaultId]
                 );
             }
-
-            // Update timestamp
-            vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
 
             return vaultIssuanceParams_;
         }
@@ -176,7 +172,7 @@ abstract contract SystemState is SystemCommons, TEA {
         _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
     }
 
-    function _updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
+    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
         require(msg.sender == _SIR);
 
         // If issuance has not started, return
@@ -198,152 +194,28 @@ abstract contract SystemState is SystemCommons, TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // I INCLUDE CHECKS HERE, BUT MOVE THEM TO SYSTEMCONTROL IF CONTRACT IS TOO LARGE OR JUST MAKE SURE IT CANNOT HAPPEN.
-
-    // function updateSystemParameters(
-    //     uint40 tsIssuanceStart,
-    //     uint16 baseFee,
-    //     uint8 lpFee,
-    //     bool emergencyStop
-    // ) external onlySystemControl {
-    //     SystemParameters memory systemParams_ = systemParams;
-
-    //     require(tsIssuanceStart == 0 || (systemParams_.tsIssuanceStart == 0 && tsIssuanceStart >= block.timestamp));
-
-    //     if (tsIssuanceStart != systemParams_.tsIssuanceStart) emit IssuanceStart(tsIssuanceStart);
-    //     if (baseFee != systemParams.baseFee || lpFee != systemParams.lpFee) emit NewFees(baseFee, lpFee);
-    //     if (emergencyStop != systemParams_.emergencyStop) emit EmergencyStop(emergencyStop);
-
-    //     systemParams = SystemParameters({
-    //         tsIssuanceStart: tsIssuanceStart == 0 ? systemParams_.tsIssuanceStart : tsIssuanceStart,
-    //         baseFee: baseFee,
-    //         lpFee: lpFee,
-    //         emergencyStop: emergencyStop
-    //     });
-    // }
-
-    // /** @dev Imperative this calls less gas than newVaultIssuances to ensure issuances can always be changed.
-    //     @dev So if newVaultIssuances costs less gas than 1 block, so does stopVaultIssuances.
-    //  */
-    // function stopVaultIssuances() external onlySystemControl {
-    //     uint256 lenActiveVaults = activeVaults.length;
-    //     for (uint256 i = 0; i < lenActiveVaults; ++i)
-    //         _vaultsIssuanceParams[activeVaults[i]].tsIssuanceEnd = uint40(block.timestamp);
-
-    //     delete activeVaults;
-    // }
-
-    // /// @dev Important to call stopVaultIssuances before calling this function
-    // function newVaultIssuances(uint40[] calldata vaults, uint16[] calldata taxesToDAO) external onlySystemControl {
-    //     uint256 lenVaults = vaults.length;
-    //     require(lenVaults == taxesToDAO.length);
-
-    //     // Compute aggregated taxes
-    //     uint16 aggTaxesToDAO;
-    //     for (uint256 i = 0; i < lenVaults; ++i) aggTaxesToDAO += taxesToDAO[i];
-
-    //     // Start new issuances
-    //     VaultIssuanceParams memory vaultIssuanceParams_;
-    //     for (uint256 i = 0; i < lenVaults; ++i) {
-    //         vaultIssuanceParams_ = vaultIssuanceParams(vaults[i]);
-
-    //         vaultIssuanceParams_.taxToDAO = taxesToDAO[i]; // New issuance allocation
-    //         vaultIssuanceParams_.aggTaxesToDAO = aggTaxesToDAO;
-    //         vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
-    //         vaultIssuanceParams_.tsIssuanceEnd = 0; // No forseable end to the allocation
-
-    //         _vaultsIssuanceParams[vaults[i]] = vaultIssuanceParams_;
-    //     }
-    // }
-
-    /// @dev We use the same function to update system parameters and the vault's issuances to minimize bytecode size
-    // function updateSystemState(
-    //     SystemParameters calldata systemParams_,
-    //     uint40[] calldata oldVaults,
-    //     uint40[] calldata newVaults,
-    //     uint16[] calldata newTaxes
-    // ) external onlySystemControl {
-    //     require(systemParams_.aggTaxesToDAO == 0);
-
-    //     if (
-    //         systemParams_.tsIssuanceStart == 0 &&
-    //         systemParams_.baseFee == 0 &&
-    //         systemParams_.lpFee == 0 &&
-    //         systemParams_.emergencyStop == false
-    //     ) {
-    //         require(_hashActiveVaults == keccak256(abi.encodePacked(oldVaults)));
-
-    //         VaultIssuanceParams memory vaultIssuanceParams_;
-
-    //         // Stop old issuances
-    //         uint256 lenVaults = oldVaults.length;
-    //         for (uint256 i = 0; i < lenVaults; ++i) {
-    //             // Retrieve the vault's current issuance state and parameters
-    //             vaultIssuanceParams_ = vaultIssuanceParams(oldVaults[i]);
-
-    //             // Nul tax, and consequently nul issuance
-    //             vaultIssuanceParams_.taxToDAO = 0;
-
-    //             // Update storage
-    //             _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
-    //         }
-
-    //         // Aggregate taxes and squared taxes
-    //         lenVaults = newVaults.length;
-    //         uint184 aggTaxesToDAO;
-    //         uint32 aggSquaredTaxesToDAO;
-    //         for (uint256 i = 0; i < lenVaults; ++i) {
-    //             aggTaxesToDAO += newTaxes[i];
-    //             aggSquaredTaxesToDAO += uint32(newTaxes[i]) ** 2;
-    //         }
-
-    //         // Condition on squares
-    //         require(aggSquaredTaxesToDAO <= uint32(type(uint16).max) ** 2);
-
-    //         // Start new issuances
-    //         for (uint256 i = 0; i < lenVaults; ++i) {
-    //             if (i > 0) require(newVaults[i] > newVaults[i - 1]); // Ensure increasing order
-
-    //             // Retrieve the vault's current issuance state and parameters
-    //             vaultIssuanceParams_ = vaultIssuanceParams(newVaults[i]);
-
-    //             // Nul tax, and consequently nul issuance
-    //             vaultIssuanceParams_.taxToDAO = newTaxes[i];
-
-    //             // Update storage
-    //             _vaultsIssuanceParams[newVaults[i]] = vaultIssuanceParams_;
-    //         }
-
-    //         // Update storage
-    //         systemParams.aggTaxesToDAO = aggTaxesToDAO;
-    //         _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
-    //     } else {
-    //         require(
-    //             systemParams_.tsIssuanceStart == 0 ||
-    //                 (systemParams.tsIssuanceStart == 0 && systemParams_.tsIssuanceStart >= block.timestamp)
-    //         );
-
-    //         systemParams = systemParams_;
-    //     }
-    // }
-
     function updateSystemState(
-        SystemParameters calldata systemParams_,
+        uint40 tsIssuanceStart_,
+        uint16 baseFee_,
+        uint8 lpFee_,
+        bool isEmergency,
+        bool isNotEmergency,
         uint40[] calldata oldVaults,
         uint40[] calldata newVaults,
-        uint16[] calldata newTaxes,
-        uint184 aggTaxesToDAO
+        uint16[] calldata newTaxes
     ) external onlySystemControl {
-        require(systemParams_.aggTaxesToDAO == 0);
-
-        if (
-            systemParams_.tsIssuanceStart == 0 &&
-            systemParams_.baseFee == 0 &&
-            systemParams_.lpFee == 0 &&
-            systemParams_.emergencyStop == false
-        ) {
-            // require(_hashActiveVaults == keccak256(abi.encodePacked(oldVaults)));
-
+        if (tsIssuanceStart_ != 0) {
+            require(systemParams.tsIssuanceStart == 0 && tsIssuanceStart_ >= block.timestamp);
+            systemParams.tsIssuanceStart = tsIssuanceStart_;
+        } else if (baseFee_ != 0) systemParams.baseFee = baseFee_;
+        else if (lpFee_ != 0) systemParams.lpFee = lpFee_;
+        else if (isEmergency) {
+            require(!systemParams.emergencyStop);
+            systemParams.emergencyStop = true;
+        } else if (isNotEmergency) {
+            require(systemParams.emergencyStop);
+            systemParams.emergencyStop = false;
+        } else {
             VaultIssuanceParams memory vaultIssuanceParams_;
 
             // Stop old issuances
@@ -359,17 +231,12 @@ abstract contract SystemState is SystemCommons, TEA {
                 _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
             }
 
-            // // Aggregate taxes and squared taxes
-            // lenVaults = newVaults.length;
-            // uint184 aggTaxesToDAO;
-            // uint32 aggSquaredTaxesToDAO;
-            // for (uint256 i = 0; i < lenVaults; ++i) {
-            //     aggTaxesToDAO += newTaxes[i];
-            //     aggSquaredTaxesToDAO += uint32(newTaxes[i]) ** 2;
-            // }
-
-            // // Condition on squares
-            // require(aggSquaredTaxesToDAO <= uint32(type(uint16).max) ** 2);
+            // Aggregate taxes and squared taxes
+            lenVaults = newVaults.length;
+            uint184 aggTaxesToDAO;
+            for (uint256 i = 0; i < lenVaults; ++i) {
+                aggTaxesToDAO += newTaxes[i];
+            }
 
             // Start new issuances
             for (uint256 i = 0; i < lenVaults; ++i) {
@@ -387,14 +254,6 @@ abstract contract SystemState is SystemCommons, TEA {
 
             // Update storage
             systemParams.aggTaxesToDAO = aggTaxesToDAO;
-            // _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
-        } else {
-            require(
-                systemParams_.tsIssuanceStart == 0 ||
-                    (systemParams.tsIssuanceStart == 0 && systemParams_.tsIssuanceStart >= block.timestamp)
-            );
-
-            systemParams = systemParams_;
         }
     }
 }

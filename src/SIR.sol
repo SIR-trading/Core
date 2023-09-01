@@ -8,9 +8,6 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
 contract SIR is ERC20, SystemCommons {
-    error ArraysLengthMismatch();
-    error ContributorsIssuanceExceedsMaxIssuance();
-
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
@@ -19,7 +16,7 @@ contract SIR is ERC20, SystemCommons {
 
     SystemState private immutable _SYSTEM_STATE;
 
-    uint72 public agg_issuance_contributors; // agg_issuance_contributors <= ISSUANCE - _AGG_ISSUANCE_VAULTS
+    uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - _AGG_ISSUANCE_VAULTS
 
     address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
@@ -37,7 +34,7 @@ contract SIR is ERC20, SystemCommons {
 
     /// @notice Not all tokens may be in circulation. This function outputs the total supply if ALL tokens where in circulation.
     function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , ) = _SYSTEM_STATE.systemParams();
+        (uint40 tsIssuanceStart, , , , ) = _SYSTEM_STATE.systemParams();
 
         if (tsIssuanceStart == 0) return 0;
         return ISSUANCE * (block.timestamp - tsIssuanceStart);
@@ -47,7 +44,10 @@ contract SIR is ERC20, SystemCommons {
         address contributor
     ) public view returns (ContributorIssuanceParams memory contributorParams) {
         unchecked {
-            (uint40 tsIssuanceStart, , , ) = _SYSTEM_STATE.systemParams();
+            (uint40 tsIssuanceStart, , , , ) = _SYSTEM_STATE.systemParams();
+
+            // Update timestamp
+            contributorParams.tsLastUpdate = uint40(block.timestamp);
 
             // If issuance has not started yet
             if (tsIssuanceStart == 0) return contributorParams;
@@ -75,7 +75,6 @@ contract SIR is ERC20, SystemCommons {
                 ) * contributorParams.issuance
             );
             if (issuanceIsOver) contributorParams.issuance = 0;
-            contributorParams.tsLastUpdate = uint40(block.timestamp);
         }
     }
 
@@ -98,36 +97,46 @@ contract SIR is ERC20, SystemCommons {
         _contributorsIssuances[msg.sender] = contributorParams;
     }
 
-    function LPerMint(uint256 vaultId) external {
+    function lPerMint(uint256 vaultId) external {
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = _SYSTEM_STATE._updateLPerIssuanceParams(vaultId, msg.sender);
+        uint104 unclaimedRewards = _SYSTEM_STATE.updateLPerIssuanceParams(vaultId, msg.sender);
 
         // Mint if any unclaimedRewards
         require(unclaimedRewards > 0);
         _mint(msg.sender, unclaimedRewards);
     }
 
-    // JUST PASS A LONG LIST OF VAULTS OR CONTRIBUTORS WITH NEW ISSUANCES, AND FUNCTION FIGUREST OUT THE REST
-    function changeContributorsIssuances(address[] calldata contributors_, uint72[] issuance) {
-        uint256 lenContributors = contributors_.length;
-        if (lenContributors != issuance.length) revert ArraysLengthMismatch();
+    /*////////////////////////////////////////////////////////////////
+                        SYSTEM CONTROL FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
 
-        uint72 agg_issuance_contributors_ = agg_issuance_contributors;
-        // TODO
+    function changeContributorsIssuances(
+        address[] calldata contributors_,
+        uint72[] calldata contributorIssuances_
+    ) external onlySystemControl returns (bool) {
+        uint256 aggIssuanceToAdd;
+        uint256 aggIssuanceToRemove;
+        uint256 lenContributors = contributors_.length;
         for (uint256 i = 0; i < lenContributors; i++) {
             // Get contributor issuance parameters
             ContributorIssuanceParams memory contributorParams = getContributorIssuance(contributors_[i]);
 
+            // Updated aggregated issuance
+            unchecked {
+                aggIssuanceToAdd += contributorIssuances_[i]; // Cannot overflow unless we have at least 2^(256-72) contributors...
+                aggIssuanceToRemove += contributorParams.issuance;
+            }
+
             // Update issuance
-            contributorParams.issuance = issuance[i];
-            contributorParams.tsLastUpdate = uint40(block.timestamp);
+            contributorParams.issuance = contributorIssuances_[i];
 
             // Update state
             _contributorsIssuances[contributors_[i]] = contributorParams;
         }
+        uint256 aggIssuanceContributors_ = aggIssuanceContributors + aggIssuanceToAdd - aggIssuanceToRemove;
 
-        if (agg_issuance_contributors_ > ISSUANCE - _AGG_ISSUANCE_VAULTS)
-            revert ContributorsIssuanceExceedsMaxIssuance();
+        aggIssuanceContributors = uint72(aggIssuanceContributors_);
+        if (aggIssuanceContributors_ > ISSUANCE - _AGG_ISSUANCE_VAULTS) return true;
     }
 
     // function changeContributorsIssuances(
