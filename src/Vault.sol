@@ -27,8 +27,6 @@ contract Vault is SystemState {
         uint256 vaultId
     );
 
-    bytes32 private immutable _hashCreationCodeAPE;
-
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
 
@@ -38,15 +36,9 @@ contract Vault is SystemState {
         public state; // Do not use vaultId 0
     VaultStructs.Parameters[] private _paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
-    constructor(
-        address systemControl_,
-        address sir,
-        address oracle_,
-        bytes32 hashCreationCodeAPE
-    ) SystemState(systemControl_, sir) {
+    constructor(address systemControl_, address sir, address oracle_) SystemState(systemControl_, sir) {
         // Price oracle
         oracle = Oracle(oracle_);
-        _hashCreationCodeAPE = hashCreationCodeAPE;
 
         /** We rely on vaultId == 0 to test if a particular vault exists.
          *  To make sure vault Id 0 is never used, we push one empty element as first entry.
@@ -392,7 +384,7 @@ contract Vault is SystemState {
         VaultStructs.Reserves memory reserves
     ) private view returns (APE ape, uint152 syntheticTokenReserve, uint256 syntheticTokenSupply) {
         if (isAPE) {
-            ape = APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE));
+            ape = APE(SaltedAddress.getAddress(state_.vaultId));
             syntheticTokenReserve = reserves.apesReserve;
             syntheticTokenSupply = ape.totalSupply();
         } else {
@@ -419,7 +411,7 @@ contract Vault is SystemState {
                     reserves.lpReserve = 1;
                 }
             } else if (state_.tickPriceSatX42 == type(int64).max) {
-                if (APE(SaltedAddress.getAddress(state_.vaultId, _hashCreationCodeAPE)).totalSupply() == 0) {
+                if (APE(SaltedAddress.getAddress(state_.vaultId)).totalSupply() == 0) {
                     reserves.lpReserve = state_.totalReserves; // type(int64).max represents +∞ => apesReserve = 0
                 } else {
                     reserves.apesReserve = 1;
@@ -605,5 +597,18 @@ contract Vault is SystemState {
                 }
             }
         }
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                        SYSTEM CONTROL FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    function widhtdrawDAOFees(uint40 vaultId) external onlySystemControl {
+        (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
+
+        uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
+        state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy
+
+        TransferHelper.safeTransfer(collateralToken, _SYSTEM_CONTROL, daoFees);
     }
 }

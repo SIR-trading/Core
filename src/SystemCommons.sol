@@ -22,7 +22,7 @@ abstract contract SystemCommons {
 
     address internal constant _ADDR_UNISWAPV3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
 
-    address private immutable _SYSTEM_CONTROL;
+    address internal immutable _SYSTEM_CONTROL;
 
     constructor(address systemControl) {
         _SYSTEM_CONTROL = systemControl;

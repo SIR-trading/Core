@@ -7,8 +7,9 @@ import {SIR} from "./SIR.sol";
 
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
+import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
-contract SystemControl is Ownable {
+contract SystemControl is ERC1155TokenReceiver, Ownable {
     event IssuanceStart(uint40 tsIssuanceStart);
     event EmergencyStop(bool indexed);
     event NewBaseFee(uint16 baseFee);
@@ -129,8 +130,7 @@ contract SystemControl is Ownable {
             revert ContributorsIssuanceExceedsMaxIssuance();
     }
 
-    // MAKE A WITHDRAWAL FUNCTION!
-    // function withdrawDAOFees(address vault) external onlyOwner returns () {
+    // function withdrawDAOFees(address vault) external onlyOwner returns (bool) {
     //     daoFees = state.daoFees;
     //     state.daoFees = 0; // No re-entrancy attack
     //     TransferHelper.safeTransfer(COLLATERAL_TOKEN, msg.sender, daoFees);
