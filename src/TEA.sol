@@ -107,7 +107,7 @@ abstract contract TEA is ERC1155 {
 
     function _mint(address to, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        _updateIssuanceParams(vaultId, to);
+        _updateLPerIssuanceParams(vaultId, to, address(0));
 
         // Mint
         totalSupply[vaultId] += amount;
@@ -128,7 +128,7 @@ abstract contract TEA is ERC1155 {
 
     function _burn(address from, uint256 vaultId, uint256 amount) internal override {
         // Update SIR issuance
-        _updateIssuanceParams(vaultId, from);
+        _updateLPerIssuanceParams(vaultId, from, address(0));
 
         // Burn
         totalSupply[vaultId] -= amount;
@@ -142,8 +142,6 @@ abstract contract TEA is ERC1155 {
     /*////////////////////////////////////////////////////////////////
                             VIRTUAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-
-    function _updateIssuanceParams(uint256 vaultId, address lper) internal virtual;
 
     function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal virtual;
 

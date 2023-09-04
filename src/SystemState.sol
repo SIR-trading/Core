@@ -140,25 +140,9 @@ abstract contract SystemState is SystemCommons, TEA {
     /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-    /**
-     * @dev To be called BEFORE minting/burning TEA
-     */
-    function _updateIssuanceParams(uint256 vaultId, address lper) internal override {
-        // If issuance has not started, return
-        if (systemParams.tsIssuanceStart == 0) return;
-
-        // Retrieve updated vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
-
-        // Update storage
-        _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
-
-        // Update LPer issuances params
-        _lpersIssuances[vaultId][lper] = _lperIssuanceParams(vaultId, lper, vaultIssuanceParams_);
-    }
 
     /**
-     * @dev To be called BEFORE transfering TEA
+     * @dev To be called BEFORE transfering/minting/burning TEA
      */
     function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal override {
         // If issuance has not started, return
@@ -169,7 +153,12 @@ abstract contract SystemState is SystemCommons, TEA {
 
         // Update lpers issuances params
         _lpersIssuances[vaultId][lper0] = _lperIssuanceParams(vaultId, lper0, vaultIssuanceParams_);
-        _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
+        if (lper1 != address(0))
+            _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
+        else {
+            // Update vault issuance parameters
+            _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
+        }
     }
 
     function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {

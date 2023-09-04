@@ -603,12 +603,12 @@ contract Vault is SystemState {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function widhtdrawDAOFees(uint40 vaultId) external onlySystemControl {
+    function widhtdrawDAOFees(uint40 vaultId, address to) external onlySystemControl {
         (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
 
         uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
         state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy
 
-        TransferHelper.safeTransfer(collateralToken, _SYSTEM_CONTROL, daoFees);
+        TransferHelper.safeTransfer(collateralToken, to, daoFees);
     }
 }
