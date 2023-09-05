@@ -158,11 +158,11 @@ abstract contract SystemState is SystemCommons, TEA {
 
         // Retrieve updated LPer issuance parameters
         LPerIssuanceParams memory lper0IssuanceParams_ = _lperIssuanceParams(vaultId, lper0, vaultIssuanceParams_);
-        unclaimedRewards = lper0IssuanceParams_.unclaimedRewards;
 
         // Update lpers issuances params
         if (sirIsCaller) {
-            // SIR contract is the caller and resets reards
+            // SIR contract is the caller and resets rewards
+            unclaimedRewards = lper0IssuanceParams_.unclaimedRewards;
             lper0IssuanceParams_.unclaimedRewards = 0;
         } else if (lper1 != address(0))
             // Transfer of TEA, we need to update the 2nd LPer

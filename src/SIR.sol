@@ -136,7 +136,8 @@ contract SIR is ERC20, SystemCommons {
         uint256 aggIssuanceContributors_ = aggIssuanceContributors + aggIssuanceToAdd - aggIssuanceToRemove;
 
         aggIssuanceContributors = uint72(aggIssuanceContributors_);
-        if (aggIssuanceContributors_ > ISSUANCE - _AGG_ISSUANCE_VAULTS) return true;
+        if (aggIssuanceContributors_ > ISSUANCE - _AGG_ISSUANCE_VAULTS) return false;
+        return true;
     }
 
     // function changeContributorsIssuances(
