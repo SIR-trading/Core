@@ -144,16 +144,12 @@ abstract contract SystemState is SystemCommons, TEA {
     /**
      * @dev To be called BEFORE transfering/minting/burning TEA
      */
-    function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal override {
-        _updateLPerIssuanceParams(vaultId, lper0, lper1, false);
-    }
-
     function _updateLPerIssuanceParams(
         uint256 vaultId,
         address lper0,
         address lper1,
         bool sirIsCaller
-    ) private returns (uint104 unclaimedRewards) {
+    ) internal override returns (uint104 unclaimedRewards) {
         // If issuance has not started, return
         if (systemParams.tsIssuanceStart == 0) return 0;
 

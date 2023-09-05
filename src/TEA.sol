@@ -44,7 +44,7 @@ abstract contract TEA is ERC1155 {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _updateLPerIssuanceParams(vaultId, from, to);
+        _updateLPerIssuanceParams(vaultId, from, to, false);
 
         // Transfer
         balanceOf[from][vaultId] -= amount;
@@ -81,7 +81,7 @@ abstract contract TEA is ERC1155 {
             amount = amounts[i];
 
             // Update SIR issuances
-            _updateLPerIssuanceParams(vaultId, from, to);
+            _updateLPerIssuanceParams(vaultId, from, to, false);
 
             // Transfer
             balanceOf[from][vaultId] -= amount;
@@ -107,7 +107,7 @@ abstract contract TEA is ERC1155 {
 
     function _mint(address to, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        _updateLPerIssuanceParams(vaultId, to, address(0));
+        _updateLPerIssuanceParams(vaultId, to, address(0), false);
 
         // Mint
         totalSupply[vaultId] += amount;
@@ -128,7 +128,7 @@ abstract contract TEA is ERC1155 {
 
     function _burn(address from, uint256 vaultId, uint256 amount) internal override {
         // Update SIR issuance
-        _updateLPerIssuanceParams(vaultId, from, address(0));
+        _updateLPerIssuanceParams(vaultId, from, address(0), false);
 
         // Burn
         totalSupply[vaultId] -= amount;
@@ -143,7 +143,12 @@ abstract contract TEA is ERC1155 {
                             VIRTUAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal virtual;
+    function _updateLPerIssuanceParams(
+        uint256 vaultId,
+        address lper0,
+        address lper1,
+        bool sirIsCaller
+    ) internal virtual returns (uint104 unclaimedRewards);
 
     function paramsById(
         uint256 vaultId
