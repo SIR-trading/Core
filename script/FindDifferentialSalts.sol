@@ -6,11 +6,11 @@ import "forge-std/console.sol";
 import "openzeppelin/utils/math/Math.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
-contract FindSalts is Script {
+contract FindDifferentialSalts is Script {
     bytes32 private immutable _HASH_CREATION_CODE_APE;
-    uint256 private constant _N_BITS_PER_SALT = 25;
+    uint256 private constant _N_BITS_PER_SALT = 16;
     uint256 private constant _N_SALTS_PER_WORD = 256 / _N_BITS_PER_SALT;
-    uint256 private constant _N_HITS = (24576 * 8) / _N_BITS_PER_SALT; // To fill the 768 max # of words in a contract
+    uint256 private constant _N_HITS = (24576 * 8) / _N_BITS_PER_SALT; // 24576 bytes in a contract / 2 bytes (16 bits) per salt
 
     constructor() {
         _HASH_CREATION_CODE_APE = keccak256(abi.encodePacked(vm.getCode("APE.sol:APE")));
@@ -23,7 +23,7 @@ contract FindSalts is Script {
      */
     function run() public {
         vm.pauseGasMetering();
-        vm.writeFile("salts.txt", "");
+        vm.writeFile("saltsDiff.txt", "");
 
         bytes32 free_mem;
         assembly ("memory-safe") {
@@ -31,9 +31,12 @@ contract FindSalts is Script {
         }
 
         uint256 i;
+        uint256 iLastHit;
         bytes2 firstThreeLetters;
         bytes32 salt;
         uint256 hits;
+        uint256 diffSalt;
+        uint256 maxDiffSalt;
         uint256 word;
         while (hits < _N_HITS) {
             salt = bytes32(i);
@@ -47,14 +50,19 @@ contract FindSalts is Script {
 
             // a9e ≈ ape
             if (firstThreeLetters == 0x0a9e) {
-                require(i < 2 ** _N_BITS_PER_SALT);
+                diffSalt = i - iLastHit;
+                require(diffSalt < 2 ** _N_BITS_PER_SALT);
+                // console.logBytes2(bytes2(uint16(diffSalt)));
                 if (hits % _N_SALTS_PER_WORD == 0) {
-                    if (hits > 0) vm.writeLine("salts.txt", Strings.toHexString(word));
-                    word = i;
+                    if (hits > 0) vm.writeLine("saltsDiff.txt", Strings.toHexString(word));
+                    word = diffSalt;
                 } else {
-                    word |= i << ((hits % _N_SALTS_PER_WORD) * _N_BITS_PER_SALT);
+                    word |= diffSalt << ((hits % _N_SALTS_PER_WORD) * _N_BITS_PER_SALT);
                 }
+                if (diffSalt > maxDiffSalt) maxDiffSalt = diffSalt;
 
+                // console.log(diffSalt);
+                iLastHit = i;
                 ++hits;
             }
 
@@ -67,5 +75,6 @@ contract FindSalts is Script {
 
         console.log(_N_HITS, "salts");
         console.log("Maximum salt is", i - 1);
+        console.log("Maximum differential salt is", maxDiffSalt);
     }
 }
