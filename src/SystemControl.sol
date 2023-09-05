@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import {SystemState} from "./SystemState.sol";
+import {Vault} from "./Vault.sol";
 import {SIR} from "./SIR.sol";
 
 // Smart contracts
@@ -22,7 +22,7 @@ contract SystemControl is Ownable {
     error WrongNewVaultsOrder();
     error NewTaxesTooHigh();
 
-    SystemState public immutable SYSTEM_STATE;
+    Vault public immutable VAULT;
     SIR public immutable SIR_TOKEN;
 
     uint256 private _sumTaxesToDAO;
@@ -45,7 +45,7 @@ contract SystemControl is Ownable {
     }
 
     constructor(address systemState, address sir) {
-        SYSTEM_STATE = SystemState(systemState);
+        VAULT = Vault(systemState);
         SIR_TOKEN = SIR(sir);
     }
 
@@ -64,28 +64,28 @@ contract SystemControl is Ownable {
 
     /// @notice Issuance may start after the beta period is over
     function startIssuanceOfSIR(uint40 tsStart) external onlyOwner {
-        SYSTEM_STATE.updateSystemState(tsStart, 0, 0, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
+        VAULT.updateSystemState(tsStart, 0, 0, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
         emit IssuanceStart(tsStart);
     }
 
     function setBaseFee(uint16 baseFee) external onlyOwner betaIsOn {
-        SYSTEM_STATE.updateSystemState(0, baseFee, 0, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
+        VAULT.updateSystemState(0, baseFee, 0, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
         emit NewBaseFee(baseFee);
     }
 
     function setLPFee(uint8 lpFee) external onlyOwner betaIsOn {
-        SYSTEM_STATE.updateSystemState(0, 0, lpFee, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
+        VAULT.updateSystemState(0, 0, lpFee, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
         emit NewLPFee(lpFee);
     }
 
     function haultMinting() external onlyOwner betaIsOn {
-        SYSTEM_STATE.updateSystemState(0, 0, 0, true, false, new uint40[](0), new uint40[](0), new uint16[](0));
+        VAULT.updateSystemState(0, 0, 0, true, false, new uint40[](0), new uint40[](0), new uint16[](0));
         emit EmergencyStop(true);
     }
 
     /// @notice We should be allowed to resume the operations of the protocol even if the best is over.
     function resumeMinting() external onlyOwner {
-        SYSTEM_STATE.updateSystemState(0, 0, 0, false, true, new uint40[](0), new uint40[](0), new uint16[](0));
+        VAULT.updateSystemState(0, 0, 0, false, true, new uint40[](0), new uint40[](0), new uint16[](0));
         emit EmergencyStop(false);
     }
 
@@ -111,7 +111,7 @@ contract SystemControl is Ownable {
         if (aggSquaredTaxesToDAO > uint256(type(uint16).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
-        SYSTEM_STATE.updateSystemState(0, 0, 0, false, false, oldVaults, newVaults, newTaxes);
+        VAULT.updateSystemState(0, 0, 0, false, false, oldVaults, newVaults, newTaxes);
 
         // Update hash of active vaults
         _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
@@ -130,6 +130,6 @@ contract SystemControl is Ownable {
     }
 
     function widhtdrawDAOFees(uint40 vaultId, address to) external onlyOwner {
-        SYSTEM_STATE.widhtdrawDAOFees(vaultId, to);
+        VAULT.widhtdrawDAOFees(vaultId, to);
     }
 }

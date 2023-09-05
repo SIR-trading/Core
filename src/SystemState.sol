@@ -145,25 +145,15 @@ abstract contract SystemState is SystemCommons, TEA {
      * @dev To be called BEFORE transfering/minting/burning TEA
      */
     function _updateLPerIssuanceParams(uint256 vaultId, address lper0, address lper1) internal override {
-        // If issuance has not started, return
-        if (systemParams.tsIssuanceStart == 0) return;
-
-        // Retrieve updated vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
-
-        // Update lpers issuances params
-        _lpersIssuances[vaultId][lper0] = _lperIssuanceParams(vaultId, lper0, vaultIssuanceParams_);
-        if (lper1 != address(0))
-            _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
-        else {
-            // Update vault issuance parameters
-            _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
-        }
+        _updateLPerIssuanceParams(vaultId, lper0, lper1, false);
     }
 
-    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
-        require(msg.sender == _SIR);
-
+    function _updateLPerIssuanceParams(
+        uint256 vaultId,
+        address lper0,
+        address lper1,
+        bool sirIsCaller
+    ) private returns (uint104 unclaimedRewards) {
         // If issuance has not started, return
         if (systemParams.tsIssuanceStart == 0) return 0;
 
@@ -171,12 +161,27 @@ abstract contract SystemState is SystemCommons, TEA {
         VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
 
         // Retrieve updated LPer issuance parameters
-        LPerIssuanceParams memory lperIssuanceParams_ = _lperIssuanceParams(vaultId, lper, vaultIssuanceParams_);
-        unclaimedRewards = lperIssuanceParams_.unclaimedRewards;
+        LPerIssuanceParams memory lper0IssuanceParams_ = _lperIssuanceParams(vaultId, lper0, vaultIssuanceParams_);
+        unclaimedRewards = lper0IssuanceParams_.unclaimedRewards;
 
         // Update lpers issuances params
-        lperIssuanceParams_.unclaimedRewards = 0;
-        _lpersIssuances[vaultId][lper] = _lperIssuanceParams(vaultId, lper, vaultIssuanceParams_);
+        if (sirIsCaller) {
+            // SIR contract is the caller and resets reards
+            lper0IssuanceParams_.unclaimedRewards = 0;
+        } else if (lper1 != address(0))
+            // Transfer of TEA, we need to update the 2nd LPer
+            _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
+        else {
+            // Mint or burning of TEA, we need to update the vault
+            _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
+        }
+        _lpersIssuances[vaultId][lper0] = lper0IssuanceParams_;
+    }
+
+    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
+        require(msg.sender == _SIR);
+
+        unclaimedRewards = _updateLPerIssuanceParams(vaultId, lper, address(0), true);
     }
 
     /*////////////////////////////////////////////////////////////////
