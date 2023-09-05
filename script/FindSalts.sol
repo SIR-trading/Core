@@ -8,9 +8,9 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 
 contract FindSalts is Script {
     bytes32 private immutable _HASH_CREATION_CODE_APE;
-    uint256 private constant _N_BITS_PER_SALT = 25;
+    uint256 private constant _N_BITS_PER_SALT = 24;
     uint256 private constant _N_SALTS_PER_WORD = 256 / _N_BITS_PER_SALT;
-    uint256 private constant _N_HITS = (24576 * 8) / _N_BITS_PER_SALT; // To fill the 768 max # of words in a contract
+    uint256 private _nHits = (24576 * 8) / _N_BITS_PER_SALT; // To fill the 768 max # of words in a contract
 
     constructor() {
         _HASH_CREATION_CODE_APE = keccak256(abi.encodePacked(vm.getCode("APE.sol:APE")));
@@ -35,7 +35,7 @@ contract FindSalts is Script {
         bytes32 salt;
         uint256 hits;
         uint256 word;
-        while (hits < _N_HITS) {
+        while (hits < _nHits) {
             salt = bytes32(i);
             firstThreeLetters = bytes2(
                 uint16(
@@ -47,7 +47,6 @@ contract FindSalts is Script {
 
             // a9e ≈ ape
             if (firstThreeLetters == 0x0a9e) {
-                require(i < 2 ** _N_BITS_PER_SALT);
                 if (hits % _N_SALTS_PER_WORD == 0) {
                     if (hits > 0) vm.writeLine("salts.txt", Strings.toHexString(word));
                     word = i;
@@ -62,10 +61,12 @@ contract FindSalts is Script {
                 mstore(0x40, free_mem)
             }
 
-            ++i;
+            if (++i >= 2 ** _N_BITS_PER_SALT) {
+                _nHits = hits;
+                break;
+            }
         }
 
-        console.log(_N_HITS, "salts");
-        console.log("Maximum salt is", i - 1);
+        console.log(_nHits, "salts");
     }
 }
