@@ -54,7 +54,7 @@ contract FindDifferentialSalts is Script {
                 require(diffSalt < 2 ** _N_BITS_PER_SALT);
                 // console.logBytes2(bytes2(uint16(diffSalt)));
                 if (hits % _N_SALTS_PER_WORD == 0) {
-                    if (hits > 0) vm.writeLine("saltsDiff.txt", Strings.toHexString(word));
+                    if (hits > 0) vm.writeLine("saltsDiff.txt", Strings.toHexString(word, 32));
                     word = diffSalt;
                 } else {
                     word |= diffSalt << ((hits % _N_SALTS_PER_WORD) * _N_BITS_PER_SALT);

@@ -6,7 +6,8 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {DeployerOfAPE, APE, SaltedAddress, FullMath} from "./libraries/DeployerOfAPE.sol";
+import {SaltedAddress} from "./libraries/SaltedAddress.sol";
+import {DeployerOfAPE, APE, FullMath} from "./libraries/DeployerOfAPE.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {Fees} from "./libraries/Fees.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";

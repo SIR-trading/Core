@@ -48,7 +48,7 @@ contract FindSalts is Script {
             // a9e ≈ ape
             if (firstThreeLetters == 0x0a9e) {
                 if (hits % _N_SALTS_PER_WORD == 0) {
-                    if (hits > 0) vm.writeLine("salts.txt", Strings.toHexString(word));
+                    if (hits > 0) vm.writeLine("salts.txt", Strings.toHexString(word, 32));
                     word = i;
                 } else {
                     word |= i << ((hits % _N_SALTS_PER_WORD) * _N_BITS_PER_SALT);
