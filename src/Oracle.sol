@@ -194,9 +194,10 @@ contract Oracle {
 
     struct OracleState {
         int64 tickPriceX42; // Last stored price. Q21.42
-        uint40 timeStamp; // Timestamp of the last stored price
+        uint40 timeStampPrice; // Timestamp of the last stored price
         uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
         uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
+        uint40 timeStampTier; // Timestamp of the last stored price
         bool initialized; // Whether the oracle has been initialized
         UniswapFeeTier uniswapFeeTier; // Uniswap v3 fee tier currently being used as oracle
     }
@@ -204,9 +205,10 @@ contract Oracle {
     /**
      * Constants
      */
+    uint256 private constant _DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int256 private constant _MAX_TICK_INC_PER_SEC = 1 << 42;
-    uint32 public constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
-    uint32 public constant TWAP_DURATION = 30 minutes;
+    uint40 private constant _TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of _TWAP_DELTA.
+    uint40 private constant _TWAP_DURATION = 30 minutes;
 
     /**
      * State variables
@@ -311,59 +313,72 @@ contract Oracle {
         OracleState memory oracleState = oracleStates[tokenA][tokenB];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
-        // Update price
-        UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee, false);
-        if (_updatePrice(oracleState, oracleData)) emit PriceTruncated(tokenA, tokenB, oracleState.tickPriceX42);
-
-        // Fee tier is updated once per block at most
-        if (oracleState.timeStamp != uint32(block.timestamp)) {
-            // Get current fee tier and the one we wish to probe
-            UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
-
-            // Retrieve oracle data
-            UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
+        // Price is updated once per block at most
+        if (oracleState.timeStampPrice != block.timestamp) {
+            // Update price
+            UniswapOracleData memory oracleData = _uniswapOracleData(
                 tokenA,
                 tokenB,
-                uniswapFeeTierProbed.fee,
+                oracleState.uniswapFeeTier.fee,
                 false
             );
-
-            // Check the scores for the current fee tier and the probed one
-            uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
-            uint256 scoreProbed = _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
-
-            if (score >= scoreProbed) {
-                if (oracleData.cardinalityToIncrease > 0) {
-                    // If the current tier is better and the TWAP's cardinality is insufficient, increase the cardinality
-                    IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
-                    uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
-                }
-            } else {
-                if (oracleDataProbed.cardinalityToIncrease > 0) {
-                    // If the probed tier is better and the TWAP's cardinality is insufficient, increase the cardinality
-                    IUniswapV3Pool uniswapPoolProbed = _getUniswapPool(tokenA, tokenB, uniswapFeeTierProbed.fee);
-                    uniswapPoolProbed.increaseObservationCardinalityNext(oracleDataProbed.cardinalityToIncrease);
-                } else if (oracleDataProbed.period >= TWAP_DURATION) {
-                    // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
-                    oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
-                    oracleState.uniswapFeeTier = uniswapFeeTierProbed;
-                    emit OracleFeeTierChanged(tokenA, tokenB, uniswapFeeTierProbed.fee);
-                }
-            }
-
-            // Update indices
-            uint NuniswapFeeTiers = 4 + uint8(_uniswapExtraFeeTiers);
-            oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
-            if (oracleState.indexFeeTier == oracleState.indexFeeTierProbeNext)
-                oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
+            if (_updatePrice(oracleState, oracleData)) emit PriceTruncated(tokenA, tokenB, oracleState.tickPriceX42);
 
             // Update timestamp
-            oracleState.timeStamp = uint40(block.timestamp);
-        }
+            oracleState.timeStampPrice = uint40(block.timestamp);
 
-        // Save new oracle state to storage
-        oracleStates[tokenA][tokenB] = oracleState;
-        emit PriceUpdated(tokenA, tokenB, oracleState.tickPriceX42);
+            // Fee tier is updated once per block at most
+            if (oracleState.timeStampPrice >= block.timestamp + _DURATION_UPDATE_FEE_TIER) {
+                // Get current fee tier and the one we wish to probe
+                UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
+
+                // Retrieve oracle data
+                UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
+                    tokenA,
+                    tokenB,
+                    uniswapFeeTierProbed.fee,
+                    false
+                );
+
+                // Check the scores for the current fee tier and the probed one
+                uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
+                uint256 scoreProbed = _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
+
+                if (score >= scoreProbed) {
+                    if (oracleData.cardinalityToIncrease > 0) {
+                        // If the current tier is better and the TWAP's cardinality is insufficient, increase the cardinality
+                        IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
+                        uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
+                    }
+                } else {
+                    if (oracleDataProbed.cardinalityToIncrease > 0) {
+                        // If the probed tier is better and the TWAP's cardinality is insufficient, increase the cardinality
+                        IUniswapV3Pool uniswapPoolProbed = _getUniswapPool(tokenA, tokenB, uniswapFeeTierProbed.fee);
+                        uniswapPoolProbed.increaseObservationCardinalityNext(oracleDataProbed.cardinalityToIncrease);
+                    } else if (oracleDataProbed.period >= _TWAP_DURATION) {
+                        // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
+                        oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
+                        oracleState.uniswapFeeTier = uniswapFeeTierProbed;
+                        emit OracleFeeTierChanged(tokenA, tokenB, uniswapFeeTierProbed.fee);
+                    }
+                }
+
+                // Update indices
+                uint NuniswapFeeTiers = 4 + uint8(_uniswapExtraFeeTiers);
+                oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
+                if (oracleState.indexFeeTier == oracleState.indexFeeTierProbeNext)
+                    oracleState.indexFeeTierProbeNext =
+                        (oracleState.indexFeeTierProbeNext + 1) %
+                        uint8(NuniswapFeeTiers);
+
+                // Update timestamp
+                oracleState.timeStampTier = uint40(block.timestamp);
+            }
+
+            // Save new oracle state to storage
+            oracleStates[tokenA][tokenB] = oracleState;
+            emit PriceUpdated(tokenA, tokenB, oracleState.tickPriceX42);
+        }
 
         // Invert price if necessary
         if (collateralToken == tokenB) return -oracleState.tickPriceX42;
@@ -410,9 +425,17 @@ contract Oracle {
         OracleState memory oracleState = oracleStates[tokenA][tokenB];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
-        // Update price
-        UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee, false);
-        _updatePrice(oracleState, oracleData);
+        // Get latest price if not stored
+        if (oracleState.timeStampPrice != block.timestamp) {
+            // Update price
+            UniswapOracleData memory oracleData = _uniswapOracleData(
+                tokenA,
+                tokenB,
+                oracleState.uniswapFeeTier.fee,
+                false
+            );
+            _updatePrice(oracleState, oracleData);
+        }
 
         // Invert price if necessary
         if (collateralToken == tokenB) return -oracleState.tickPriceX42;
@@ -436,7 +459,7 @@ contract Oracle {
 
             // Truncate price if necessary
             int256 tickMaxIncrement = _MAX_TICK_INC_PER_SEC *
-                int256((uint256(block.timestamp) - uint256(oracleState.timeStamp)));
+                int256((uint256(block.timestamp) - uint256(oracleState.timeStampPrice)));
             if (tickPriceX42 > int256(oracleState.tickPriceX42) + tickMaxIncrement) {
                 oracleState.tickPriceX42 += int64(tickMaxIncrement);
                 truncated = true;
@@ -491,7 +514,7 @@ contract Oracle {
 
         // Retrieve oracle info from Uniswap v3
         uint32[] memory interval = new uint32[](2);
-        interval[0] = instantData ? 1 : TWAP_DURATION;
+        interval[0] = instantData ? 1 : _TWAP_DURATION;
         interval[1] = 0;
         int56[] memory tickCumulatives;
         uint160[] memory liquidityCumulatives;
@@ -547,15 +570,15 @@ contract Oracle {
             tickCumulatives[0] = tickCumulativesAgain[0];
             liquidityCumulatives[0] = liquidityCumulativesAgain[0];
 
-            // Estimate necessary length of the oracle if we want it to be TWAP_DURATION long
-            uint256 cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1;
+            // Estimate necessary length of the oracle if we want it to be _TWAP_DURATION long
+            uint256 cardinalityNeeded = (uint256(cardinalityNow) * _TWAP_DURATION - 1) / interval[0] + 1;
 
             /**
              * Check if cardinality must increase,
-             * if so we add a TWAP_DELTA increment taking into consideration that every block takes in average 12 seconds
+             * if so we add a _TWAP_DELTA increment taking into consideration that every block takes in average 12 seconds
              */
             if (cardinalityNeeded > cardinalityNext)
-                oracleData.cardinalityToIncrease = cardinalityNext + uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
+                oracleData.cardinalityToIncrease = cardinalityNext + uint16((_TWAP_DELTA - 1) / (12 seconds)) + 1;
         }
 
         // Compute average liquidity
