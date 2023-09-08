@@ -3,3 +3,4 @@ uniswap-v2-core/=lib/v2-core/contracts/
 uniswap-v3-core/=lib/v3-core/contracts/
 uniswap-v3-periphery/=lib/v3-periphery/contracts/
 openzeppelin/=lib/openzeppelin-contracts/contracts/
+abdk/=lib/abdk-libraries-solidity/
