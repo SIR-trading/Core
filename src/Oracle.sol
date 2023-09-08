@@ -514,7 +514,7 @@ contract Oracle {
 
         // Retrieve oracle info from Uniswap v3
         uint32[] memory interval = new uint32[](2);
-        interval[0] = instantData ? 1 : _TWAP_DURATION;
+        interval[0] = instantData ? 1 : uint32(_TWAP_DURATION);
         interval[1] = 0;
         int56[] memory tickCumulatives;
         uint160[] memory liquidityCumulatives;
