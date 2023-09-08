@@ -33,8 +33,9 @@ library Fees {
                 feeNum = 10000; // baseFee is uint16, leverageTier is int8, so feeNum does not require more than 24 bits
                 feeDen = 10000 + (uint256(baseFee) << uint256(leverageTier));
             } else {
-                feeNum = 10000 << uint256(-leverageTier);
-                feeDen = (10000 << uint256(-leverageTier)) + uint256(baseFee);
+                uint256 temp = 10000 << uint256(-leverageTier);
+                feeNum = temp;
+                feeDen = temp + uint256(baseFee);
             }
 
             // Split collateralAmount into comission and collateralFeeFree

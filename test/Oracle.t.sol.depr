@@ -2,17 +2,30 @@
 pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
+import {UniswapV3Factory} from "uniswap-v3-core/UniswapV3Factory.sol";
+import {SwapRouter} from "v3-periphery/SwapRouter.sol";
+
+// import {UniswapInterfaceMulticall} from "v3-periphery/lens/UniswapInterfaceMulticall.sol";
 
 contract OracleTest is Test {
+    UniswapV3Factory private _uV3factory;
+    SwapRouter private _uV3router;
 
+    // UniswapInterfaceMulticall private _uV3multicall;
+
+    constructor() {
+        _uV3factory = new UniswapV3Factory();
+        _uV3factory.enableFeeAmount(100, 1); // Add 1 bp fee tier
+
+        _uV3router = new SwapRouter(address(_uV3factory), _WETH9);
+        // _uV3multicall = new UniswapInterfaceMulticall();
+    }
 
     function testFuzz_Oracly() public {
-
-
-        assertEq(
-            ,
-            ,
-            ""
-        );
+        // assertEq(
+        //     ,
+        //     ,
+        //     ""
+        // );
     }
 }
