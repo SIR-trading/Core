@@ -4,15 +4,8 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
-import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 
 contract FeesTest is Test {
-    using ABDKMath64x64 for int128;
-
-    /*********************
-        MINT TESTS
-     *********************/
-
     function testFuzz_APE(uint16 baseFee, uint152 collateralAmount, int8 leverageTier) public {
         // Constraint leverageTier to supported values
         leverageTier = int8(bound(leverageTier, -3, 2));

@@ -25,24 +25,21 @@ library Fees {
         uint16 baseFee,
         uint152 collateralAmount,
         int256 leverageTier
-    ) internal pure returns (uint152, uint152) {
+    ) internal pure returns (uint152 collateralFeeFree, uint152 comission) {
         unchecked {
             uint256 feeNum;
             uint256 feeDen;
             if (leverageTier >= 0) {
-                feeNum = uint256(baseFee) << uint256(leverageTier); // baseFee is uint16, leverageTier is int8, so feeNum does not require more than 24 bits
+                feeNum = 10000; // baseFee is uint16, leverageTier is int8, so feeNum does not require more than 24 bits
                 feeDen = 10000 + (uint256(baseFee) << uint256(leverageTier));
             } else {
-                feeNum = uint256(baseFee);
+                feeNum = 10000 << uint256(-leverageTier);
                 feeDen = (10000 << uint256(-leverageTier)) + uint256(baseFee);
             }
 
             // Split collateralAmount into comission and collateralFeeFree
-            uint256 temp = uint256(collateralAmount) * feeNum;
-            uint256 comission = temp == 0 ? 0 : (temp - 1) / feeDen + 1; // Cannot OF because feeNum takes at most 24 bits. Round up.
-            uint256 collateralFeeFree = collateralAmount - comission;
-
-            return (uint152(collateralFeeFree), uint152(comission));
+            collateralFeeFree = uint152((uint256(collateralAmount) * feeNum) / feeDen);
+            comission = collateralAmount - collateralFeeFree;
         }
     }
 }
