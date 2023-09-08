@@ -18,7 +18,7 @@ pragma solidity ^0.8.0;
 
 library Fees {
     /**
-     *  @return collateralDeposited
+     *  @return collateralFeeFree
      *  @return comission to LPers
      */
     function hiddenFee(
@@ -37,11 +37,11 @@ library Fees {
                 feeDen = (10000 << uint256(-leverageTier)) + uint256(baseFee);
             }
 
-            // Split collateralAmount into comission and collateralDeposited
+            // Split collateralAmount into comission and collateralFeeFree
             uint256 comission = (uint256(collateralAmount) * feeNum) / feeDen; // Cannot overflow 256 bits because feeNum takes at most 24 bits
-            uint256 collateralDeposited = collateralAmount - comission;
+            uint256 collateralFeeFree = collateralAmount - comission;
 
-            return (uint152(collateralDeposited), uint152(comission));
+            return (uint152(collateralFeeFree), uint152(comission));
         }
     }
 }
