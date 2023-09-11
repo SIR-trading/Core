@@ -25,3 +25,6 @@
 [submodule "lib/uniswap-lib"]
 	path = lib/uniswap-lib
 	url = https://github.com/Uniswap/solidity-lib
+[submodule "lib/uniswap-openzeppelin"]
+	path = lib/uniswap-openzeppelin
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
