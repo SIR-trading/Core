@@ -5,4 +5,5 @@ uniswap-v3-periphery/=lib/v3-periphery/contracts/
 openzeppelin/=lib/openzeppelin-contracts/contracts/
 abdk/=lib/abdk-libraries-solidity/
 @uniswap/lib/=lib/uniswap-lib/
-@openzeppelin/contracts/token/ERC721/IERC721Metadata.sol/=lib/openzeppelin-contracts/contracts/token/ERC721/extensions//IERC721Metadata.sol/
+@openzeppelin/=lib/uniswap-openzeppelin/
+@uniswap/v3-core/=lib/v3-core/
