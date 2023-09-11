@@ -22,3 +22,6 @@
 [submodule "lib/canonical-weth"]
 	path = lib/canonical-weth
 	url = https://github.com/gnosis/canonical-weth
+[submodule "lib/uniswap-lib"]
+	path = lib/uniswap-lib
+	url = https://github.com/Uniswap/solidity-lib
