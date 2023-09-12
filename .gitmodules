@@ -28,3 +28,6 @@
 [submodule "lib/canonical-weth"]
 	path = lib/canonical-weth
 	url = https://github.com/gnosis/canonical-weth
+[submodule "lib/uniswap-openzeppelin"]
+	path = lib/uniswap-openzeppelin
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
