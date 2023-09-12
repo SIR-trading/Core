@@ -7,3 +7,4 @@ abdk/=lib/abdk-libraries-solidity/
 @uniswap/lib/=lib/uniswap-lib/
 @openzeppelin/=lib/uniswap-openzeppelin/
 @uniswap/v3-core/=lib/v3-core/
+base64-sol/=lib/base64/
