@@ -7,9 +7,6 @@
 [submodule "lib/solmate"]
 	path = lib/solmate
 	url = https://github.com/transmissions11/solmate
-[submodule "lib/v2-core"]
-	path = lib/v2-core
-	url = https://github.com/Uniswap/v2-core
 [submodule "lib/abdk-libraries-solidity"]
 	path = lib/abdk-libraries-solidity
 	url = https://github.com/abdk-consulting/abdk-libraries-solidity
