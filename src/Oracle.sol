@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import {IUniswapV3Factory} from "uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
-import {IUniswapV3Pool} from "uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
+import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
+import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";

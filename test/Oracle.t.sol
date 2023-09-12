@@ -2,18 +2,17 @@
 pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
-import {UniswapV3Factory} from "v3-core/UniswapV3Factory.sol";
-import {NonfungiblePositionManager} from "v3-periphery/NonfungiblePositionManager.sol";
-import {NonfungibleTokenPositionDescriptor} from "v3-periphery/NonfungibleTokenPositionDescriptor.sol";
-import {SwapRouter} from "v3-periphery/SwapRouter.sol";
+import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
+import {INonfungiblePositionManager} from "src/test/INonfungiblePositionManager.sol";
+// import {SwapRouter} from "v3-periphery/SwapRouter.sol";
 import {Oracle} from "src/Oracle.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 
 // import {UniswapInterfaceMulticall} from "v3-periphery/lens/UniswapInterfaceMulticall.sol";
 
 contract OracleNotInitializedTest is Test {
-    UniswapV3Factory private _uV3factory;
-    NonfungiblePositionManager private _uV3positionManager;
+    IUniswapV3Factory private _uV3factory;
+    INonfungiblePositionManager private _uV3positionManager;
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
@@ -23,18 +22,18 @@ contract OracleNotInitializedTest is Test {
     // UniswapInterfaceMulticall private _uV3multicall;
 
     constructor() {
-        _uV3factory = new UniswapV3Factory();
+        _uV3factory = IUniswapV3Factory(deployCode("UniswapV3Factory.sol"));
         _uV3factory.enableFeeAmount(100, 1); // Add 1 bp fee tier
 
-        NonfungibleTokenPositionDescriptor uV3tokenDescriptor = new NonfungibleTokenPositionDescriptor(
-            address(0), // We do not use WETH9 anyway
-            "ETH"
+        address uV3tokenDescriptor = (
+            deployCode("NonfungibleTokenPositionDescriptor.sol", abi.encode(address(0), "ETH"))
         );
 
-        _uV3positionManager = new NonfungiblePositionManager(
-            address(_uV3factory),
-            address(0),
-            address(uV3tokenDescriptor)
+        _uV3positionManager = INonfungiblePositionManager(
+            deployCode(
+                "NonfungiblePositionManager.sol",
+                abi.encode(address(_uV3factory), address(0), uV3tokenDescriptor)
+            )
         ); // It has createAndInitializePoolIfNecessary
 
         _oracle = new Oracle();
