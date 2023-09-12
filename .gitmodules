@@ -16,15 +16,6 @@
 [submodule "lib/base64"]
 	path = lib/base64
 	url = https://github.com/Brechtpd/base64
-[submodule "lib/v3-periphery.git"]
-	path = lib/v3-periphery.git
-	url = https://github.com/Uniswap/v3-periphery.git
-[submodule "lib/v3-core.git"]
-	path = lib/v3-core.git
-	url = https://github.com/Uniswap/v3-core.git
 [submodule "lib/v2-core"]
 	path = lib/v2-core
 	url = https://github.com/Uniswap/v2-core
-[submodule "lib/uniswap-openzeppelin"]
-	path = lib/uniswap-openzeppelin
-	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
