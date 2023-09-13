@@ -25,6 +25,8 @@ contract OracleNotInitializedTest is Test {
         _uV3factory = IUniswapV3Factory(deployCode("UniswapV3Factory.sol"));
         _uV3factory.enableFeeAmount(100, 1); // Add 1 bp fee tier
 
+        deployCodeTo("PoolAddress.sol", 0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4);
+
         address uV3tokenDescriptor = (
             deployCode("NonfungibleTokenPositionDescriptor.sol", abi.encode(address(0), "ETH"))
         );

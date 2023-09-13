@@ -5,22 +5,56 @@ pragma abicoder v2;
 import "openzeppelin/token/ERC721/extensions/IERC721Metadata.sol";
 import "openzeppelin/token/ERC721/extensions/IERC721Enumerable.sol";
 
-import "v3-periphery/interfaces/IPoolInitializer.sol";
-import "v3-periphery/interfaces/IERC721Permit.sol";
-import "v3-periphery/interfaces/IPeripheryPayments.sol";
-import "v3-periphery/interfaces/IPeripheryImmutableState.sol";
+interface INonfungiblePositionManager {
+    function factory() external view returns (address);
 
-/// @title Non-fungible token for positions
-/// @notice Wraps Uniswap V3 positions in a non-fungible token interface which allows for them to be transferred
-/// and authorized.
-interface INonfungiblePositionManager is
-    IPoolInitializer,
-    IPeripheryPayments,
-    IPeripheryImmutableState,
-    IERC721Metadata,
-    IERC721Enumerable,
-    IERC721Permit
-{
+    function WETH9() external view returns (address);
+
+    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable;
+
+    function refundETH() external payable;
+
+    function sweepToken(address token, uint256 amountMinimum, address recipient) external payable;
+
+    function supportsInterface(bytes4 interfaceId) external view returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+
+    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
+
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
+    function balanceOf(address owner) external view returns (uint256 balance);
+
+    function ownerOf(uint256 tokenId) external view returns (address owner);
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external;
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) external;
+
+    function transferFrom(address from, address to, uint256 tokenId) external;
+
+    function approve(address to, uint256 tokenId) external;
+
+    function setApprovalForAll(address operator, bool approved) external;
+
+    function getApproved(uint256 tokenId) external view returns (address operator);
+
+    function isApprovedForAll(address owner, address operator) external view returns (bool);
+
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+
+    function permit(address spender, uint256 tokenId, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external payable;
+
+    function createAndInitializePoolIfNecessary(
+        address token0,
+        address token1,
+        uint24 fee,
+        uint160 sqrtPriceX96
+    ) external payable returns (address pool);
+
     event IncreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     event DecreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     event Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1);
