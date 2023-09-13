@@ -12,3 +12,6 @@ libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0
 
 [fuzz]
 # seed = "0x00"
+
+[rpc_endpoints]
+mainnet = "https://mainnet.infura.io/v3/${RPC_MAINNET}"

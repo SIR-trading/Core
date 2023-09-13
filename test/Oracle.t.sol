@@ -10,9 +10,9 @@ import {MockERC20} from "src/test/MockERC20.sol";
 
 // import {UniswapInterfaceMulticall} from "v3-periphery/lens/UniswapInterfaceMulticall.sol";
 
-contract OracleNotInitializedTest is Test {
-    IUniswapV3Factory private _uV3factory;
-    INonfungiblePositionManager private _uV3positionManager;
+contract OracleTest is Test {
+    // IUniswapV3Factory private _uV3factory;
+    // INonfungiblePositionManager private _uV3positionManager;
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
@@ -22,21 +22,7 @@ contract OracleNotInitializedTest is Test {
     // UniswapInterfaceMulticall private _uV3multicall;
 
     constructor() {
-        _uV3factory = IUniswapV3Factory(deployCode("UniswapV3Factory.sol"));
-        _uV3factory.enableFeeAmount(100, 1); // Add 1 bp fee tier
-
-        deployCodeTo("PoolAddress.sol", 0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4);
-
-        address uV3tokenDescriptor = (
-            deployCode("NonfungibleTokenPositionDescriptor.sol", abi.encode(address(0), "ETH"))
-        );
-
-        _uV3positionManager = INonfungiblePositionManager(
-            deployCode(
-                "NonfungiblePositionManager.sol",
-                abi.encode(address(_uV3factory), address(0), uV3tokenDescriptor)
-            )
-        ); // It has createAndInitializePoolIfNecessary
+        vm.createSelectFork("mainnet", 18128102);
 
         _oracle = new Oracle();
 
