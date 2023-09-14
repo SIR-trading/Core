@@ -12,6 +12,8 @@ import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 // Contracts
 import {Addresses} from "./libraries/Addresses.sol";
 
+import "forge-std/console.sol";
+
 /**
  *     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
  *     @dev Gas cost: Around 10k gas for calling Uniswap v3 oracle, plus 10k gas for each different fee pool, making a min gas of approx 20k. For reference a Uniswap trade costs around 120k.
@@ -217,6 +219,63 @@ contract Oracle {
     uint private _uniswapExtraFeeTiers; // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier
 
     /*////////////////////////////////////////////////////////////////
+                            READ-ONLY FUNCTIONS
+    /////////////////////////////////////////////////////////////////*/
+
+    // USE THIS TO PICK THE BEST FEE TIER https://twitter.com/guil_lambert/status/1679971498361081856 ?????
+
+    function getUniswapFeeTiers() public view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
+        // Find out # of all possible fee tiers
+        uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
+        uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
+
+        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
+        uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
+        uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
+        uniswapFeeTiers[2] = UniswapFeeTier(3000, 60);
+        uniswapFeeTiers[3] = UniswapFeeTier(10000, 200);
+
+        // Extra fee tiers
+        if (NuniswapExtraFeeTiers > 0) {
+            uniswapExtraFeeTiers_ >>= 8;
+            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
+                uniswapFeeTiers[4 + i] = UniswapFeeTier(
+                    uint24(uniswapExtraFeeTiers_),
+                    int24(uint24(uniswapExtraFeeTiers_ >> 24))
+                );
+                uniswapExtraFeeTiers_ >>= 48;
+            }
+        }
+    }
+
+    /**
+     * @return the TWAP price of the pair of tokens
+     */
+    function getPrice(address collateralToken, address debtToken) external view returns (int64) {
+        (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
+
+        // Get oracle state
+        OracleState memory oracleState = oracleStates[tokenA][tokenB];
+        if (!oracleState.initialized) revert OracleNotInitialized();
+
+        // Get latest price if not stored
+        if (oracleState.timeStampPrice != block.timestamp) {
+            // Update price
+            UniswapOracleData memory oracleData = _uniswapOracleData(
+                tokenA,
+                tokenB,
+                oracleState.uniswapFeeTier.fee,
+                false
+            );
+            _updatePrice(oracleState, oracleData);
+        }
+
+        // Invert price if necessary
+        if (collateralToken == tokenB) return -oracleState.tickPriceX42;
+        return oracleState.tickPriceX42;
+    }
+
+    /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     /////////////////////////////////////////////////////////////////*/
 
@@ -229,7 +288,7 @@ contract Oracle {
         require(uniswapFeeTiers.length < 9); // 4 basic fee tiers + 5 extra fee tiers max
 
         // Check fee tier actually exists in Uniswap v3
-        int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
+        int24 tickSpacing = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
         require(tickSpacing > 0);
 
         // Check fee tier has not been added yet
@@ -239,7 +298,7 @@ contract Oracle {
 
         // Add new fee tier
         _uniswapExtraFeeTiers |=
-            (uint(fee) | uint(uint24(tickSpacing) << 24)) <<
+            (uint(fee) | (uint(uint24(tickSpacing)) << 24)) <<
             (8 + 48 * (uniswapFeeTiers.length - 4));
 
         // Increase count
@@ -386,63 +445,6 @@ contract Oracle {
     }
 
     /*////////////////////////////////////////////////////////////////
-                            READ-ONLY FUNCTIONS
-    /////////////////////////////////////////////////////////////////*/
-
-    // USE THIS TO PICK THE BEST FEE TIER https://twitter.com/guil_lambert/status/1679971498361081856 ?????
-
-    function getUniswapFeeTiers() public view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
-        // Find out # of all possible fee tiers
-        uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
-        uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
-
-        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
-        uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
-        uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
-        uniswapFeeTiers[2] = UniswapFeeTier(3000, 60);
-        uniswapFeeTiers[3] = UniswapFeeTier(10000, 200);
-
-        // Extra fee tiers
-        if (NuniswapExtraFeeTiers > 0) {
-            uniswapExtraFeeTiers_ >>= 8;
-            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
-                uniswapFeeTiers[4 + i] = UniswapFeeTier(
-                    uint24(uniswapExtraFeeTiers_),
-                    int24(uint24(uniswapExtraFeeTiers_ >> 24))
-                );
-                uniswapExtraFeeTiers_ >>= 48;
-            }
-        }
-    }
-
-    /**
-     * @return the TWAP price of the pair of tokens
-     */
-    function getPrice(address collateralToken, address debtToken) external view returns (int64) {
-        (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
-
-        // Get oracle state
-        OracleState memory oracleState = oracleStates[tokenA][tokenB];
-        if (!oracleState.initialized) revert OracleNotInitialized();
-
-        // Get latest price if not stored
-        if (oracleState.timeStampPrice != block.timestamp) {
-            // Update price
-            UniswapOracleData memory oracleData = _uniswapOracleData(
-                tokenA,
-                tokenB,
-                oracleState.uniswapFeeTier.fee,
-                false
-            );
-            _updatePrice(oracleState, oracleData);
-        }
-
-        // Invert price if necessary
-        if (collateralToken == tokenB) return -oracleState.tickPriceX42;
-        return oracleState.tickPriceX42;
-    }
-
-    /*////////////////////////////////////////////////////////////////
                         PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
@@ -494,7 +496,7 @@ contract Oracle {
         return
             IUniswapV3Pool(
                 UniswapPoolAddress.computeAddress(
-                    Addresses.ADDR_UNISWAPV3_FACTORY,
+                    Addresses._ADDR_UNISWAPV3_FACTORY,
                     UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee)
                 )
             );
