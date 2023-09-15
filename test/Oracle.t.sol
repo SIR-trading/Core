@@ -110,6 +110,10 @@ contract OracleInitializeTest is Test {
         int24 tickSpacing,
         address pool
     );
+    event IncreaseObservationCardinalityNext(
+        uint16 observationCardinalityNextOld,
+        uint16 observationCardinalityNextNew
+    );
 
     Oracle private _oracle;
     MockERC20 private _tokenA;
@@ -128,29 +132,29 @@ contract OracleInitializeTest is Test {
     //     _oracle.initialize(address(_tokenA), address(_tokenB));
     // }
 
-    // function test_InitializePoolNotInitialized() public {
-    //     uint24 fee = 100;
-    //     int24 tickSpacing = 1;
+    function test_InitializePoolNotInitialized() public {
+        uint24 fee = 100;
+        int24 tickSpacing = 1;
 
-    //     // Deploy Uniswap v3 pool
-    //     UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
-    //         address(_tokenA),
-    //         address(_tokenB),
-    //         fee
-    //     );
-    //     vm.expectEmit(true, true, true, true, Addresses._ADDR_UNISWAPV3_FACTORY);
-    //     emit PoolCreated(
-    //         poolKey.token0,
-    //         poolKey.token1,
-    //         fee,
-    //         tickSpacing,
-    //         UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
-    //     );
-    //     IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
+        // Deploy Uniswap v3 pool
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            address(_tokenA),
+            address(_tokenB),
+            fee
+        );
+        vm.expectEmit(true, true, true, true, Addresses._ADDR_UNISWAPV3_FACTORY);
+        emit PoolCreated(
+            poolKey.token0,
+            poolKey.token1,
+            fee,
+            tickSpacing,
+            UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
+        );
+        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
 
-    //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
-    //     _oracle.initialize(address(_tokenA), address(_tokenB));
-    // }
+        vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+        _oracle.initialize(address(_tokenA), address(_tokenB));
+    }
 
     function test_InitializePoolNoLiquidity() public {
         uint24 fee = 100;
@@ -183,6 +187,9 @@ contract OracleInitializeTest is Test {
         vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
+
+    // WHAT IF THERE IS AN UNINITIALIZED FEE TIER AND A FEE TIER WHOSE ORACLE NEEDS AN INCREASE??? WILL initialize WORK?
+    // TEST EVENT IncreaseObservationCardinalityNext(uint16 observationCardinalityNextOld,uint16 observationCardinalityNextNew)
 
     // function test_InitializeNoPoolTokens() public {
     //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
