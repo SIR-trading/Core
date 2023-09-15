@@ -590,20 +590,15 @@ contract Oracle {
                 ...the cardinality of Uniswap v3 oracle is insufficient
                 ...or the TWAP storage is not yet filled with price data
              */
-            // Get current oracle length
-            uint16 cardinalityNow;
-            uint16 cardinalityNext;
-            uint16 observationIndex;
 
-            /**
-             * About Uni v3 Cardinality
-             *  "cardinalityNow" is the current oracle array length with populated price information
-             *  "cardinalityNext" is the future cardinality
-             *  The oracle array is updated circularly.
-             *  The array's cardinality is not bumped to cardinalityNext until the last element in the array (of length cardinalityNow) is updated
-             *  just before a mint/swap/burn.
+            /** About Uni v3 Cardinality
+                "cardinalityNow" is the current oracle array length with populated price information
+                "cardinalityNext" is the future cardinality
+                The oracle array is updated circularly.
+                The array's cardinality is not bumped to cardinalityNext until the last element in the array
+                (of length cardinalityNow) is updated just before a mint/swap/burn.
              */
-            (, , observationIndex, cardinalityNow, cardinalityNext, , ) = uniswapPool.slot0();
+            (, , uint16 observationIndex, uint16 cardinalityNow, uint16 cardinalityNext, , ) = uniswapPool.slot0();
 
             // Obtain the timestamp of the oldest observation
             (
@@ -612,15 +607,21 @@ contract Oracle {
                 uint160 secondsPerLiquidityCumulativeX128,
                 bool initialized
             ) = uniswapPool.observations((observationIndex + 1) % cardinalityNow);
-            if (observationIndex == 0) return oracleData; // Oracle only has 1 storage slot which is insufficient
+
+            console.log("cardinalityNow", cardinalityNow);
+            console.log("observationIndex", observationIndex);
+            console.log("initialized", initialized);
 
             // The next index might not be populated if the cardinality is in the process of increasing. In this case the oldest observation is always in index 0
             if (!initialized) {
-                (blockTimestampOldest, tickCumulative, secondsPerLiquidityCumulativeX128, initialized) = uniswapPool
+                (blockTimestampOldest, tickCumulative_, secondsPerLiquidityCumulativeX128, initialized) = uniswapPool
                     .observations(0);
                 cardinalityNow = observationIndex + 1;
                 if (!initialized) return oracleData; // No oracle data whatsoever
             }
+
+            // Oracle only has 1 storage slot which is insufficient
+            if (cardinalityNow == 1) return oracleData;
 
             // Current TWAP duration
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
