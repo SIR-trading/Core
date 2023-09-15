@@ -197,6 +197,7 @@ contract Oracle {
      * This struct is used to pass data between function.
      */
     struct UniswapOracleData {
+        IUniswapV3Pool uniswapPool; // Uniswap v3 pool
         int56 aggPriceTick; // Aggregated log price over the period
         uint160 aggLiquidity; // Aggregated in-range liquidity over the period
         uint40 period; // Duration of the current TWAP
@@ -328,7 +329,6 @@ contract Oracle {
         // Find the best fee tier by weighted liquidity
         uint256 score;
         UniswapOracleData memory oracleData;
-        uint16 cardinalityToIncrease;
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve instant liquidity (we pass true as the last argument) because some pools may not have an initialized TWAP yet.
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
@@ -345,9 +345,15 @@ contract Oracle {
                 // Update best score
                 if (scoreTemp > score) {
                     oracleState.indexFeeTier = uint8(i);
-                    cardinalityToIncrease = oracleData.cardinalityToIncrease;
                     score = scoreTemp;
                 }
+            } else if (oracleData.period == 0) {
+                /** During normal operation, the oracle will occasionally probe other fee tiers to see if their liquidity score
+                    is better than the current fee tier. If so, it will slowly increase the cardinality of the TWAP if the
+                    score continues to be better, until the TWAP is fully initialized.
+                    For this to work, the TWAP must have at least 2 storage slots initialized.
+                */
+                oracleData.uniswapPool.increaseObservationCardinalityNext(2);
             }
         }
 
@@ -355,12 +361,6 @@ contract Oracle {
         oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(uniswapFeeTiers.length);
         oracleState.initialized = true;
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
-
-        // Extend the memory array of the selected Uniswap pool.
-        if (cardinalityToIncrease > 0) {
-            IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, uniswapFeeTiers[oracleState.indexFeeTier].fee);
-            uniswapPool.increaseObservationCardinalityNext(cardinalityToIncrease);
-        }
 
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
@@ -445,14 +445,14 @@ contract Oracle {
                 if (score >= scoreProbed) {
                     if (oracleData.cardinalityToIncrease > 0) {
                         // If the current tier is better and the TWAP's cardinality is insufficient, increase the cardinality
-                        IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
-                        uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
+                        oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
                     }
                 } else {
                     if (oracleDataProbed.cardinalityToIncrease > 0) {
                         // If the probed tier is better and the TWAP's cardinality is insufficient, increase the cardinality
-                        IUniswapV3Pool uniswapPoolProbed = _getUniswapPool(tokenA, tokenB, uniswapFeeTierProbed.fee);
-                        uniswapPoolProbed.increaseObservationCardinalityNext(oracleDataProbed.cardinalityToIncrease);
+                        oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
+                            oracleDataProbed.cardinalityToIncrease
+                        );
                     } else if (oracleDataProbed.period >= _TWAP_DURATION) {
                         // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
                         oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
@@ -563,10 +563,10 @@ contract Oracle {
         uint24 fee
     ) private view returns (UniswapOracleData memory oracleData) {
         // Retrieve Uniswap pool
-        IUniswapV3Pool uniswapPool = _getUniswapPool(tokenA, tokenB, fee);
+        oracleData.uniswapPool = _getUniswapPool(tokenA, tokenB, fee);
 
         // If pool does not exist, no-op, return all parameters 0.
-        if (address(uniswapPool).code.length == 0) return oracleData;
+        if (address(oracleData.uniswapPool).code.length == 0) return oracleData;
 
         // Retrieve oracle info from Uniswap v3
         uint32[] memory interval = new uint32[](2);
@@ -575,7 +575,7 @@ contract Oracle {
         int56[] memory tickCumulatives;
         uint160[] memory liquidityCumulatives;
 
-        try uniswapPool.observe(interval) returns (
+        try oracleData.uniswapPool.observe(interval) returns (
             int56[] memory tickCumulatives_,
             uint160[] memory liquidityCumulatives_
         ) {
@@ -598,7 +598,9 @@ contract Oracle {
                 The array's cardinality is not bumped to cardinalityNext until the last element in the array
                 (of length cardinalityNow) is updated just before a mint/swap/burn.
              */
-            (, , uint16 observationIndex, uint16 cardinalityNow, uint16 cardinalityNext, , ) = uniswapPool.slot0();
+            (, , uint16 observationIndex, uint16 cardinalityNow, uint16 cardinalityNext, , ) = oracleData
+                .uniswapPool
+                .slot0();
 
             // Obtain the timestamp of the oldest observation
             (
@@ -606,15 +608,12 @@ contract Oracle {
                 int56 tickCumulative_,
                 uint160 secondsPerLiquidityCumulativeX128,
                 bool initialized
-            ) = uniswapPool.observations((observationIndex + 1) % cardinalityNow);
-
-            console.log("cardinalityNow", cardinalityNow);
-            console.log("observationIndex", observationIndex);
-            console.log("initialized", initialized);
+            ) = oracleData.uniswapPool.observations((observationIndex + 1) % cardinalityNow);
 
             // The next index might not be populated if the cardinality is in the process of increasing. In this case the oldest observation is always in index 0
             if (!initialized) {
-                (blockTimestampOldest, tickCumulative_, secondsPerLiquidityCumulativeX128, initialized) = uniswapPool
+                (blockTimestampOldest, tickCumulative_, secondsPerLiquidityCumulativeX128, initialized) = oracleData
+                    .uniswapPool
                     .observations(0);
                 cardinalityNow = observationIndex + 1;
                 if (!initialized) return oracleData; // No oracle data whatsoever
