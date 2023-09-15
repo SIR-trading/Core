@@ -3,11 +3,14 @@ pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
 import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
+import {INonfungiblePositionManager} from "src/test/INonfungiblePositionManager.sol";
+import {UniswapPoolAddress} from "src/libraries/UniswapPoolAddress.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
+import {MockERC20} from "src/test/MockERC20.sol";
 
-contract OracleNewUniswapFeeTierTest is Test {
-    event UniswapFeeTierAdded(uint24 fee);
+contract OracleNewFeeTiersTest is Test {
+    event UniswapFeeTierAdded(uint24 indexed fee);
 
     Oracle private _oracle;
 
@@ -87,4 +90,113 @@ contract OracleNewUniswapFeeTierTest is Test {
             _oracle.newUniswapFeeTier(fee + i);
         }
     }
+}
+
+contract OracleInitializeTest is Test {
+    event OracleInitialized(address indexed tokenA, address indexed tokenB);
+    event UniswapOracleDataRetrieved(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint24 indexed fee,
+        int56 aggLogPrice,
+        uint160 avLiquidity,
+        uint40 period,
+        uint16 cardinalityToIncrease
+    );
+    event PoolCreated(
+        address indexed token0,
+        address indexed token1,
+        uint24 indexed fee,
+        int24 tickSpacing,
+        address pool
+    );
+
+    Oracle private _oracle;
+    MockERC20 private _tokenA;
+    MockERC20 private _tokenB;
+
+    constructor() {
+        vm.createSelectFork("mainnet", 18128102);
+
+        _oracle = new Oracle();
+        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
+        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+    }
+
+    // function test_InitializeNoPool() public {
+    //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
+
+    // function test_InitializePoolNotInitialized() public {
+    //     uint24 fee = 100;
+    //     int24 tickSpacing = 1;
+
+    //     // Deploy Uniswap v3 pool
+    //     UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+    //         address(_tokenA),
+    //         address(_tokenB),
+    //         fee
+    //     );
+    //     vm.expectEmit(true, true, true, true, Addresses._ADDR_UNISWAPV3_FACTORY);
+    //     emit PoolCreated(
+    //         poolKey.token0,
+    //         poolKey.token1,
+    //         fee,
+    //         tickSpacing,
+    //         UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
+    //     );
+    //     IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
+
+    //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
+
+    function test_InitializePoolNoLiquidity() public {
+        uint24 fee = 100;
+        int24 tickSpacing = 1;
+
+        // Start at price = 1
+        uint160 sqrtPriceX96 = 2 ** 96;
+
+        // Deploy Uniswap v3 pool
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            address(_tokenA),
+            address(_tokenB),
+            fee
+        );
+        vm.expectEmit(true, true, true, true, Addresses._ADDR_UNISWAPV3_FACTORY);
+        emit PoolCreated(
+            poolKey.token0,
+            poolKey.token1,
+            fee,
+            tickSpacing,
+            UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
+        );
+        INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER).createAndInitializePoolIfNecessary(
+            poolKey.token0,
+            poolKey.token1,
+            fee,
+            sqrtPriceX96
+        );
+
+        vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+        _oracle.initialize(address(_tokenA), address(_tokenB));
+    }
+
+    // function test_InitializeNoPoolTokens() public {
+    //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+    //     _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_USDT);
+    // }
+
+    // function test_InitializeBNBAndWETH() public {
+    //     vm.expectEmit(address(_oracle));
+    //     emit OracleInitialized(Addresses._ADDR_BNB, Addresses._ADDR_WETH);
+    //     _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_BNB);
+
+    //     _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
+    // }
+
+    // Test when pool exists but not initialized, or TWAP is not old enough
+    // Check the event that shows the liquidity and other parameters
 }
