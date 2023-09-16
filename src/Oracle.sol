@@ -171,7 +171,7 @@ contract Oracle {
     error OracleNotInitialized();
 
     event UniswapFeeTierAdded(uint24 indexed fee);
-    event OracleInitialized(address indexed tokenA, address indexed tokenB);
+    event OracleInitialized(address indexed tokenA, address indexed tokenB, uint24 indexed feeTier);
     event OracleFeeTierChanged(address indexed tokenA, address indexed tokenB, uint24 indexed feeTier);
     event PriceUpdated(address indexed tokenA, address indexed tokenB, int64 priceTickX42);
     event PriceTruncated(address indexed tokenA, address indexed tokenB, int64 priceTickX42);
@@ -337,7 +337,7 @@ contract Oracle {
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
 
-        emit OracleInitialized(tokenA, tokenB);
+        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier);
     }
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
@@ -547,6 +547,12 @@ contract Oracle {
                 .uniswapPool
                 .slot0();
 
+            // Oracle only has 1 storage slot
+            if (cardinalityNext == 1) {
+                oracleData.onlyOneObservation = true;
+                return oracleData;
+            }
+
             // Obtain the timestamp of the oldest observation
             (
                 uint32 blockTimestampOldest,
@@ -562,12 +568,6 @@ contract Oracle {
                     .observations(0);
                 cardinalityNow = observationIndex + 1;
                 // The 1st element of observations is always initialized
-            }
-
-            // Oracle only has 1 storage slot
-            if (cardinalityNext == 1) {
-                oracleData.onlyOneObservation = true;
-                return oracleData;
             }
 
             // Oracle only has 1 storage slot initialized
