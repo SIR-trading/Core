@@ -171,10 +171,14 @@ contract Oracle {
     error OracleNotInitialized();
 
     event UniswapFeeTierAdded(uint24 indexed fee);
-    event OracleInitialized(address indexed tokenA, address indexed tokenB, uint24 indexed feeTier);
-    event OracleFeeTierChanged(address indexed tokenA, address indexed tokenB, uint24 indexed feeTier);
-    event PriceUpdated(address indexed tokenA, address indexed tokenB, int64 priceTickX42);
-    event PriceTruncated(address indexed tokenA, address indexed tokenB, int64 priceTickX42);
+    event OracleInitialized(address indexed tokenA, address indexed tokenB, uint24 indexed feeTier, uint40 periodTWAP);
+    event OracleFeeTierChanged(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint24 oldfeeTier,
+        uint24 indexed newfeeTier
+    );
+    event PriceUpdated(address indexed tokenA, address indexed tokenB, bool priceTruncated, int64 priceTickX42);
     event UniswapOracleDataRetrieved(
         address indexed tokenA,
         address indexed tokenB,
@@ -337,7 +341,7 @@ contract Oracle {
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
 
-        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier);
+        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier, oracleData.period);
     }
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
@@ -396,7 +400,8 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
-            if (_updatePrice(oracleState, oracleData)) emit PriceTruncated(tokenA, tokenB, oracleState.tickPriceX42);
+            // Updates price and emits event
+            emit PriceUpdated(tokenA, tokenB, _updatePrice(oracleState, oracleData), oracleState.tickPriceX42);
 
             // Update timestamp
             oracleState.timeStampPrice = uint40(block.timestamp);
@@ -453,8 +458,13 @@ contract Oracle {
                         } else if (oracleDataProbed.period >= _TWAP_DURATION) {
                             // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
                             oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
+                            emit OracleFeeTierChanged(
+                                tokenA,
+                                tokenB,
+                                oracleState.uniswapFeeTier.fee,
+                                uniswapFeeTierProbed.fee
+                            );
                             oracleState.uniswapFeeTier = uniswapFeeTierProbed;
-                            emit OracleFeeTierChanged(tokenA, tokenB, uniswapFeeTierProbed.fee);
                         }
                     } else if (oracleDataProbed.onlyOneObservation) {
                         // Any fee tier needs at least 2 slots in the observations array to get a score
@@ -484,7 +494,6 @@ contract Oracle {
 
             // Save new oracle state to storage
             oracleStates[tokenA][tokenB] = oracleState;
-            emit PriceUpdated(tokenA, tokenB, oracleState.tickPriceX42);
         }
 
         // Invert price if necessary
