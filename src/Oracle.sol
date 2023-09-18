@@ -171,12 +171,17 @@ contract Oracle {
     error OracleNotInitialized();
 
     event UniswapFeeTierAdded(uint24 indexed fee);
-    event OracleInitialized(address indexed tokenA, address indexed tokenB, uint24 indexed feeTier, uint40 periodTWAP);
+    event OracleInitialized(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint24 indexed feeTierSelected,
+        uint40 periodTWAP
+    );
     event OracleFeeTierChanged(
         address indexed tokenA,
         address indexed tokenB,
-        uint24 oldfeeTier,
-        uint24 indexed newfeeTier
+        uint24 indexed feeTierPrevious,
+        uint24 feeTierSelected
     );
     event PriceUpdated(address indexed tokenA, address indexed tokenB, bool priceTruncated, int64 priceTickX42);
     event UniswapOracleDataRetrieved(
@@ -306,7 +311,7 @@ contract Oracle {
         uint256 score;
         UniswapOracleData memory oracleData;
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
-            // Retrieve instant liquidity (we pass true as the last argument) because some pools may not have an initialized TWAP yet.
+            // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
             if (!oracleData.initialized) continue;
 
@@ -323,13 +328,6 @@ contract Oracle {
                     oracleState.indexFeeTier = uint8(i);
                     score = scoreTemp;
                 }
-            } else if (oracleData.onlyOneObservation) {
-                /** During normal operation, the oracle will occasionally probe other fee tiers to see if their liquidity score
-                    is better than the current fee tier. If so, it will slowly increase the cardinality of the TWAP if the
-                    score continues to be better, until the TWAP is fully initialized.
-                    For this to work, the TWAP must have at least 2 storage slots initialized.
-                */
-                oracleData.uniswapPool.increaseObservationCardinalityNext(2);
             }
         }
 
@@ -341,7 +339,7 @@ contract Oracle {
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
 
-        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier, oracleData.period);
+        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier.fee, oracleData.period);
     }
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
@@ -411,25 +409,31 @@ contract Oracle {
                 // Get current fee tier and the one we wish to probe
                 UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
-                // Retrieve oracle data
-                UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
-                    tokenA,
-                    tokenB,
-                    uniswapFeeTierProbed.fee
-                );
+                bool checkCardinalityCurrentFeeTier = false;
+                if (oracleState.indexFeeTier != oracleState.indexFeeTierProbeNext) {
+                    /** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** /
+                     ** ** THIS SECTION PROBES OTHER FEE TIERS IN CASE THEIR PRICE IS MORE RELIABLE THAN THE CURRENT ONE ** ** **
+                     ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** */
 
-                if (oracleDataProbed.initialized) {
-                    emit UniswapOracleDataRetrieved(
+                    // Retrieve oracle data
+                    UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
                         tokenA,
                         tokenB,
-                        uniswapFeeTierProbed.fee,
-                        oracleDataProbed.aggPriceTick,
-                        oracleDataProbed.aggLiquidity,
-                        oracleDataProbed.period,
-                        oracleDataProbed.cardinalityToIncrease
+                        uniswapFeeTierProbed.fee
                     );
 
-                    /** Compute scores.
+                    if (oracleDataProbed.initialized) {
+                        emit UniswapOracleDataRetrieved(
+                            tokenA,
+                            tokenB,
+                            uniswapFeeTierProbed.fee,
+                            oracleDataProbed.aggPriceTick,
+                            oracleDataProbed.aggLiquidity,
+                            oracleDataProbed.period,
+                            oracleDataProbed.cardinalityToIncrease
+                        );
+
+                        /** Compute scores.
                 
                         Check the scores for the current fee tier and the probed one.
                         We do now weight the average liquidity by the duration of the TWAP because
@@ -438,55 +442,59 @@ contract Oracle {
                         This is different than done in initialize() because a fee tier will not be selected until
                         its average liquidity is the best AND the TWAP is fully initialized.
                     */
-                    uint256 score = _feeTierScore(
-                        (uint200(oracleData.aggLiquidity) << 40) / oracleData.period, // The period of the current fee tier is never 0
-                        oracleState.uniswapFeeTier
-                    );
-                    uint256 scoreProbed = oracleDataProbed.period == 0
-                        ? 0
-                        : _feeTierScore(
-                            (uint200(oracleDataProbed.aggLiquidity) << 40) / oracleDataProbed.period,
-                            uniswapFeeTierProbed
+                        uint256 score = _feeTierScore(
+                            (uint200(oracleData.aggLiquidity) << 40) / oracleData.period, // The period of the current fee tier is never 0
+                            oracleState.uniswapFeeTier
                         );
+                        uint256 scoreProbed = oracleDataProbed.period == 0
+                            ? 0
+                            : _feeTierScore(
+                                (uint200(oracleDataProbed.aggLiquidity) << 40) / oracleDataProbed.period,
+                                uniswapFeeTierProbed
+                            );
 
-                    if (scoreProbed > score) {
-                        if (oracleDataProbed.cardinalityToIncrease > 0) {
-                            // If the probed tier is better and the TWAP's cardinality is insufficient, increase the cardinality
-                            oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
-                                oracleDataProbed.cardinalityToIncrease
-                            );
-                        } else if (oracleDataProbed.period >= _TWAP_DURATION) {
-                            // If the probed tier is better and the TWAP is fully initialized, switch to the probed tier
-                            oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
-                            emit OracleFeeTierChanged(
-                                tokenA,
-                                tokenB,
-                                oracleState.uniswapFeeTier.fee,
-                                uniswapFeeTierProbed.fee
-                            );
-                            oracleState.uniswapFeeTier = uniswapFeeTierProbed;
+                        if (scoreProbed > score) {
+                            // If the probed fee tier is better than the current one, then we increase its cardinality if necessary
+                            if (oracleDataProbed.cardinalityToIncrease > 0) {
+                                oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
+                                    oracleDataProbed.cardinalityToIncrease
+                                );
+                            }
+                            // If the probed fee tier is better than the current one AND the cardinality is sufficient, switch to the probed tier
+                            else if (oracleDataProbed.period >= _TWAP_DURATION) {
+                                oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
+                                emit OracleFeeTierChanged(
+                                    tokenA,
+                                    tokenB,
+                                    oracleState.uniswapFeeTier.fee,
+                                    uniswapFeeTierProbed.fee
+                                );
+                                oracleState.uniswapFeeTier = uniswapFeeTierProbed;
+                            }
+                        } else if (oracleDataProbed.onlyOneObservation) {
+                            // To even probe the fee tier price and liquidity, it must have at least 2 slots in the observations array.
+                            oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(2);
+                        } else {
+                            // If the current tier is still better, then we increase its cardinality if necessary
+                            checkCardinalityCurrentFeeTier = true;
                         }
-                    } else if (oracleDataProbed.onlyOneObservation) {
-                        // Any fee tier needs at least 2 slots in the observations array to get a score
-                        oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(2);
-                    } else {
-                        if (oracleData.cardinalityToIncrease > 0) {
-                            // If the current tier is better and the TWAP's cardinality is insufficient, increase the cardinality
-                            oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
-                        }
+                    } else if (oracleData.cardinalityToIncrease > 0) {
+                        // If the probed tier is not even initialized, then we increase the cardinality of the current tier if necessary
+                        checkCardinalityCurrentFeeTier = true;
                     }
-                } else if (oracleData.cardinalityToIncrease > 0) {
+                } else {
+                    // The probed tier is the current tier
+                    checkCardinalityCurrentFeeTier = true;
+                }
+
+                if (checkCardinalityCurrentFeeTier && oracleData.cardinalityToIncrease > 0) {
+                    // If the probed tier is not even initialized, then we increase the cardinality of the current tier if necessary
                     oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
                 }
 
-                // Update indices
+                // Point to the next fee tier to probe
                 uint NuniswapFeeTiers = 4 + uint8(_uniswapExtraFeeTiers);
                 oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
-                if (oracleState.indexFeeTier == oracleState.indexFeeTierProbeNext) {
-                    oracleState.indexFeeTierProbeNext =
-                        (oracleState.indexFeeTierProbeNext + 1) %
-                        uint8(NuniswapFeeTiers);
-                }
 
                 // Update timestamp
                 oracleState.timeStampTier = uint40(block.timestamp);
@@ -556,7 +564,7 @@ contract Oracle {
                 .uniswapPool
                 .slot0();
 
-            // Oracle only has 1 storage slot
+            // Fee tier never has had its cardinality increased to enalbe the TWAP
             if (cardinalityNext == 1) {
                 oracleData.onlyOneObservation = true;
                 return oracleData;
