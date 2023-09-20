@@ -165,7 +165,11 @@ import "forge-std/console.sol";
  */
 
 contract Oracle {
-    error NoUniswapV3Pool();
+    error UniswapV3NotReady(
+        uint8 NumNonExistantOrNonInitializedFeeTiers,
+        uint8 NumNoLiquidity,
+        uint8 NumNoTWAPFeeTiers
+    );
     error UniswapFeeTierIndexOutOfBounds();
     error OracleAlreadyInitialized();
     error OracleNotInitialized();
@@ -309,11 +313,14 @@ contract Oracle {
 
         // Find the best fee tier by weighted liquidity
         uint256 score;
+        uint40 period;
         UniswapOracleData memory oracleData;
+        uint8 NumNonExistantOrNonInitializedFeeTiers;
+        uint8 NumNoTWAPFeeTiers;
+        uint8 NumNoLiquidity;
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
-            if (!oracleData.initialized) continue;
 
             if (oracleData.aggLiquidity > 0) {
                 /** Compute scores.
@@ -326,12 +333,20 @@ contract Oracle {
                 // Update best score
                 if (scoreTemp > score) {
                     oracleState.indexFeeTier = uint8(i);
+                    period = oracleData.period;
                     score = scoreTemp;
                 }
+            } else if (oracleData.onlyOneObservation) {
+                NumNoTWAPFeeTiers++;
+            } else if (!oracleData.initialized) {
+                NumNonExistantOrNonInitializedFeeTiers++;
+            } else {
+                NumNoLiquidity++;
             }
         }
 
-        if (score == 0) revert NoUniswapV3Pool();
+        if (score == 0)
+            revert UniswapV3NotReady(NumNonExistantOrNonInitializedFeeTiers, NumNoLiquidity, NumNoTWAPFeeTiers);
         oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(uniswapFeeTiers.length);
         oracleState.initialized = true;
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
@@ -339,7 +354,7 @@ contract Oracle {
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
 
-        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier.fee, oracleData.period);
+        emit OracleInitialized(tokenA, tokenB, oracleState.uniswapFeeTier.fee, period);
     }
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
@@ -570,31 +585,44 @@ contract Oracle {
                 return oracleData;
             }
 
-            // Obtain the timestamp of the oldest observation
-            (
-                uint32 blockTimestampOldest,
-                int56 tickCumulative_,
-                uint160 secondsPerLiquidityCumulativeX128,
-                bool initialized
-            ) = oracleData.uniswapPool.observations((observationIndex + 1) % cardinalityNow);
+            // Get oracle data at the current timestamp
+            (tickCumulatives, liquidityCumulatives) = oracleData.uniswapPool.observe(new uint32[](1)); // It should never fail
+            int56 tickCumulative_ = tickCumulatives[0];
+            uint160 liquidityCumulative_ = liquidityCumulatives[0];
 
-            // The next index might not be populated if the cardinality is in the process of increasing. In this case the oldest observation is always in index 0
+            // Exand arrays to two slots
+            tickCumulatives = new int56[](2);
+            liquidityCumulatives = new uint160[](2);
+            tickCumulatives[1] = tickCumulative_;
+            liquidityCumulatives[1] = liquidityCumulative_;
+
+            // Get oracle data for the oldes observation possible
+            uint32 blockTimestampOldest;
+            bool initialized;
+            (blockTimestampOldest, tickCumulative_, liquidityCumulative_, initialized) = oracleData
+                .uniswapPool
+                .observations((observationIndex + 1) % cardinalityNow);
+
+            /** The next index might not be populated if the cardinality is in the process of increasing.
+                In this case the oldest observation is always in index 0.
+                Observation at index 0 is always initialized.
+             */
             if (!initialized) {
-                (blockTimestampOldest, tickCumulative_, secondsPerLiquidityCumulativeX128, ) = oracleData
-                    .uniswapPool
-                    .observations(0);
+                (blockTimestampOldest, tickCumulative_, liquidityCumulative_, ) = oracleData.uniswapPool.observations(
+                    0
+                );
                 cardinalityNow = observationIndex + 1;
                 // The 1st element of observations is always initialized
             }
 
-            // Oracle only has 1 storage slot initialized
+            // If cardinality is currently 1, there is not enough data to compute TWAP
             if (cardinalityNow == 1) return oracleData;
 
             // Current TWAP duration
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
 
             tickCumulatives[0] = tickCumulative_;
-            liquidityCumulatives[0] = secondsPerLiquidityCumulativeX128;
+            liquidityCumulatives[0] = liquidityCumulative_;
 
             // Estimate necessary length of the oracle if we want it to be _TWAP_DURATION long
             uint256 cardinalityNeeded = (uint256(cardinalityNow) * _TWAP_DURATION - 1) / interval[0] + 1;

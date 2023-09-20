@@ -3,6 +3,7 @@ pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
 import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
+import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 import {INonfungiblePositionManager} from "src/test/INonfungiblePositionManager.sol";
 import {UniswapPoolAddress} from "src/libraries/UniswapPoolAddress.sol";
 import {Oracle} from "src/Oracle.sol";
@@ -35,7 +36,6 @@ contract OracleNewFeeTiersTest is Test {
         assertEq(uniswapFeeTiers[3].tickSpacing, uniswapFactory.feeAmountTickSpacing(10000));
 
         for (uint256 i = 4; i < uniswapFeeTiers.length; i++) {
-            console.log(uniswapFeeTiers[i].fee, uint24(uniswapFeeTiers[i].tickSpacing));
             assertEq(uniswapFeeTiers[i].tickSpacing, uniswapFactory.feeAmountTickSpacing(uniswapFeeTiers[i].fee));
         }
     }
@@ -93,7 +93,15 @@ contract OracleNewFeeTiersTest is Test {
 }
 
 contract OracleInitializeTest is Test {
-    event OracleInitialized(address indexed tokenA, address indexed tokenB);
+    int24 internal constant MIN_TICK = -887272;
+    int24 internal constant MAX_TICK = -MIN_TICK;
+
+    event OracleInitialized(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint24 indexed feeTierSelected,
+        uint40 periodTWAP
+    );
     event UniswapOracleDataRetrieved(
         address indexed tokenA,
         address indexed tokenB,
@@ -115,6 +123,8 @@ contract OracleInitializeTest is Test {
         uint16 observationCardinalityNextNew
     );
 
+    INonfungiblePositionManager positionManager =
+        INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
@@ -128,63 +138,209 @@ contract OracleInitializeTest is Test {
     }
 
     // function test_InitializeNoPool() public {
-    //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+    //     vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 4, 0, 0));
     //     _oracle.initialize(address(_tokenA), address(_tokenB));
     // }
 
-    function test_InitializePoolNotInitialized() public {
+    // function test_InitializePoolNotInitialized() public {
+    //     uint24 fee = 100;
+    //     int24 tickSpacing = 1;
+
+    //     // Deploy Uniswap v3 pool
+    //     UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+    //         address(_tokenA),
+    //         address(_tokenB),
+    //         fee
+    //     );
+    //     vm.expectEmit(Addresses._ADDR_UNISWAPV3_FACTORY);
+    //     emit PoolCreated(
+    //         poolKey.token0,
+    //         poolKey.token1,
+    //         fee,
+    //         tickSpacing,
+    //         UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
+    //     );
+    //     IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
+
+    //     vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 4, 0, 0));
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
+
+    // function test_InitializePoolNoLiquidity() public {
+    //     uint24 fee = 100;
+
+    //     // Start at price = 1
+    //     uint160 sqrtPriceX96 = 2 ** 96;
+
+    //     // Create and initialize Uniswap v3 pool
+    //     UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+    //         address(_tokenA),
+    //         address(_tokenB),
+    //         fee
+    //     );
+    //     positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
+
+    //     // Increase oracle cardinality
+    //     address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+    //     vm.expectEmit(pool);
+    //     emit IncreaseObservationCardinalityNext(1, 2);
+    //     IUniswapV3Pool(pool).increaseObservationCardinalityNext(2);
+
+    //     vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 3, 1, 0));
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
+
+    // function test_InitializeCardinalityIs1() public {
+    //     uint24 fee = 100;
+    //     uint256 amount = 10 ** 12;
+
+    //     // Start at price = 1
+    //     uint160 sqrtPriceX96 = 2 ** 96;
+
+    //     // Create and initialize Uniswap v3 pool
+    //     UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+    //         address(_tokenA),
+    //         address(_tokenB),
+    //         fee
+    //     );
+    //     positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
+
+    //     // Mint mock tokens
+    //     _tokenA.mint(amount);
+    //     _tokenB.mint(amount);
+
+    //     // Approve tokens
+    //     _tokenA.approve(address(positionManager), amount);
+    //     _tokenB.approve(address(positionManager), amount);
+
+    //     // Add liquidity
+    //     positionManager.mint(
+    //         INonfungiblePositionManager.MintParams({
+    //             token0: poolKey.token0,
+    //             token1: poolKey.token1,
+    //             fee: fee,
+    //             tickLower: MIN_TICK,
+    //             tickUpper: MAX_TICK,
+    //             amount0Desired: amount,
+    //             amount1Desired: amount,
+    //             amount0Min: 0,
+    //             amount1Min: 0,
+    //             recipient: address(this),
+    //             deadline: block.timestamp
+    //         })
+    //     );
+
+    //     vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 3, 0, 1));
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
+
+    // function test_InitializeTwapNotReady() public {
+    //     uint24 fee = 100;
+    //     uint256 amount = 10 ** 12;
+
+    //     // Start at price = 1
+    //     uint160 sqrtPriceX96 = 2 ** 96;
+
+    //     // Create and initialize Uniswap v3 pool
+    //     UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+    //         address(_tokenA),
+    //         address(_tokenB),
+    //         fee
+    //     );
+    //     positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
+
+    //     // Mint mock tokens
+    //     _tokenA.mint(amount);
+    //     _tokenB.mint(amount);
+
+    //     // Approve tokens
+    //     _tokenA.approve(address(positionManager), amount);
+    //     _tokenB.approve(address(positionManager), amount);
+
+    //     // Add liquidity
+    //     positionManager.mint(
+    //         INonfungiblePositionManager.MintParams({
+    //             token0: poolKey.token0,
+    //             token1: poolKey.token1,
+    //             fee: fee,
+    //             tickLower: MIN_TICK,
+    //             tickUpper: MAX_TICK,
+    //             amount0Desired: amount,
+    //             amount1Desired: amount,
+    //             amount0Min: 0,
+    //             amount1Min: 0,
+    //             recipient: address(this),
+    //             deadline: block.timestamp
+    //         })
+    //     );
+
+    //     // Increase oracle cardinality
+    //     address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+    //     vm.expectEmit(pool);
+    //     emit IncreaseObservationCardinalityNext(1, 2);
+    //     IUniswapV3Pool(pool).increaseObservationCardinalityNext(2);
+
+    //     vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 3, 1, 0));
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
+
+    function test_Initialize() public {
         uint24 fee = 100;
-        int24 tickSpacing = 1;
-
-        // Deploy Uniswap v3 pool
-        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
-            address(_tokenA),
-            address(_tokenB),
-            fee
-        );
-        vm.expectEmit(true, true, true, true, Addresses._ADDR_UNISWAPV3_FACTORY);
-        emit PoolCreated(
-            poolKey.token0,
-            poolKey.token1,
-            fee,
-            tickSpacing,
-            UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
-        );
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
-
-        vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
-        _oracle.initialize(address(_tokenA), address(_tokenB));
-    }
-
-    function test_InitializePoolNoLiquidity() public {
-        uint24 fee = 100;
-        int24 tickSpacing = 1;
+        uint256 amount = 10 ** 12;
 
         // Start at price = 1
         uint160 sqrtPriceX96 = 2 ** 96;
 
-        // Deploy Uniswap v3 pool
+        // Create and initialize Uniswap v3 pool
         UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
             address(_tokenA),
             address(_tokenB),
             fee
         );
-        vm.expectEmit(true, true, true, true, Addresses._ADDR_UNISWAPV3_FACTORY);
-        emit PoolCreated(
-            poolKey.token0,
-            poolKey.token1,
-            fee,
-            tickSpacing,
-            UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey)
-        );
-        INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER).createAndInitializePoolIfNecessary(
-            poolKey.token0,
-            poolKey.token1,
-            fee,
-            sqrtPriceX96
+        positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
+
+        // Mint mock tokens
+        _tokenA.mint(amount);
+        _tokenB.mint(amount);
+
+        // Approve tokens
+        _tokenA.approve(address(positionManager), amount);
+        _tokenB.approve(address(positionManager), amount);
+
+        // Add liquidity
+        (uint256 tokenId, uint128 liquidity, , ) = positionManager.mint(
+            INonfungiblePositionManager.MintParams({
+                token0: poolKey.token0,
+                token1: poolKey.token1,
+                fee: fee,
+                tickLower: MIN_TICK,
+                tickUpper: MAX_TICK,
+                amount0Desired: amount,
+                amount1Desired: amount,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: block.timestamp
+            })
         );
 
-        vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+        // Increase oracle cardinality
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        vm.expectEmit(pool);
+        emit IncreaseObservationCardinalityNext(1, 2);
+        IUniswapV3Pool(pool).increaseObservationCardinalityNext(2);
+
+        // Increase time
+        skip(12 seconds);
+
+        // Update oracle by burning LP position
+        positionManager.decreaseLiquidity(
+            INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidity, 0, 0, block.timestamp)
+        );
+
+        // vm.expectRevert();
+        vm.expectEmit(address(_oracle));
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, 12);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
@@ -192,7 +348,7 @@ contract OracleInitializeTest is Test {
     // TEST EVENT IncreaseObservationCardinalityNext(uint16 observationCardinalityNextOld,uint16 observationCardinalityNextNew)
 
     // function test_InitializeNoPoolTokens() public {
-    //     vm.expectRevert(Oracle.NoUniswapV3Pool.selector);
+    //     vm.expectRevert(Oracle.UniswapV3NotReady.selector);
     //     _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_USDT);
     // }
 
