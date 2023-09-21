@@ -27,6 +27,3 @@
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
 [submodule "lib\\forge-std"]
 	branch = master
-[submodule "lib/v3-core.git"]
-	path = lib/v3-core.git
-	url = https://github.com/Uniswap/v3-core.git
