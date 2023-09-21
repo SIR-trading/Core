@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
-import {INonfungiblePositionManager} from "src/test/INonfungiblePositionManager.sol";
+import {INonfungiblePositionManager} from "v3-periphery/interfaces/INonfungibleTokenPositionDescriptor.sol";
 import {UniswapPoolAddress} from "src/libraries/UniswapPoolAddress.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
@@ -188,7 +188,7 @@ contract OracleInitializeTest is Test {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
         uint40 duration = 12 seconds;
-        UniswapPoolAddress.PoolKey memory poolKey = _preparePool(100, liquidity, duration);
+        (, UniswapPoolAddress.PoolKey memory poolKey) = _preparePool(100, liquidity, duration);
 
         // vm.expectRevert();
         vm.expectEmit(address(_oracle));
@@ -204,7 +204,7 @@ contract OracleInitializeTest is Test {
         _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
     }
 
-    function test_InitializeWithMultipleFeeTiers(uint128[9] calldata liquidity, uint32[9] calldata duration) public {
+    function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] calldata duration) public {
         // Maximize the number of fee tiers to test stress the initialization
         Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
 
@@ -223,35 +223,17 @@ contract OracleInitializeTest is Test {
 
         // Add them to Uniswap v3
         vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-            uniswapFeeTiers[4].fee,
-            uniswapFeeTiers[4].tickSpacing
-        );
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-            uniswapFeeTiers[5].fee,
-            uniswapFeeTiers[5].tickSpacing
-        );
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-            uniswapFeeTiers[6].fee,
-            uniswapFeeTiers[6].tickSpacing
-        );
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-            uniswapFeeTiers[7].fee,
-            uniswapFeeTiers[7].tickSpacing
-        );
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-            uniswapFeeTiers[8].fee,
-            uniswapFeeTiers[8].tickSpacing
-        );
+        for (uint256 i = 4; i < 9; i++) {
+            IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+                uniswapFeeTiers[i].fee,
+                uniswapFeeTiers[i].tickSpacing
+            );
+        }
         vm.stopPrank();
 
         // Add them the oracle
-        for (uint256 i = 5; i < 9; i++) {
-            _oracle.newUniswapFeeTier(uniswapFeeTiers[4].fee);
-            _oracle.newUniswapFeeTier(uniswapFeeTiers[5].fee);
-            _oracle.newUniswapFeeTier(uniswapFeeTiers[6].fee);
-            _oracle.newUniswapFeeTier(uniswapFeeTiers[7].fee);
-            _oracle.newUniswapFeeTier(uniswapFeeTiers[8].fee);
+        for (uint256 i = 4; i < 9; i++) {
+            _oracle.newUniswapFeeTier(uniswapFeeTiers[i].fee);
         }
 
         // Deploy fee tiers and score them
@@ -263,8 +245,8 @@ contract OracleInitializeTest is Test {
         for (uint256 i = 0; i < 9; i++) {
             if (liquidity[i] == 0 && duration[0] == 0) _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
             else if (liquidity[i] == 0) poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, duration[i]);
-            else if (duration[i] == 0) (, poolKey) = _preparePoolNoTWAP(uniswapFeeTiers[i].fee, liquidity[i]);
-            else poolKey = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], duration[i]);
+            else if (duration[i] == 0) (, , poolKey) = _preparePoolNoTWAP(uniswapFeeTiers[i].fee, liquidity[i]);
+            else (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], duration[i]);
 
             uint256 tempScore = ((uint256(liquidity[i]) *
                 (TWAP_DURATION < duration[i] ? TWAP_DURATION : duration[i]) *
@@ -278,13 +260,17 @@ contract OracleInitializeTest is Test {
         }
 
         // Check the correct fee tier is selected
-        vm.expectEmit(address(_oracle));
-        emit OracleInitialized(
-            poolKey.token0,
-            poolKey.token1,
-            uniswapFeeTiers[bestIndex].fee,
-            TWAP_DURATION < duration[bestIndex] ? TWAP_DURATION : duration[bestIndex]
-        );
+        if (bestScore == 0) {
+            vm.expectRevert();
+        } else {
+            vm.expectEmit(address(_oracle));
+            emit OracleInitialized(
+                poolKey.token0,
+                poolKey.token1,
+                uniswapFeeTiers[bestIndex].fee,
+                TWAP_DURATION < duration[bestIndex] ? TWAP_DURATION : duration[bestIndex]
+            );
+        }
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
@@ -311,11 +297,7 @@ contract OracleInitializeTest is Test {
         uint160 sqrtPriceX96 = 2 ** 96;
 
         // Create and initialize Uniswap v3 pool
-        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
-            address(_tokenA),
-            address(_tokenB),
-            fee
-        );
+        poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
         positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
 
         // Increase oracle cardinality
@@ -326,16 +308,12 @@ contract OracleInitializeTest is Test {
 
         // Increase time
         skip(duration);
-
-        poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
     }
 
     function _preparePoolNoTWAP(
         uint24 fee,
         uint128 liquidity
-    ) private returns (uint256 tokenId, UniswapPoolAddress.PoolKey memory poolKey) {
-        uint256 amount = 10 ** 12;
-
+    ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
         // Start at price = 1
         uint160 sqrtPriceX96 = 2 ** 96;
 
@@ -360,28 +338,30 @@ contract OracleInitializeTest is Test {
         _tokenB.approve(address(positionManager), amount1);
 
         // Add liquidity
-        (tokenId, , , ) = positionManager.mint(
+        (tokenId, liquidityAdj, , ) = positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: poolKey.token0,
                 token1: poolKey.token1,
                 fee: fee,
                 tickLower: TickMath.MIN_TICK,
                 tickUpper: TickMath.MAX_TICK,
-                amount0Desired: amount,
-                amount1Desired: amount,
+                amount0Desired: amount0,
+                amount1Desired: amount1,
                 amount0Min: 0,
                 amount1Min: 0,
                 recipient: address(this),
                 deadline: block.timestamp
             })
         );
+        console.log("liquidity", uint(liquidity));
+        console.log("liquidityAdj", uint(liquidityAdj));
     }
 
     function _preparePoolCardinalityNotExtendedYet(
         uint24 fee,
         uint128 liquidity
-    ) private returns (uint256 tokenId, UniswapPoolAddress.PoolKey memory poolKey) {
-        (tokenId, poolKey) = _preparePoolNoTWAP(fee, liquidity);
+    ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+        (tokenId, liquidityAdj, poolKey) = _preparePoolNoTWAP(fee, liquidity);
 
         // Increase oracle cardinality
         address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
@@ -394,20 +374,21 @@ contract OracleInitializeTest is Test {
         uint24 fee,
         uint128 liquidity,
         uint40 duration
-    ) private returns (UniswapPoolAddress.PoolKey memory) {
-        (uint256 tokenId, UniswapPoolAddress.PoolKey memory poolKey) = _preparePoolCardinalityNotExtendedYet(
-            fee,
-            liquidity
-        );
+    ) private returns (uint128, UniswapPoolAddress.PoolKey memory) {
+        (
+            uint256 tokenId,
+            uint128 liquidityAdj,
+            UniswapPoolAddress.PoolKey memory poolKey
+        ) = _preparePoolCardinalityNotExtendedYet(fee, liquidity);
 
         // Increase time
         skip(duration);
 
         // Update oracle by burning LP position
         positionManager.decreaseLiquidity(
-            INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidity, 0, 0, block.timestamp)
+            INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityAdj, 0, 0, block.timestamp)
         );
 
-        return poolKey;
+        return (liquidityAdj, poolKey);
     }
 }
