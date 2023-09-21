@@ -235,7 +235,7 @@ contract Oracle {
     uint256 private constant _DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int256 private constant _MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 private constant _TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of _TWAP_DELTA.
-    uint40 private constant _TWAP_DURATION = 30 minutes;
+    uint40 public constant TWAP_DURATION = 30 minutes;
 
     /**
      * State variables
@@ -476,7 +476,7 @@ contract Oracle {
                                 );
                             }
                             // If the probed fee tier is better than the current one AND the cardinality is sufficient, switch to the probed tier
-                            else if (oracleDataProbed.period >= _TWAP_DURATION) {
+                            else if (oracleDataProbed.period >= TWAP_DURATION) {
                                 oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
                                 emit OracleFeeTierChanged(
                                     tokenA,
@@ -503,7 +503,7 @@ contract Oracle {
                 }
 
                 if (checkCardinalityCurrentFeeTier && oracleData.cardinalityToIncrease > 0) {
-                    // If the probed tier is not even initialized, then we increase the cardinality of the current tier if necessary
+                    // We increase the cardinality of the current tier if necessary
                     oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
                 }
 
@@ -541,7 +541,7 @@ contract Oracle {
 
         // Retrieve oracle info from Uniswap v3
         uint32[] memory interval = new uint32[](2);
-        interval[0] = uint32(_TWAP_DURATION);
+        interval[0] = uint32(TWAP_DURATION);
         interval[1] = 0;
         int56[] memory tickCumulatives;
         uint160[] memory liquidityCumulatives;
@@ -624,8 +624,8 @@ contract Oracle {
             tickCumulatives[0] = tickCumulative_;
             liquidityCumulatives[0] = liquidityCumulative_;
 
-            // Estimate necessary length of the oracle if we want it to be _TWAP_DURATION long
-            uint256 cardinalityNeeded = (uint256(cardinalityNow) * _TWAP_DURATION - 1) / interval[0] + 1;
+            // Estimate necessary length of the oracle if we want it to be TWAP_DURATION long
+            uint256 cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1;
 
             /**
              * Check if cardinality must increase,
