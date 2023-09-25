@@ -165,11 +165,7 @@ import "forge-std/console.sol";
  */
 
 contract Oracle {
-    error UniswapV3NotReady(
-        uint8 NumNonExistantOrNonInitializedFeeTiers,
-        uint8 NumNoLiquidity,
-        uint8 NumNoTWAPFeeTiers
-    );
+    error NoFeeTiers();
     error UniswapFeeTierIndexOutOfBounds();
     error OracleAlreadyInitialized();
     error OracleNotInitialized();
@@ -211,10 +207,8 @@ contract Oracle {
      */
     struct UniswapOracleData {
         IUniswapV3Pool uniswapPool; // Uniswap v3 pool
-        bool initialized; // Whether the fee tier is initialized
-        bool onlyOneObservation; // Whether array of observations is of length 1 (which is the minimum length)
         int56 aggPriceTick; // Aggregated log price over the period
-        uint160 aggLiquidity; // Aggregated in-range liquidity over the period
+        uint160 aggLiquidity; // Aggregated in-range liquidity over period. Non-initialized fee tier => aggLiquidity = 0, else aggLiquidity > 0
         uint40 period; // Duration of the current TWAP
         uint16 cardinalityToIncrease; // Cardinality suggested for increase
     }
@@ -285,6 +279,15 @@ contract Oracle {
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
+
+            /** If the fee tier has been updated this block
+                AND the cardinality of the selected fee tier is 1,
+                THEN the price is unavailable.
+
+                In 1 block the problem will be fixed.
+             */
+            require(oracleData.period > 0);
+
             _updatePrice(oracleState, oracleData);
         }
 
@@ -315,13 +318,13 @@ contract Oracle {
         uint256 score;
         uint40 period;
         UniswapOracleData memory oracleData;
-        uint8 NumNonExistantOrNonInitializedFeeTiers;
-        uint8 NumNoTWAPFeeTiers;
-        uint8 NumNoLiquidity;
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
 
+            console.log("fee: %s", uniswapFeeTiers[i].fee);
+            console.log("oracleData.aggLiquidity: %s", oracleData.aggLiquidity);
+            console.log("oracleData.period: %s", oracleData.period);
             if (oracleData.aggLiquidity > 0) {
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
@@ -336,20 +339,16 @@ contract Oracle {
                     period = oracleData.period;
                     score = scoreTemp;
                 }
-            } else if (oracleData.onlyOneObservation) {
-                NumNoTWAPFeeTiers++;
-            } else if (!oracleData.initialized) {
-                NumNonExistantOrNonInitializedFeeTiers++;
-            } else {
-                NumNoLiquidity++;
             }
         }
 
-        if (score == 0)
-            revert UniswapV3NotReady(NumNonExistantOrNonInitializedFeeTiers, NumNoLiquidity, NumNoTWAPFeeTiers);
+        if (score == 0) revert NoFeeTiers();
         oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(uniswapFeeTiers.length);
         oracleState.initialized = true;
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
+
+        // We increase the cardinality of the selected tier if necessary
+        oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
 
         // Update oracle state
         oracleStates[tokenA][tokenB] = oracleState;
@@ -413,6 +412,15 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
+            /** If this oracle has been initialized this block
+                AND the fee tier has been updated this block
+                AND the cardinality of the selected fee tier is 1,
+                THEN the period is unavailable.
+
+                In 1 block the problem will be fixed.
+             */
+            require(oracleData.period > 0);
+
             // Updates price and emits event
             emit PriceUpdated(tokenA, tokenB, _updatePrice(oracleState, oracleData), oracleState.tickPriceX42);
 
@@ -437,7 +445,7 @@ contract Oracle {
                         uniswapFeeTierProbed.fee
                     );
 
-                    if (oracleDataProbed.initialized) {
+                    if (oracleDataProbed.aggLiquidity > 0) {
                         emit UniswapOracleDataRetrieved(
                             tokenA,
                             tokenB,
@@ -450,19 +458,19 @@ contract Oracle {
 
                         /** Compute scores.
                 
-                        Check the scores for the current fee tier and the probed one.
-                        We do now weight the average liquidity by the duration of the TWAP because
-                        we do not want to discard fee tiers with short TWAPs.
+                            Check the scores for the current fee tier and the probed one.
+                            We do now weight the average liquidity by the duration of the TWAP because
+                            we do not want to discard fee tiers with short TWAPs.
 
-                        This is different than done in initialize() because a fee tier will not be selected until
-                        its average liquidity is the best AND the TWAP is fully initialized.
-                    */
+                            This is different than done in initialize() because a fee tier will not be selected until
+                            its average liquidity is the best AND the TWAP is fully initialized.
+                        */
                         uint256 score = _feeTierScore(
                             (uint200(oracleData.aggLiquidity) << 40) / oracleData.period, // The period of the current fee tier is never 0
                             oracleState.uniswapFeeTier
                         );
                         uint256 scoreProbed = oracleDataProbed.period == 0
-                            ? 0
+                            ? type(uint256).max // Increase cardinality if it is only 1
                             : _feeTierScore(
                                 (uint200(oracleDataProbed.aggLiquidity) << 40) / oracleDataProbed.period,
                                 uniswapFeeTierProbed
@@ -486,9 +494,6 @@ contract Oracle {
                                 );
                                 oracleState.uniswapFeeTier = uniswapFeeTierProbed;
                             }
-                        } else if (oracleDataProbed.onlyOneObservation) {
-                            // To even probe the fee tier price and liquidity, it must have at least 2 slots in the observations array.
-                            oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(2);
                         } else {
                             // If the current tier is still better, then we increase its cardinality if necessary
                             checkCardinalityCurrentFeeTier = true;
@@ -552,15 +557,9 @@ contract Oracle {
         ) {
             tickCumulatives = tickCumulatives_;
             liquidityCumulatives = liquidityCumulatives_;
-
-            // Pool is initialized
-            oracleData.initialized = true;
         } catch Error(string memory reason) {
             // If pool is not initialized (or other unexpected errors), no-op, return all parameters 0.
             if (keccak256(bytes(reason)) != keccak256(bytes("OLD"))) return oracleData;
-
-            // Pool is initialized
-            oracleData.initialized = true;
 
             /* 
                 If Uniswap v3 Pool reverts with the message 'OLD' then
@@ -579,12 +578,6 @@ contract Oracle {
                 .uniswapPool
                 .slot0();
 
-            // Fee tier never has had its cardinality increased to enalbe the TWAP
-            if (cardinalityNext == 1) {
-                oracleData.onlyOneObservation = true;
-                return oracleData;
-            }
-
             // Get oracle data at the current timestamp
             (tickCumulatives, liquidityCumulatives) = oracleData.uniswapPool.observe(new uint32[](1)); // It should never fail
             int56 tickCumulative_ = tickCumulatives[0];
@@ -596,12 +589,15 @@ contract Oracle {
             tickCumulatives[1] = tickCumulative_;
             liquidityCumulatives[1] = liquidityCumulative_;
 
-            // Get oracle data for the oldes observation possible
+            // Get oracle data for the oldest observation possible
             uint32 blockTimestampOldest;
             bool initialized;
-            (blockTimestampOldest, tickCumulative_, liquidityCumulative_, initialized) = oracleData
-                .uniswapPool
-                .observations((observationIndex + 1) % cardinalityNow);
+            if (cardinalityNow > 1) {
+                // If cardinalityNow is 1, oldest (and newest) observations are at index 0.
+                (blockTimestampOldest, tickCumulative_, liquidityCumulative_, initialized) = oracleData
+                    .uniswapPool
+                    .observations((observationIndex + 1) % cardinalityNow);
+            }
 
             /** The next index might not be populated if the cardinality is in the process of increasing.
                 In this case the oldest observation is always in index 0.
@@ -615,11 +611,15 @@ contract Oracle {
                 // The 1st element of observations is always initialized
             }
 
-            // If cardinality is currently 1, there is not enough data to compute TWAP
-            if (cardinalityNow == 1) return oracleData;
-
             // Current TWAP duration
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
+
+            // This can only occur if the fee tier has cardinality 1
+            if (interval[0] == 0) {
+                oracleData.aggLiquidity = 1; // So that it is considered during the selection of the best fee tier but only in the worst case scenario
+                oracleData.cardinalityToIncrease = uint16((_TWAP_DELTA - 1) / (12 seconds)) + 1;
+                return oracleData;
+            }
 
             tickCumulatives[0] = tickCumulative_;
             liquidityCumulatives[0] = liquidityCumulative_;
@@ -636,6 +636,9 @@ contract Oracle {
         }
 
         // Compute average liquidity
+        console.log(interval[0]);
+        console.log("liquidityCumulatives[0]: %s", liquidityCumulatives[0]);
+        console.log("liquidityCumulatives[1]: %s", liquidityCumulatives[1]);
         oracleData.aggLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]); // Liquidity is always >=1
 
         // Aggregated price from Uniswap v3 are given as token1/token0
@@ -701,7 +704,8 @@ contract Oracle {
         uint256 aggOrAvLiquidity,
         UniswapFeeTier memory uniswapFeeTier
     ) private pure returns (uint256) {
-        return ((aggOrAvLiquidity * uniswapFeeTier.fee) << 72) / uint24(uniswapFeeTier.tickSpacing);
+        // The score is rounded up to ensure it is always >1 if aggOrAvLiquidity>0
+        return (((aggOrAvLiquidity * uniswapFeeTier.fee) << 72) - 1) / uint24(uniswapFeeTier.tickSpacing) + 1;
     }
 
     function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private pure returns (IUniswapV3Pool) {
