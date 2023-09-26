@@ -94,26 +94,7 @@ contract OracleNewFeeTiersTest is Test {
     }
 }
 
-contract OracleInitializeTest is Test {
-    int24 internal constant MIN_TICK = -887272;
-    int24 internal constant MAX_TICK = -MIN_TICK;
-
-    event OracleInitialized(
-        address indexed tokenA,
-        address indexed tokenB,
-        uint24 indexed feeTierSelected,
-        uint160 averageLiquidity,
-        uint40 period
-    );
-    event UniswapOracleDataRetrieved(
-        address indexed tokenA,
-        address indexed tokenB,
-        uint24 indexed fee,
-        int56 aggLogPrice,
-        uint160 avLiquidity,
-        uint40 period,
-        uint16 cardinalityToIncrease
-    );
+contract OracleInitializeTest is Test, Oracle {
     event PoolCreated(
         address indexed token0,
         address indexed token1,
@@ -163,6 +144,8 @@ contract OracleInitializeTest is Test {
         uint40 duration = 12 seconds;
         UniswapPoolAddress.PoolKey memory poolKey = _preparePoolNoLiquidity(fee, duration);
 
+        vm.expectEmit(false, false, false, false);
+        emit IncreaseObservationCardinalityNext(0, 0);
         vm.expectEmit(address(_oracle));
         emit OracleInitialized(poolKey.token0, poolKey.token1, fee, 1, duration);
         _oracle.initialize(address(_tokenA), address(_tokenB));
@@ -173,8 +156,10 @@ contract OracleInitializeTest is Test {
         uint128 liquidity = 2 ** 64;
         (, , UniswapPoolAddress.PoolKey memory poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
 
+        vm.expectEmit(false, false, false, false);
+        emit IncreaseObservationCardinalityNext(0, 0);
         vm.expectEmit(address(_oracle));
-        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, type(uint128).max, 0);
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, 1, 0);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
@@ -185,19 +170,12 @@ contract OracleInitializeTest is Test {
         UniswapPoolAddress.PoolKey memory poolKey;
         (, liquidity, poolKey) = _preparePoolTwapCardinality1(fee, liquidity, duration);
 
+        vm.expectEmit(false, false, false, false);
+        emit IncreaseObservationCardinalityNext(0, 0);
         vm.expectEmit(address(_oracle));
         emit OracleInitialized(poolKey.token0, poolKey.token1, fee, liquidity, duration);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
-
-    // function test_InitializeTwapNotReady() public {
-    //     uint24 fee = 100;
-    //     uint128 liquidity = 2 ** 64;
-    //     _preparePoolCardinalityNotExtendedYet(fee, liquidity);
-
-    //     vm.expectRevert(Oracle.NoFeeTiers.selector);
-    //     _oracle.initialize(address(_tokenA), address(_tokenB));
-    // }
 
     function test_Initialize() public {
         uint24 fee = 100;
@@ -382,19 +360,6 @@ contract OracleInitializeTest is Test {
         skip(duration);
     }
 
-    function _preparePoolCardinalityNotExtendedYet(
-        uint24 fee,
-        uint128 liquidity
-    ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
-        (tokenId, liquidityAdj, poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
-
-        // Increase oracle cardinality
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-        vm.expectEmit(pool);
-        emit IncreaseObservationCardinalityNext(1, 2);
-        IUniswapV3Pool(pool).increaseObservationCardinalityNext(2);
-    }
-
     function _preparePool(
         uint24 fee,
         uint128 liquidity,
@@ -404,7 +369,13 @@ contract OracleInitializeTest is Test {
             uint256 tokenId,
             uint128 liquidityAdj,
             UniswapPoolAddress.PoolKey memory poolKey
-        ) = _preparePoolCardinalityNotExtendedYet(fee, liquidity);
+        ) = _preparePoolTwapCardinality0(fee, liquidity);
+
+        // Increase oracle cardinality
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        vm.expectEmit(pool);
+        emit IncreaseObservationCardinalityNext(1, 1000);
+        IUniswapV3Pool(pool).increaseObservationCardinalityNext(1000);
 
         // Increase time
         skip(duration);

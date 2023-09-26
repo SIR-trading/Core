@@ -323,19 +323,18 @@ contract Oracle {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
 
-            // console.log("fee: %s", uniswapFeeTiers[i].fee);
-            // console.log("oracleData.avLiquidity: %s", oracleData.avLiquidity);
-            // console.log("oracleData.period: %s", oracleData.period);
+            console.log("fee: %s", uniswapFeeTiers[i].fee);
+            console.log("oracleData.avLiquidity: %s", oracleData.avLiquidity);
+            console.log("oracleData.period: %s", oracleData.period);
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
                     we do not want to select a fee tier whose liquidity is easy manipulated.
                         avLiquidity * period = aggregate Liquidity
                  */
-                uint256 scoreTemp = _feeTierScore(
-                    uint256(oracleData.avLiquidity) * oracleData.period,
-                    uniswapFeeTiers[i]
-                );
+                uint256 scoreTemp = oracleData.period == 0
+                    ? 1
+                    : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
                 // console.log("scoreTemp: %s", scoreTemp);
                 // console.log("score: %s", score);
 
@@ -354,6 +353,7 @@ contract Oracle {
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
 
         // We increase the cardinality of the selected tier if necessary
+        console.log("bestOracleData.cardinalityToIncrease: %s", bestOracleData.cardinalityToIncrease);
         if (bestOracleData.cardinalityToIncrease > 0)
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
 
@@ -479,8 +479,8 @@ contract Oracle {
                             its average liquidity is the best AND the TWAP is fully initialized.
                         */
                         uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
-                        uint256 scoreProbed = oracleDataProbed.period == 0
-                            ? type(uint256).max // Increase cardinality if it is only 1
+                        uint256 scoreProbed = oracleDataProbed.period <= 1
+                            ? type(uint256).max // Increase cardinality if it has never been increased
                             : _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
 
                         if (scoreProbed > score) {
@@ -624,7 +624,8 @@ contract Oracle {
             // This can only occur if the fee tier has cardinality 1
             uint256 cardinalityNeeded;
             if (interval[0] == 0) {
-                oracleData.avLiquidity = 1; // So that it is considered during the selection of the best fee tier but only in the worst case scenario
+                // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
+                oracleData.avLiquidity = 1;
                 cardinalityNeeded = (_TWAP_DELTA - 1) / (12 seconds) + 1;
                 if (cardinalityNeeded > cardinalityNext) oracleData.cardinalityToIncrease = uint16(cardinalityNeeded);
                 return oracleData;
