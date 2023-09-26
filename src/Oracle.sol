@@ -323,9 +323,9 @@ contract Oracle {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
 
-            console.log("fee: %s", uniswapFeeTiers[i].fee);
-            console.log("oracleData.avLiquidity: %s", oracleData.avLiquidity);
-            console.log("oracleData.period: %s", oracleData.period);
+            // console.log("fee: %s", uniswapFeeTiers[i].fee);
+            // console.log("oracleData.avLiquidity: %s", oracleData.avLiquidity);
+            // console.log("oracleData.period: %s", oracleData.period);
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
@@ -353,7 +353,7 @@ contract Oracle {
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
 
         // We increase the cardinality of the selected tier if necessary
-        console.log("bestOracleData.cardinalityToIncrease: %s", bestOracleData.cardinalityToIncrease);
+        // console.log("bestOracleData.cardinalityToIncrease: %s", bestOracleData.cardinalityToIncrease);
         if (bestOracleData.cardinalityToIncrease > 0)
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
 

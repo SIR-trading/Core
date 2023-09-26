@@ -12,9 +12,7 @@ import {MockERC20} from "src/test/MockERC20.sol";
 import {LiquidityAmounts} from "v3-periphery/libraries/LiquidityAmounts.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 
-contract OracleNewFeeTiersTest is Test {
-    event UniswapFeeTierAdded(uint24 indexed fee);
-
+contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
 
     constructor() {
@@ -181,7 +179,8 @@ contract OracleInitializeTest is Test, Oracle {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
         uint40 duration = 12 seconds;
-        (, UniswapPoolAddress.PoolKey memory poolKey) = _preparePool(100, liquidity, duration);
+        UniswapPoolAddress.PoolKey memory poolKey;
+        (liquidity, poolKey) = _preparePool(100, liquidity, duration);
 
         // vm.expectRevert();
         vm.expectEmit(address(_oracle));
@@ -197,76 +196,98 @@ contract OracleInitializeTest is Test, Oracle {
         _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
     }
 
-    // function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] calldata duration) public {
-    //     // Maximize the number of fee tiers to test stress the initialization
-    //     Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
+    function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint256[9] memory timeInc) public {
+        // Maximize the number of fee tiers to test stress the initialization
+        Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
 
-    //     // Existing fee tiers
-    //     uniswapFeeTiers[0] = Oracle.UniswapFeeTier(100, 1);
-    //     uniswapFeeTiers[1] = Oracle.UniswapFeeTier(500, 10);
-    //     uniswapFeeTiers[2] = Oracle.UniswapFeeTier(3000, 60);
-    //     uniswapFeeTiers[3] = Oracle.UniswapFeeTier(10000, 200);
+        // Existing fee tiers
+        uniswapFeeTiers[0] = Oracle.UniswapFeeTier(100, 1);
+        uniswapFeeTiers[1] = Oracle.UniswapFeeTier(500, 10);
+        uniswapFeeTiers[2] = Oracle.UniswapFeeTier(3000, 60);
+        uniswapFeeTiers[3] = Oracle.UniswapFeeTier(10000, 200);
 
-    //     // Made up fee tiers
-    //     uniswapFeeTiers[4] = Oracle.UniswapFeeTier(42, 7);
-    //     uniswapFeeTiers[5] = Oracle.UniswapFeeTier(69, 99);
-    //     uniswapFeeTiers[6] = Oracle.UniswapFeeTier(300, 6);
-    //     uniswapFeeTiers[7] = Oracle.UniswapFeeTier(9999, 199);
-    //     uniswapFeeTiers[8] = Oracle.UniswapFeeTier(100000, 1);
+        // Made up fee tiers
+        uniswapFeeTiers[4] = Oracle.UniswapFeeTier(42, 7);
+        uniswapFeeTiers[5] = Oracle.UniswapFeeTier(69, 99);
+        uniswapFeeTiers[6] = Oracle.UniswapFeeTier(300, 6);
+        uniswapFeeTiers[7] = Oracle.UniswapFeeTier(9999, 199);
+        uniswapFeeTiers[8] = Oracle.UniswapFeeTier(100000, 1);
 
-    //     // Add them to Uniswap v3
-    //     vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
-    //     for (uint256 i = 4; i < 9; i++) {
-    //         IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-    //             uniswapFeeTiers[i].fee,
-    //             uniswapFeeTiers[i].tickSpacing
-    //         );
-    //     }
-    //     vm.stopPrank();
+        // Add them to Uniswap v3
+        vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
+        for (uint256 i = 4; i < 9; i++) {
+            IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+                uniswapFeeTiers[i].fee,
+                uniswapFeeTiers[i].tickSpacing
+            );
+        }
+        vm.stopPrank();
 
-    //     // Add them the oracle
-    //     for (uint256 i = 4; i < 9; i++) {
-    //         _oracle.newUniswapFeeTier(uniswapFeeTiers[i].fee);
-    //     }
+        // Add them the oracle
+        for (uint256 i = 4; i < 9; i++) {
+            _oracle.newUniswapFeeTier(uniswapFeeTiers[i].fee);
+        }
 
-    //     // Deploy fee tiers and score them
-    //     UniswapPoolAddress.PoolKey memory bestPoolKey;
-    //     UniswapPoolAddress.PoolKey memory poolKey;
-    //     uint256 bestScore;
-    //     uint256 bestIndex;
-    //     uint40 TWAP_DURATION = _oracle.TWAP_DURATION();
-    //     for (uint256 i = 0; i < 9; i++) {
-    //         if (liquidity[i] == 0 && duration[0] == 0) _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
-    //         else if (liquidity[i] == 0) poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, duration[i]);
-    //         else if (duration[i] == 0)
-    //             (, , poolKey) = _preparePoolTwapCardinality1(uniswapFeeTiers[i].fee, liquidity[i]);
-    //         else (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], duration[i]);
+        // Deploy fee tiers
+        UniswapPoolAddress.PoolKey memory poolKey;
+        for (uint256 i = 0; i < 9; i++) {
+            // Bound timeInc to 32 bits
+            timeInc[i] = bound(timeInc[i], 0, type(uint32).max);
 
-    //         uint256 tempScore = ((uint256(liquidity[i]) *
-    //             (TWAP_DURATION < duration[i] ? TWAP_DURATION : duration[i]) *
-    //             uniswapFeeTiers[i].fee) << 72) / uint24(uniswapFeeTiers[i].tickSpacing);
+            if (liquidity[i] == 0 && timeInc[i] == 0) {
+                _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
+            } else if (liquidity[i] == 0) {
+                liquidity[i] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
+                poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, uint32(timeInc[i]));
+            } else if (timeInc[i] == 0) {
+                (, liquidity[i], poolKey) = _preparePoolTwapCardinality0(uniswapFeeTiers[i].fee, liquidity[i]);
+            } else {
+                (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], uint32(timeInc[i]));
+            }
+        }
 
-    //         if (bestScore > tempScore) {
-    //             bestIndex = 0;
-    //             bestScore = tempScore;
-    //             bestPoolKey = poolKey;
-    //         }
-    //     }
+        // Score fee tiers
+        UniswapPoolAddress.PoolKey memory bestPoolKey;
+        uint256 bestScore;
+        uint256 iBest;
+        for (uint256 i = 8; i >= 0 && i < 9; ) {
+            // Time increments accumulate
+            if (i < 8) timeInc[i] += timeInc[i + 1];
 
-    //     // Check the correct fee tier is selected
-    //     if (bestScore == 0) {
-    //         vm.expectRevert();
-    //     } else {
-    //         vm.expectEmit(address(_oracle));
-    //         emit OracleInitialized(
-    //             poolKey.token0,
-    //             poolKey.token1,
-    //             uniswapFeeTiers[bestIndex].fee,
-    //             TWAP_DURATION < duration[bestIndex] ? TWAP_DURATION : duration[bestIndex]
-    //         );
-    //     }
-    //     _oracle.initialize(address(_tokenA), address(_tokenB));
-    // }
+            timeInc[i] = TWAP_DURATION < timeInc[i] ? TWAP_DURATION : timeInc[i];
+            uint256 aggLiquidity = liquidity[i] * timeInc[i];
+            uint256 tempScore = aggLiquidity == 0
+                ? 1
+                : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) / uint24(uniswapFeeTiers[i].tickSpacing) + 1;
+
+            if (tempScore > bestScore) {
+                iBest = i;
+                bestScore = tempScore;
+                bestPoolKey = poolKey;
+            }
+            console.log(i, uint(bestScore));
+
+            unchecked {
+                i--;
+            }
+        }
+
+        // Check the correct fee tier is selected
+        if (bestScore == 0) {
+            vm.expectRevert();
+        } else {
+            vm.expectEmit(address(_oracle));
+            emit OracleInitialized(
+                poolKey.token0,
+                poolKey.token1,
+                uniswapFeeTiers[iBest].fee,
+                liquidity[iBest],
+                uint40(timeInc[iBest])
+            );
+        }
+
+        _oracle.initialize(address(_tokenA), address(_tokenB));
+    }
 
     // Test when pool exists but not initialized, or TWAP is not old enough
     // Check the event that shows the liquidity and other parameters
