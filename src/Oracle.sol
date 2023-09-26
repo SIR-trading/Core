@@ -175,7 +175,7 @@ contract Oracle {
         address indexed tokenA,
         address indexed tokenB,
         uint24 indexed feeTierSelected,
-        uint128 averageLiquidity,
+        uint160 averageLiquidity,
         uint40 period
     );
     event OracleFeeTierChanged(
@@ -190,7 +190,7 @@ contract Oracle {
         address indexed tokenB,
         uint24 indexed fee,
         int56 aggPriceTick,
-        uint160 aggLiquidity,
+        uint160 avLiquidity,
         uint40 period,
         uint16 cardinalityToIncrease
     );
@@ -209,7 +209,7 @@ contract Oracle {
     struct UniswapOracleData {
         IUniswapV3Pool uniswapPool; // Uniswap v3 pool
         int56 aggPriceTick; // Aggregated log price over the period
-        uint160 aggLiquidity; // Aggregated in-range liquidity over period. Non-initialized fee tier => aggLiquidity = 0, else aggLiquidity > 0
+        uint160 avLiquidity; // Aggregated in-range liquidity over period. Non-initialized fee tier => avLiquidity = 0, else avLiquidity > 0
         uint40 period; // Duration of the current TWAP
         uint16 cardinalityToIncrease; // Cardinality suggested for increase
     }
@@ -324,15 +324,18 @@ contract Oracle {
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
 
             // console.log("fee: %s", uniswapFeeTiers[i].fee);
-            // console.log("oracleData.aggLiquidity: %s", oracleData.aggLiquidity);
+            // console.log("oracleData.avLiquidity: %s", oracleData.avLiquidity);
             // console.log("oracleData.period: %s", oracleData.period);
-            if (oracleData.aggLiquidity > 0) {
+            if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
                     we do not want to select a fee tier whose liquidity is easy manipulated.
-                        avLiquidity * period = aggLiquidity
+                        avLiquidity * period = aggregate Liquidity
                  */
-                uint256 scoreTemp = _feeTierScore(oracleData.aggLiquidity, uniswapFeeTiers[i]);
+                uint256 scoreTemp = _feeTierScore(
+                    uint256(oracleData.avLiquidity) * oracleData.period,
+                    uniswapFeeTiers[i]
+                );
                 // console.log("scoreTemp: %s", scoreTemp);
                 // console.log("score: %s", score);
 
@@ -361,9 +364,7 @@ contract Oracle {
             tokenA,
             tokenB,
             oracleState.uniswapFeeTier.fee,
-            bestOracleData.period == 0
-                ? type(uint128).max
-                : uint128(bestOracleData.aggLiquidity / bestOracleData.period),
+            bestOracleData.avLiquidity,
             bestOracleData.period
         );
     }
@@ -419,7 +420,7 @@ contract Oracle {
                 tokenB,
                 oracleState.uniswapFeeTier.fee,
                 oracleData.aggPriceTick,
-                oracleData.aggLiquidity,
+                oracleData.avLiquidity,
                 oracleData.period,
                 oracleData.cardinalityToIncrease
             );
@@ -457,13 +458,13 @@ contract Oracle {
                         uniswapFeeTierProbed.fee
                     );
 
-                    if (oracleDataProbed.aggLiquidity > 0) {
+                    if (oracleDataProbed.avLiquidity > 0) {
                         emit UniswapOracleDataRetrieved(
                             tokenA,
                             tokenB,
                             uniswapFeeTierProbed.fee,
                             oracleDataProbed.aggPriceTick,
-                            oracleDataProbed.aggLiquidity,
+                            oracleDataProbed.avLiquidity,
                             oracleDataProbed.period,
                             oracleDataProbed.cardinalityToIncrease
                         );
@@ -477,16 +478,10 @@ contract Oracle {
                             This is different than done in initialize() because a fee tier will not be selected until
                             its average liquidity is the best AND the TWAP is fully initialized.
                         */
-                        uint256 score = _feeTierScore(
-                            (uint200(oracleData.aggLiquidity) << 40) / oracleData.period, // The period of the current fee tier is never 0
-                            oracleState.uniswapFeeTier
-                        );
+                        uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
                         uint256 scoreProbed = oracleDataProbed.period == 0
                             ? type(uint256).max // Increase cardinality if it is only 1
-                            : _feeTierScore(
-                                (uint200(oracleDataProbed.aggLiquidity) << 40) / oracleDataProbed.period,
-                                uniswapFeeTierProbed
-                            );
+                            : _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
 
                         if (scoreProbed > score) {
                             // If the probed fee tier is better than the current one, then we increase its cardinality if necessary
@@ -629,7 +624,7 @@ contract Oracle {
             // This can only occur if the fee tier has cardinality 1
             uint256 cardinalityNeeded;
             if (interval[0] == 0) {
-                oracleData.aggLiquidity = 1; // So that it is considered during the selection of the best fee tier but only in the worst case scenario
+                oracleData.avLiquidity = 1; // So that it is considered during the selection of the best fee tier but only in the worst case scenario
                 cardinalityNeeded = (_TWAP_DELTA - 1) / (12 seconds) + 1;
                 if (cardinalityNeeded > cardinalityNext) oracleData.cardinalityToIncrease = uint16(cardinalityNeeded);
                 return oracleData;
@@ -653,8 +648,8 @@ contract Oracle {
         // console.log("interval[0]: %s", interval[0]);
         // console.log("liquidityCumulatives[0]: %s", liquidityCumulatives[0]);
         // console.log("liquidityCumulatives[1]: %s", liquidityCumulatives[1]);
-        oracleData.aggLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]); // Liquidity is always >=1
-        // console.log("aggLiquidity: %s", oracleData.aggLiquidity);
+        oracleData.avLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]); // Liquidity is always >=1
+        // console.log("avLiquidity: %s", oracleData.avLiquidity);
 
         // Aggregated price from Uniswap v3 are given as token1/token0
         oracleData.aggPriceTick = tickCumulatives[1] - tickCumulatives[0];
@@ -708,7 +703,7 @@ contract Oracle {
         We use the time-weighted tickTVL to score fee tiers.
         However, fee tiers with small weighting period are more susceptible to manipulation.
         Thus, instead we weight the time-weighted tickTVL by the weighting period:
-            twTickTVL * period * feeTier = aggLiquidity
+            twTickTVL * period * feeTier = avLiquidity
         
         However, it may be a good idea to weight the score by the fee tier, because it is harder to move the
         price of a pool with higher fee tier. The square of the feeTier^2*tickTVL is a good predictor of

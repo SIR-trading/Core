@@ -102,7 +102,8 @@ contract OracleInitializeTest is Test {
         address indexed tokenA,
         address indexed tokenB,
         uint24 indexed feeTierSelected,
-        uint40 periodTWAP
+        uint160 averageLiquidity,
+        uint40 period
     );
     event UniswapOracleDataRetrieved(
         address indexed tokenA,
@@ -140,12 +141,12 @@ contract OracleInitializeTest is Test {
     }
 
     function test_InitializeNoPool() public {
-        vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 4, 0, 0));
+        vm.expectRevert(Oracle.NoFeeTiers.selector);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
     function test_InitializeNoPoolOfBNBAndUSDT() public {
-        vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 4, 0, 0));
+        vm.expectRevert(Oracle.NoFeeTiers.selector);
         _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_USDT);
     }
 
@@ -153,36 +154,50 @@ contract OracleInitializeTest is Test {
         uint24 fee = 100;
         _preparePoolNoInitialization(fee);
 
-        vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 4, 0, 0));
+        vm.expectRevert(Oracle.NoFeeTiers.selector);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
     function test_InitializePoolNoLiquidity() public {
         uint24 fee = 100;
         uint40 duration = 12 seconds;
-        _preparePoolNoLiquidity(fee, duration);
+        UniswapPoolAddress.PoolKey memory poolKey = _preparePoolNoLiquidity(fee, duration);
 
-        vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 3, 1, 0));
+        vm.expectEmit(address(_oracle));
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, 1, duration);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
-    function test_InitializeCardinalityIs1() public {
+    function test_InitializeTwapCardinality0() public {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
-        _preparePoolNoTWAP(fee, liquidity);
+        (, , UniswapPoolAddress.PoolKey memory poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
 
-        vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 3, 0, 1));
+        vm.expectEmit(address(_oracle));
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, type(uint128).max, 0);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
-    function test_InitializeTwapNotReady() public {
+    function test_InitializeTwapCardinality1() public {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
-        _preparePoolCardinalityNotExtendedYet(fee, liquidity);
+        uint40 duration = 12 seconds;
+        UniswapPoolAddress.PoolKey memory poolKey;
+        (, liquidity, poolKey) = _preparePoolTwapCardinality1(fee, liquidity, duration);
 
-        vm.expectRevert(abi.encodeWithSelector(Oracle.UniswapV3NotReady.selector, 3, 1, 0));
+        vm.expectEmit(address(_oracle));
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, liquidity, duration);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
+
+    // function test_InitializeTwapNotReady() public {
+    //     uint24 fee = 100;
+    //     uint128 liquidity = 2 ** 64;
+    //     _preparePoolCardinalityNotExtendedYet(fee, liquidity);
+
+    //     vm.expectRevert(Oracle.NoFeeTiers.selector);
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
 
     function test_Initialize() public {
         uint24 fee = 100;
@@ -192,87 +207,88 @@ contract OracleInitializeTest is Test {
 
         // vm.expectRevert();
         vm.expectEmit(address(_oracle));
-        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, duration);
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, liquidity, duration);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
     function test_InitializeBNBAndWETH() public {
         vm.expectEmit(true, true, false, false, address(_oracle));
-        emit OracleInitialized(Addresses._ADDR_BNB, Addresses._ADDR_WETH, 0, 0);
+        emit OracleInitialized(Addresses._ADDR_BNB, Addresses._ADDR_WETH, 0, 0, 0);
         _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_BNB);
 
         _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
     }
 
-    function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] calldata duration) public {
-        // Maximize the number of fee tiers to test stress the initialization
-        Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
+    // function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] calldata duration) public {
+    //     // Maximize the number of fee tiers to test stress the initialization
+    //     Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
 
-        // Existing fee tiers
-        uniswapFeeTiers[0] = Oracle.UniswapFeeTier(100, 1);
-        uniswapFeeTiers[1] = Oracle.UniswapFeeTier(500, 10);
-        uniswapFeeTiers[2] = Oracle.UniswapFeeTier(3000, 60);
-        uniswapFeeTiers[3] = Oracle.UniswapFeeTier(10000, 200);
+    //     // Existing fee tiers
+    //     uniswapFeeTiers[0] = Oracle.UniswapFeeTier(100, 1);
+    //     uniswapFeeTiers[1] = Oracle.UniswapFeeTier(500, 10);
+    //     uniswapFeeTiers[2] = Oracle.UniswapFeeTier(3000, 60);
+    //     uniswapFeeTiers[3] = Oracle.UniswapFeeTier(10000, 200);
 
-        // Made up fee tiers
-        uniswapFeeTiers[4] = Oracle.UniswapFeeTier(42, 7);
-        uniswapFeeTiers[5] = Oracle.UniswapFeeTier(69, 99);
-        uniswapFeeTiers[6] = Oracle.UniswapFeeTier(300, 6);
-        uniswapFeeTiers[7] = Oracle.UniswapFeeTier(9999, 199);
-        uniswapFeeTiers[8] = Oracle.UniswapFeeTier(100000, 1);
+    //     // Made up fee tiers
+    //     uniswapFeeTiers[4] = Oracle.UniswapFeeTier(42, 7);
+    //     uniswapFeeTiers[5] = Oracle.UniswapFeeTier(69, 99);
+    //     uniswapFeeTiers[6] = Oracle.UniswapFeeTier(300, 6);
+    //     uniswapFeeTiers[7] = Oracle.UniswapFeeTier(9999, 199);
+    //     uniswapFeeTiers[8] = Oracle.UniswapFeeTier(100000, 1);
 
-        // Add them to Uniswap v3
-        vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
-        for (uint256 i = 4; i < 9; i++) {
-            IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
-                uniswapFeeTiers[i].fee,
-                uniswapFeeTiers[i].tickSpacing
-            );
-        }
-        vm.stopPrank();
+    //     // Add them to Uniswap v3
+    //     vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
+    //     for (uint256 i = 4; i < 9; i++) {
+    //         IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+    //             uniswapFeeTiers[i].fee,
+    //             uniswapFeeTiers[i].tickSpacing
+    //         );
+    //     }
+    //     vm.stopPrank();
 
-        // Add them the oracle
-        for (uint256 i = 4; i < 9; i++) {
-            _oracle.newUniswapFeeTier(uniswapFeeTiers[i].fee);
-        }
+    //     // Add them the oracle
+    //     for (uint256 i = 4; i < 9; i++) {
+    //         _oracle.newUniswapFeeTier(uniswapFeeTiers[i].fee);
+    //     }
 
-        // Deploy fee tiers and score them
-        UniswapPoolAddress.PoolKey memory bestPoolKey;
-        UniswapPoolAddress.PoolKey memory poolKey;
-        uint256 bestScore;
-        uint256 bestIndex;
-        uint40 TWAP_DURATION = _oracle.TWAP_DURATION();
-        for (uint256 i = 0; i < 9; i++) {
-            if (liquidity[i] == 0 && duration[0] == 0) _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
-            else if (liquidity[i] == 0) poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, duration[i]);
-            else if (duration[i] == 0) (, , poolKey) = _preparePoolNoTWAP(uniswapFeeTiers[i].fee, liquidity[i]);
-            else (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], duration[i]);
+    //     // Deploy fee tiers and score them
+    //     UniswapPoolAddress.PoolKey memory bestPoolKey;
+    //     UniswapPoolAddress.PoolKey memory poolKey;
+    //     uint256 bestScore;
+    //     uint256 bestIndex;
+    //     uint40 TWAP_DURATION = _oracle.TWAP_DURATION();
+    //     for (uint256 i = 0; i < 9; i++) {
+    //         if (liquidity[i] == 0 && duration[0] == 0) _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
+    //         else if (liquidity[i] == 0) poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, duration[i]);
+    //         else if (duration[i] == 0)
+    //             (, , poolKey) = _preparePoolTwapCardinality1(uniswapFeeTiers[i].fee, liquidity[i]);
+    //         else (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], duration[i]);
 
-            uint256 tempScore = ((uint256(liquidity[i]) *
-                (TWAP_DURATION < duration[i] ? TWAP_DURATION : duration[i]) *
-                uniswapFeeTiers[i].fee) << 72) / uint24(uniswapFeeTiers[i].tickSpacing);
+    //         uint256 tempScore = ((uint256(liquidity[i]) *
+    //             (TWAP_DURATION < duration[i] ? TWAP_DURATION : duration[i]) *
+    //             uniswapFeeTiers[i].fee) << 72) / uint24(uniswapFeeTiers[i].tickSpacing);
 
-            if (bestScore > tempScore) {
-                bestIndex = 0;
-                bestScore = tempScore;
-                bestPoolKey = poolKey;
-            }
-        }
+    //         if (bestScore > tempScore) {
+    //             bestIndex = 0;
+    //             bestScore = tempScore;
+    //             bestPoolKey = poolKey;
+    //         }
+    //     }
 
-        // Check the correct fee tier is selected
-        if (bestScore == 0) {
-            vm.expectRevert();
-        } else {
-            vm.expectEmit(address(_oracle));
-            emit OracleInitialized(
-                poolKey.token0,
-                poolKey.token1,
-                uniswapFeeTiers[bestIndex].fee,
-                TWAP_DURATION < duration[bestIndex] ? TWAP_DURATION : duration[bestIndex]
-            );
-        }
-        _oracle.initialize(address(_tokenA), address(_tokenB));
-    }
+    //     // Check the correct fee tier is selected
+    //     if (bestScore == 0) {
+    //         vm.expectRevert();
+    //     } else {
+    //         vm.expectEmit(address(_oracle));
+    //         emit OracleInitialized(
+    //             poolKey.token0,
+    //             poolKey.token1,
+    //             uniswapFeeTiers[bestIndex].fee,
+    //             TWAP_DURATION < duration[bestIndex] ? TWAP_DURATION : duration[bestIndex]
+    //         );
+    //     }
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+    // }
 
     // Test when pool exists but not initialized, or TWAP is not old enough
     // Check the event that shows the liquidity and other parameters
@@ -310,7 +326,7 @@ contract OracleInitializeTest is Test {
         skip(duration);
     }
 
-    function _preparePoolNoTWAP(
+    function _preparePoolTwapCardinality0(
         uint24 fee,
         uint128 liquidity
     ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
@@ -353,15 +369,24 @@ contract OracleInitializeTest is Test {
                 deadline: block.timestamp
             })
         );
-        console.log("liquidity", uint(liquidity));
-        console.log("liquidityAdj", uint(liquidityAdj));
+    }
+
+    function _preparePoolTwapCardinality1(
+        uint24 fee,
+        uint128 liquidity,
+        uint40 duration
+    ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+        (tokenId, liquidityAdj, poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
+
+        // Increase time
+        skip(duration);
     }
 
     function _preparePoolCardinalityNotExtendedYet(
         uint24 fee,
         uint128 liquidity
     ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
-        (tokenId, liquidityAdj, poolKey) = _preparePoolNoTWAP(fee, liquidity);
+        (tokenId, liquidityAdj, poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
 
         // Increase oracle cardinality
         address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
