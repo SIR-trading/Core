@@ -335,9 +335,14 @@ contract Oracle {
                 uint256 scoreTemp = oracleData.period == 0
                     ? 1
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
-                // console.log("scoreTemp: %s", scoreTemp);
-                // console.log("score: %s", score);
-
+                // if (uniswapFeeTiers[i].fee == 100000) {
+                //     console.log("--------Contract : %s", uniswapFeeTiers[i].fee, "--------");
+                //     console.log("avLiquidity: %s", uint256(oracleData.avLiquidity));
+                //     console.log("aggLiquidity: %s", uint256(oracleData.avLiquidity) * oracleData.period);
+                //     console.log("period: %s", oracleData.period);
+                //     console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
+                // }
+                console.log("fee %s", uniswapFeeTiers[i].fee, " score: %s", uint(scoreTemp));
                 // Update best score
                 if (scoreTemp > score) {
                     oracleState.indexFeeTier = uint8(i);
@@ -646,10 +651,8 @@ contract Oracle {
         }
 
         // Compute average liquidity
-        // console.log("interval[0]: %s", interval[0]);
-        // console.log("liquidityCumulatives[0]: %s", liquidityCumulatives[0]);
-        // console.log("liquidityCumulatives[1]: %s", liquidityCumulatives[1]);
-        oracleData.avLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]); // Liquidity is always >=1
+        // Liquidity is always >=1
+        oracleData.avLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]);
         // console.log("avLiquidity: %s", oracleData.avLiquidity);
 
         // Aggregated price from Uniswap v3 are given as token1/token0

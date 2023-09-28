@@ -504,6 +504,7 @@ contract Vault is SystemState {
         }
     }
 
+    // OPTIMIZE WITH THIS?? https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/UniswapV3Pool.sol#L140
     function _getCollateralDeposited(
         VaultStructs.State memory state_,
         address collateralToken

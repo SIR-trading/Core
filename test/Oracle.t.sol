@@ -256,16 +256,23 @@ contract OracleInitializeTest is Test, Oracle {
 
             timeInc[i] = TWAP_DURATION < timeInc[i] ? TWAP_DURATION : timeInc[i];
             uint256 aggLiquidity = liquidity[i] * timeInc[i];
+            // if (uniswapFeeTiers[i].fee == 100000) {
+            // console.log("----------Test : %s", uniswapFeeTiers[i].fee, "----------");
+            // console.log("avLiquidity: %s", liquidity[i] == 0 ? 1 : liquidity[i]);
+            // console.log("aggLiquidity: %s", aggLiquidity == 0 ? 1 : aggLiquidity);
+            // console.log("period: %s", timeInc[i]);
+            // console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
+            // }
             uint256 tempScore = aggLiquidity == 0
                 ? 1
                 : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) / uint24(uniswapFeeTiers[i].tickSpacing) + 1;
 
-            if (tempScore > bestScore) {
+            if (tempScore >= bestScore) {
                 iBest = i;
                 bestScore = tempScore;
                 bestPoolKey = poolKey;
             }
-            console.log(i, uint(bestScore));
+            console.log("fee %s", uniswapFeeTiers[i].fee, "score: %s", uint(tempScore));
 
             unchecked {
                 i--;
@@ -276,6 +283,9 @@ contract OracleInitializeTest is Test, Oracle {
         if (bestScore == 0) {
             vm.expectRevert();
         } else {
+            // Account for rounding error in Uniswap
+            liquidity[iBest] = uint128((timeInc[iBest] << 128) / ((timeInc[iBest] << 128) / liquidity[iBest]));
+
             vm.expectEmit(address(_oracle));
             emit OracleInitialized(
                 poolKey.token0,
@@ -344,13 +354,20 @@ contract OracleInitializeTest is Test, Oracle {
             liquidity
         );
 
+        // Reorder tokens
+        MockERC20 token0 = MockERC20(poolKey.token0);
+        MockERC20 token1 = MockERC20(poolKey.token1);
+
         // Mint mock tokens
-        _tokenA.mint(amount0);
-        _tokenB.mint(amount1);
+        token0.mint(amount0);
+        token1.mint(amount1);
 
         // Approve tokens
-        _tokenA.approve(address(positionManager), amount0);
-        _tokenB.approve(address(positionManager), amount1);
+        // console.log("approve", address(positionManager), "to TKA", amount0);
+        // console.log("approve", address(positionManager), "to TKB", amount1);
+        // console.log("msg.sender", msg.sender);
+        token0.approve(address(positionManager), amount0);
+        token1.approve(address(positionManager), amount1);
 
         // Add liquidity
         (tokenId, liquidityAdj, , ) = positionManager.mint(
