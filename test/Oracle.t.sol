@@ -281,7 +281,7 @@ contract OracleInitializeTest is Test, Oracle {
             //     console.log("period: %s", timeInc[i]);
             //     console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
             // }
-            uint256 tempScore = aggLiquidity == 0
+            uint256 tempScore = aggLiquidity > 0 && timeInc[i] == 0
                 ? 1
                 : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) / uint24(uniswapFeeTiers[i].tickSpacing) + 1;
 
@@ -354,6 +354,8 @@ contract OracleInitializeTest is Test, Oracle {
         uint24 fee,
         uint128 liquidity
     ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+        // vm.assume(liquidity == 0 || liquidity > 100);
+
         // Start at price = 1
         uint160 sqrtPriceX96 = 2 ** 96;
 
@@ -361,42 +363,56 @@ contract OracleInitializeTest is Test, Oracle {
         poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
         positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
 
+        // Compute min and max tick
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
+        int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
+        int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
+
         // Compute amounts
         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
             sqrtPriceX96,
-            TickMath.MIN_SQRT_RATIO,
-            TickMath.MAX_SQRT_RATIO,
+            TickMath.getSqrtRatioAtTick(minTick),
+            TickMath.getSqrtRatioAtTick(maxTick),
             liquidity
         );
 
-        // Reorder tokens
-        MockERC20 token0 = MockERC20(poolKey.token0);
-        MockERC20 token1 = MockERC20(poolKey.token1);
+        if (amount0 != 0 || amount1 != 0) {
+            {
+                // Reorder tokens
+                MockERC20 token0 = MockERC20(poolKey.token0);
+                MockERC20 token1 = MockERC20(poolKey.token1);
 
-        // Mint mock tokens
-        token0.mint(amount0);
-        token1.mint(amount1);
+                // Mint mock tokens
+                token0.mint(amount0);
+                token1.mint(amount1);
 
-        // Approve tokens
-        token0.approve(address(positionManager), amount0);
-        token1.approve(address(positionManager), amount1);
+                // Approve tokens
+                token0.approve(address(positionManager), amount0);
+                token1.approve(address(positionManager), amount1);
+            }
 
-        // Add liquidity
-        (tokenId, liquidityAdj, , ) = positionManager.mint(
-            INonfungiblePositionManager.MintParams({
-                token0: poolKey.token0,
-                token1: poolKey.token1,
-                fee: fee,
-                tickLower: TickMath.MIN_TICK,
-                tickUpper: TickMath.MAX_TICK,
-                amount0Desired: amount0,
-                amount1Desired: amount1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(this),
-                deadline: block.timestamp
-            })
-        );
+            // Add liquidity
+            // console.log("--------fee: %s--------", fee);
+            // console.log("liquidity: %s", liquidity);
+            // console.log("amount0: %s", amount0);
+            // console.log("amount1: %s", amount1);
+            (tokenId, liquidityAdj, , ) = positionManager.mint(
+                INonfungiblePositionManager.MintParams({
+                    token0: poolKey.token0,
+                    token1: poolKey.token1,
+                    fee: fee,
+                    tickLower: minTick,
+                    tickUpper: maxTick,
+                    amount0Desired: amount0,
+                    amount1Desired: amount1,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: block.timestamp
+                })
+            );
+        }
     }
 
     function _preparePoolTwapCardinality1(
@@ -430,10 +446,12 @@ contract OracleInitializeTest is Test, Oracle {
         // Increase time
         skip(duration);
 
-        // Update oracle by burning LP position
-        positionManager.decreaseLiquidity(
-            INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityAdj, 0, 0, block.timestamp)
-        );
+        if (liquidityAdj != 0) {
+            // Update oracle by burning LP position
+            positionManager.decreaseLiquidity(
+                INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityAdj, 0, 0, block.timestamp)
+            );
+        }
 
         return (liquidityAdj, poolKey);
     }

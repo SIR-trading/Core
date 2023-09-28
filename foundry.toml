@@ -11,7 +11,7 @@ libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 
 [fuzz]
-# seed = "0x00"
+seed = "0x00"
 
 [rpc_endpoints]
 mainnet = "https://mainnet.infura.io/v3/${RPC_MAINNET}"
