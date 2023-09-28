@@ -342,7 +342,7 @@ contract Oracle {
                 //     console.log("period: %s", oracleData.period);
                 //     console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
                 // }
-                console.log("fee %s", uniswapFeeTiers[i].fee, " score: %s", uint(scoreTemp));
+                // console.log("fee %s", uniswapFeeTiers[i].fee, " score: %s", uint(scoreTemp));
                 // Update best score
                 if (scoreTemp > score) {
                     oracleState.indexFeeTier = uint8(i);
