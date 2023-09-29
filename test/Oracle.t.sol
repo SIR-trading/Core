@@ -153,7 +153,7 @@ contract OracleInitializeTest is Test, Oracle {
     function test_InitializeTwapCardinality0() public {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
-        (, , UniswapPoolAddress.PoolKey memory poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
+        (, UniswapPoolAddress.PoolKey memory poolKey) = _preparePool(fee, liquidity, 0);
 
         vm.expectEmit(false, false, false, false);
         emit IncreaseObservationCardinalityNext(0, 0);
@@ -167,7 +167,7 @@ contract OracleInitializeTest is Test, Oracle {
         uint128 liquidity = 2 ** 64;
         uint40 duration = 12 seconds;
         UniswapPoolAddress.PoolKey memory poolKey;
-        (, liquidity, poolKey) = _preparePoolTwapCardinality1(fee, liquidity, duration);
+        (liquidity, poolKey) = _preparePool(fee, liquidity, duration);
 
         vm.expectEmit(false, false, false, false);
         emit IncreaseObservationCardinalityNext(0, 0);
@@ -231,32 +231,30 @@ contract OracleInitializeTest is Test, Oracle {
 
         // Deploy fee tiers
         UniswapPoolAddress.PoolKey memory poolKey;
+        console.log("--------------------------------");
+        console.log("--------------------------------");
         for (uint256 i = 0; i < 9; i++) {
             // Bound timeInc to 32 bits
             timeInc[i] = bound(timeInc[i], 0, type(uint32).max);
             liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity
 
+            // console.log(uniswapFeeTiers[i].fee, liquidity[i], timeInc[i]);
             if (liquidity[i] == 0 && timeInc[i] == 0) {
+                console.log("Fee: %s.", uniswapFeeTiers[i].fee);
                 _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
             } else if (liquidity[i] == 0) {
-                liquidity[i] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
                 poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, uint32(timeInc[i]));
-            } else if (timeInc[i] == 0) {
-                // console.log(
-                //     "MaxLiquidity:",
-                //     Tick.tickSpacingToMaxLiquidityPerTick(uniswapFeeTiers[i].tickSpacing),
-                //     "Liquidity:",
-                //     liquidity[i]
-                // );
-                (, liquidity[i], poolKey) = _preparePoolTwapCardinality0(uniswapFeeTiers[i].fee, liquidity[i]);
+                liquidity[i] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
+                console.log(
+                    "Fee: %s. No liquidity. Liquidity: %s. Duration: %s",
+                    uniswapFeeTiers[i].fee,
+                    liquidity[i],
+                    timeInc[i]
+                );
             } else {
-                // console.log(
-                //     "MaxLiquidity:",
-                //     Tick.tickSpacingToMaxLiquidityPerTick(uniswapFeeTiers[i].tickSpacing),
-                //     "Liquidity:",
-                //     liquidity[i]
-                // );
                 (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], uint32(timeInc[i]));
+                if (liquidity[i] == 0) liquidity[i] = 1;
+                console.log("Fee: %s. Liquidity: %s. Duration: %s", uniswapFeeTiers[i].fee, liquidity[i], timeInc[i]);
             }
         }
 
@@ -264,25 +262,22 @@ contract OracleInitializeTest is Test, Oracle {
         UniswapPoolAddress.PoolKey memory bestPoolKey;
         uint256 bestScore;
         uint256 iBest;
+        console.log("--------------------------------");
+        console.log("--------------------------------");
         for (uint256 i = 8; i >= 0 && i < 9; ) {
             // Time increments accumulate
             if (i < 8) timeInc[i] += timeInc[i + 1];
 
             timeInc[i] = TWAP_DURATION < timeInc[i] ? TWAP_DURATION : timeInc[i];
             uint256 aggLiquidity = liquidity[i] * timeInc[i];
-            // if (uniswapFeeTiers[i].fee == 100000) {
-            //     console.log("----------Test : %s", uniswapFeeTiers[i].fee, "----------");
-            //     console.log("avLiquidity: %s", liquidity[i] == 0 ? 1 : liquidity[i]);
-            //     console.log(
-            //         "adjAvLiquidity: %s",
-            //         liquidity[i] == 0 ? 1 : uint128((timeInc[i] << 128) / ((timeInc[i] << 128) / liquidity[i]))
-            //     );
-            //     console.log("aggLiquidity: %s", aggLiquidity == 0 ? 1 : aggLiquidity);
-            //     console.log("period: %s", timeInc[i]);
-            //     console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
-            // }
-            uint256 tempScore = aggLiquidity > 0 && timeInc[i] == 0
-                ? 1
+            // console.log("----------Test : %s", uniswapFeeTiers[i].fee, "----------");
+            // console.log("avLiquidity: %s", liquidity[i] == 0 ? 1 : liquidity[i]);
+            // console.log("aggLiquidity: %s", aggLiquidity == 0 ? 1 : aggLiquidity);
+            // console.log("period: %s", timeInc[i]);
+            // console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
+
+            uint256 tempScore = aggLiquidity == 0
+                ? 0
                 : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) / uint24(uniswapFeeTiers[i].tickSpacing) + 1;
 
             if (tempScore >= bestScore) {
@@ -290,12 +285,14 @@ contract OracleInitializeTest is Test, Oracle {
                 bestScore = tempScore;
                 bestPoolKey = poolKey;
             }
-            // console.log("fee %s", uniswapFeeTiers[i].fee, "score: %s", uint(tempScore));
+            console.log("Score fee %s: %s", uniswapFeeTiers[i].fee, tempScore);
 
             unchecked {
                 i--;
             }
         }
+
+        console.log("BEST fee tier in TEST is: %s", uniswapFeeTiers[iBest].fee);
 
         // Check the correct fee tier is selected
         if (bestScore == 0) {
@@ -350,10 +347,11 @@ contract OracleInitializeTest is Test, Oracle {
         skip(duration);
     }
 
-    function _preparePoolTwapCardinality0(
+    function _preparePool(
         uint24 fee,
-        uint128 liquidity
-    ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+        uint128 liquidity,
+        uint40 duration
+    ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
         // vm.assume(liquidity == 0 || liquidity > 100);
 
         // Start at price = 1
@@ -397,7 +395,7 @@ contract OracleInitializeTest is Test, Oracle {
             // console.log("liquidity: %s", liquidity);
             // console.log("amount0: %s", amount0);
             // console.log("amount1: %s", amount1);
-            (tokenId, liquidityAdj, , ) = positionManager.mint(
+            (, liquidityAdj, , ) = positionManager.mint(
                 INonfungiblePositionManager.MintParams({
                     token0: poolKey.token0,
                     token1: poolKey.token1,
@@ -412,47 +410,26 @@ contract OracleInitializeTest is Test, Oracle {
                     deadline: block.timestamp
                 })
             );
+
+            // (, uint160[] memory liquidityCumulative) = IUniswapV3Pool(pool).observe(new uint32[](1));
+            // console.log(
+            //     "Liquidity after minting %s is %s and cumulative is %s",
+            //     liquidityAdj,
+            //     IUniswapV3Pool(pool).liquidity(),
+            //     liquidityCumulative[0]
+            // );
+
+            /** Price: The uniswap oracle extrapolates the price for the most recent observations by simply assuming
+                it's the same price as the last observation. So it suffices to just skip the duration of the TWAP.
+
+                Liquidity: The uniswap oracle extrapolaes the liquidity for the most recent observations by simply
+                taking the last observation AND assuming the liquidity since the last observation is the value
+                store in the variable 'liquidity'. Notice this is different than the price. So it is important to
+                keep in mind the liquidity at the beginning of the transaction.
+
+                In conclusion, 1 single slot (all oracles are initialized with 1 slot) is enough to test the oracle.
+            */
+            skip(duration);
         }
-    }
-
-    function _preparePoolTwapCardinality1(
-        uint24 fee,
-        uint128 liquidity,
-        uint40 duration
-    ) private returns (uint256 tokenId, uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
-        (tokenId, liquidityAdj, poolKey) = _preparePoolTwapCardinality0(fee, liquidity);
-
-        // Increase time
-        skip(duration);
-    }
-
-    function _preparePool(
-        uint24 fee,
-        uint128 liquidity,
-        uint40 duration
-    ) private returns (uint128, UniswapPoolAddress.PoolKey memory) {
-        (
-            uint256 tokenId,
-            uint128 liquidityAdj,
-            UniswapPoolAddress.PoolKey memory poolKey
-        ) = _preparePoolTwapCardinality0(fee, liquidity);
-
-        // Increase oracle cardinality
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-        vm.expectEmit(pool);
-        emit IncreaseObservationCardinalityNext(1, 1000);
-        IUniswapV3Pool(pool).increaseObservationCardinalityNext(1000);
-
-        // Increase time
-        skip(duration);
-
-        if (liquidityAdj != 0) {
-            // Update oracle by burning LP position
-            positionManager.decreaseLiquidity(
-                INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityAdj, 0, 0, block.timestamp)
-            );
-        }
-
-        return (liquidityAdj, poolKey);
     }
 }
