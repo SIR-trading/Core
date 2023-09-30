@@ -162,7 +162,7 @@ contract OracleInitializeTest is Test, Oracle {
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
-    function test_InitializeTwapCardinality1() public {
+    function test_Initialize() public {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
         uint40 duration = 12 seconds;
@@ -171,19 +171,6 @@ contract OracleInitializeTest is Test, Oracle {
 
         vm.expectEmit(false, false, false, false);
         emit IncreaseObservationCardinalityNext(0, 0);
-        vm.expectEmit(address(_oracle));
-        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, liquidity, duration);
-        _oracle.initialize(address(_tokenA), address(_tokenB));
-    }
-
-    function test_Initialize() public {
-        uint24 fee = 100;
-        uint128 liquidity = 2 ** 64;
-        uint40 duration = 12 seconds;
-        UniswapPoolAddress.PoolKey memory poolKey;
-        (liquidity, poolKey) = _preparePool(100, liquidity, duration);
-
-        // vm.expectRevert();
         vm.expectEmit(address(_oracle));
         emit OracleInitialized(poolKey.token0, poolKey.token1, fee, liquidity, duration);
         _oracle.initialize(address(_tokenA), address(_tokenB));
