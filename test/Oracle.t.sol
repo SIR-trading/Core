@@ -197,15 +197,11 @@ contract OracleInitializeTest is Test, Oracle {
         _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
     }
 
-    function safeRange(uint128 liquidity, uint32 period) private pure returns (uint128 min, uint128 max) {
-        if (liquidity == 0 || period == 0) return (liquidity, liquidity);
-
-        uint128 delta = uint128((((uint256(liquidity) ** 2) - 1) >> 128) / uint256(period) + 1);
-        min = liquidity - delta;
-        max = liquidity + delta;
-    }
-
-    function testFuzz_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] memory period) public {
+    function testFuzz_InitializeWithMultipleFeeTiers(
+        uint128[9] memory liquidity,
+        uint32[9] memory period,
+        uint256 seed
+    ) public {
         {
             // Conditions on liqudity parameters to avoid test failures due to rounding errors
             bool noRoundingConfusion = true;
@@ -217,7 +213,7 @@ contract OracleInitializeTest is Test, Oracle {
                 liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity per tick
 
                 // Check liquidity is sufficiently apart that rounding errors cause the oracle selection diverge in the test
-                (uint128 min, uint128 max) = safeRange(liquidity[i], period[i]);
+                (uint128 min, uint128 max) = _safeRange(liquidity[i], period[i]);
                 for (uint256 j = 0; j < 9; j++) {
                     if (liquidity[j] == 0 || i == j) continue;
                     if (liquidity[j] > min && liquidity[j] < max) {
@@ -265,36 +261,32 @@ contract OracleInitializeTest is Test, Oracle {
             _oracle.newUniswapFeeTier(uniswapFeeTiers[i].fee);
         }
 
-        // Deploy fee tiers
+        // Deploy fee tiers in random order
         UniswapPoolAddress.PoolKey memory poolKey;
-        // ALSO RANDOMIZE THE ORDER OF SETTING UP THE POOLS!!
+        uint8[9] memory order = _shuffle1To9(seed);
+        uint256[9] memory timeInc;
         for (uint256 i = 0; i < 9; i++) {
-            if (liquidity[i] == 0 && period[i] == 0) {
-                _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
-            } else if (liquidity[i] == 0) {
-                poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, uint32(period[i]));
-                liquidity[i] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
+            uint j = order[i];
+
+            if (liquidity[j] == 0 && period[j] == 0) {
+                _preparePoolNoInitialization(uniswapFeeTiers[j].fee);
+            } else if (liquidity[j] == 0) {
+                poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[j].fee, uint32(period[j]));
+                liquidity[j] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
             } else {
-                (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], uint32(period[i]));
-                if (liquidity[i] == 0) liquidity[i] = 1;
+                (liquidity[j], poolKey) = _preparePool(uniswapFeeTiers[j].fee, liquidity[j], uint32(period[j]));
+                if (liquidity[j] == 0) liquidity[j] = 1;
+            }
+
+            for (j = 0; j <= i; j++) {
+                timeInc[order[j]] += period[order[i]];
             }
         }
 
         // Score fee tiers
-        UniswapPoolAddress.PoolKey memory bestPoolKey;
         uint256 bestScore;
         uint256 iBest;
-        uint256[9] memory timeInc;
-        for (uint256 i = 8; i >= 0 && i < 9; ) {
-            // Time increments accumulate
-            if (i < 8) timeInc[i] += period[i] + timeInc[i + 1];
-            else timeInc[8] = period[8];
-
-            unchecked {
-                i--;
-            }
-        }
-
+        UniswapPoolAddress.PoolKey memory bestPoolKey;
         for (uint256 i = 0; i < 9; i++) {
             period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
 
@@ -435,5 +427,36 @@ contract OracleInitializeTest is Test, Oracle {
             */
             skip(duration);
         }
+    }
+
+    function _safeRange(uint128 liquidity, uint32 period) private pure returns (uint128 min, uint128 max) {
+        if (liquidity == 0 || period == 0) return (liquidity, liquidity);
+
+        uint128 delta = uint128((((uint256(liquidity) ** 2) - 1) >> 128) / uint256(period) + 1);
+        min = liquidity - delta;
+        max = liquidity + delta;
+    }
+
+    function _shuffle1To9(uint256 seed) public pure returns (uint8[9] memory) {
+        uint8[9] memory sequence;
+
+        // Initialize the array with values 1 to 9
+        for (uint8 i = 1; i < 9; i++) {
+            sequence[i] = i;
+        }
+
+        // Shuffle using the Fisher-Yates algorithm
+        for (uint8 i = uint8(sequence.length) - 1; i > 0 && i < 9; ) {
+            uint8 j = uint8((uint256(keccak256(abi.encodePacked(seed, i))) % (i + 1)));
+
+            // Swap sequence[i] with sequence[j]
+            (sequence[i], sequence[j]) = (sequence[j], sequence[i]);
+
+            unchecked {
+                i--;
+            }
+        }
+
+        return sequence;
     }
 }
