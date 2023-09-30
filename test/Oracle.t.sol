@@ -141,7 +141,7 @@ contract OracleInitializeTest is Test, Oracle {
     function test_InitializePoolNoLiquidity() public {
         uint24 fee = 100;
         uint40 duration = 12 seconds;
-        UniswapPoolAddress.PoolKey memory poolKey = _preparePoolNoLiquidity(fee, duration);
+        (, UniswapPoolAddress.PoolKey memory poolKey) = _preparePool(fee, 0, duration);
 
         vm.expectEmit(false, false, false, false);
         emit IncreaseObservationCardinalityNext(0, 0);
@@ -270,9 +270,6 @@ contract OracleInitializeTest is Test, Oracle {
 
             if (liquidity[j] == 0 && period[j] == 0) {
                 _preparePoolNoInitialization(uniswapFeeTiers[j].fee);
-            } else if (liquidity[j] == 0) {
-                poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[j].fee, uint32(period[j]));
-                liquidity[j] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
             } else {
                 (liquidity[j], poolKey) = _preparePool(uniswapFeeTiers[j].fee, liquidity[j], uint32(period[j]));
                 if (liquidity[j] == 0) liquidity[j] = 1;
@@ -334,34 +331,11 @@ contract OracleInitializeTest is Test, Oracle {
         poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
     }
 
-    function _preparePoolNoLiquidity(
-        uint24 fee,
-        uint40 duration
-    ) private returns (UniswapPoolAddress.PoolKey memory poolKey) {
-        // Start at price = 1
-        uint160 sqrtPriceX96 = 2 ** 96;
-
-        // Create and initialize Uniswap v3 pool
-        poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
-        positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
-
-        // Increase oracle cardinality
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-        vm.expectEmit(pool);
-        emit IncreaseObservationCardinalityNext(1, 2);
-        IUniswapV3Pool(pool).increaseObservationCardinalityNext(2);
-
-        // Increase time
-        skip(duration);
-    }
-
     function _preparePool(
         uint24 fee,
         uint128 liquidity,
         uint40 duration
     ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
-        // vm.assume(liquidity == 0 || liquidity > 100);
-
         // Start at price = 1
         uint160 sqrtPriceX96 = 2 ** 96;
 
@@ -369,53 +343,56 @@ contract OracleInitializeTest is Test, Oracle {
         poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
         positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
 
-        // Compute min and max tick
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-        int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
-        int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
-        int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
+        if (liquidity > 0) {
+            // Compute min and max tick
+            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
+            int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
+            int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
 
-        // Compute amounts
-        (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96,
-            TickMath.getSqrtRatioAtTick(minTick),
-            TickMath.getSqrtRatioAtTick(maxTick),
-            liquidity
-        );
-
-        if (amount0 != 0 || amount1 != 0) {
-            {
-                // Reorder tokens
-                MockERC20 token0 = MockERC20(poolKey.token0);
-                MockERC20 token1 = MockERC20(poolKey.token1);
-
-                // Mint mock tokens
-                token0.mint(amount0);
-                token1.mint(amount1);
-
-                // Approve tokens
-                token0.approve(address(positionManager), amount0);
-                token1.approve(address(positionManager), amount1);
-            }
-
-            // Add liquidity
-            (, liquidityAdj, , ) = positionManager.mint(
-                INonfungiblePositionManager.MintParams({
-                    token0: poolKey.token0,
-                    token1: poolKey.token1,
-                    fee: fee,
-                    tickLower: minTick,
-                    tickUpper: maxTick,
-                    amount0Desired: amount0,
-                    amount1Desired: amount1,
-                    amount0Min: 0,
-                    amount1Min: 0,
-                    recipient: address(this),
-                    deadline: block.timestamp
-                })
+            // Compute amounts
+            (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(minTick),
+                TickMath.getSqrtRatioAtTick(maxTick),
+                liquidity
             );
 
-            /** Price: The uniswap oracle extrapolates the price for the most recent observations by simply assuming
+            if (amount0 != 0 || amount1 != 0) {
+                {
+                    // Reorder tokens
+                    MockERC20 token0 = MockERC20(poolKey.token0);
+                    MockERC20 token1 = MockERC20(poolKey.token1);
+
+                    // Mint mock tokens
+                    token0.mint(amount0);
+                    token1.mint(amount1);
+
+                    // Approve tokens
+                    token0.approve(address(positionManager), amount0);
+                    token1.approve(address(positionManager), amount1);
+                }
+
+                // Add liquidity
+                (, liquidityAdj, , ) = positionManager.mint(
+                    INonfungiblePositionManager.MintParams({
+                        token0: poolKey.token0,
+                        token1: poolKey.token1,
+                        fee: fee,
+                        tickLower: minTick,
+                        tickUpper: maxTick,
+                        amount0Desired: amount0,
+                        amount1Desired: amount1,
+                        amount0Min: 0,
+                        amount1Min: 0,
+                        recipient: address(this),
+                        deadline: block.timestamp
+                    })
+                );
+            }
+        }
+
+        /** Price: The uniswap oracle extrapolates the price for the most recent observations by simply assuming
                 it's the same price as the last observation. So it suffices to just skip the duration of the TWAP.
 
                 Liquidity: The uniswap oracle extrapolaes the liquidity for the most recent observations by simply
@@ -425,13 +402,13 @@ contract OracleInitializeTest is Test, Oracle {
 
                 In conclusion, 1 single slot (all oracles are initialized with 1 slot) is enough to test the oracle.
             */
-            skip(duration);
-        }
+        skip(duration);
     }
 
     function _safeRange(uint128 liquidity, uint32 period) private pure returns (uint128 min, uint128 max) {
         if (liquidity == 0 || period == 0) return (liquidity, liquidity);
 
+        // This approximation error is based on how the Uniswap oracle computes the liquidity cumulatives
         uint128 delta = uint128((((uint256(liquidity) ** 2) - 1) >> 128) / uint256(period) + 1);
         min = liquidity - delta;
         max = liquidity + delta;
