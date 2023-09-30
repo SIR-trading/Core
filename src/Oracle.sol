@@ -326,9 +326,6 @@ contract Oracle {
             console.log("--------Contract : %s", uniswapFeeTiers[i].fee, "--------");
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
 
-            // console.log("fee: %s", uniswapFeeTiers[i].fee);
-            // console.log("oracleData.avLiquidity: %s", oracleData.avLiquidity);
-            // console.log("oracleData.period: %s", oracleData.period);
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
@@ -338,14 +335,12 @@ contract Oracle {
                 uint256 scoreTemp = oracleData.period == 0
                     ? 1
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
-                // if (uniswapFeeTiers[i].fee == 100000) {
                 console.log("avLiquidity: %s", uint256(oracleData.avLiquidity));
                 console.log("aggLiquidity: %s", uint256(oracleData.avLiquidity) * oracleData.period);
                 console.log("period: %s", oracleData.period);
                 console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
                 console.log("Score: %s", scoreTemp);
-                // }
-                // console.log("fee %s", uniswapFeeTiers[i].fee, " score: %s", uint(scoreTemp));
+
                 // Update best score
                 if (scoreTemp > score) {
                     oracleState.indexFeeTier = uint8(i);
@@ -362,7 +357,6 @@ contract Oracle {
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
 
         // We increase the cardinality of the selected tier if necessary
-        // console.log("bestOracleData.cardinalityToIncrease: %s", bestOracleData.cardinalityToIncrease);
         if (bestOracleData.cardinalityToIncrease > 0)
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
 
@@ -657,7 +651,7 @@ contract Oracle {
         // Compute average liquidity
         // Liquidity is always >=1
         oracleData.avLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]);
-        console.log("fee %s, avLiquidity: %s", fee, oracleData.avLiquidity);
+        // console.log("fee %s, avLiquidity: %s", fee, oracleData.avLiquidity);
         console.log("interval[0]: %s", interval[0]);
         console.log("liquidityCumulatives[1]: %s", liquidityCumulatives[1]);
         console.log("liquidityCumulatives[0]: %s", liquidityCumulatives[0]);

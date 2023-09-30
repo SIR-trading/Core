@@ -197,7 +197,35 @@ contract OracleInitializeTest is Test, Oracle {
         _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
     }
 
-    function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint256[9] memory timeInc) public {
+    function safeRange(uint128 liquidity, uint32 period) private pure returns (uint128 min, uint128 max) {
+        if (liquidity == 0 || period == 0) return (liquidity, liquidity);
+
+        uint128 delta = uint128((((uint256(liquidity) ** 2) - 1) >> 128) / uint256(period) + 1);
+        min = liquidity - delta;
+        max = liquidity + delta;
+    }
+
+    function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] memory period) public {
+        {
+            // Conditions on liqudity parameters to avoid test failures due to rounding errors
+            for (uint256 i = 0; i < 9; i++) {
+                if (liquidity[i] != 0) {
+                    liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity per tick
+
+                    // Check liquidity is sufficiently apart that rounding errors cause the oracle selection diverge in the test
+                    bool noRoundingConfusion = true;
+                    (uint128 min, uint128 max) = safeRange(liquidity[i], period[i]);
+                    for (uint256 j = 0; j < i; j++) {
+                        if (liquidity[j] > min && liquidity[j] < max) {
+                            noRoundingConfusion = false;
+                            break;
+                        }
+                    }
+                    vm.assume(noRoundingConfusion);
+                }
+            }
+        }
+
         // Maximize the number of fee tiers to test stress the initialization
         Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
 
@@ -234,27 +262,14 @@ contract OracleInitializeTest is Test, Oracle {
         console.log("--------------------------------");
         console.log("--------------------------------");
         for (uint256 i = 0; i < 9; i++) {
-            // Bound timeInc to 32 bits
-            timeInc[i] = bound(timeInc[i], 0, type(uint32).max);
-            liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity
-
-            // console.log(uniswapFeeTiers[i].fee, liquidity[i], timeInc[i]);
-            if (liquidity[i] == 0 && timeInc[i] == 0) {
-                console.log("Fee: %s.", uniswapFeeTiers[i].fee);
+            if (liquidity[i] == 0 && period[i] == 0) {
                 _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
             } else if (liquidity[i] == 0) {
-                poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, uint32(timeInc[i]));
+                poolKey = _preparePoolNoLiquidity(uniswapFeeTiers[i].fee, uint32(period[i]));
                 liquidity[i] = 1; // Uniswap assumes liquidity == 1 when no liquidity is provided
-                console.log(
-                    "Fee: %s. No liquidity. Liquidity: %s. Duration: %s",
-                    uniswapFeeTiers[i].fee,
-                    liquidity[i],
-                    timeInc[i]
-                );
             } else {
-                (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], uint32(timeInc[i]));
+                (liquidity[i], poolKey) = _preparePool(uniswapFeeTiers[i].fee, liquidity[i], uint32(period[i]));
                 if (liquidity[i] == 0) liquidity[i] = 1;
-                console.log("Fee: %s. Liquidity: %s. Duration: %s", uniswapFeeTiers[i].fee, liquidity[i], timeInc[i]);
             }
         }
 
@@ -264,17 +279,43 @@ contract OracleInitializeTest is Test, Oracle {
         uint256 iBest;
         console.log("--------------------------------");
         console.log("--------------------------------");
+        uint256[9] memory timeInc;
         for (uint256 i = 8; i >= 0 && i < 9; ) {
             // Time increments accumulate
-            if (i < 8) timeInc[i] += timeInc[i + 1];
+            if (i < 8) timeInc[i] += period[i] + timeInc[i + 1];
+            else timeInc[8] = period[8];
 
-            timeInc[i] = TWAP_DURATION < timeInc[i] ? TWAP_DURATION : timeInc[i];
-            uint256 aggLiquidity = liquidity[i] * timeInc[i];
-            // console.log("----------Test : %s", uniswapFeeTiers[i].fee, "----------");
-            // console.log("avLiquidity: %s", liquidity[i] == 0 ? 1 : liquidity[i]);
-            // console.log("aggLiquidity: %s", aggLiquidity == 0 ? 1 : aggLiquidity);
-            // console.log("period: %s", timeInc[i]);
-            // console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
+            unchecked {
+                i--;
+            }
+        }
+
+        for (uint256 i = 0; i < 9; i++) {
+            period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
+
+            uint256 aggLiquidity = liquidity[i] * period[i];
+            console.log("----------Test : %s", uniswapFeeTiers[i].fee, "----------");
+            console.log(
+                "liquidityCumulatives[1]: %s",
+                liquidity[i] == 0 ? 1 : (uint256(timeInc[0]) << 128) / liquidity[i]
+            );
+            console.log(
+                "liquidityCumulatives[0]: %s",
+                liquidity[i] == 0 ? 1 : (uint256(timeInc[0] - period[i]) << 128) / liquidity[i]
+            );
+            console.log("avLiquidity: %s", liquidity[i] == 0 ? 1 : liquidity[i]);
+            // if (period[i] != 0)
+            //     console.log(
+            //         "adjAvLiquidity: %s",
+            //         liquidity[i] == 0
+            //             ? 1
+            //             : (uint256(period[i]) << 128) /
+            //                 (((uint256(timeInc[0]) << 128) / liquidity[i]) -
+            //                     ((uint256(timeInc[0] - period[i]) << 128) / liquidity[i]))
+            //     );
+            console.log("aggLiquidity: %s", aggLiquidity == 0 ? 1 : aggLiquidity);
+            console.log("period: %s", period[i]);
+            console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
 
             uint256 tempScore = aggLiquidity == 0
                 ? 0
@@ -286,10 +327,6 @@ contract OracleInitializeTest is Test, Oracle {
                 bestPoolKey = poolKey;
             }
             console.log("Score fee %s: %s", uniswapFeeTiers[i].fee, tempScore);
-
-            unchecked {
-                i--;
-            }
         }
 
         console.log("BEST fee tier in TEST is: %s", uniswapFeeTiers[iBest].fee);
@@ -304,7 +341,7 @@ contract OracleInitializeTest is Test, Oracle {
                 poolKey.token1,
                 uniswapFeeTiers[iBest].fee,
                 0, // Rounding errors make it almost impossible to test this
-                uint40(timeInc[iBest])
+                uint40(period[iBest])
             );
         }
 
@@ -391,10 +428,6 @@ contract OracleInitializeTest is Test, Oracle {
             }
 
             // Add liquidity
-            // console.log("--------fee: %s--------", fee);
-            // console.log("liquidity: %s", liquidity);
-            // console.log("amount0: %s", amount0);
-            // console.log("amount1: %s", amount1);
             (, liquidityAdj, , ) = positionManager.mint(
                 INonfungiblePositionManager.MintParams({
                     token0: poolKey.token0,
@@ -410,14 +443,6 @@ contract OracleInitializeTest is Test, Oracle {
                     deadline: block.timestamp
                 })
             );
-
-            // (, uint160[] memory liquidityCumulative) = IUniswapV3Pool(pool).observe(new uint32[](1));
-            // console.log(
-            //     "Liquidity after minting %s is %s and cumulative is %s",
-            //     liquidityAdj,
-            //     IUniswapV3Pool(pool).liquidity(),
-            //     liquidityCumulative[0]
-            // );
 
             /** Price: The uniswap oracle extrapolates the price for the most recent observations by simply assuming
                 it's the same price as the last observation. So it suffices to just skip the duration of the TWAP.
