@@ -205,26 +205,34 @@ contract OracleInitializeTest is Test, Oracle {
         max = liquidity + delta;
     }
 
-    function test_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] memory period) public {
+    function testFuzz_InitializeWithMultipleFeeTiers(uint128[9] memory liquidity, uint32[9] memory period) public {
         {
             // Conditions on liqudity parameters to avoid test failures due to rounding errors
-            for (uint256 i = 0; i < 9; i++) {
-                if (liquidity[i] != 0) {
-                    liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity per tick
+            bool noRoundingConfusion = true;
+            for (uint256 i = 0; i < 9 && noRoundingConfusion; i++) {
+                // We limit the value of period to avoid overflows
+                period[i] = uint32(bound(period[i], 0, 2 ^ 25));
 
-                    // Check liquidity is sufficiently apart that rounding errors cause the oracle selection diverge in the test
-                    bool noRoundingConfusion = true;
-                    (uint128 min, uint128 max) = safeRange(liquidity[i], period[i]);
-                    for (uint256 j = 0; j < i; j++) {
-                        if (liquidity[j] > min && liquidity[j] < max) {
-                            noRoundingConfusion = false;
-                            break;
-                        }
+                if (liquidity[i] == 0) continue;
+                liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity per tick
+
+                // Check liquidity is sufficiently apart that rounding errors cause the oracle selection diverge in the test
+                (uint128 min, uint128 max) = safeRange(liquidity[i], period[i]);
+                for (uint256 j = 0; j < 9; j++) {
+                    if (liquidity[j] == 0 || i == j) continue;
+                    if (liquidity[j] > min && liquidity[j] < max) {
+                        noRoundingConfusion = false;
+                        break;
                     }
-                    vm.assume(noRoundingConfusion);
                 }
             }
+            vm.assume(noRoundingConfusion);
         }
+
+        // for (uint256 i = 0; i < 9; i++) {
+        //     vm.writeLine("./log.log", vm.toString(liquidity[i]));
+        // }
+        // vm.writeLine("./log.log", "");
 
         // Maximize the number of fee tiers to test stress the initialization
         Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
@@ -259,8 +267,7 @@ contract OracleInitializeTest is Test, Oracle {
 
         // Deploy fee tiers
         UniswapPoolAddress.PoolKey memory poolKey;
-        console.log("--------------------------------");
-        console.log("--------------------------------");
+        // ALSO RANDOMIZE THE ORDER OF SETTING UP THE POOLS!!
         for (uint256 i = 0; i < 9; i++) {
             if (liquidity[i] == 0 && period[i] == 0) {
                 _preparePoolNoInitialization(uniswapFeeTiers[i].fee);
@@ -277,8 +284,6 @@ contract OracleInitializeTest is Test, Oracle {
         UniswapPoolAddress.PoolKey memory bestPoolKey;
         uint256 bestScore;
         uint256 iBest;
-        console.log("--------------------------------");
-        console.log("--------------------------------");
         uint256[9] memory timeInc;
         for (uint256 i = 8; i >= 0 && i < 9; ) {
             // Time increments accumulate
@@ -294,29 +299,6 @@ contract OracleInitializeTest is Test, Oracle {
             period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
 
             uint256 aggLiquidity = liquidity[i] * period[i];
-            console.log("----------Test : %s", uniswapFeeTiers[i].fee, "----------");
-            console.log(
-                "liquidityCumulatives[1]: %s",
-                liquidity[i] == 0 ? 1 : (uint256(timeInc[0]) << 128) / liquidity[i]
-            );
-            console.log(
-                "liquidityCumulatives[0]: %s",
-                liquidity[i] == 0 ? 1 : (uint256(timeInc[0] - period[i]) << 128) / liquidity[i]
-            );
-            console.log("avLiquidity: %s", liquidity[i] == 0 ? 1 : liquidity[i]);
-            // if (period[i] != 0)
-            //     console.log(
-            //         "adjAvLiquidity: %s",
-            //         liquidity[i] == 0
-            //             ? 1
-            //             : (uint256(period[i]) << 128) /
-            //                 (((uint256(timeInc[0]) << 128) / liquidity[i]) -
-            //                     ((uint256(timeInc[0] - period[i]) << 128) / liquidity[i]))
-            //     );
-            console.log("aggLiquidity: %s", aggLiquidity == 0 ? 1 : aggLiquidity);
-            console.log("period: %s", period[i]);
-            console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
-
             uint256 tempScore = aggLiquidity == 0
                 ? 0
                 : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) / uint24(uniswapFeeTiers[i].tickSpacing) + 1;
@@ -326,10 +308,7 @@ contract OracleInitializeTest is Test, Oracle {
                 bestScore = tempScore;
                 bestPoolKey = poolKey;
             }
-            console.log("Score fee %s: %s", uniswapFeeTiers[i].fee, tempScore);
         }
-
-        console.log("BEST fee tier in TEST is: %s", uniswapFeeTiers[iBest].fee);
 
         // Check the correct fee tier is selected
         if (bestScore == 0) {

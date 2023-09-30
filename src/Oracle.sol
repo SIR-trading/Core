@@ -319,11 +319,8 @@ contract Oracle {
         uint256 score;
         UniswapOracleData memory oracleData;
         UniswapOracleData memory bestOracleData;
-        console.log("--------------------------------");
-        console.log("--------------------------------");
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve average liquidity
-            console.log("--------Contract : %s", uniswapFeeTiers[i].fee, "--------");
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
 
             if (oracleData.avLiquidity > 0) {
@@ -335,11 +332,6 @@ contract Oracle {
                 uint256 scoreTemp = oracleData.period == 0
                     ? 1
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
-                console.log("avLiquidity: %s", uint256(oracleData.avLiquidity));
-                console.log("aggLiquidity: %s", uint256(oracleData.avLiquidity) * oracleData.period);
-                console.log("period: %s", oracleData.period);
-                console.log("tickSpacing: %s", uint24(uniswapFeeTiers[i].tickSpacing));
-                console.log("Score: %s", scoreTemp);
 
                 // Update best score
                 if (scoreTemp > score) {
@@ -349,7 +341,6 @@ contract Oracle {
                 }
             }
         }
-        console.log("BEST fee tier in CONTRACT is: %s", uniswapFeeTiers[oracleState.indexFeeTier].fee);
 
         if (score == 0) revert NoFeeTiers();
         oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(uniswapFeeTiers.length);
@@ -651,10 +642,6 @@ contract Oracle {
         // Compute average liquidity
         // Liquidity is always >=1
         oracleData.avLiquidity = (uint160(interval[0]) << 128) / (liquidityCumulatives[1] - liquidityCumulatives[0]);
-        // console.log("fee %s, avLiquidity: %s", fee, oracleData.avLiquidity);
-        console.log("interval[0]: %s", interval[0]);
-        console.log("liquidityCumulatives[1]: %s", liquidityCumulatives[1]);
-        console.log("liquidityCumulatives[0]: %s", liquidityCumulatives[0]);
 
         // Aggregated price from Uniswap v3 are given as token1/token0
         oracleData.aggPriceTick = tickCumulatives[1] - tickCumulatives[0];
