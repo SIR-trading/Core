@@ -491,6 +491,7 @@ contract OracleGetPrice is Test, Oracle {
         (, int24 tick, uint16 observationIndex, uint16 observationCardinality, , , ) = IUniswapV3Pool(uniswapPool)
             .slot0();
         (uint32 blockTimestampOldest, , , ) = IUniswapV3Pool(uniswapPool).observations(observationIndex);
+
         assertEq(tickPriceX42, int256(tick) << 42);
         assertEq(observationIndex, 0);
         assertEq(observationCardinality, 1);

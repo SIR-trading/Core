@@ -421,15 +421,14 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
-            /** If this oracle has been initialized this block
-                AND the fee tier has been updated this block
-                AND the cardinality of the selected fee tier is 1,
-                THEN the period is unavailable.
-
-                In 1 block the problem will be fixed.
-             */
-            require(oracleData.period > 0);
-            // CHANGE THIS!!
+            if (oracleData.period == 0) {
+                /** If the fee tier has been updated this block
+                    AND the cardinality of the selected fee tier is 1,
+                    THEN the price is unavailable as TWAP.
+                */
+                (, int24 tick, , , , , ) = oracleData.uniswapPool.slot0();
+                oracleData.aggPriceTick = tick;
+            }
 
             // Updates price and emits event
             emit PriceUpdated(token0, token1, _updatePrice(oracleState, oracleData), oracleState.tickPriceX42);
@@ -442,8 +441,10 @@ contract Oracle {
                 // Get current fee tier and the one we wish to probe
                 UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
-                bool checkCardinalityCurrentFeeTier = false;
-                if (oracleState.indexFeeTier != oracleState.indexFeeTierProbeNext) {
+                bool checkCardinalityCurrentFeeTier;
+                if (oracleData.period == 0) {
+                    checkCardinalityCurrentFeeTier = true;
+                } else if (oracleState.indexFeeTier != oracleState.indexFeeTierProbeNext) {
                     /** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** /
                      ** ** THIS SECTION PROBES OTHER FEE TIERS IN CASE THEIR PRICE IS MORE RELIABLE THAN THE CURRENT ONE ** ** **
                      ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** */
