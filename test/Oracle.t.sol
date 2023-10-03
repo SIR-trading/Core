@@ -12,6 +12,7 @@ import {MockERC20} from "src/test/MockERC20.sol";
 import {LiquidityAmounts} from "v3-periphery/libraries/LiquidityAmounts.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {Tick} from "v3-core/libraries/Tick.sol";
+import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 
 contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
@@ -176,12 +177,12 @@ contract OracleInitializeTest is Test, Oracle {
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
-    function test_InitializeBNBAndWETH() public {
+    function test_InitializeUSDTAndWETH() public {
         vm.expectEmit(true, true, false, false, address(_oracle));
-        emit OracleInitialized(Addresses._ADDR_BNB, Addresses._ADDR_WETH, 0, 0, 0);
-        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_BNB);
+        emit OracleInitialized(Addresses._ADDR_WETH, Addresses._ADDR_USDT, 0, 0, 0);
+        _oracle.initialize(Addresses._ADDR_USDT, Addresses._ADDR_WETH);
 
-        _oracle.initialize(Addresses._ADDR_BNB, Addresses._ADDR_WETH); // No-op
+        _oracle.initialize(Addresses._ADDR_USDT, Addresses._ADDR_WETH); // No-op
     }
 
     function testFuzz_InitializeWithMultipleFeeTiers(
@@ -423,4 +424,170 @@ contract OracleInitializeTest is Test, Oracle {
 
         return sequence;
     }
+}
+
+contract OracleGetPrice is Test, Oracle {
+    using ABDKMath64x64 for int128;
+
+    event IncreaseObservationCardinalityNext(
+        uint16 observationCardinalityNextOld,
+        uint16 observationCardinalityNextNew
+    );
+
+    INonfungiblePositionManager positionManager =
+        INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
+    Oracle private _oracle;
+    MockERC20 private _tokenA;
+    MockERC20 private _tokenB;
+
+    uint256 immutable forkId;
+
+    constructor() {
+        // We fork after this tx because it allows us to test a 0-TWAP.
+        forkId = vm.createSelectFork("mainnet", 18149275);
+
+        _oracle = new Oracle();
+
+        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
+        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+    }
+
+    // function setUp() public {
+    //     vm.selectFork(forkId);
+    // }
+
+    function test_getPriceNotInitialized() public {
+        vm.expectRevert(Oracle.OracleNotInitialized.selector);
+        _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    }
+
+    // function test_getPriceNoTWAP() public {
+    //     uint24 fee = 100;
+    //     uint128 liquidity = 2 ** 64;
+
+    //     _preparePool(fee, liquidity, 0);
+
+    //     _oracle.initialize(address(_tokenA), address(_tokenB));
+
+    //     int64 tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
+
+    //     assertEq(tickPriceX42, 0);
+    // }
+
+    function test_getPriceNoTWAP() public {
+        // At block 18149275 the FRAX-alUSD oracle is updated.
+
+        // The time of the mainnet fork is suitable chosen to
+        _oracle.initialize(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
+
+        int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
+
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            Addresses._ADDR_FRAX,
+            Addresses._ADDR_ALUSD,
+            500
+        );
+        address uniswapPool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        (, int24 tick, uint16 observationIndex, uint16 observationCardinality, , , ) = IUniswapV3Pool(uniswapPool)
+            .slot0();
+        (uint32 blockTimestampOldest, , , ) = IUniswapV3Pool(uniswapPool).observations(observationIndex);
+        assertEq(tickPriceX42, int256(tick) << 42);
+        assertEq(observationIndex, 0);
+        assertEq(observationCardinality, 1);
+        assertEq(blockTimestampOldest, block.timestamp);
+    }
+
+    function test_getPriceUSDCAndWETH() public {
+        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+
+        int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+        // console.log("tickPriceX42:");
+        // console.logInt(tickPriceX42);
+
+        /** Notice that to compute the actual price of ETH/USDC we would do
+                1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
+            because of the decimals.
+         */
+        int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
+        int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
+        uint ETHdivUSDC = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
+
+        assertEq(ETHdivUSDC, 1604); // Price of ETH on Sep-13-2023
+    }
+
+    function test_getPriceUSDTAndWETH() public {
+        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
+
+        int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
+        console.log("tickPriceX42:");
+        console.logInt(tickPriceX42);
+
+        /** Notice that to compute the actual price of ETH/USDT we would do
+                1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT
+            because of the decimals.
+         */
+        int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
+        int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
+        uint ETHdivUSDT = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
+
+        assertEq(ETHdivUSDT, 1604); // Price of ETH on Sep-13-2023
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                        PRIVATE FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    // function _addLiquidity(
+    //     UniswapPoolAddress.PoolKey memory poolKey
+    // ) private returns (uint128 liquidityAdj) {
+    //     address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+
+    //     int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
+    //     (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+
+    //     int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
+    //     int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
+
+    //     // Compute amounts
+    //     (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
+    //         sqrtPriceX96,
+    //         TickMath.getSqrtRatioAtTick(minTick),
+    //         TickMath.getSqrtRatioAtTick(maxTick),
+    //         liquidity
+    //     );
+
+    //     if (amount0 != 0 || amount1 != 0) {
+    //         {
+    //             // Reorder tokens
+    //             MockERC20 token0 = MockERC20(poolKey.token0);
+    //             MockERC20 token1 = MockERC20(poolKey.token1);
+
+    //             // Mint mock tokens
+    //             token0.mint(amount0);
+    //             token1.mint(amount1);
+
+    //             // Approve tokens
+    //             token0.approve(address(positionManager), amount0);
+    //             token1.approve(address(positionManager), amount1);
+    //         }
+
+    //         // Add liquidity
+    //         (, liquidityAdj, , ) = positionManager.mint(
+    //             INonfungiblePositionManager.MintParams({
+    //                 token0: poolKey.token0,
+    //                 token1: poolKey.token1,
+    //                 fee: fee,
+    //                 tickLower: minTick,
+    //                 tickUpper: maxTick,
+    //                 amount0Desired: amount0,
+    //                 amount1Desired: amount1,
+    //                 amount0Min: 0,
+    //                 amount1Min: 0,
+    //                 recipient: address(this),
+    //                 deadline: block.timestamp
+    //             })
+    //         );
+
+    //     }
+    // }
 }

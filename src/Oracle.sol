@@ -172,22 +172,22 @@ contract Oracle {
 
     event UniswapFeeTierAdded(uint24 indexed fee);
     event OracleInitialized(
-        address indexed tokenA,
-        address indexed tokenB,
+        address indexed token0,
+        address indexed token1,
         uint24 indexed feeTierSelected,
         uint160 averageLiquidity,
         uint40 period
     );
     event OracleFeeTierChanged(
-        address indexed tokenA,
-        address indexed tokenB,
+        address indexed token0,
+        address indexed token1,
         uint24 indexed feeTierPrevious,
         uint24 feeTierSelected
     );
-    event PriceUpdated(address indexed tokenA, address indexed tokenB, bool priceTruncated, int64 priceTickX42);
+    event PriceUpdated(address indexed token0, address indexed token1, bool priceTruncated, int64 priceTickX42);
     event UniswapOracleDataRetrieved(
-        address indexed tokenA,
-        address indexed tokenB,
+        address indexed token0,
+        address indexed token1,
         uint24 indexed fee,
         int56 aggPriceTick,
         uint160 avLiquidity,
@@ -219,7 +219,7 @@ contract Oracle {
         uint40 timeStampPrice; // Timestamp of the last stored price
         uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
         uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
-        uint40 timeStampTier; // Timestamp of the last stored price
+        uint40 timeStampFeeTier; // Timestamp of the last probed fee tier
         bool initialized; // Whether the oracle has been initialized
         UniswapFeeTier uniswapFeeTier; // Uniswap v3 fee tier currently being used as oracle
     }
@@ -235,7 +235,7 @@ contract Oracle {
     /**
      * State variables
      */
-    mapping(address tokenA => mapping(address tokenB => OracleState)) public oracleStates;
+    mapping(address token0 => mapping(address token1 => OracleState)) public oracleStates;
     uint private _uniswapExtraFeeTiers; // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier
 
     /*////////////////////////////////////////////////////////////////
@@ -270,30 +270,32 @@ contract Oracle {
      * @return the TWAP price of the pair of tokens
      */
     function getPrice(address collateralToken, address debtToken) external view returns (int64) {
-        (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
+        (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle state
-        OracleState memory oracleState = oracleStates[tokenA][tokenB];
+        OracleState memory oracleState = oracleStates[token0][token1];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Get latest price if not stored
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
-            UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
+            UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
+            console.log("period", oracleData.period);
 
-            /** If the fee tier has been updated this block
-                AND the cardinality of the selected fee tier is 1,
-                THEN the price is unavailable.
-
-                In 1 block the problem will be fixed.
-             */
-            require(oracleData.period > 0);
+            if (oracleData.period == 0) {
+                /** If the fee tier has been updated this block
+                    AND the cardinality of the selected fee tier is 1,
+                    THEN the price is unavailable as TWAP.
+                */
+                (, int24 tick, , , , , ) = oracleData.uniswapPool.slot0();
+                oracleData.aggPriceTick = tick;
+            }
 
             _updatePrice(oracleState, oracleData);
         }
 
         // Invert price if necessary
-        if (collateralToken == tokenB) return -oracleState.tickPriceX42;
+        if (collateralToken == token1) return -oracleState.tickPriceX42;
         return oracleState.tickPriceX42;
     }
 
@@ -399,19 +401,19 @@ contract Oracle {
      * @notice The order of the tokens does not matter for updating the oracle state, it only matters if we need to retrie the price
      */
     function updateOracleState(address collateralToken, address debtToken) external returns (int64) {
-        (address tokenA, address tokenB) = _orderTokens(collateralToken, debtToken);
+        (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle state
-        OracleState memory oracleState = oracleStates[tokenA][tokenB];
+        OracleState memory oracleState = oracleStates[token0][token1];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Price is updated once per block at most
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
-            UniswapOracleData memory oracleData = _uniswapOracleData(tokenA, tokenB, oracleState.uniswapFeeTier.fee);
+            UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
             emit UniswapOracleDataRetrieved(
-                tokenA,
-                tokenB,
+                token0,
+                token1,
                 oracleState.uniswapFeeTier.fee,
                 oracleData.aggPriceTick,
                 oracleData.avLiquidity,
@@ -427,15 +429,16 @@ contract Oracle {
                 In 1 block the problem will be fixed.
              */
             require(oracleData.period > 0);
+            // CHANGE THIS!!
 
             // Updates price and emits event
-            emit PriceUpdated(tokenA, tokenB, _updatePrice(oracleState, oracleData), oracleState.tickPriceX42);
+            emit PriceUpdated(token0, token1, _updatePrice(oracleState, oracleData), oracleState.tickPriceX42);
 
             // Update timestamp
             oracleState.timeStampPrice = uint40(block.timestamp);
 
             // Fee tier is updated once per _DURATION_UPDATE_FEE_TIER at most
-            if (block.timestamp >= oracleState.timeStampTier + _DURATION_UPDATE_FEE_TIER) {
+            if (block.timestamp >= oracleState.timeStampFeeTier + _DURATION_UPDATE_FEE_TIER) {
                 // Get current fee tier and the one we wish to probe
                 UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
@@ -447,15 +450,15 @@ contract Oracle {
 
                     // Retrieve oracle data
                     UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
-                        tokenA,
-                        tokenB,
+                        token0,
+                        token1,
                         uniswapFeeTierProbed.fee
                     );
 
                     if (oracleDataProbed.avLiquidity > 0) {
                         emit UniswapOracleDataRetrieved(
-                            tokenA,
-                            tokenB,
+                            token0,
+                            token1,
                             uniswapFeeTierProbed.fee,
                             oracleDataProbed.aggPriceTick,
                             oracleDataProbed.avLiquidity,
@@ -488,8 +491,8 @@ contract Oracle {
                             else if (oracleDataProbed.period >= TWAP_DURATION) {
                                 oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
                                 emit OracleFeeTierChanged(
-                                    tokenA,
-                                    tokenB,
+                                    token0,
+                                    token1,
                                     oracleState.uniswapFeeTier.fee,
                                     uniswapFeeTierProbed.fee
                                 );
@@ -518,15 +521,15 @@ contract Oracle {
                 oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
 
                 // Update timestamp
-                oracleState.timeStampTier = uint40(block.timestamp);
+                oracleState.timeStampFeeTier = uint40(block.timestamp);
             }
 
             // Save new oracle state to storage
-            oracleStates[tokenA][tokenB] = oracleState;
+            oracleStates[token0][token1] = oracleState;
         }
 
         // Invert price if necessary
-        if (collateralToken == tokenB) return -oracleState.tickPriceX42;
+        if (collateralToken == token1) return -oracleState.tickPriceX42;
         return oracleState.tickPriceX42;
     }
 
@@ -535,12 +538,12 @@ contract Oracle {
     ////////////////////////////////////////////////////////////////*/
 
     function _uniswapOracleData(
-        address tokenA,
-        address tokenB,
+        address token0,
+        address token1,
         uint24 fee
     ) private view returns (UniswapOracleData memory oracleData) {
         // Retrieve Uniswap pool
-        oracleData.uniswapPool = _getUniswapPool(tokenA, tokenB, fee);
+        oracleData.uniswapPool = _getUniswapPool(token0, token1, fee);
 
         // If pool does not exist, no-op, return all parameters 0.
         if (address(oracleData.uniswapPool).code.length == 0) return oracleData;
@@ -659,18 +662,26 @@ contract Oracle {
     ) internal view returns (bool truncated) {
         unchecked {
             // Compute price (buy operating with int256 we do not need to check for of/uf)
-            int256 tickPriceX42 = (int256(oracleData.aggPriceTick) << 42) / int256(uint256(oracleData.period));
+            int256 tickPriceX42 = (int256(oracleData.aggPriceTick) << 42);
 
-            // Truncate price if necessary
-            int256 tickMaxIncrement = _MAX_TICK_INC_PER_SEC *
-                int256((uint256(block.timestamp) - uint256(oracleState.timeStampPrice)));
-            if (tickPriceX42 > int256(oracleState.tickPriceX42) + tickMaxIncrement) {
-                oracleState.tickPriceX42 += int64(tickMaxIncrement);
-                truncated = true;
-            } else if (tickPriceX42 + tickMaxIncrement < int256(oracleState.tickPriceX42)) {
-                oracleState.tickPriceX42 -= int64(tickMaxIncrement);
-                truncated = true;
-            } else oracleState.tickPriceX42 = int64(tickPriceX42);
+            /** When period==0, aggPriceTick is in fact the instantaneous price
+                When period==1, dividing by period does not change tickPriceX42
+             */
+            if (oracleData.period > 1) tickPriceX42 /= int256(uint256(oracleData.period));
+
+            if (oracleState.timeStampPrice == 0) oracleState.tickPriceX42 = int64(tickPriceX42);
+            else {
+                // Truncate price if necessary
+                int256 tickMaxIncrement = _MAX_TICK_INC_PER_SEC *
+                    int256((uint256(block.timestamp) - uint256(oracleState.timeStampPrice)));
+                if (tickPriceX42 > int256(oracleState.tickPriceX42) + tickMaxIncrement) {
+                    oracleState.tickPriceX42 += int64(tickMaxIncrement);
+                    truncated = true;
+                } else if (tickPriceX42 + tickMaxIncrement < int256(oracleState.tickPriceX42)) {
+                    oracleState.tickPriceX42 -= int64(tickMaxIncrement);
+                    truncated = true;
+                } else oracleState.tickPriceX42 = int64(tickPriceX42);
+            }
         }
     }
 
