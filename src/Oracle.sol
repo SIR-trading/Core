@@ -229,7 +229,7 @@ contract Oracle {
      */
     uint256 private constant _DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int256 private constant _MAX_TICK_INC_PER_SEC = 1 << 42;
-    uint40 private constant _TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of _TWAP_DELTA.
+    uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
     uint40 public constant TWAP_DURATION = 30 minutes;
 
     /**
@@ -408,6 +408,8 @@ contract Oracle {
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Price is updated once per block at most
+        // console.log("block.timestamp", block.timestamp);
+        // console.log("oracleState.timeStampPrice", oracleState.timeStampPrice);
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
@@ -421,6 +423,7 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
+            console.log("oracleData.period", oracleData.period);
             if (oracleData.period == 0) {
                 /** If the fee tier has been updated this block
                     AND the cardinality of the selected fee tier is 1,
@@ -624,7 +627,9 @@ contract Oracle {
             if (interval[0] == 0) {
                 // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
                 oracleData.avLiquidity = 1;
-                cardinalityNeeded = (_TWAP_DELTA - 1) / (12 seconds) + 1;
+                cardinalityNeeded = (TWAP_DELTA - 1) / (12 seconds) + 1;
+                console.log("cardinalityNeeded", cardinalityNeeded);
+                console.log("cardinalityNext", cardinalityNext);
                 if (cardinalityNeeded > cardinalityNext) oracleData.cardinalityToIncrease = uint16(cardinalityNeeded);
                 return oracleData;
             }
@@ -637,10 +642,10 @@ contract Oracle {
 
             /**
              * Check if cardinality must increase,
-             * if so we add a _TWAP_DELTA increment taking into consideration that every block takes in average 12 seconds
+             * if so we add a TWAP_DELTA increment taking into consideration that every block takes in average 12 seconds
              */
             if (cardinalityNeeded > cardinalityNext)
-                oracleData.cardinalityToIncrease = cardinalityNext + uint16((_TWAP_DELTA - 1) / (12 seconds)) + 1;
+                oracleData.cardinalityToIncrease = cardinalityNext + uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
         }
 
         // Compute average liquidity

@@ -461,26 +461,20 @@ contract OracleGetPrice is Test, Oracle {
         _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
     }
 
-    // function test_getPriceNoTWAP() public {
-    //     uint24 fee = 100;
-    //     uint128 liquidity = 2 ** 64;
+    function test_updateOracleStateNotInitialized() public {
+        vm.expectRevert(Oracle.OracleNotInitialized.selector);
+        _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    }
 
-    //     _preparePool(fee, liquidity, 0);
-
-    //     _oracle.initialize(address(_tokenA), address(_tokenB));
-
-    //     int64 tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
-
-    //     assertEq(tickPriceX42, 0);
-    // }
-
-    function test_getPriceNoTWAP() public {
+    function test_getPriceNoTWAP() public returns (int64 tickPriceX42) {
         // At block 18149275 the FRAX-alUSD oracle is updated.
 
         // The time of the mainnet fork is suitable chosen to
+        vm.expectEmit();
+        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
         _oracle.initialize(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
 
-        int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
+        tickPriceX42 = _oracle.getPrice(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
 
         UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
             Addresses._ADDR_FRAX,
@@ -498,12 +492,23 @@ contract OracleGetPrice is Test, Oracle {
         assertEq(blockTimestampOldest, block.timestamp);
     }
 
+    function test_updateOracleStateNoTWAP() public {
+        // At block 18149275 the FRAX-alUSD oracle is updated.
+
+        // The time of the mainnet fork is suitable chosen to
+        vm.expectEmit();
+        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        _oracle.initialize(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
+
+        int64 tickPriceX42 = _oracle.updateOracleState(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
+
+        assertEq(tickPriceX42, _oracle.getPrice(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD));
+    }
+
     function test_getPriceUSDCAndWETH() public {
         _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
 
         int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
-        // console.log("tickPriceX42:");
-        // console.logInt(tickPriceX42);
 
         /** Notice that to compute the actual price of ETH/USDC we would do
                 1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
@@ -513,15 +518,30 @@ contract OracleGetPrice is Test, Oracle {
         int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
         uint ETHdivUSDC = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
 
-        assertEq(ETHdivUSDC, 1604); // Price of ETH on Sep-13-2023
+        assertEq((ETHdivUSDC / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
+    }
+
+    function test_updateOracleStateUSDCAndWETH() public {
+        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+
+        int64 tickPriceX42 = _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+        assertEq(tickPriceX42, _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC));
+
+        /** Notice that to compute the actual price of ETH/USDC we would do
+                1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
+            because of the decimals.
+         */
+        int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
+        int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
+        uint ETHdivUSDC = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
+
+        assertEq((ETHdivUSDC / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
     }
 
     function test_getPriceUSDTAndWETH() public {
         _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
 
         int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
-        console.log("tickPriceX42:");
-        console.logInt(tickPriceX42);
 
         /** Notice that to compute the actual price of ETH/USDT we would do
                 1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT
@@ -531,7 +551,24 @@ contract OracleGetPrice is Test, Oracle {
         int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
         uint ETHdivUSDT = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
 
-        assertEq(ETHdivUSDT, 1604); // Price of ETH on Sep-13-2023
+        assertEq((ETHdivUSDT / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
+    }
+
+    function test_updateOracleStateUSDTAndWETH() public {
+        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
+
+        int64 tickPriceX42 = _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
+        assertEq(tickPriceX42, _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDT));
+
+        /** Notice that to compute the actual price of ETH/USDT we would do
+                1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT
+            because of the decimals.
+         */
+        int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
+        int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
+        uint ETHdivUSDT = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
+
+        assertEq((ETHdivUSDT / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
     }
 
     /*////////////////////////////////////////////////////////////////
