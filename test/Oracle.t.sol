@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 import {INonfungiblePositionManager} from "v3-periphery/interfaces/INonfungibleTokenPositionDescriptor.sol";
+import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {UniswapPoolAddress} from "src/libraries/UniswapPoolAddress.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
@@ -436,6 +437,7 @@ contract OracleGetPrice is Test, Oracle {
 
     INonfungiblePositionManager positionManager =
         INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
@@ -571,61 +573,156 @@ contract OracleGetPrice is Test, Oracle {
         assertEq((ETHdivUSDT / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
     }
 
+    function test_getPriceTruncated(uint16 periodTick0) public {
+        // MOVE THE POOL INSTANTIATION TO THE CONSTRUCTOR
+
+        uint256 maxPeriodTick0 = TWAP_DURATION -
+            (uint256(TWAP_DURATION) ** 2 * uint64(MAX_TICK_INC_PER_SEC)) /
+            (uint256(887271) << 42) -
+            1;
+        periodTick0 = uint16(bound(periodTick0, 0, maxPeriodTick0));
+
+        uint24 feeTier = 100;
+        uint128 liquidity = 2 ** 10; // Small liquidity to push the price easily
+        _preparePool(feeTier, liquidity);
+
+        vm.expectEmit();
+        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        _oracle.initialize(address(_tokenA), address(_tokenB));
+
+        // Store price in the oracle
+        int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        assertEq(tickPriceX42, 0);
+
+        // Skip ahead so Uni v3 oracle can be update in the new positions
+        skip(periodTick0);
+
+        // Move price to tick = 887271
+        _swap(feeTier, false, 10 ** 30);
+
+        // Skip ahead so oracle can be manipulated with the extreme tick
+        skip(TWAP_DURATION - periodTick0);
+
+        tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
+        assertEq(tickPriceX42, -int40(TWAP_DURATION) * MAX_TICK_INC_PER_SEC);
+
+        // ADD TRUNCATION EVENT!
+        tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        assertEq(tickPriceX42, -int40(TWAP_DURATION) * MAX_TICK_INC_PER_SEC);
+    }
+
+    function test_getPriceNotTruncated(uint16 periodTick0) public {
+        // TO FINISH
+    }
+
     /*////////////////////////////////////////////////////////////////
                         PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // function _addLiquidity(
-    //     UniswapPoolAddress.PoolKey memory poolKey
-    // ) private returns (uint128 liquidityAdj) {
-    //     address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+    function _preparePool(
+        uint24 fee,
+        uint128 liquidity
+    ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+        // Start at price = 1 or tick = 0
+        uint160 sqrtPriceX96 = 2 ** 96;
 
-    //     int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
-    //     (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+        // Create and initialize Uniswap v3 pool
+        poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
+        positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
 
-    //     int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
-    //     int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
+        if (liquidity > 0) {
+            // Compute min and max tick
+            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
+            int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
+            int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
 
-    //     // Compute amounts
-    //     (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
-    //         sqrtPriceX96,
-    //         TickMath.getSqrtRatioAtTick(minTick),
-    //         TickMath.getSqrtRatioAtTick(maxTick),
-    //         liquidity
-    //     );
+            // Compute amounts
+            (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(minTick),
+                TickMath.getSqrtRatioAtTick(maxTick),
+                liquidity
+            );
 
-    //     if (amount0 != 0 || amount1 != 0) {
-    //         {
-    //             // Reorder tokens
-    //             MockERC20 token0 = MockERC20(poolKey.token0);
-    //             MockERC20 token1 = MockERC20(poolKey.token1);
+            if (amount0 != 0 || amount1 != 0) {
+                {
+                    // Reorder tokens
+                    MockERC20 token0 = MockERC20(poolKey.token0);
+                    MockERC20 token1 = MockERC20(poolKey.token1);
 
-    //             // Mint mock tokens
-    //             token0.mint(amount0);
-    //             token1.mint(amount1);
+                    // Mint mock tokens
+                    token0.mint(amount0);
+                    token1.mint(amount1);
 
-    //             // Approve tokens
-    //             token0.approve(address(positionManager), amount0);
-    //             token1.approve(address(positionManager), amount1);
-    //         }
+                    // Approve tokens
+                    token0.approve(address(positionManager), amount0);
+                    token1.approve(address(positionManager), amount1);
+                }
 
-    //         // Add liquidity
-    //         (, liquidityAdj, , ) = positionManager.mint(
-    //             INonfungiblePositionManager.MintParams({
-    //                 token0: poolKey.token0,
-    //                 token1: poolKey.token1,
-    //                 fee: fee,
-    //                 tickLower: minTick,
-    //                 tickUpper: maxTick,
-    //                 amount0Desired: amount0,
-    //                 amount1Desired: amount1,
-    //                 amount0Min: 0,
-    //                 amount1Min: 0,
-    //                 recipient: address(this),
-    //                 deadline: block.timestamp
-    //             })
-    //         );
+                // Add liquidity
+                (, liquidityAdj, , ) = positionManager.mint(
+                    INonfungiblePositionManager.MintParams({
+                        token0: poolKey.token0,
+                        token1: poolKey.token1,
+                        fee: fee,
+                        tickLower: minTick,
+                        tickUpper: maxTick,
+                        amount0Desired: amount0,
+                        amount1Desired: amount1,
+                        amount0Min: 0,
+                        amount1Min: 0,
+                        recipient: address(this),
+                        deadline: block.timestamp
+                    })
+                );
+            }
+        }
+    }
 
-    //     }
-    // }
+    function _swap(uint24 feeTier, bool buyTokenA, uint256 amountIn) private returns (uint256 amountOut) {
+        // Mint mock tokens
+        MockERC20 tokenIn;
+        MockERC20 tokenOut;
+        if (buyTokenA) {
+            tokenIn = _tokenB;
+            tokenOut = _tokenA;
+        } else {
+            tokenIn = _tokenA;
+            tokenOut = _tokenB;
+        }
+
+        // Mint and approve tokens
+        tokenIn.mint(amountIn);
+        tokenIn.approve(address(swapRouter), amountIn);
+
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            address(tokenIn),
+            address(tokenOut),
+            feeTier
+        );
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        (, int24 tick, , , , , ) = IUniswapV3Pool(pool).slot0();
+        console.log("tick:");
+        console.logInt(tick);
+
+        // Swap
+        amountOut = swapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(tokenIn),
+                tokenOut: address(tokenOut),
+                fee: feeTier,
+                recipient: address(this),
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        console.log("amountOut: %s", amountOut);
+
+        (, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
+        console.log("tick:");
+        console.logInt(tick);
+    }
 }

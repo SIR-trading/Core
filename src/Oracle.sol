@@ -228,7 +228,7 @@ contract Oracle {
      * Constants
      */
     uint256 private constant _DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
-    int256 private constant _MAX_TICK_INC_PER_SEC = 1 << 42;
+    int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
     uint40 public constant TWAP_DURATION = 30 minutes;
 
@@ -280,7 +280,6 @@ contract Oracle {
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
-            console.log("period", oracleData.period);
 
             if (oracleData.period == 0) {
                 /** If the fee tier has been updated this block
@@ -423,7 +422,6 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
-            console.log("oracleData.period", oracleData.period);
             if (oracleData.period == 0) {
                 /** If the fee tier has been updated this block
                     AND the cardinality of the selected fee tier is 1,
@@ -434,7 +432,8 @@ contract Oracle {
             }
 
             // Updates price and emits event
-            emit PriceUpdated(token0, token1, _updatePrice(oracleState, oracleData), oracleState.tickPriceX42);
+            bool priceTruncated = _updatePrice(oracleState, oracleData);
+            emit PriceUpdated(token0, token1, priceTruncated, oracleState.tickPriceX42);
 
             // Update timestamp
             oracleState.timeStampPrice = uint40(block.timestamp);
@@ -628,8 +627,8 @@ contract Oracle {
                 // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
                 oracleData.avLiquidity = 1;
                 cardinalityNeeded = (TWAP_DELTA - 1) / (12 seconds) + 1;
-                console.log("cardinalityNeeded", cardinalityNeeded);
-                console.log("cardinalityNext", cardinalityNext);
+                // console.log("cardinalityNeeded", cardinalityNeeded);
+                // console.log("cardinalityNext", cardinalityNext);
                 if (cardinalityNeeded > cardinalityNext) oracleData.cardinalityToIncrease = uint16(cardinalityNeeded);
                 return oracleData;
             }
@@ -678,7 +677,7 @@ contract Oracle {
             if (oracleState.timeStampPrice == 0) oracleState.tickPriceX42 = int64(tickPriceX42);
             else {
                 // Truncate price if necessary
-                int256 tickMaxIncrement = _MAX_TICK_INC_PER_SEC *
+                int256 tickMaxIncrement = MAX_TICK_INC_PER_SEC *
                     int256((uint256(block.timestamp) - uint256(oracleState.timeStampPrice)));
                 if (tickPriceX42 > int256(oracleState.tickPriceX42) + tickMaxIncrement) {
                     oracleState.tickPriceX42 += int64(tickMaxIncrement);
