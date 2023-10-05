@@ -184,16 +184,7 @@ contract Oracle {
         uint24 indexed feeTierPrevious,
         uint24 feeTierSelected
     );
-    event PriceUpdated(address indexed token0, address indexed token1, bool priceTruncated, int64 priceTickX42);
-    event UniswapOracleDataRetrieved(
-        address indexed token0,
-        address indexed token1,
-        uint24 indexed fee,
-        int56 aggPriceTick,
-        uint160 avLiquidity,
-        uint40 period,
-        uint16 cardinalityToIncrease
-    );
+    event PriceUpdated(address indexed token0, address indexed token1, bool indexed priceTruncated, int64 priceTickX42);
 
     /**
      * Parameters of a Uniswap v3 tier.
@@ -412,15 +403,6 @@ contract Oracle {
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
-            emit UniswapOracleDataRetrieved(
-                token0,
-                token1,
-                oracleState.uniswapFeeTier.fee,
-                oracleData.aggPriceTick,
-                oracleData.avLiquidity,
-                oracleData.period,
-                oracleData.cardinalityToIncrease
-            );
 
             if (oracleData.period == 0) {
                 /** If the fee tier has been updated this block
@@ -459,16 +441,6 @@ contract Oracle {
                     );
 
                     if (oracleDataProbed.avLiquidity > 0) {
-                        emit UniswapOracleDataRetrieved(
-                            token0,
-                            token1,
-                            uniswapFeeTierProbed.fee,
-                            oracleDataProbed.aggPriceTick,
-                            oracleDataProbed.avLiquidity,
-                            oracleDataProbed.period,
-                            oracleDataProbed.cardinalityToIncrease
-                        );
-
                         /** Compute scores.
                 
                             Check the scores for the current fee tier and the probed one.
