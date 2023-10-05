@@ -441,6 +441,7 @@ contract OracleGetPrice is Test, Oracle {
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
+    UniswapPoolAddress.PoolKey private _poolKey;
 
     uint256 immutable forkId;
 
@@ -452,6 +453,14 @@ contract OracleGetPrice is Test, Oracle {
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+
+        uint24 feeTier = 100;
+        uint128 liquidity = 2 ** 10; // Small liquidity to push the price easily
+        (, _poolKey) = _preparePool(feeTier, liquidity);
+
+        vm.expectEmit();
+        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
     // function setUp() public {
@@ -511,23 +520,7 @@ contract OracleGetPrice is Test, Oracle {
         _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
 
         int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
-
-        /** Notice that to compute the actual price of ETH/USDC we would do
-                1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
-            because of the decimals.
-         */
-        int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
-        int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
-        uint ETHdivUSDC = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
-
-        assertEq((ETHdivUSDC / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
-    }
-
-    function test_updateOracleStateUSDCAndWETH() public {
-        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
-
-        int64 tickPriceX42 = _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
-        assertEq(tickPriceX42, _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDC));
+        assertEq(tickPriceX42, _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC));
 
         /** Notice that to compute the actual price of ETH/USDC we would do
                 1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
@@ -544,6 +537,7 @@ contract OracleGetPrice is Test, Oracle {
         _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
 
         int64 tickPriceX42 = _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
+        assertEq(tickPriceX42, _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDT));
 
         /** Notice that to compute the actual price of ETH/USDT we would do
                 1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT
@@ -556,39 +550,12 @@ contract OracleGetPrice is Test, Oracle {
         assertEq((ETHdivUSDT / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
     }
 
-    function test_updateOracleStateUSDTAndWETH() public {
-        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
-
-        int64 tickPriceX42 = _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDT);
-        assertEq(tickPriceX42, _oracle.getPrice(Addresses._ADDR_WETH, Addresses._ADDR_USDT));
-
-        /** Notice that to compute the actual price of ETH/USDT we would do
-                1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT
-            because of the decimals.
-         */
-        int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
-        int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
-        uint ETHdivUSDT = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
-
-        assertEq((ETHdivUSDT / 100) * 100, 1600); // Price of ETH on Sep-13-2023 rounded to 2 digits
-    }
-
-    function test_getPriceTruncated(uint16 periodTick0) public {
-        // MOVE THE POOL INSTANTIATION TO THE CONSTRUCTOR
-
+    function testFuzz_getPriceTruncated(uint16 periodTick0) public {
         uint256 maxPeriodTick0 = TWAP_DURATION -
             (uint256(TWAP_DURATION) ** 2 * uint64(MAX_TICK_INC_PER_SEC)) /
             (uint256(887271) << 42) -
             1;
         periodTick0 = uint16(bound(periodTick0, 0, maxPeriodTick0));
-
-        uint24 feeTier = 100;
-        uint128 liquidity = 2 ** 10; // Small liquidity to push the price easily
-        _preparePool(feeTier, liquidity);
-
-        vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
-        _oracle.initialize(address(_tokenA), address(_tokenB));
 
         // Store price in the oracle
         int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
@@ -598,7 +565,7 @@ contract OracleGetPrice is Test, Oracle {
         skip(periodTick0);
 
         // Move price to tick = 887271
-        _swap(feeTier, false, 10 ** 30);
+        _swap(_poolKey.fee, false, 10 ** 30);
 
         // Skip ahead so oracle can be manipulated with the extreme tick
         skip(TWAP_DURATION - periodTick0);
@@ -606,13 +573,48 @@ contract OracleGetPrice is Test, Oracle {
         tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
         assertEq(tickPriceX42, -int40(TWAP_DURATION) * MAX_TICK_INC_PER_SEC);
 
-        // ADD TRUNCATION EVENT!
+        vm.expectEmit();
+        emit PriceUpdated(
+            _poolKey.token0,
+            _poolKey.token1,
+            true,
+            address(_tokenA) == _poolKey.token0 ? tickPriceX42 : -tickPriceX42
+        );
         tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
         assertEq(tickPriceX42, -int40(TWAP_DURATION) * MAX_TICK_INC_PER_SEC);
     }
 
-    function test_getPriceNotTruncated(uint16 periodTick0) public {
-        // TO FINISH
+    function testFuzz_getPriceNotTruncated(uint16 periodTick0) public {
+        uint256 minPeriodTick0 = TWAP_DURATION -
+            (uint256(TWAP_DURATION) ** 2 * uint64(MAX_TICK_INC_PER_SEC)) /
+            (uint256(887271) << 42);
+        periodTick0 = uint16(bound(periodTick0, minPeriodTick0, TWAP_DURATION));
+
+        // Store price in the oracle
+        int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        assertEq(tickPriceX42, 0);
+
+        // Skip ahead so Uni v3 oracle can be update in the new positions
+        skip(periodTick0);
+
+        // Move price to tick = 887271
+        _swap(_poolKey.fee, false, 10 ** 30);
+
+        // Skip ahead so oracle can be manipulated with the extreme tick
+        skip(TWAP_DURATION - periodTick0);
+
+        int64 expTickPriceX42 = int64(
+            ((int256(887271) << 42) * int40(TWAP_DURATION - periodTick0)) / int40(TWAP_DURATION)
+        );
+        tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
+        if (address(_tokenA) == _poolKey.token0) assertEq(tickPriceX42, expTickPriceX42);
+        else assertEq(tickPriceX42, -expTickPriceX42);
+
+        vm.expectEmit();
+        emit PriceUpdated(_poolKey.token0, _poolKey.token1, false, expTickPriceX42);
+        tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        if (address(_tokenA) == _poolKey.token0) assertEq(tickPriceX42, expTickPriceX42);
+        else assertEq(tickPriceX42, -expTickPriceX42);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -724,5 +726,35 @@ contract OracleGetPrice is Test, Oracle {
         (, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
         console.log("tick:");
         console.logInt(tick);
+    }
+}
+
+contract OracleProbingFeeTiers is Test, Oracle {
+    INonfungiblePositionManager positionManager =
+        INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
+    Oracle private _oracle;
+    MockERC20 private _tokenA;
+    MockERC20 private _tokenB;
+    UniswapPoolAddress.PoolKey private _poolKey;
+
+    uint256 immutable forkId;
+
+    constructor() {
+        // We fork after this tx because it allows us to test a 0-TWAP.
+        forkId = vm.createSelectFork("mainnet", 18149275);
+
+        _oracle = new Oracle();
+
+        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
+        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+
+        uint24 feeTier = 100;
+        uint128 liquidity = 2 ** 10; // Small liquidity to push the price easily
+        (, _poolKey) = _preparePool(feeTier, liquidity);
+
+        vm.expectEmit();
+        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 }
