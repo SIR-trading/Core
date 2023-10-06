@@ -10,6 +10,7 @@ library Addresses {
     address internal constant _ADDR_USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address internal constant _ADDR_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant _ADDR_USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address internal constant _ADDR_USDC_MINTER = 0x5B6122C109B78C6755486966148C1D70a50A47D7;
     address internal constant _ADDR_FRAX = 0x853d955aCEf822Db058eb8505911ED77F175b99e;
     address internal constant _ADDR_ALUSD = 0xBC6DA0FE9aD5f3b0d58160288917AA56653660E9;
 }

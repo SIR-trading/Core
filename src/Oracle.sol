@@ -171,11 +171,20 @@ contract Oracle {
     error OracleNotInitialized();
 
     event UniswapFeeTierAdded(uint24 indexed fee);
+    event UniswapOracleProbed(
+        address indexed tokenA,
+        address indexed tokenB,
+        uint24 indexed fee,
+        int56 aggPriceTick,
+        uint160 avLiquidity,
+        uint40 period,
+        uint16 cardinalityToIncrease
+    );
     event OracleInitialized(
         address indexed token0,
         address indexed token1,
         uint24 indexed feeTierSelected,
-        uint160 averageLiquidity,
+        uint160 avLiquidity,
         uint40 period
     );
     event OracleFeeTierChanged(
@@ -218,7 +227,7 @@ contract Oracle {
     /**
      * Constants
      */
-    uint256 private constant _DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
+    uint256 internal constant DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
     uint40 public constant TWAP_DURATION = 30 minutes;
@@ -314,8 +323,23 @@ contract Oracle {
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
+            emit UniswapOracleProbed(
+                tokenA,
+                tokenB,
+                uniswapFeeTiers[i].fee,
+                oracleData.aggPriceTick,
+                oracleData.avLiquidity,
+                oracleData.period,
+                oracleData.cardinalityToIncrease
+            );
 
             if (oracleData.avLiquidity > 0) {
+                // console.log("_________________________________________");
+                // console.log("uniswapFeeTiers[i].fee", uniswapFeeTiers[i].fee);
+                // console.log("oracleData.avLiquidity", oracleData.avLiquidity);
+                // console.log("oracleData.period", oracleData.period);
+                // console.log("oracleData.cardinalityToIncrease", oracleData.cardinalityToIncrease);
+
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
                     we do not want to select a fee tier whose liquidity is easy manipulated.
@@ -324,6 +348,7 @@ contract Oracle {
                 uint256 scoreTemp = oracleData.period == 0
                     ? 1
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
+                // console.log("score", scoreTemp);
 
                 // Update best score
                 if (scoreTemp > score) {
@@ -403,6 +428,15 @@ contract Oracle {
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
+            emit UniswapOracleProbed(
+                token0,
+                token1,
+                oracleState.uniswapFeeTier.fee,
+                oracleData.aggPriceTick,
+                oracleData.avLiquidity,
+                oracleData.period,
+                oracleData.cardinalityToIncrease
+            );
 
             if (oracleData.period == 0) {
                 /** If the fee tier has been updated this block
@@ -420,8 +454,10 @@ contract Oracle {
             // Update timestamp
             oracleState.timeStampPrice = uint40(block.timestamp);
 
-            // Fee tier is updated once per _DURATION_UPDATE_FEE_TIER at most
-            if (block.timestamp >= oracleState.timeStampFeeTier + _DURATION_UPDATE_FEE_TIER) {
+            // Fee tier is updated once per DURATION_UPDATE_FEE_TIER at most
+            console.log("block.timestamp", block.timestamp);
+            console.log("Next time to probe", oracleState.timeStampFeeTier + DURATION_UPDATE_FEE_TIER);
+            if (block.timestamp >= oracleState.timeStampFeeTier + DURATION_UPDATE_FEE_TIER) {
                 // Get current fee tier and the one we wish to probe
                 UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
@@ -438,6 +474,15 @@ contract Oracle {
                         token0,
                         token1,
                         uniswapFeeTierProbed.fee
+                    );
+                    emit UniswapOracleProbed(
+                        token0,
+                        token1,
+                        uniswapFeeTierProbed.fee,
+                        oracleDataProbed.aggPriceTick,
+                        oracleDataProbed.avLiquidity,
+                        oracleDataProbed.period,
+                        oracleDataProbed.cardinalityToIncrease
                     );
 
                     if (oracleDataProbed.avLiquidity > 0) {

@@ -14,6 +14,7 @@ import {LiquidityAmounts} from "v3-periphery/libraries/LiquidityAmounts.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {Tick} from "v3-core/libraries/Tick.sol";
 import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
+import {IWETH9} from "v3-periphery/interfaces/external/IWETH9.sol";
 
 contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
@@ -335,9 +336,9 @@ contract OracleInitializeTest is Test, Oracle {
         if (liquidity > 0) {
             // Compute min and max tick
             address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-            int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
-            int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
-            int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
+            int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
+            int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
+            int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
 
             // Compute amounts
             (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
@@ -635,9 +636,9 @@ contract OracleGetPrice is Test, Oracle {
         if (liquidity > 0) {
             // Compute min and max tick
             address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-            int24 tickSpacking = IUniswapV3Pool(pool).tickSpacing();
-            int24 minTick = (TickMath.MIN_TICK / tickSpacking) * tickSpacking;
-            int24 maxTick = (TickMath.MAX_TICK / tickSpacking) * tickSpacking;
+            int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
+            int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
+            int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
 
             // Compute amounts
             (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
@@ -734,27 +735,225 @@ contract OracleProbingFeeTiers is Test, Oracle {
         INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
     ISwapRouter swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
     Oracle private _oracle;
-    MockERC20 private _tokenA;
-    MockERC20 private _tokenB;
-    UniswapPoolAddress.PoolKey private _poolKey;
+    MockERC20 private usdc = MockERC20(Addresses._ADDR_USDC);
+    IWETH9 private weth = IWETH9(Addresses._ADDR_WETH);
 
     uint256 immutable forkId;
 
     constructor() {
+        // LETS USE REAL PAIRS HERE
+
         // We fork after this tx because it allows us to test a 0-TWAP.
         forkId = vm.createSelectFork("mainnet", 18149275);
 
         _oracle = new Oracle();
-
-        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
-        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
-
-        uint24 feeTier = 100;
-        uint128 liquidity = 2 ** 10; // Small liquidity to push the price easily
-        (, _poolKey) = _preparePool(feeTier, liquidity);
-
-        vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
-        _oracle.initialize(address(_tokenA), address(_tokenB));
+        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC); // It picks feeTier = 500
     }
+
+    function test_noFeeTierProbed() public {
+        // Retrieve/store price
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 500, 0, 0, 0, 0);
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 3000, 0, 0, 0, 0);
+        _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+
+        // Hugely increase liquidity rest of fee tiers
+        _addLiquidity(100, 2 ** 70);
+        _addLiquidity(3000, 2 ** 70);
+        _addLiquidity(10000, 2 ** 70);
+
+        skip(DURATION_UPDATE_FEE_TIER - 1);
+
+        // Retrieve/store price but do NOT PROBE tier
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 500, 0, 0, 0, 0);
+        _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    }
+
+    /// @dev This test in combination with the previous one tests that an event is NOT emitted.
+    function testFail_noFeeTierProbed() public {
+        test_noFeeTierProbed();
+
+        // Retrieve/store price but do NOT PROBE tier
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 500, 0, 0, 0, 0);
+
+        // This one should fail because not enough time has elapsed to probe a new tier.
+        vm.expectEmit(false, false, false, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 10000, 0, 0, 0, 0);
+        _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    }
+
+    function test_feeTierProbed() public {
+        // Retrieve/store price
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 500, 0, 0, 0, 0);
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 3000, 0, 0, 0, 0);
+        _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+
+        // Hugely increase liquidity rest of fee tiers
+        _addLiquidity(100, 2 ** 70);
+        _addLiquidity(3000, 2 ** 70);
+        _addLiquidity(10000, 2 ** 70);
+
+        skip(DURATION_UPDATE_FEE_TIER);
+
+        // Retrieve/store price but do NOT PROBE tier
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 500, 0, 0, 0, 0);
+        vm.expectEmit(true, true, true, false);
+        emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 10000, 0, 0, 0, 0);
+        _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    }
+
+    // function testFail_FeeTierProbed(uint40 time) public {
+    //     // Hugely increase liquidity rest of fee tiers
+    //     _addLiquidity(100, 2 ** 70);
+    //     _addLiquidity(3000, 2 ** 70);
+    //     _addLiquidity(10000, 2 ** 70);
+
+    //     skip(DURATION_UPDATE_FEE_TIER - 1);
+    //     vm.expectEmit();
+    //     emit OracleFeeTierChanged();
+    //     _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC); // It picks feeTier = 500
+    // }
+
+    // function test_probeBetterFeeTier() public {
+    //     _addLiquidity(10000, 2 ** 70); // Makes this feeTier win the battle of the feeTiers
+
+    //     skip(30 minutes);
+    //     _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC); // It picks feeTier = 500
+    // }
+
+    // function test_probeNewBetterFeeTier(uint a) public {
+    //     vm.writeLine("./ts.log", vm.toString(block.timestamp));
+    // }
+
+    /*////////////////////////////////////////////////////////////////
+                        PRIVATE FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    function _addLiquidity(
+        uint24 fee,
+        uint128 liquidity
+    ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+        require(liquidity > 0, "Oracle: liquidity must be > 0");
+
+        // Get sqrtPriceX96
+        poolKey = UniswapPoolAddress.getPoolKey(Addresses._ADDR_WETH, Addresses._ADDR_USDC, fee);
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        (uint160 sqrtPriceX96, int24 tick, , , , , ) = IUniswapV3Pool(pool).slot0();
+
+        // Compute min and max tick
+        int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
+        int24 minTick = ((tick - 2 * tickSpac) / tickSpac) * tickSpac;
+        int24 maxTick = ((tick + 2 * tickSpac) / tickSpac) * tickSpac;
+
+        // Compute amounts
+        (uint256 amountUSDC, uint256 amountWETH) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(minTick),
+            TickMath.getSqrtRatioAtTick(maxTick),
+            liquidity
+        );
+
+        if (amountUSDC != 0 || amountWETH != 0) {
+            console.log("amountUSDC: %s", amountUSDC / 1e6);
+            console.log("amountWETH: %s", amountWETH / 1e18);
+            // Mint mock tokens
+            if (amountUSDC != 0) {
+                vm.prank(Addresses._ADDR_USDC_MINTER);
+                usdc.mint(address(this), amountUSDC);
+                usdc.approve(address(positionManager), amountUSDC);
+            }
+
+            if (amountWETH != 0) {
+                vm.deal(address(this), amountWETH);
+                weth.deposit{value: amountWETH}();
+                weth.approve(address(positionManager), amountWETH);
+            }
+
+            // Add liquidity
+            (, liquidityAdj, , ) = positionManager.mint(
+                INonfungiblePositionManager.MintParams({
+                    token0: address(usdc),
+                    token1: address(weth),
+                    fee: fee,
+                    tickLower: minTick,
+                    tickUpper: maxTick,
+                    amount0Desired: amountUSDC,
+                    amount1Desired: amountWETH,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: block.timestamp
+                })
+            );
+        }
+    }
+
+    // function _preparePool(
+    //     uint24 fee,
+    //     uint128 liquidity
+    // ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+    //     // Start at price = 1 or tick = 0
+    //     uint160 sqrtPriceX96 = 2 ** 96;
+
+    //     // Create and initialize Uniswap v3 pool
+    //     poolKey = UniswapPoolAddress.getPoolKey(Addresses._ADDR_WETH, Addresses._ADDR_USDC, fee);
+    //     positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
+
+    //     if (liquidity > 0) {
+    //         // Compute min and max tick
+    //         address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+    //         int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
+    //         int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
+    //         int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
+
+    //         // Compute amounts
+    //         (uint256 amount0, uint256 amount1) = LiquidityAmounts.getAmountsForLiquidity(
+    //             sqrtPriceX96,
+    //             TickMath.getSqrtRatioAtTick(minTick),
+    //             TickMath.getSqrtRatioAtTick(maxTick),
+    //             liquidity
+    //         );
+
+    //         if (amount0 != 0 || amount1 != 0) {
+    //             {
+    //                 // Reorder tokens
+    //                 MockERC20 token0 = MockERC20(poolKey.token0);
+    //                 MockERC20 token1 = MockERC20(poolKey.token1);
+
+    //                 // Mint mock tokens
+    //                 token0.mint(amount0);
+    //                 token1.mint(amount1);
+
+    //                 // Approve tokens
+    //                 token0.approve(address(positionManager), amount0);
+    //                 token1.approve(address(positionManager), amount1);
+    //             }
+
+    //             // Add liquidity
+    //             (, liquidityAdj, , ) = positionManager.mint(
+    //                 INonfungiblePositionManager.MintParams({
+    //                     token0: poolKey.token0,
+    //                     token1: poolKey.token1,
+    //                     fee: fee,
+    //                     tickLower: minTick,
+    //                     tickUpper: maxTick,
+    //                     amount0Desired: amount0,
+    //                     amount1Desired: amount1,
+    //                     amount0Min: 0,
+    //                     amount1Min: 0,
+    //                     recipient: address(this),
+    //                     deadline: block.timestamp
+    //                 })
+    //             );
+    //         }
+    //     }
+    // }
 }
+
+// DO SOME INVARIANT TESTING HERE
