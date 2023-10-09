@@ -230,6 +230,7 @@ contract Oracle {
     uint256 internal constant DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
+    uint16 internal constant CARDINALITY_DELTA = uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
     uint40 public constant TWAP_DURATION = 30 minutes;
 
     /**
@@ -641,10 +642,7 @@ contract Oracle {
             if (interval[0] == 0) {
                 // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
                 oracleData.avLiquidity = 1;
-                cardinalityNeeded = (TWAP_DELTA - 1) / (12 seconds) + 1;
-                // console.log("cardinalityNeeded", cardinalityNeeded);
-                // console.log("cardinalityNext", cardinalityNext);
-                if (cardinalityNeeded > cardinalityNext) oracleData.cardinalityToIncrease = uint16(cardinalityNeeded);
+                oracleData.cardinalityToIncrease = 1 + CARDINALITY_DELTA;
                 return oracleData;
             }
 
@@ -656,10 +654,10 @@ contract Oracle {
 
             /**
              * Check if cardinality must increase,
-             * if so we add a TWAP_DELTA increment taking into consideration that every block takes in average 12 seconds
+             * ...and if so, increment by CARDINALITY_DELTA.
              */
             if (cardinalityNeeded > cardinalityNext)
-                oracleData.cardinalityToIncrease = cardinalityNext + uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
+                oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
         }
 
         // Compute average liquidity

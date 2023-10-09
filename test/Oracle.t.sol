@@ -460,7 +460,7 @@ contract OracleGetPrice is Test, Oracle {
         (, _poolKey) = _preparePool(feeTier, liquidity);
 
         vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
@@ -483,7 +483,7 @@ contract OracleGetPrice is Test, Oracle {
 
         // The time of the mainnet fork is suitable chosen to
         vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.initialize(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
 
         tickPriceX42 = _oracle.getPrice(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
@@ -509,7 +509,7 @@ contract OracleGetPrice is Test, Oracle {
 
         // The time of the mainnet fork is suitable chosen to
         vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, uint16((TWAP_DELTA - 1) / (12 seconds) + 1));
+        emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.initialize(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
 
         int64 tickPriceX42 = _oracle.updateOracleState(Addresses._ADDR_FRAX, Addresses._ADDR_ALUSD);
@@ -913,29 +913,52 @@ contract OracleProbingFeeTiers is Test, Oracle {
         _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
     }
 
-    // function test_probeBetterFeeTier() public {
-    //     _addLiquidity(10000, 2 ** 70); // Makes this feeTier win the battle of the feeTiers
+    // function test_newFeeTierProbedAndCardinalityIncreased() public {
+    //     // Create new fee tier
+    //     uint24 newFeeTier = 69;
+    //     int24 newTickSpacing = 4;
 
-    //     skip(30 minutes);
-    //     _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC); // It picks feeTier = 500
-    // }
+    //     // Enable it in Uniswap v3
+    //     vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
+    //     IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(newFeeTier, newTickSpacing);
+    //     vm.stopPrank();
 
-    // function test_probeNewBetterFeeTier(uint a) public {
-    //     vm.writeLine("./ts.log", vm.toString(block.timestamp));
+    //     // Enable it in the oracle
+    //     _oracle.newUniswapFeeTier(newFeeTier);
+
+    //     // Probe tier 3000
+    //     _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    //     skip(DURATION_UPDATE_FEE_TIER);
+
+    //     // Probe tier 10000 (last tier in the list)
+    //     _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
+    //     skip(DURATION_UPDATE_FEE_TIER);
+
+    //     // Create pool and add liquidity
+    //     uint256 tokenId = _preparePool(newFeeTier, 2 ** 70);
+    //     // skip(TWAP_DURATION); // TWAP is old enough to be selected
+
+    //     // // Probe new tier
+    //     // vm.expectEmit(true, true, true, false);
+    //     // emit UniswapOracleProbed(Addresses._ADDR_USDC, Addresses._ADDR_WETH, newFeeTier, 0, 0, 0, 0);
+    //     // vm.expectEmit();
+    //     // emit OracleFeeTierChanged(Addresses._ADDR_USDC, Addresses._ADDR_WETH, 500, newFeeTier);
+    //     // _oracle.updateOracleState(Addresses._ADDR_WETH, Addresses._ADDR_USDC);
     // }
 
     /*////////////////////////////////////////////////////////////////
                         PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _addLiquidity(
-        uint24 fee,
-        uint128 liquidity
-    ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+    function _addLiquidity(uint24 fee, uint128 liquidity) private returns (uint256 tokenId) {
         require(liquidity > 0, "liquidity must be > 0");
 
         // Get sqrtPriceX96
-        poolKey = UniswapPoolAddress.getPoolKey(Addresses._ADDR_WETH, Addresses._ADDR_USDC, fee);
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            Addresses._ADDR_WETH,
+            Addresses._ADDR_USDC,
+            fee
+        );
         address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
         (uint160 sqrtPriceX96, int24 tick, , , , , ) = IUniswapV3Pool(pool).slot0();
 
@@ -967,7 +990,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
             }
 
             // Add liquidity
-            (, liquidityAdj, , ) = positionManager.mint(
+            (tokenId, , , ) = positionManager.mint(
                 INonfungiblePositionManager.MintParams({
                     token0: address(usdc),
                     token1: address(weth),
@@ -985,18 +1008,19 @@ contract OracleProbingFeeTiers is Test, Oracle {
         }
     }
 
-    function _preparePool(
-        uint24 fee,
-        uint128 liquidity
-    ) private returns (uint128 liquidityAdj, UniswapPoolAddress.PoolKey memory poolKey) {
+    function _preparePool(uint24 fee, uint128 liquidity) private returns (uint256 tokenId) {
         // Start at price = 1 or tick = 0
         uint160 sqrtPriceX96 = 24721 * 2 ** 96;
 
         // Create and initialize Uniswap v3 pool
-        poolKey = UniswapPoolAddress.getPoolKey(Addresses._ADDR_WETH, Addresses._ADDR_USDC, fee);
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            Addresses._ADDR_WETH,
+            Addresses._ADDR_USDC,
+            fee
+        );
         positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
 
-        (liquidityAdj, poolKey) = _addLiquidity(fee, liquidity);
+        (tokenId) = _addLiquidity(fee, liquidity);
     }
 }
 
