@@ -455,8 +455,6 @@ contract Oracle {
             oracleState.timeStampPrice = uint40(block.timestamp);
 
             // Fee tier is updated once per DURATION_UPDATE_FEE_TIER at most
-            console.log("block.timestamp", block.timestamp);
-            console.log("Next time to probe", oracleState.timeStampFeeTier + DURATION_UPDATE_FEE_TIER);
             if (block.timestamp >= oracleState.timeStampFeeTier + DURATION_UPDATE_FEE_TIER) {
                 // Get current fee tier and the one we wish to probe
                 UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
