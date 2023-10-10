@@ -457,16 +457,14 @@ contract Oracle {
 
             // Fee tier is updated once per DURATION_UPDATE_FEE_TIER at most
             if (block.timestamp >= oracleState.timeStampFeeTier + DURATION_UPDATE_FEE_TIER) {
-                // Get current fee tier and the one we wish to probe
-                UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
-
                 bool checkCardinalityCurrentFeeTier;
-                if (oracleData.period == 0) {
-                    checkCardinalityCurrentFeeTier = true;
-                } else if (oracleState.indexFeeTier != oracleState.indexFeeTierProbeNext) {
+                if (oracleData.period > 0 && oracleState.indexFeeTier != oracleState.indexFeeTierProbeNext) {
                     /** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** /
                      ** ** THIS SECTION PROBES OTHER FEE TIERS IN CASE THEIR PRICE IS MORE RELIABLE THAN THE CURRENT ONE ** ** **
                      ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** */
+
+                    // Get current fee tier and the one we wish to probe
+                    UniswapFeeTier memory uniswapFeeTierProbed = _uniswapFeeTier(oracleState.indexFeeTierProbeNext);
 
                     // Retrieve oracle data
                     UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
@@ -526,7 +524,6 @@ contract Oracle {
                         checkCardinalityCurrentFeeTier = true;
                     }
                 } else {
-                    // The probed tier is the current tier
                     checkCardinalityCurrentFeeTier = true;
                 }
 
@@ -638,26 +635,23 @@ contract Oracle {
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
 
             // This can only occur if the fee tier has cardinality 1
-            uint256 cardinalityNeeded;
             if (interval[0] == 0) {
                 // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
+                oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
                 oracleData.avLiquidity = 1;
-                oracleData.cardinalityToIncrease = 1 + CARDINALITY_DELTA;
                 return oracleData;
             }
-
-            tickCumulatives[0] = tickCumulative_;
-            liquidityCumulatives[0] = liquidityCumulative_;
-
-            // Estimate necessary length of the oracle if we want it to be TWAP_DURATION long
-            cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1;
 
             /**
              * Check if cardinality must increase,
              * ...and if so, increment by CARDINALITY_DELTA.
              */
+            uint256 cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1; // Estimate necessary length of the oracle if we want it to be TWAP_DURATION long
             if (cardinalityNeeded > cardinalityNext)
                 oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
+
+            tickCumulatives[0] = tickCumulative_;
+            liquidityCumulatives[0] = liquidityCumulative_;
         }
 
         // Compute average liquidity
