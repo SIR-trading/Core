@@ -1025,4 +1025,179 @@ contract OracleProbingFeeTiers is Test, Oracle {
     }
 }
 
-// DO SOME INVARIANT TESTING HERE
+contract OracleInvariantTests is Test, Oracle {
+    IUniswapV3Factory private _uniswapFactory;
+    INonfungiblePositionManager private _positionManager;
+    ISwapRouter swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
+    Oracle private _oracle;
+    MockERC20 private _tokenA;
+    MockERC20 private _tokenB;
+
+    int64 private _tickPriceX42;
+    uint40 private _tsPrice;
+
+    mapping(uint feeTier => uint256[] tokenIds) private _tokenIds;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18149275);
+
+        _uniswapFactory = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY);
+        _positionManager = INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
+
+        _oracle = new Oracle();
+
+        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
+        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+        if (address(_tokenB) < address(_tokenA)) (_tokenA, _tokenB) = (_tokenB, _tokenA);
+
+        // Add liquidity to 2 pools
+        _preparePool(42, 10000, 2 ** 60);
+        _preparePool(69, 500, 2 ** 50);
+
+        // Initialize oracle
+        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC); // It picks feeTier = 500
+
+        // Contracts to be called
+        targetContract(_oracle, positionManager);
+    }
+
+    function invariant_priceMaxDivergence() public {
+        int256 tickPriceX42_ = oracleStates(address(_tokenA), address(_tokenB)).tickPriceX42;
+        int256 tickPriceDiff = tickPriceX42_ > _tickPriceX42
+            ? tickPriceX42_ - _tickPriceX42
+            : _tickPriceX42 - tickPriceX42_;
+        // _tickPriceX42 MAX_TICK_INC_PER_SEC
+
+        assertLe(tickPriceDiff, MAX_TICK_INC_PER_SEC * (block.timestamp - _tsPrice));
+
+        _tickPriceX42 = tickPriceX42_;
+        _tsPrice = uint40(block.timestamp);
+    }
+
+    function _preparePool(uint160 startTick, uint24 fee, uint128 liquidity) private {
+        // Create and initialize Uniswap v3 pool
+        positionManager.createAndInitializePoolIfNecessary(
+            address(_tokenA),
+            address(_tokenB),
+            fee,
+            TickMath.getSqrtRatioAtTick(startTick)
+        );
+
+        _addLiquidity(fee, liquidity);
+    }
+
+    function _addLiquidity(uint24 fee, uint128 liquidity) private returns (uint128 liquidityAdj) {
+        require(liquidity > 0, "liquidity must be > 0");
+
+        uint160 sqrtPriceX96;
+        int24 minTick;
+        int24 maxTick;
+        {
+            // Get sqrtPriceX96
+            UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+                address(_tokenA),
+                address(_tokenB),
+                fee
+            );
+            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            int24 tick;
+            (sqrtPriceX96, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
+
+            // Compute min and max tick
+            int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
+            minTick = ((tick - 2 * tickSpac) / tickSpac) * tickSpac;
+            maxTick = ((tick + 2 * tickSpac) / tickSpac) * tickSpac;
+        }
+
+        // Compute amounts
+        (uint256 amountA, uint256 amountWETH) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtRatioAtTick(minTick),
+            TickMath.getSqrtRatioAtTick(maxTick),
+            liquidity
+        );
+
+        if (amountA != 0 || amountB != 0) {
+            // Mint mock tokens
+            if (amountA != 0) {
+                uint256 balanceA = _tokenA.balanceOf(address(this));
+                _tokenA.mint(balanceA < amountA ? amountA - balanceA : 0);
+                _tokenA.approve(address(positionManager), amountA);
+            }
+            if (amountB != 0) {
+                uint256 balanceB = _tokenB.balanceOf(address(this));
+                _tokenB.mint(balanceB < amountB ? amountB - balanceB : 0);
+                _tokenB.approve(address(positionManager), amountB);
+            }
+
+            // Add liquidity
+            (tokenId, liquidityAdj, , ) = positionManager.mint(
+                INonfungiblePositionManager.MintParams({
+                    token0: address(_tokenA),
+                    token1: address(_tokenB),
+                    fee: fee,
+                    tickLower: minTick,
+                    tickUpper: maxTick,
+                    amount0Desired: amountA,
+                    amount1Desired: amountB,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    recipient: address(this),
+                    deadline: block.timestamp
+                })
+            );
+
+            _tokenIds[fee].push(tokenId);
+        }
+    }
+
+    function _rmvLiquidity(uint24 fee, uint128 liquidity) private {
+        while (liquidity > 0 && _tokenIds[fee].length > 0) {
+            uint256 tokenId = _tokenIds[fee].pull();
+            (, , , , , , , uint128 liquidityPos, , , , ) = positionManager.positions(tokenId);
+            if (liquidityPos > liquidity) {
+                positionManager.decreaseLiquidity(
+                    INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidity, 0, 0, block.timestamp)
+                );
+                liquidity = 0;
+            } else {
+                positionManager.decreaseLiquidity(
+                    INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityPos, 0, 0, block.timestamp)
+                );
+                liquidity -= liquidityPos;
+            }
+        }
+    }
+
+    function _swap(uint24 feeTier, bool buyTokenA, uint256 amountIn) private returns (uint256 amountOut) {
+        // Mint mock tokens
+        MockERC20 tokenIn;
+        MockERC20 tokenOut;
+        if (buyTokenA) {
+            tokenIn = _tokenB;
+            tokenOut = _tokenA;
+        } else {
+            tokenIn = _tokenA;
+            tokenOut = _tokenB;
+        }
+
+        // Mint and approve tokens
+        uint256 balanceIn = tokenIn.balanceOf(address(this));
+        tokenIn.mint(balanceIn < amountA ? amountIn - balanceIn : 0);
+        tokenIn.approve(address(swapRouter), amountIn);
+
+        // Swap
+        amountOut = swapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(tokenIn),
+                tokenOut: address(tokenOut),
+                fee: feeTier,
+                recipient: address(this),
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+    }
+}
