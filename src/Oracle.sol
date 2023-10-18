@@ -236,7 +236,7 @@ contract Oracle {
     /**
      * State variables
      */
-    mapping(address token0 => mapping(address token1 => OracleState)) public oracle;
+    mapping(address token0 => mapping(address token1 => OracleState)) public state;
     uint private _uniswapExtraFeeTiers; // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier
 
     /*////////////////////////////////////////////////////////////////
@@ -274,7 +274,7 @@ contract Oracle {
         (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle state
-        OracleState memory oracleState = oracle[token0][token1];
+        OracleState memory oracleState = state[token0][token1];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Get latest price if not stored
@@ -311,7 +311,7 @@ contract Oracle {
         (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
 
         // Get oracle state
-        OracleState memory oracleState = oracle[tokenA][tokenB];
+        OracleState memory oracleState = state[tokenA][tokenB];
         if (oracleState.initialized) return; // No-op return because reverting would cause SIR to fail creating new vaults
 
         // Get all fee tiers
@@ -370,7 +370,7 @@ contract Oracle {
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
 
         // Update oracle state
-        oracle[tokenA][tokenB] = oracleState;
+        state[tokenA][tokenB] = oracleState;
 
         emit OracleInitialized(
             tokenA,
@@ -420,7 +420,7 @@ contract Oracle {
         (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle state
-        OracleState memory oracleState = oracle[token0][token1];
+        OracleState memory oracleState = state[token0][token1];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Price is updated once per block at most
@@ -541,7 +541,7 @@ contract Oracle {
             }
 
             // Save new oracle state to storage
-            oracle[token0][token1] = oracleState;
+            state[token0][token1] = oracleState;
         }
 
         // Invert price if necessary

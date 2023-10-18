@@ -1231,7 +1231,7 @@ contract SirOracleHandler is Test {
     MockERC20 private immutable _tokenB;
 
     UniswapHandler private immutable _uniswapHandler;
-    Oracle private immutable oracle;
+    Oracle public immutable oracle;
 
     constructor(MockERC20 tokenA, MockERC20 tokenB, UniswapHandler uniswapHandler_) {
         assert(address(_tokenA) < address(_tokenB));
@@ -1266,7 +1266,7 @@ contract SirOracleHandler is Test {
     }
 }
 
-contract OracleInvariantTest is Test {
+contract OracleInvariantTest is Test, Oracle {
     SirOracleHandler private _oracleHandler;
     Oracle private _oracle;
 
@@ -1286,16 +1286,13 @@ contract OracleInvariantTest is Test {
     }
 
     function invariant_priceMaxDivergence() public {
-        Oracle.OracleState memory oracleState = _oracle.state[address(_tokenA)][address(_tokenB)];
+        (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.state(address(_tokenA), address(_tokenB));
+        int64 tickPriceX42_B = _oracle.getPrice(address(_tokenA), address(_tokenB));
 
-        int256 tickPriceDiff = tickPriceX42_ > _tickPriceX42
-            ? tickPriceX42_ - _tickPriceX42
-            : _tickPriceX42 - tickPriceX42_;
-        // _tickPriceX42 MAX_TICK_INC_PER_SEC
+        uint256 tickPriceDiff = tickPriceX42_A > tickPriceX42_B
+            ? uint64(tickPriceX42_A - tickPriceX42_B)
+            : uint64(tickPriceX42_B - tickPriceX42_A);
 
-        assertLe(tickPriceDiff, MAX_TICK_INC_PER_SEC * (block.timestamp - _tsPrice));
-
-        _tickPriceX42 = tickPriceX42_;
-        _tsPrice = uint40(block.timestamp);
+        assertLe(tickPriceDiff, uint64(MAX_TICK_INC_PER_SEC) * (block.timestamp - timeStampPrice));
     }
 }
