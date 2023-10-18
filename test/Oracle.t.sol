@@ -1025,69 +1025,77 @@ contract OracleProbingFeeTiers is Test, Oracle {
     }
 }
 
-contract OracleInvariantTests is Test, Oracle {
-    IUniswapV3Factory private _uniswapFactory;
-    INonfungiblePositionManager private _positionManager;
-    ISwapRouter swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
-    Oracle private _oracle;
-    MockERC20 private _tokenA;
-    MockERC20 private _tokenB;
+contract UniswapHandler is Test {
+    IUniswapV3Factory private constant _uniswapFactory = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY);
+    INonfungiblePositionManager private constant _positionManager =
+        INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter private constant _swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
+    MockERC20 private immutable _tokenA;
+    MockERC20 private immutable _tokenB;
 
-    int64 private _tickPriceX42;
-    uint40 private _tsPrice;
+    mapping(uint24 => uint256[]) _tokenIds;
+    uint24[] internal feeTiers = [100, 500, 3000, 10000];
+    uint24[] public initializedFeeTiers = new uint24[](0);
 
-    mapping(uint feeTier => uint256[] tokenIds) private _tokenIds;
-
-    function setUp() public {
-        vm.createSelectFork("mainnet", 18149275);
-
-        _uniswapFactory = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY);
-        _positionManager = INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
-
-        _oracle = new Oracle();
-
-        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
-        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
-        if (address(_tokenB) < address(_tokenA)) (_tokenA, _tokenB) = (_tokenB, _tokenA);
-
-        // Add liquidity to 2 pools
-        _preparePool(42, 10000, 2 ** 60);
-        _preparePool(69, 500, 2 ** 50);
-
-        // Initialize oracle
-        _oracle.initialize(Addresses._ADDR_WETH, Addresses._ADDR_USDC); // It picks feeTier = 500
-
-        // Contracts to be called
-        targetContract(_oracle, positionManager);
+    function getFeeTiers() external view returns (uint24[] memory) {
+        return feeTiers;
     }
 
-    function invariant_priceMaxDivergence() public {
-        int256 tickPriceX42_ = oracleStates(address(_tokenA), address(_tokenB)).tickPriceX42;
-        int256 tickPriceDiff = tickPriceX42_ > _tickPriceX42
-            ? tickPriceX42_ - _tickPriceX42
-            : _tickPriceX42 - tickPriceX42_;
-        // _tickPriceX42 MAX_TICK_INC_PER_SEC
+    constructor(MockERC20 tokenA, MockERC20 tokenB) {
+        assert(address(_tokenA) < address(_tokenB));
+        _tokenA = tokenA;
+        _tokenB = tokenB;
 
-        assertLe(tickPriceDiff, MAX_TICK_INC_PER_SEC * (block.timestamp - _tsPrice));
-
-        _tickPriceX42 = tickPriceX42_;
-        _tsPrice = uint40(block.timestamp);
+        // Add 1 pool so that we can run all functions
+        instantiatePool(0, 2 ** 96); // Tier 100 bps and price = 1
     }
 
-    function _preparePool(uint160 startTick, uint24 fee, uint128 liquidity) private {
-        // Create and initialize Uniswap v3 pool
-        positionManager.createAndInitializePoolIfNecessary(
+    function increaseCardinality(uint256 feeTierIndex, uint16 observationCardinalityNext) external {
+        uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
+
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
             address(_tokenA),
             address(_tokenB),
-            fee,
-            TickMath.getSqrtRatioAtTick(startTick)
+            feeTier
         );
-
-        _addLiquidity(fee, liquidity);
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinalityNext);
     }
 
-    function _addLiquidity(uint24 fee, uint128 liquidity) private returns (uint128 liquidityAdj) {
-        require(liquidity > 0, "liquidity must be > 0");
+    function enableFeeTier(uint24 fee, int24 tickSpacingUint) external {
+        fee = uint24(bound(fee, 0, 1000000 - 1));
+        if (_uniswapFactory.feeAmountTickSpacing(fee) != 0) return; // already enabled
+
+        int24 tickSpacing = int24(bound(tickSpacingUint, 1, 16384 - 1));
+
+        vm.prank(Addresses._ADDR_UNISWAPV3_OWNER);
+        _uniswapFactory.enableFeeAmount(fee, tickSpacing);
+
+        feeTiers.push(fee);
+    }
+
+    function instantiatePool(uint256 feeTierIndex, uint160 sqrtPriceX96) public {
+        uint24 feeTier = _getFeeTier(feeTierIndex);
+
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            address(_tokenA),
+            address(_tokenB),
+            feeTier
+        );
+        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        if (pool.code.length > 0) return; // already instantiated
+
+        sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO - 1));
+
+        // Create and initialize Uniswap v3 pool
+        _positionManager.createAndInitializePoolIfNecessary(address(_tokenA), address(_tokenB), feeTier, sqrtPriceX96);
+
+        initializedFeeTiers.push(feeTier);
+    }
+
+    function addLiquidity(uint256 feeTierIndex, uint128 liquidity) external {
+        uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
+        liquidity = uint128(bound(liquidity, 1, type(uint128).max));
 
         uint160 sqrtPriceX96;
         int24 minTick;
@@ -1097,7 +1105,7 @@ contract OracleInvariantTests is Test, Oracle {
             UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
                 address(_tokenA),
                 address(_tokenB),
-                fee
+                feeTier
             );
             address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tick;
@@ -1110,7 +1118,7 @@ contract OracleInvariantTests is Test, Oracle {
         }
 
         // Compute amounts
-        (uint256 amountA, uint256 amountWETH) = LiquidityAmounts.getAmountsForLiquidity(
+        (uint256 amountA, uint256 amountB) = LiquidityAmounts.getAmountsForLiquidity(
             sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(minTick),
             TickMath.getSqrtRatioAtTick(maxTick),
@@ -1122,20 +1130,20 @@ contract OracleInvariantTests is Test, Oracle {
             if (amountA != 0) {
                 uint256 balanceA = _tokenA.balanceOf(address(this));
                 _tokenA.mint(balanceA < amountA ? amountA - balanceA : 0);
-                _tokenA.approve(address(positionManager), amountA);
+                _tokenA.approve(address(_positionManager), amountA);
             }
             if (amountB != 0) {
                 uint256 balanceB = _tokenB.balanceOf(address(this));
                 _tokenB.mint(balanceB < amountB ? amountB - balanceB : 0);
-                _tokenB.approve(address(positionManager), amountB);
+                _tokenB.approve(address(_positionManager), amountB);
             }
 
             // Add liquidity
-            (tokenId, liquidityAdj, , ) = positionManager.mint(
+            (uint256 tokenId, , , ) = _positionManager.mint(
                 INonfungiblePositionManager.MintParams({
                     token0: address(_tokenA),
                     token1: address(_tokenB),
-                    fee: fee,
+                    fee: feeTier,
                     tickLower: minTick,
                     tickUpper: maxTick,
                     amount0Desired: amountA,
@@ -1147,21 +1155,25 @@ contract OracleInvariantTests is Test, Oracle {
                 })
             );
 
-            _tokenIds[fee].push(tokenId);
+            _tokenIds[feeTier].push(tokenId);
         }
     }
 
-    function _rmvLiquidity(uint24 fee, uint128 liquidity) private {
-        while (liquidity > 0 && _tokenIds[fee].length > 0) {
-            uint256 tokenId = _tokenIds[fee].pull();
-            (, , , , , , , uint128 liquidityPos, , , , ) = positionManager.positions(tokenId);
+    function rmvLiquidity(uint256 feeTierIndex, uint128 liquidity) external {
+        uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
+        liquidity = uint128(bound(liquidity, 1, type(uint128).max));
+
+        while (liquidity > 0 && _tokenIds[feeTier].length > 0) {
+            uint256 tokenId = _tokenIds[feeTier][_tokenIds[feeTier].length - 1];
+            _tokenIds[feeTier].pop();
+            (, , , , , , , uint128 liquidityPos, , , , ) = _positionManager.positions(tokenId);
             if (liquidityPos > liquidity) {
-                positionManager.decreaseLiquidity(
+                _positionManager.decreaseLiquidity(
                     INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidity, 0, 0, block.timestamp)
                 );
                 liquidity = 0;
             } else {
-                positionManager.decreaseLiquidity(
+                _positionManager.decreaseLiquidity(
                     INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityPos, 0, 0, block.timestamp)
                 );
                 liquidity -= liquidityPos;
@@ -1169,11 +1181,15 @@ contract OracleInvariantTests is Test, Oracle {
         }
     }
 
-    function _swap(uint24 feeTier, bool buyTokenA, uint256 amountIn) private returns (uint256 amountOut) {
+    function swap(uint256 feeTierIndex, bool swapDirection, uint256 amountIn) external {
+        uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
+        amountIn = bound(amountIn, 1, type(uint256).max);
+        // If amountIn is too large for the entire pool liquidity, the remainer will be returned.
+
         // Mint mock tokens
         MockERC20 tokenIn;
         MockERC20 tokenOut;
-        if (buyTokenA) {
+        if (swapDirection) {
             tokenIn = _tokenB;
             tokenOut = _tokenA;
         } else {
@@ -1183,11 +1199,11 @@ contract OracleInvariantTests is Test, Oracle {
 
         // Mint and approve tokens
         uint256 balanceIn = tokenIn.balanceOf(address(this));
-        tokenIn.mint(balanceIn < amountA ? amountIn - balanceIn : 0);
-        tokenIn.approve(address(swapRouter), amountIn);
+        tokenIn.mint(balanceIn < amountIn ? amountIn - balanceIn : 0);
+        tokenIn.approve(address(_swapRouter), amountIn);
 
         // Swap
-        amountOut = swapRouter.exactInputSingle(
+        _swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(tokenIn),
                 tokenOut: address(tokenOut),
@@ -1199,5 +1215,87 @@ contract OracleInvariantTests is Test, Oracle {
                 sqrtPriceLimitX96: 0
             })
         );
+    }
+
+    function _getFeeTier(uint256 feeTierIndex) private view returns (uint24 feeTier) {
+        feeTier = feeTiers[bound(feeTierIndex, 0, feeTiers.length - 1)];
+    }
+
+    function _getInitializedFeeTier(uint256 feeTierIndex) private view returns (uint24 feeTier) {
+        feeTier = initializedFeeTiers[bound(feeTierIndex, 0, initializedFeeTiers.length - 1)];
+    }
+}
+
+contract SirOracleHandler is Test {
+    MockERC20 private immutable _tokenA;
+    MockERC20 private immutable _tokenB;
+
+    UniswapHandler private immutable _uniswapHandler;
+    Oracle private immutable oracle;
+
+    constructor(MockERC20 tokenA, MockERC20 tokenB, UniswapHandler uniswapHandler_) {
+        assert(address(_tokenA) < address(_tokenB));
+        _tokenA = tokenA;
+        _tokenB = tokenB;
+
+        _uniswapHandler = uniswapHandler_;
+        oracle = new Oracle();
+        oracle.initialize(address(_tokenA), address(_tokenB));
+    }
+
+    function newUniswapFeeTier(uint256 feeTierIndex) external {
+        uint24[] memory feeTiers = _uniswapHandler.getFeeTiers();
+        if (feeTiers.length >= 9) return; // already 9 fee tiers
+        uint24 feeTier = feeTiers[bound(feeTierIndex, 0, feeTiers.length - 1)];
+
+        // Check it has not been added yet
+        Oracle.UniswapFeeTier[] memory uniswapFeeTiers = oracle.getUniswapFeeTiers();
+        for (uint256 i = 0; i < uniswapFeeTiers.length; i++) {
+            if (feeTier == uniswapFeeTiers[i].fee) return; // already added
+        }
+
+        oracle.newUniswapFeeTier(feeTier);
+    }
+
+    function updateOracleState(bool direction) external {
+        (address collateralToken, address debtToken) = direction
+            ? (address(_tokenA), address(_tokenB))
+            : (address(_tokenB), address(_tokenA));
+
+        oracle.updateOracleState(collateralToken, debtToken);
+    }
+}
+
+contract OracleInvariantTest is Test {
+    SirOracleHandler private _oracleHandler;
+    Oracle private _oracle;
+
+    MockERC20 private _tokenA;
+    MockERC20 private _tokenB;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18149275);
+
+        MockERC20 tokenA_ = new MockERC20("Mock Token A", "MTA", 18);
+        MockERC20 tokenB_ = new MockERC20("Mock Token B", "MTA", 6);
+        (_tokenA, _tokenB) = address(tokenA_) > address(tokenB_) ? (tokenB_, tokenA_) : (tokenA_, tokenB_);
+
+        UniswapHandler uniswapHandler = new UniswapHandler(_tokenA, _tokenB);
+        _oracleHandler = new SirOracleHandler(_tokenA, _tokenB, uniswapHandler);
+        _oracle = Oracle(_oracleHandler.oracle());
+    }
+
+    function invariant_priceMaxDivergence() public {
+        Oracle.OracleState memory oracleState = _oracle.state[address(_tokenA)][address(_tokenB)];
+
+        int256 tickPriceDiff = tickPriceX42_ > _tickPriceX42
+            ? tickPriceX42_ - _tickPriceX42
+            : _tickPriceX42 - tickPriceX42_;
+        // _tickPriceX42 MAX_TICK_INC_PER_SEC
+
+        assertLe(tickPriceDiff, MAX_TICK_INC_PER_SEC * (block.timestamp - _tsPrice));
+
+        _tickPriceX42 = tickPriceX42_;
+        _tsPrice = uint40(block.timestamp);
     }
 }
