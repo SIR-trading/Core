@@ -17,5 +17,5 @@ mainnet = "https://mainnet.infura.io/v3/${RPC_MAINNET}"
 [invariant]
 fail_on_revert = true   # Fail the test if the contract reverts
 runs           = 1   # Number of times that a sequence of function calls is generated and run
-depth          = 10     # Number of function calls made in a given run.
+depth          = 50     # Number of function calls made in a given run.
 seed           = "0x00"

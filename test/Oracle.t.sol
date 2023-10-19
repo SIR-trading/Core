@@ -1026,6 +1026,10 @@ contract OracleProbingFeeTiers is Test, Oracle {
     }
 }
 
+///////////////////////////////////////////////
+//// I N V A R I A N T //// T E S T I N G ////
+/////////////////////////////////////////////
+
 contract UniswapHandler is Test {
     IUniswapV3Factory private constant _uniswapFactory = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY);
     INonfungiblePositionManager private constant _positionManager =
@@ -1048,10 +1052,12 @@ contract UniswapHandler is Test {
         _tokenB = tokenB_;
 
         // Add 1 pool so that we can run all functions
-        instantiatePool(0, 2 ** 96); // Tier 100 bps and price = 1
+        instantiatePool(0, 0, 2 ** 96); // Tier 100 bps and price = 1
     }
 
-    function increaseCardinality(uint256 feeTierIndex, uint16 observationCardinalityNext) external {
+    function increaseCardinality(uint24 timeSkip, uint256 feeTierIndex, uint16 observationCardinalityNext) external {
+        skip(timeSkip);
+
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
 
         UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
@@ -1063,7 +1069,9 @@ contract UniswapHandler is Test {
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinalityNext);
     }
 
-    function enableFeeTier(uint24 fee, int24 tickSpacingUint) external {
+    function enableFeeTier(uint24 timeSkip, uint24 fee, int24 tickSpacingUint) external {
+        skip(timeSkip);
+
         fee = uint24(bound(fee, 0, 1000000 - 1));
         if (_uniswapFactory.feeAmountTickSpacing(fee) != 0) return; // already enabled
 
@@ -1075,7 +1083,9 @@ contract UniswapHandler is Test {
         feeTiers.push(fee);
     }
 
-    function instantiatePool(uint256 feeTierIndex, uint160 sqrtPriceX96) public {
+    function instantiatePool(uint24 timeSkip, uint256 feeTierIndex, uint160 sqrtPriceX96) public {
+        skip(timeSkip);
+
         uint24 feeTier = _getFeeTier(feeTierIndex);
 
         UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
@@ -1094,7 +1104,9 @@ contract UniswapHandler is Test {
         initializedFeeTiers.push(feeTier);
     }
 
-    function addLiquidity(uint256 feeTierIndex, uint128 liquidity) external {
+    function addLiquidity(uint24 timeSkip, uint256 feeTierIndex, uint128 liquidity) external {
+        skip(timeSkip);
+
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
         liquidity = uint128(bound(liquidity, 1, type(uint128).max));
 
@@ -1109,13 +1121,19 @@ contract UniswapHandler is Test {
                 feeTier
             );
             address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
-            int24 tick;
-            (sqrtPriceX96, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
+            (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+            int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
             // Compute min and max tick
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             minTick = ((tick - 2 * tickSpac) / tickSpac) * tickSpac;
+            if (minTick < TickMath.MIN_TICK) minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             maxTick = ((tick + 2 * tickSpac) / tickSpac) * tickSpac;
+            if (maxTick > TickMath.MAX_TICK) maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
+            // console.log("Tick, Min Tick, Max Tick");
+            // console.logInt(tick);
+            // console.logInt(minTick);
+            // console.logInt(maxTick);
         }
 
         // Compute amounts
@@ -1126,41 +1144,53 @@ contract UniswapHandler is Test {
             liquidity
         );
 
-        if (amountA != 0 || amountB != 0) {
-            // Mint mock tokens
-            if (amountA != 0) {
-                uint256 balanceA = _tokenA.balanceOf(address(this));
-                _tokenA.mint(balanceA < amountA ? amountA - balanceA : 0);
-                _tokenA.approve(address(_positionManager), amountA);
-            }
-            if (amountB != 0) {
-                uint256 balanceB = _tokenB.balanceOf(address(this));
-                _tokenB.mint(balanceB < amountB ? amountB - balanceB : 0);
-                _tokenB.approve(address(_positionManager), amountB);
-            }
+        if (
+            LiquidityAmounts.getLiquidityForAmounts(
+                sqrtPriceX96,
+                TickMath.getSqrtRatioAtTick(minTick),
+                TickMath.getSqrtRatioAtTick(maxTick),
+                amountA,
+                amountB
+            ) == 0
+        ) return;
 
-            // Add liquidity
-            (uint256 tokenId, , , ) = _positionManager.mint(
-                INonfungiblePositionManager.MintParams({
-                    token0: address(_tokenA),
-                    token1: address(_tokenB),
-                    fee: feeTier,
-                    tickLower: minTick,
-                    tickUpper: maxTick,
-                    amount0Desired: amountA,
-                    amount1Desired: amountB,
-                    amount0Min: 0,
-                    amount1Min: 0,
-                    recipient: address(this),
-                    deadline: block.timestamp
-                })
-            );
+        if (amountA == 0 && amountB == 0) return;
 
-            _tokenIds[feeTier].push(tokenId);
+        // Mint mock tokens
+        if (amountA != 0) {
+            uint256 balanceA = _tokenA.balanceOf(address(this));
+            _tokenA.mint(balanceA < amountA ? amountA - balanceA : 0);
+            _tokenA.approve(address(_positionManager), amountA);
         }
+        if (amountB != 0) {
+            uint256 balanceB = _tokenB.balanceOf(address(this));
+            _tokenB.mint(balanceB < amountB ? amountB - balanceB : 0);
+            _tokenB.approve(address(_positionManager), amountB);
+        }
+
+        // Add liquidity
+        (uint256 tokenId, , , ) = _positionManager.mint(
+            INonfungiblePositionManager.MintParams({
+                token0: address(_tokenA),
+                token1: address(_tokenB),
+                fee: feeTier,
+                tickLower: minTick,
+                tickUpper: maxTick,
+                amount0Desired: amountA,
+                amount1Desired: amountB,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(this),
+                deadline: block.timestamp
+            })
+        );
+
+        _tokenIds[feeTier].push(tokenId);
     }
 
-    function rmvLiquidity(uint256 feeTierIndex, uint128 liquidity) external {
+    function rmvLiquidity(uint24 timeSkip, uint256 feeTierIndex, uint128 liquidity) external {
+        skip(timeSkip);
+
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
         liquidity = uint128(bound(liquidity, 1, type(uint128).max));
 
@@ -1182,7 +1212,9 @@ contract UniswapHandler is Test {
         }
     }
 
-    function swap(uint256 feeTierIndex, bool swapDirection, uint256 amountIn) external {
+    function swap(uint24 timeSkip, uint256 feeTierIndex, bool swapDirection, uint256 amountIn) external {
+        skip(timeSkip);
+
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
         amountIn = bound(amountIn, 1, type(uint256).max);
         // If amountIn is too large for the entire pool liquidity, the remainer will be returned.
@@ -1217,10 +1249,12 @@ contract UniswapHandler is Test {
                     sqrtPriceLimitX96: 0
                 })
             )
-        returns (uint256 amountOut) {
+        returns (uint256) {
             // Do nothing if it goes through
+            console.log("SUCCESSFUL swap");
         } catch {
             // Do nothing if it fails
+            console.log("FAILED swap");
         }
     }
 
@@ -1250,7 +1284,9 @@ contract SirOracleHandler is Test {
         oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
-    function newUniswapFeeTier(uint256 feeTierIndex) external {
+    function newUniswapFeeTier(uint24 timeSkip, uint256 feeTierIndex) external {
+        skip(timeSkip);
+
         uint24[] memory feeTiers = _uniswapHandler.getFeeTiers();
         if (feeTiers.length >= 9) return; // already 9 fee tiers
         uint24 feeTier = feeTiers[bound(feeTierIndex, 0, feeTiers.length - 1)];
@@ -1264,7 +1300,9 @@ contract SirOracleHandler is Test {
         oracle.newUniswapFeeTier(feeTier);
     }
 
-    function updateOracleState(bool direction) external {
+    function updateOracleState(uint24 timeSkip, bool direction) external {
+        skip(timeSkip);
+
         (address collateralToken, address debtToken) = direction
             ? (address(_tokenA), address(_tokenB))
             : (address(_tokenB), address(_tokenA));
@@ -1298,7 +1336,7 @@ contract OracleInvariantTest is Test, Oracle {
     }
 
     function invariant_priceMaxDivergence() public {
-        // MAKE SURE TO SKIP TIME HERE TO SIMULATE BLOCKS!
+        console.log(block.timestamp);
 
         (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.state(address(_tokenA), address(_tokenB));
         int64 tickPriceX42_B = _oracle.getPrice(address(_tokenA), address(_tokenB));
