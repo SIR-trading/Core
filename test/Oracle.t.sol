@@ -13,6 +13,7 @@ import {MockERC20} from "src/test/MockERC20.sol";
 import {LiquidityAmounts} from "v3-periphery/libraries/LiquidityAmounts.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {Tick} from "v3-core/libraries/Tick.sol";
+import {SwapMath} from "v3-core/libraries/SwapMath.sol";
 import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 import {IWETH9} from "v3-periphery/interfaces/external/IWETH9.sol";
 
@@ -1041,10 +1042,10 @@ contract UniswapHandler is Test {
         return feeTiers;
     }
 
-    constructor(MockERC20 tokenA, MockERC20 tokenB) {
-        assert(address(_tokenA) < address(_tokenB));
-        _tokenA = tokenA;
-        _tokenB = tokenB;
+    constructor(MockERC20 tokenA_, MockERC20 tokenB_) {
+        assert(address(tokenA_) < address(tokenB_));
+        _tokenA = tokenA_;
+        _tokenB = tokenB_;
 
         // Add 1 pool so that we can run all functions
         instantiatePool(0, 2 ** 96); // Tier 100 bps and price = 1
@@ -1203,18 +1204,24 @@ contract UniswapHandler is Test {
         tokenIn.approve(address(_swapRouter), amountIn);
 
         // Swap
-        _swapRouter.exactInputSingle(
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: address(tokenIn),
-                tokenOut: address(tokenOut),
-                fee: feeTier,
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: amountIn,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
+        try
+            _swapRouter.exactInputSingle(
+                ISwapRouter.ExactInputSingleParams({
+                    tokenIn: address(tokenIn),
+                    tokenOut: address(tokenOut),
+                    fee: feeTier,
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountIn: amountIn,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                })
+            )
+        returns (uint256 amountOut) {
+            // Do nothing if it goes through
+        } catch {
+            // Do nothing if it fails
+        }
     }
 
     function _getFeeTier(uint256 feeTierIndex) private view returns (uint24 feeTier) {
@@ -1233,14 +1240,14 @@ contract SirOracleHandler is Test {
     UniswapHandler private immutable _uniswapHandler;
     Oracle public immutable oracle;
 
-    constructor(MockERC20 tokenA, MockERC20 tokenB, UniswapHandler uniswapHandler_) {
-        assert(address(_tokenA) < address(_tokenB));
-        _tokenA = tokenA;
-        _tokenB = tokenB;
+    constructor(MockERC20 tokenA_, MockERC20 tokenB_, UniswapHandler uniswapHandler_) {
+        assert(address(tokenA_) < address(tokenB_));
+        _tokenA = tokenA_;
+        _tokenB = tokenB_;
 
         _uniswapHandler = uniswapHandler_;
         oracle = new Oracle();
-        oracle.initialize(address(_tokenA), address(_tokenB));
+        oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
     function newUniswapFeeTier(uint256 feeTierIndex) external {
@@ -1276,16 +1283,23 @@ contract OracleInvariantTest is Test, Oracle {
     function setUp() public {
         vm.createSelectFork("mainnet", 18149275);
 
-        MockERC20 tokenA_ = new MockERC20("Mock Token A", "MTA", 18);
-        MockERC20 tokenB_ = new MockERC20("Mock Token B", "MTA", 6);
-        (_tokenA, _tokenB) = address(tokenA_) > address(tokenB_) ? (tokenB_, tokenA_) : (tokenA_, tokenB_);
+        _tokenA = new MockERC20("Mock Token A", "MTA", 18);
+        _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+
+        // Order tokens
+        if (address(_tokenA) > address(_tokenB)) (_tokenA, _tokenB) = (_tokenB, _tokenA);
 
         UniswapHandler uniswapHandler = new UniswapHandler(_tokenA, _tokenB);
         _oracleHandler = new SirOracleHandler(_tokenA, _tokenB, uniswapHandler);
         _oracle = Oracle(_oracleHandler.oracle());
+
+        targetContract(address(uniswapHandler));
+        targetContract(address(_oracleHandler));
     }
 
     function invariant_priceMaxDivergence() public {
+        // MAKE SURE TO SKIP TIME HERE TO SIMULATE BLOCKS!
+
         (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.state(address(_tokenA), address(_tokenB));
         int64 tickPriceX42_B = _oracle.getPrice(address(_tokenA), address(_tokenB));
 

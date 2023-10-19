@@ -246,18 +246,18 @@ contract Oracle {
     function getUniswapFeeTiers() public view returns (UniswapFeeTier[] memory uniswapFeeTiers) {
         // Find out # of all possible fee tiers
         uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
-        uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
+        uint numUniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
 
-        uniswapFeeTiers = new UniswapFeeTier[](4 + NuniswapExtraFeeTiers);
+        uniswapFeeTiers = new UniswapFeeTier[](4 + numUniswapExtraFeeTiers);
         uniswapFeeTiers[0] = UniswapFeeTier(100, 1);
         uniswapFeeTiers[1] = UniswapFeeTier(500, 10);
         uniswapFeeTiers[2] = UniswapFeeTier(3000, 60);
         uniswapFeeTiers[3] = UniswapFeeTier(10000, 200);
 
         // Extra fee tiers
-        if (NuniswapExtraFeeTiers > 0) {
+        if (numUniswapExtraFeeTiers > 0) {
             uniswapExtraFeeTiers_ >>= 8;
-            for (uint i = 0; i < NuniswapExtraFeeTiers; i++) {
+            for (uint i = 0; i < numUniswapExtraFeeTiers; i++) {
                 uniswapFeeTiers[4 + i] = UniswapFeeTier(
                     uint24(uniswapExtraFeeTiers_),
                     int24(uint24(uniswapExtraFeeTiers_ >> 24))
@@ -404,9 +404,9 @@ contract Oracle {
             (8 + 48 * (uniswapFeeTiers.length - 4));
 
         // Increase count
-        uint NuniswapExtraFeeTiers = uint(uint8(_uniswapExtraFeeTiers));
+        uint numUniswapExtraFeeTiers = uint(uint8(_uniswapExtraFeeTiers));
         _uniswapExtraFeeTiers &= (2 ** 240 - 1) << 8;
-        _uniswapExtraFeeTiers |= NuniswapExtraFeeTiers + 1;
+        _uniswapExtraFeeTiers |= numUniswapExtraFeeTiers + 1;
 
         emit UniswapFeeTierAdded(fee);
     }
@@ -533,8 +533,8 @@ contract Oracle {
                 }
 
                 // Point to the next fee tier to probe
-                uint NuniswapFeeTiers = 4 + uint8(_uniswapExtraFeeTiers);
-                oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(NuniswapFeeTiers);
+                uint numUniswapFeeTiers = 4 + uint8(_uniswapExtraFeeTiers);
+                oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTierProbeNext + 1) % uint8(numUniswapFeeTiers);
 
                 // Update timestamp
                 oracleState.timeStampFeeTier = uint40(block.timestamp);
@@ -705,8 +705,8 @@ contract Oracle {
         else {
             // Extra fee tiers
             uint uniswapExtraFeeTiers_ = _uniswapExtraFeeTiers;
-            uint NuniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
-            if (indexFeeTier >= NuniswapExtraFeeTiers + 4) revert UniswapFeeTierIndexOutOfBounds();
+            uint numUniswapExtraFeeTiers = uint(uint8(uniswapExtraFeeTiers_));
+            if (indexFeeTier >= numUniswapExtraFeeTiers + 4) revert UniswapFeeTierIndexOutOfBounds();
 
             uniswapExtraFeeTiers_ >>= 8 + 48 * (indexFeeTier - 4);
             return UniswapFeeTier(uint24(uniswapExtraFeeTiers_), int24(uint24(uniswapExtraFeeTiers_ >> 24)));
