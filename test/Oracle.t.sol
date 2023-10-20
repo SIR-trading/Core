@@ -1038,6 +1038,8 @@ contract UniswapHandler is Test {
     MockERC20 private immutable _tokenA;
     MockERC20 private immutable _tokenB;
 
+    IOracleInvariantTest private immutable _oracleInvariantTest;
+
     mapping(uint24 => uint256[]) _tokenIds;
     uint24[] internal feeTiers = [100, 500, 3000, 10000];
     uint24[] public initializedFeeTiers = new uint24[](0);
@@ -1051,12 +1053,14 @@ contract UniswapHandler is Test {
         _tokenA = tokenA_;
         _tokenB = tokenB_;
 
+        _oracleInvariantTest = IOracleInvariantTest(msg.sender);
+
         // Add 1 pool so that we can run all functions
         instantiatePool(0, 0, 2 ** 96); // Tier 100 bps and price = 1
     }
 
     function increaseCardinality(uint24 timeSkip, uint256 feeTierIndex, uint16 observationCardinalityNext) external {
-        skip(timeSkip);
+        _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
 
@@ -1070,7 +1074,7 @@ contract UniswapHandler is Test {
     }
 
     function enableFeeTier(uint24 timeSkip, uint24 fee, int24 tickSpacingUint) external {
-        skip(timeSkip);
+        _oracleInvariantTest.skip(timeSkip);
 
         fee = uint24(bound(fee, 0, 1000000 - 1));
         if (_uniswapFactory.feeAmountTickSpacing(fee) != 0) return; // already enabled
@@ -1084,7 +1088,7 @@ contract UniswapHandler is Test {
     }
 
     function instantiatePool(uint24 timeSkip, uint256 feeTierIndex, uint160 sqrtPriceX96) public {
-        skip(timeSkip);
+        _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getFeeTier(feeTierIndex);
 
@@ -1104,11 +1108,11 @@ contract UniswapHandler is Test {
         initializedFeeTiers.push(feeTier);
     }
 
-    function addLiquidity(uint24 timeSkip, uint256 feeTierIndex, uint128 liquidity) external {
-        skip(timeSkip);
+    function addLiquidity(uint24 timeSkip, uint256 feeTierIndex, uint96 liquidity) external {
+        _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
-        liquidity = uint128(bound(liquidity, 1, type(uint128).max));
+        liquidity = uint96(bound(liquidity, 1, type(uint96).max));
 
         uint160 sqrtPriceX96;
         int24 minTick;
@@ -1188,11 +1192,11 @@ contract UniswapHandler is Test {
         _tokenIds[feeTier].push(tokenId);
     }
 
-    function rmvLiquidity(uint24 timeSkip, uint256 feeTierIndex, uint128 liquidity) external {
-        skip(timeSkip);
+    function rmvLiquidity(uint24 timeSkip, uint256 feeTierIndex, uint96 liquidity) external {
+        _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
-        liquidity = uint128(bound(liquidity, 1, type(uint128).max));
+        liquidity = uint96(bound(liquidity, 1, type(uint96).max));
 
         while (liquidity > 0 && _tokenIds[feeTier].length > 0) {
             uint256 tokenId = _tokenIds[feeTier][_tokenIds[feeTier].length - 1];
@@ -1207,16 +1211,16 @@ contract UniswapHandler is Test {
                 _positionManager.decreaseLiquidity(
                     INonfungiblePositionManager.DecreaseLiquidityParams(tokenId, liquidityPos, 0, 0, block.timestamp)
                 );
-                liquidity -= liquidityPos;
+                liquidity -= uint96(liquidityPos);
             }
         }
     }
 
-    function swap(uint24 timeSkip, uint256 feeTierIndex, bool swapDirection, uint256 amountIn) external {
-        skip(timeSkip);
+    function swap(uint24 timeSkip, uint256 feeTierIndex, bool swapDirection, uint128 amountIn) external {
+        _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
-        amountIn = bound(amountIn, 1, type(uint256).max);
+        amountIn = uint128(bound(amountIn, 1, type(uint128).max));
         // If amountIn is too large for the entire pool liquidity, the remainer will be returned.
 
         // Mint mock tokens
@@ -1273,19 +1277,21 @@ contract SirOracleHandler is Test {
 
     UniswapHandler private immutable _uniswapHandler;
     Oracle public immutable oracle;
+    IOracleInvariantTest private immutable _oracleInvariantTest;
 
     constructor(MockERC20 tokenA_, MockERC20 tokenB_, UniswapHandler uniswapHandler_) {
         assert(address(tokenA_) < address(tokenB_));
         _tokenA = tokenA_;
         _tokenB = tokenB_;
 
+        _oracleInvariantTest = IOracleInvariantTest(msg.sender);
         _uniswapHandler = uniswapHandler_;
         oracle = new Oracle();
         oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
     function newUniswapFeeTier(uint24 timeSkip, uint256 feeTierIndex) external {
-        skip(timeSkip);
+        _oracleInvariantTest.skip(timeSkip);
 
         uint24[] memory feeTiers = _uniswapHandler.getFeeTiers();
         if (feeTiers.length >= 9) return; // already 9 fee tiers
@@ -1301,7 +1307,7 @@ contract SirOracleHandler is Test {
     }
 
     function updateOracleState(uint24 timeSkip, bool direction) external {
-        skip(timeSkip);
+        _oracleInvariantTest.skip(timeSkip);
 
         (address collateralToken, address debtToken) = direction
             ? (address(_tokenA), address(_tokenB))
@@ -1311,6 +1317,10 @@ contract SirOracleHandler is Test {
     }
 }
 
+interface IOracleInvariantTest {
+    function skip(uint40 timeSkip) external;
+}
+
 contract OracleInvariantTest is Test, Oracle {
     SirOracleHandler private _oracleHandler;
     Oracle private _oracle;
@@ -1318,8 +1328,11 @@ contract OracleInvariantTest is Test, Oracle {
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
 
+    uint40 private _currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
+
     function setUp() public {
         vm.createSelectFork("mainnet", 18149275);
+        _currentTime = uint40(block.timestamp);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -1335,8 +1348,13 @@ contract OracleInvariantTest is Test, Oracle {
         targetContract(address(_oracleHandler));
     }
 
+    function skip(uint40 timeSkip) external {
+        _currentTime += timeSkip;
+        vm.warp(_currentTime);
+    }
+
     function invariant_priceMaxDivergence() public {
-        console.log(block.timestamp);
+        vm.warp(_currentTime);
 
         (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.state(address(_tokenA), address(_tokenB));
         int64 tickPriceX42_B = _oracle.getPrice(address(_tokenA), address(_tokenB));
@@ -1345,6 +1363,6 @@ contract OracleInvariantTest is Test, Oracle {
             ? uint64(tickPriceX42_A - tickPriceX42_B)
             : uint64(tickPriceX42_B - tickPriceX42_A);
 
-        assertLe(tickPriceDiff, uint64(MAX_TICK_INC_PER_SEC) * (block.timestamp - timeStampPrice));
+        assertLe(tickPriceDiff, uint256(uint64(MAX_TICK_INC_PER_SEC)) * (block.timestamp - timeStampPrice));
     }
 }
