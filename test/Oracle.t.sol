@@ -1255,10 +1255,10 @@ contract UniswapHandler is Test {
             )
         returns (uint256) {
             // Do nothing if it goes through
-            console.log("SUCCESSFUL swap");
+            // console.log("SUCCESSFUL swap");
         } catch {
             // Do nothing if it fails
-            console.log("FAILED swap");
+            // console.log("FAILED swap");
         }
     }
 
@@ -1291,6 +1291,7 @@ contract SirOracleHandler is Test {
     }
 
     function newUniswapFeeTier(uint24 timeSkip, uint256 feeTierIndex) external {
+        console.log("newUniswapFeeTier");
         _oracleInvariantTest.skip(timeSkip);
 
         uint24[] memory feeTiers = _uniswapHandler.getFeeTiers();
@@ -1303,6 +1304,7 @@ contract SirOracleHandler is Test {
             if (feeTier == uniswapFeeTiers[i].fee) return; // already added
         }
 
+        console.log("Adding fee tier:", feeTier);
         oracle.newUniswapFeeTier(feeTier);
     }
 
@@ -1346,6 +1348,7 @@ contract OracleInvariantTest is Test, Oracle {
 
         targetContract(address(uniswapHandler));
         targetContract(address(_oracleHandler));
+        console.log("__________________________________");
     }
 
     function skip(uint40 timeSkip) external {
@@ -1362,6 +1365,8 @@ contract OracleInvariantTest is Test, Oracle {
         uint256 tickPriceDiff = tickPriceX42_A > tickPriceX42_B
             ? uint64(tickPriceX42_A - tickPriceX42_B)
             : uint64(tickPriceX42_B - tickPriceX42_A);
+
+        console.logInt(tickPriceX42_B);
 
         assertLe(tickPriceDiff, uint256(uint64(MAX_TICK_INC_PER_SEC)) * (block.timestamp - timeStampPrice));
     }

@@ -482,6 +482,12 @@ contract Oracle {
                         oracleDataProbed.cardinalityToIncrease
                     );
 
+                    // console.log("_________________________________________");
+                    // console.log("uniswapFeeTierProbed.fee", uniswapFeeTierProbed.fee);
+                    // console.logInt(oracleDataProbed.aggPriceTick);
+                    // console.log("oracleDataProbed.avLiquidity", oracleDataProbed.avLiquidity);
+                    // console.log("oracleDataProbed.period", oracleDataProbed.period);
+                    // console.log("oracleDataProbed.cardinalityToIncrease", oracleDataProbed.cardinalityToIncrease);
                     if (oracleDataProbed.avLiquidity > 0) {
                         /** Compute scores.
                 
@@ -513,6 +519,7 @@ contract Oracle {
                                     oracleState.uniswapFeeTier.fee,
                                     uniswapFeeTierProbed.fee
                                 );
+                                console.log("FEE TIER CHANGE");
                                 oracleState.uniswapFeeTier = uniswapFeeTierProbed;
                             }
                         } else {
