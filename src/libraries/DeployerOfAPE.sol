@@ -66,7 +66,7 @@ library DeployerOfAPE {
                 abi.encodePacked(
                     "Tokenized ",
                     IERC20(addrCollateralToken).symbol(),
-                    " / ",
+                    "/",
                     IERC20(addrDebtToken).symbol(),
                     " with x",
                     leverageStr,

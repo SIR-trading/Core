@@ -18,7 +18,7 @@ abstract contract TEA is ERC1155 {
         (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
         return
             string.concat(
-                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE",
+                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-",
                 vaultIdStr,
                 "%22%2C%22symbol%22%3A%22TEA-",
                 vaultIdStr,
