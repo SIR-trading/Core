@@ -2,14 +2,15 @@
 pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
-import {APE} from "src/APE.sol";
+import {TEA} from "src/TEA.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 contract TEAInstance is TEA {
     VaultStructs.Parameters[] private _paramsById;
 
-    constructor(address systemControl_, address sir, address oracle_) SystemState(systemControl_, sir) {
+    constructor() {
         /** We rely on vaultId == 0 to test if a particular vault exists.
          *  To make sure vault Id 0 is never used, we push one empty element as first entry.
          */
@@ -20,12 +21,20 @@ contract TEAInstance is TEA {
         _paramsById.push(VaultStructs.Parameters(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, 1));
     }
 
+    function mint(address to, uint256 vaultId, uint256 amount) external {
+        _mint(to, vaultId, amount);
+    }
+
+    function burn(address from, uint256 vaultId, uint256 amount) external {
+        _burn(from, vaultId, amount);
+    }
+
     function _updateLPerIssuanceParams(
         uint256 vaultId,
         address lper0,
         address lper1,
         bool sirIsCaller
-    ) internal virtual returns (uint104 unclaimedRewards) {}
+    ) internal override returns (uint104 unclaimedRewards) {}
 
     function paramsById(
         uint256 vaultId
@@ -53,171 +62,472 @@ contract TEATest is Test {
         uint256[] amounts
     );
 
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
     TEAInstance tea;
     address alice;
     address bob;
+    address charlie;
 
     uint256 constant vaultIdA = 1;
     uint256 constant vaultIdB = 2;
 
     function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
         tea = new TEAInstance();
         alice = vm.addr(1);
         bob = vm.addr(2);
+        charlie = vm.addr(3);
     }
 
-    function test_initialConditions(uint256 vaultId) public {
+    function test_initialConditions() public {
         assertEq(tea.totalSupply(vaultIdA), 0);
-        assertEq(tea.balanceOf(vaultIdA, alice), 0);
-        assertEq(tea.balanceOf(vaultIdA, bob), 0);
+        assertEq(tea.balanceOf(alice, vaultIdA), 0);
+        assertEq(tea.balanceOf(bob, vaultIdA), 0);
         assertEq(
             tea.uri(vaultIdA),
-            "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-1%22%2C%22symbol%22%3A%22TEA-1%22%2C%22decimals%22%3A18%2C%22chainId%22%3A1%2C%22debtToken%22%3A%220xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48%22%2C%22collateralToken%22%3A%220xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2%22%2C%22leverageTier%22%3A-2%7D"
+            "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-1%22%2C%22symbol%22%3A%22TEA-1%22%2C%22decimals%22%3A18%2C%22chainId%22%3A1%2C%22debtToken%22%3A%220xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48%22%2C%22collateralToken%22%3A%220xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2%22%2C%22leverageTier%22%3A-2%2C%22totalSupply%22%3A0%7D"
         );
 
         assertEq(tea.totalSupply(vaultIdB), 0);
-        assertEq(tea.balanceOf(vaultIdB, alice), 0);
-        assertEq(tea.balanceOf(vaultIdB, bob), 0);
+        assertEq(tea.balanceOf(alice, vaultIdB), 0);
+        assertEq(tea.balanceOf(bob, vaultIdB), 0);
         assertEq(
             tea.uri(vaultIdB),
-            "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-2%22%2C%22symbol%22%3A%22TEA-2%22%2C%22decimals%22%3A6%2C%22chainId%22%3A1%2C%22debtToken%22%3A%220xBC6DA0FE9aD5f3b0d58160288917AA56653660E9%22%2C%22collateralToken%22%3A%220xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48%22%2C%22leverageTier%22%3A-2%7D"
+            "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-2%22%2C%22symbol%22%3A%22TEA-2%22%2C%22decimals%22%3A6%2C%22chainId%22%3A1%2C%22debtToken%22%3A%220xbc6da0fe9ad5f3b0d58160288917aa56653660e9%22%2C%22collateralToken%22%3A%220xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48%22%2C%22leverageTier%22%3A1%2C%22totalSupply%22%3A0%7D"
         );
     }
 
-    // function testFuzz_mint(uint256 mintAmountA, uint256 mintAmountB) public {
-    //     vm.expectEmit();
-    //     emit Transfer(address(0), alice, mintAmountA);
-    //     tea.mint(alice, mintAmountA);
-    //     assertEq(tea.balanceOf(alice), mintAmountA);
-    //     assertEq(tea.totalSupply(), mintAmountA);
+    function testFail_initialConditions() public view {
+        tea.uri(0);
+    }
 
-    //     mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
+    function testFuzz_setApprovalForAll(bool approved) public {
+        vm.prank(alice); // Setting the sender to 'alice'
 
-    //     vm.expectEmit();
-    //     emit Transfer(address(0), bob, mintAmountB);
-    //     tea.mint(bob, mintAmountB);
-    //     assertEq(tea.balanceOf(bob), mintAmountB);
-    //     assertEq(tea.totalSupply(), mintAmountA + mintAmountB);
-    // }
+        vm.expectEmit();
+        emit ApprovalForAll(alice, bob, approved);
+        tea.setApprovalForAll(bob, approved); // Setting 'bob' as the operator for 'alice'
 
-    // function testFuzz_mintFails(uint256 mintAmountA, uint256 mintAmountB) public {
-    //     mintAmountA = bound(mintAmountA, 1, type(uint256).max);
-    //     tea.mint(alice, mintAmountA);
+        // Asserting the approval
+        if (approved) assertTrue(tea.isApprovedForAll(alice, bob));
+        else assertTrue(!tea.isApprovedForAll(alice, bob));
+    }
 
-    //     mintAmountB = bound(mintAmountB, type(uint256).max - mintAmountA + 1, type(uint256).max);
-    //     vm.expectRevert();
-    //     tea.mint(bob, mintAmountB);
-    // }
+    ///////////////////////////
+    //// safeTransferForm ////
+    /////////////////////////
 
-    // function testFail_mintByNonOwner() public {
-    //     vm.prank(alice);
-    //     APE(tea).mint(bob, 1000); // This should fail because bob is not the owner
-    // }
+    function testFuzz_safeTransferFrom(uint256 vaultId, uint256 transferAmount, uint256 mintAmount) public {
+        // Bounds the amounts
+        transferAmount = bound(transferAmount, 1, type(uint256).max);
+        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
-    // function testFuzz_burn(uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-    //     mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
-    //     burnAmountB = bound(burnAmountB, 0, mintAmountB);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(bob, vaultId, mintAmount);
 
-    //     tea.mint(alice, mintAmountA);
-    //     tea.mint(bob, mintAmountB);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
 
-    //     vm.expectEmit();
-    //     emit Transfer(bob, address(0), burnAmountB);
-    //     tea.burn(bob, burnAmountB);
+        // Expecting the transfer event
+        vm.expectEmit();
+        emit TransferSingle(alice, bob, charlie, vaultId, transferAmount);
 
-    //     assertEq(tea.balanceOf(bob), mintAmountB - burnAmountB);
-    //     assertEq(tea.totalSupply(), mintAmountA + mintAmountB - burnAmountB);
-    // }
+        // Alice transfers from Bob to Charlie
+        vm.prank(alice);
+        tea.safeTransferFrom(bob, charlie, vaultId, transferAmount, "");
 
-    // function testFuzz_burnMoreThanBalance(uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-    //     mintAmountA = bound(mintAmountA, 0, type(uint256).max - 1);
-    //     mintAmountB = bound(mintAmountB, 1, type(uint256).max - mintAmountA);
-    //     burnAmountB = bound(burnAmountB, mintAmountB + 1, type(uint256).max);
+        // Asserting the post-transfer state
+        assertEq(tea.balanceOf(alice, vaultId), 0);
+        assertEq(tea.balanceOf(bob, vaultId), mintAmount - transferAmount);
+        assertEq(tea.balanceOf(charlie, vaultId), transferAmount);
+    }
 
-    //     tea.mint(alice, mintAmountA);
-    //     tea.mint(bob, mintAmountB);
+    function testFuzz_safeTransferFromExceedBalance(
+        uint256 vaultId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        // Bounds the amounts
+        transferAmount = bound(transferAmount, 1, type(uint256).max);
+        mintAmount = bound(mintAmount, 0, transferAmount - 1);
 
-    //     vm.expectRevert();
-    //     tea.burn(bob, burnAmountB);
-    // }
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(bob, vaultId, mintAmount);
 
-    // function testFuzz_transfer(uint256 transferAmount, uint256 mintAmount) public {
-    //     transferAmount = bound(transferAmount, 1, type(uint256).max);
-    //     mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
 
-    //     tea.mint(alice, mintAmount);
+        // Alice transfers from Bob to herself
+        vm.prank(alice);
+        vm.expectRevert();
+        tea.safeTransferFrom(bob, charlie, vaultId, transferAmount, "");
+    }
 
-    //     vm.expectEmit();
-    //     emit Transfer(alice, bob, transferAmount);
-    //     vm.prank(alice);
-    //     assertTrue(tea.transfer(bob, transferAmount));
-    //     assertEq(tea.balanceOf(bob), transferAmount);
-    //     assertEq(tea.balanceOf(alice), mintAmount - transferAmount);
-    // }
+    function testFuzz_safeTransferFromNotAuthorized(
+        uint256 vaultId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        // Bounds the amounts
+        transferAmount = bound(transferAmount, 1, type(uint256).max);
+        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
-    // function testFuzz_transferMoreThanBalance(uint256 transferAmount, uint256 mintAmount) public {
-    //     transferAmount = bound(transferAmount, 1, type(uint256).max);
-    //     mintAmount = bound(mintAmount, 0, transferAmount - 1);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(bob, vaultId, mintAmount);
 
-    //     tea.mint(alice, mintAmount);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
 
-    //     vm.expectRevert();
-    //     tea.transfer(bob, transferAmount);
-    // }
+        // Charlie fails to transfer from Bob
+        vm.prank(charlie);
+        vm.expectRevert("NOT_AUTHORIZED");
+        tea.safeTransferFrom(bob, alice, vaultId, transferAmount, "");
+    }
 
-    // function testFuzz_approve(uint256 amount) public {
-    //     vm.prank(alice);
-    //     assertTrue(tea.approve(bob, amount));
-    //     assertEq(tea.allowance(alice, bob), amount);
-    // }
+    function testFuzz_safeTransferFromToContract(uint256 vaultId, uint256 transferAmount, uint256 mintAmount) public {
+        // Bounds the amounts
+        transferAmount = bound(transferAmount, 1, type(uint256).max);
+        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
-    // function testFuzz_transferFrom(uint256 transferAmount, uint256 mintAmount) public {
-    //     transferAmount = bound(transferAmount, 1, type(uint256).max);
-    //     mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(bob, vaultId, mintAmount);
 
-    //     tea.mint(bob, mintAmount);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
 
-    //     vm.prank(bob);
-    //     assertTrue(tea.approve(alice, mintAmount));
-    //     assertEq(tea.allowance(bob, alice), mintAmount);
+        // Alice fails to transfer from Bob to this contract
+        vm.prank(alice);
+        vm.expectRevert();
+        tea.safeTransferFrom(bob, address(this), vaultId, transferAmount, "");
+    }
 
-    //     vm.expectEmit();
-    //     emit Transfer(bob, alice, transferAmount);
-    //     vm.prank(alice);
-    //     assertTrue(tea.transferFrom(bob, alice, transferAmount));
+    function testFuzz_safeTransferFromUnsafeRecipient(
+        uint256 vaultId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        vm.mockCall(
+            address(this),
+            abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
+            abi.encode(TEAInstance.mint.selector) // Wrong selector
+        );
 
-    //     assertEq(tea.balanceOf(bob), mintAmount - transferAmount);
-    //     assertEq(tea.allowance(bob, alice), mintAmount == type(uint256).max ? mintAmount : mintAmount - transferAmount);
-    //     assertEq(tea.balanceOf(alice), transferAmount);
-    // }
+        // Bounds the amounts
+        transferAmount = bound(transferAmount, 1, type(uint256).max);
+        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
-    // function testFuzz_transferFromWithoutApproval(uint256 transferAmount, uint256 mintAmount) public {
-    //     transferAmount = bound(transferAmount, 1, type(uint256).max);
-    //     mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(bob, vaultId, mintAmount);
 
-    //     tea.mint(bob, mintAmount);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
 
-    //     vm.expectRevert();
-    //     vm.prank(alice);
-    //     tea.transferFrom(bob, alice, transferAmount);
-    // }
+        // Alice fails to transfer from Bob to this contract
+        vm.prank(alice);
+        vm.expectRevert("UNSAFE_RECIPIENT");
+        tea.safeTransferFrom(bob, address(this), vaultId, transferAmount, "");
+    }
 
-    // function testFuzz_transferFromExceedAllowance(
-    //     uint256 transferAmount,
-    //     uint256 mintAmount,
-    //     uint256 allowedAmount
-    // ) public {
-    //     transferAmount = bound(transferAmount, 1, type(uint256).max);
-    //     mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
-    //     allowedAmount = bound(allowedAmount, 0, transferAmount - 1);
+    function testFuzz_safeTransferFromSafeRecipient(
+        uint256 vaultId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        vm.mockCall(
+            address(this),
+            abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
+            abi.encode(ERC1155TokenReceiver.onERC1155Received.selector)
+        );
 
-    //     tea.mint(bob, mintAmount);
+        // Bounds the amounts
+        transferAmount = bound(transferAmount, 1, type(uint256).max);
+        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
-    //     vm.prank(bob);
-    //     tea.approve(alice, allowedAmount);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(bob, vaultId, mintAmount);
 
-    //     vm.expectRevert();
-    //     vm.prank(alice);
-    //     tea.transferFrom(bob, alice, transferAmount);
-    // }
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
+
+        // Expecting the transfer event
+        vm.expectEmit();
+        emit TransferSingle(alice, bob, address(this), vaultId, transferAmount);
+
+        // Alice transfers from Bob to this contract
+        vm.prank(alice);
+        tea.safeTransferFrom(bob, address(this), vaultId, transferAmount, "");
+
+        // Asserting the post-transfer state
+        assertEq(tea.balanceOf(alice, vaultId), 0);
+        assertEq(tea.balanceOf(bob, vaultId), mintAmount - transferAmount);
+        assertEq(tea.balanceOf(address(this), vaultId), transferAmount);
+    }
+
+    ////////////////////////////////
+    //// safeBatchTransferFrom ////
+    //////////////////////////////
+
+    function _convertToDynamicArray(uint256 a, uint256 b) private pure returns (uint256[] memory arrOut) {
+        arrOut = new uint256[](2);
+        arrOut[0] = a;
+        arrOut[1] = b;
+    }
+
+    function testFuzz_safeBatchTransferFrom1(
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB
+    ) public {
+        transferAmountA = bound(transferAmountA, 1, type(uint256).max);
+        mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
+        tea.mint(bob, vaultIdA, mintAmountA);
+
+        transferAmountB = bound(transferAmountB, 1, type(uint256).max);
+        mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
+        tea.mint(bob, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
+
+        // Expecting the batch transfer event
+        vm.expectEmit();
+        emit TransferBatch(
+            alice,
+            bob,
+            charlie,
+            _convertToDynamicArray(vaultIdA, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB)
+        );
+
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(alice);
+        tea.safeBatchTransferFrom(
+            bob,
+            charlie,
+            _convertToDynamicArray(vaultIdA, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+
+        assertEq(tea.balanceOf(bob, vaultIdA), mintAmountA - transferAmountA);
+        assertEq(tea.balanceOf(charlie, vaultIdA), transferAmountA);
+        assertEq(tea.balanceOf(bob, vaultIdB), mintAmountB - transferAmountB);
+        assertEq(tea.balanceOf(charlie, vaultIdB), transferAmountB);
+    }
+
+    function testFuzz_safeBatchTransferFromNotAuthorized(
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB
+    ) public {
+        transferAmountA = bound(transferAmountA, 1, type(uint256).max);
+        mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
+        tea.mint(bob, vaultIdA, mintAmountA);
+
+        transferAmountB = bound(transferAmountB, 1, type(uint256).max);
+        mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
+        tea.mint(bob, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
+
+        // Charlie fails to batch transfer from Bob
+        vm.prank(charlie);
+        vm.expectRevert("NOT_AUTHORIZED");
+        tea.safeBatchTransferFrom(
+            bob,
+            alice,
+            _convertToDynamicArray(vaultIdA, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
+
+    function testFuzz_safeBatchTransferFromExceedBalance(
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB
+    ) public {
+        transferAmountA = bound(transferAmountA, 1, type(uint256).max);
+        mintAmountA = bound(mintAmountA, 0, transferAmountA - 1);
+        tea.mint(bob, vaultIdA, mintAmountA);
+
+        transferAmountB = bound(transferAmountB, 1, type(uint256).max);
+        mintAmountB = bound(mintAmountB, 0, transferAmountB - 1);
+        tea.mint(bob, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
+
+        // Alice tries to batch transfer from Bob but should fail
+        vm.prank(alice);
+        vm.expectRevert();
+        tea.safeBatchTransferFrom(
+            bob,
+            charlie,
+            _convertToDynamicArray(vaultIdA, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
+
+    function testFuzz_safeBatchTransferFromToContract(
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB
+    ) public {
+        transferAmountA = bound(transferAmountA, 1, type(uint256).max);
+        mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
+        tea.mint(bob, vaultIdA, mintAmountA);
+
+        transferAmountB = bound(transferAmountB, 1, type(uint256).max);
+        mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
+        tea.mint(bob, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
+
+        // Alice fails to batch transfer from Bob to this contract
+        vm.prank(alice);
+        vm.expectRevert();
+        tea.safeBatchTransferFrom(
+            bob,
+            address(this),
+            _convertToDynamicArray(vaultIdA, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
+
+    function testFuzz_safeBatchTransferFromUnsafeRecipient(
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB
+    ) public {
+        vm.mockCall(
+            address(this),
+            abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155BatchReceived.selector),
+            abi.encode(TEAInstance.mint.selector) // Wrong selector
+        );
+
+        transferAmountA = bound(transferAmountA, 1, type(uint256).max);
+        mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
+        tea.mint(bob, vaultIdA, mintAmountA);
+
+        transferAmountB = bound(transferAmountB, 1, type(uint256).max);
+        mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
+        tea.mint(bob, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(bob);
+        tea.setApprovalForAll(alice, true);
+
+        // Alice fails to batch transfer from Bob to an unsafe recipient
+        vm.prank(alice);
+        vm.expectRevert();
+        tea.safeBatchTransferFrom(
+            bob,
+            address(this),
+            _convertToDynamicArray(vaultIdA, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
+}
+
+contract TEATestInternal is Test, TEA {
+    address alice;
+    address bob;
+    address charlie;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        alice = vm.addr(1);
+        bob = vm.addr(2);
+        charlie = vm.addr(3);
+    }
+
+    function _updateLPerIssuanceParams(
+        uint256 vaultId,
+        address lper0,
+        address lper1,
+        bool sirIsCaller
+    ) internal override returns (uint104 unclaimedRewards) {}
+
+    function paramsById(
+        uint256 vaultId
+    ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {}
+
+    function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
+        _mint(alice, vaultId, mintAmountA);
+        assertEq(balanceOf[alice][vaultId], mintAmountA);
+        assertEq(totalSupply[vaultId], mintAmountA);
+
+        mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
+
+        vm.expectEmit();
+        emit TransferSingle(msg.sender, address(0), bob, vaultId, mintAmountB);
+        _mint(bob, vaultId, mintAmountB);
+        assertEq(balanceOf[bob][vaultId], mintAmountB);
+        assertEq(totalSupply[vaultId], mintAmountA + mintAmountB);
+    }
+
+    function testFuzz_mintFails(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
+        mintAmountA = bound(mintAmountA, 1, type(uint256).max);
+        _mint(alice, vaultId, mintAmountA);
+
+        mintAmountB = bound(mintAmountB, type(uint256).max - mintAmountA + 1, type(uint256).max);
+        vm.expectRevert();
+        _mint(bob, vaultId, mintAmountB);
+    }
+
+    function testFuzz_burn(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
+        mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
+        burnAmountB = bound(burnAmountB, 0, mintAmountB);
+
+        _mint(alice, vaultId, mintAmountA);
+        _mint(bob, vaultId, mintAmountB);
+
+        vm.expectEmit();
+        emit TransferSingle(msg.sender, bob, address(0), vaultId, burnAmountB);
+        _burn(bob, vaultId, burnAmountB);
+
+        assertEq(balanceOf[bob][vaultId], mintAmountB - burnAmountB);
+        assertEq(totalSupply[vaultId], mintAmountA + mintAmountB - burnAmountB);
+    }
+
+    function testFuzz_burnMoreThanBalance(
+        uint256 vaultId,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint256 burnAmountB
+    ) public {
+        mintAmountA = bound(mintAmountA, 1, type(uint256).max - 1);
+        mintAmountB = bound(mintAmountB, 1, type(uint256).max - mintAmountA);
+        burnAmountB = bound(burnAmountB, mintAmountB + 1, type(uint256).max);
+
+        _mint(alice, vaultId, mintAmountA);
+        _mint(bob, vaultId, mintAmountB);
+
+        vm.expectRevert();
+        _burn(bob, vaultId, burnAmountB);
+    }
 }

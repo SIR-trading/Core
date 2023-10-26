@@ -12,9 +12,9 @@ contract APETest is Test {
     APE ape;
     address alice;
     address bob;
+    address charlie;
 
     function setUp() public {
-        // vm.etch(msg.sender, type(APE).creationCode);
         vm.mockCall(
             address(this),
             abi.encodeWithSelector(IVault.latestTokenParams.selector),
@@ -30,6 +30,7 @@ contract APETest is Test {
         ape = new APE();
         alice = vm.addr(1);
         bob = vm.addr(2);
+        charlie = vm.addr(3);
     }
 
     function test_initialConditions() public {
@@ -142,13 +143,14 @@ contract APETest is Test {
         assertEq(ape.allowance(bob, alice), mintAmount);
 
         vm.expectEmit();
-        emit Transfer(bob, alice, transferAmount);
+        emit Transfer(bob, charlie, transferAmount);
         vm.prank(alice);
-        assertTrue(ape.transferFrom(bob, alice, transferAmount));
+        assertTrue(ape.transferFrom(bob, charlie, transferAmount));
 
         assertEq(ape.balanceOf(bob), mintAmount - transferAmount);
         assertEq(ape.allowance(bob, alice), mintAmount == type(uint256).max ? mintAmount : mintAmount - transferAmount);
-        assertEq(ape.balanceOf(alice), transferAmount);
+        assertEq(ape.balanceOf(alice), 0);
+        assertEq(ape.balanceOf(charlie), transferAmount);
     }
 
     function testFuzz_transferFromWithoutApproval(uint256 transferAmount, uint256 mintAmount) public {

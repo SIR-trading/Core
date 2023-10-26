@@ -9,6 +9,7 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 
 // Contracts
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
+import "forge-std/Test.sol";
 
 abstract contract TEA is ERC1155 {
     mapping(uint256 vaultId => uint256) public totalSupply;
@@ -30,6 +31,8 @@ abstract contract TEA is ERC1155 {
                 Strings.toHexString(collateralToken),
                 "%22%2C%22leverageTier%22%3A",
                 Strings.toString(leverageTier),
+                "%2C%22totalSupply%22%3A",
+                Strings.toString(totalSupply[vaultId]),
                 "%7D"
             );
     }
@@ -131,10 +134,10 @@ abstract contract TEA is ERC1155 {
         _updateLPerIssuanceParams(vaultId, from, address(0), false);
 
         // Burn
-        totalSupply[vaultId] -= amount;
         unchecked {
-            balanceOf[from][vaultId] -= amount;
+            totalSupply[vaultId] -= amount;
         }
+        balanceOf[from][vaultId] -= amount;
 
         emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
     }
