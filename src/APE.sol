@@ -37,8 +37,12 @@ contract APE is Owned {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Because the constructor does not have arguments, the deployment bytecode is the same for all tokens.
+    /** @dev CREATE2 deployment allows Vault.sol to compute the APE address (needed by Vault to make external calls)
+        without storing it in storage, saving gas. However, because Vault.sol is already at the limit of 24KB,
+        we can't import the APE creation code necessary for predicting the CREATE2 address.
+        However, CREATE2 uses the hash of the creation code and its parameters to predict the address.
+        So if we do not pass any parameters we can just hardcode the hash of the APE creation code which
+        only takes 32 bytes.
      */
     constructor() {
         // Set immutable parameters
