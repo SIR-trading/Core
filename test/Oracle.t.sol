@@ -15,7 +15,7 @@ import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {Tick} from "v3-core/libraries/Tick.sol";
 import {SwapMath} from "v3-core/libraries/SwapMath.sol";
 import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
-import {IWETH9} from "v3-periphery/interfaces/external/IWETH9.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
 
 contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
