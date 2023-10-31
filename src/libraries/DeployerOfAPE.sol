@@ -13,6 +13,13 @@ import {APE} from "../APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
 library DeployerOfAPE {
+    event VaultInitialized(
+        address indexed debtToken,
+        address indexed collateralToken,
+        int8 indexed leverageTier,
+        uint256 vaultId
+    );
+
     // Deploy APE token
     function deploy(
         VaultStructs.TokenParameters storage tokenParameters,
@@ -30,7 +37,9 @@ library DeployerOfAPE {
         tokenParameters.decimals = IERC20(collateralToken).decimals();
 
         // Deploy APE
-        new APE{salt: bytes32(vaultId)}();
+        APE ape = new APE{salt: bytes32(vaultId)}();
+
+        emit VaultInitialized(debtToken, collateralToken, leverageTier, vaultId);
     }
 
     /** @param addrDebtToken Address of the unclaimedRewards token

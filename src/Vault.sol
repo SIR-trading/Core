@@ -21,13 +21,6 @@ contract Vault is SystemState {
     error VaultDoesNotExist();
     error LeverageTierOutOfRange();
 
-    event VaultInitialized(
-        address indexed debtToken,
-        address indexed collateralToken,
-        int8 indexed leverageTier,
-        uint256 vaultId
-    );
-
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
 

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {APE} from "../APE.sol";
+
 library SaltedAddress {
-    bytes32 private constant _HASH_CREATION_CODE_APE =
-        0x36af10401bb78153f4e90dbeb1fad843a0704d3884a00ab6d41ebca444f24edd; // keccak256(abi.encodePacked(vm.getCode("APE.sol:APE")))
+    bytes32 private constant _HASH_CREATION_CODE_APE = keccak256(type(APE).creationCode);
 
     function getAddress(uint256 vaultId) internal view returns (address) {
         return
