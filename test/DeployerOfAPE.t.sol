@@ -43,13 +43,7 @@ contract MockCaller {
     }
 
     function deploy(uint40 vaultId, int8 leverageTier) external {
-        DeployerOfAPE.deploy(
-            _transientTokenParameters,
-            vaultId,
-            Addresses._ADDR_USDC,
-            Addresses._ADDR_WETH,
-            leverageTier
-        );
+        DeployerOfAPE.deploy(_transientTokenParameters, vaultId, _debtToken, _collateralToken, leverageTier);
     }
 
     function getApeAddress(uint40 vaultId) external view returns (address) {
@@ -69,17 +63,16 @@ contract DeployerOfAPETest is Test {
         vm.createSelectFork("mainnet", 18128102);
     }
 
-    function test_deployETHvsUSDC() public {
+    function test_deployETHvsUSDC() public returns (MockCaller mockCaller) {
         uint40 vaultId = 42;
         int8 leverageTier = -2;
 
-        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
+        mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
 
         vm.expectEmit();
         emit VaultInitialized(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier, vaultId);
         mockCaller.deploy(vaultId, leverageTier);
 
-        vm.prank(address(mockCaller));
         address ape = mockCaller.getApeAddress(vaultId);
         assertGt(ape.code.length, 0);
 
@@ -88,71 +81,67 @@ contract DeployerOfAPETest is Test {
         assertEq(IERC20(ape).decimals(), 18);
     }
 
-    // function testFuzz_deployETHvsUSDC(uint40 vaultId, int8 leverageTier) public {
-    //     vm.assume(vaultId > 0);
-    //     leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
+    function test_deployETHvsUSDCRepeatedVault() public {
+        uint40 vaultId = 42;
+        int8 leverageTier = 0;
 
-    //     vm.mockCall(
-    //         address(this),
-    //         abi.encodeWithSelector(IVault.latestTokenParams.selector),
-    //         abi.encode(
-    //             _transientTokenParameters.name,
-    //             _transientTokenParameters.symbol,
-    //             _transientTokenParameters.decimals,
-    //             Addresses._ADDR_USDC,
-    //             Addresses._ADDR_WETH,
-    //             leverageTier
-    //         )
-    //     );
+        MockCaller mockCaller = test_deployETHvsUSDC();
 
-    //     vm.expectEmit();
-    //     emit VaultInitialized(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier, vaultId);
-    //     DeployerOfAPE.deploy(
-    //         _transientTokenParameters,
-    //         vaultId,
-    //         Addresses._ADDR_USDC,
-    //         Addresses._ADDR_WETH,
-    //         leverageTier
-    //     );
+        vm.expectRevert();
+        mockCaller.deploy(vaultId, leverageTier);
+    }
 
-    //     address ape = SaltedAddress.getAddress(vaultId);
-    //     assertGt(ape.code.length, 0);
+    function test_deployETHvsUSDCWrongVaultId() public {
+        uint40 vaultId = 0;
+        int8 leverageTier = -2;
 
-    //     assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(vaultId)));
-    //     assertEq(IERC20(ape).decimals(), IERC20(Addresses._ADDR_WETH).decimals());
-    // }
+        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
 
-    // function testFuzz_deployUSDCvsALUSD(uint40 vaultId, int8 leverageTier) public {
-    //     vm.assume(vaultId > 0);
-    //     leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
+        vm.expectRevert();
+        mockCaller.deploy(vaultId, leverageTier);
+    }
 
-    //     vm.mockCall(
-    //         address(this),
-    //         abi.encodeWithSelector(IVault.latestTokenParams.selector),
-    //         abi.encode(
-    //             _transientTokenParameters.name,
-    //             _transientTokenParameters.symbol,
-    //             _transientTokenParameters.decimals,
-    //             Addresses._ADDR_ALUSD,
-    //             Addresses._ADDR_USDC,
-    //             leverageTier
-    //         )
-    //     );
+    function testFuzz_deployETHvsUSDC(uint40 vaultId, int8 leverageTier) public {
+        vm.assume(vaultId > 0);
+        leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
 
-    //     vm.expectEmit();
-    //     emit VaultInitialized(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, leverageTier, vaultId);
-    //     DeployerOfAPE.deploy(
-    //         _transientTokenParameters,
-    //         vaultId,
-    //         Addresses._ADDR_ALUSD,
-    //         Addresses._ADDR_USDC,
-    //         leverageTier
-    //     );
+        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
 
-    //     address ape = SaltedAddress.getAddress(vaultId);
-    //     assertGt(ape.code.length, 0);
+        vm.expectEmit();
+        emit VaultInitialized(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier, vaultId);
+        mockCaller.deploy(vaultId, leverageTier);
 
-    //     assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(vaultId)));
-    //     assertEq(IERC20(ape).decimals(), IERC20(Addresses._ADDR_USDC).decimals());
-    // }
+        address ape = mockCaller.getApeAddress(vaultId);
+        assertGt(ape.code.length, 0);
+
+        assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(vaultId)));
+        assertEq(IERC20(ape).decimals(), IERC20(Addresses._ADDR_WETH).decimals());
+    }
+
+    function testFuzz_deployETHvsUSDCWrongLeverage(uint40 vaultId, int8 leverageTier) public {
+        vm.assume(vaultId > 0);
+        vm.assume(leverageTier < -3 || leverageTier > 2); // Non accepted values in the system
+
+        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
+
+        vm.expectRevert();
+        mockCaller.deploy(vaultId, leverageTier);
+    }
+
+    function testFuzz_deployUSDCvsALUSD(uint40 vaultId, int8 leverageTier) public {
+        vm.assume(vaultId > 0);
+        leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
+
+        MockCaller mockCaller = new MockCaller(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, leverageTier);
+
+        vm.expectEmit();
+        emit VaultInitialized(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, leverageTier, vaultId);
+        mockCaller.deploy(vaultId, leverageTier);
+
+        address ape = mockCaller.getApeAddress(vaultId);
+        assertGt(ape.code.length, 0);
+
+        assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(vaultId)));
+        assertEq(IERC20(ape).decimals(), IERC20(Addresses._ADDR_USDC).decimals());
+    }
 }

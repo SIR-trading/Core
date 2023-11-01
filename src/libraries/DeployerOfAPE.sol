@@ -12,7 +12,7 @@ import {FullMath} from "./FullMath.sol";
 import {APE} from "../APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
-import "forge-std/Test.sol";
+// import "forge-std/Test.sol";
 
 library DeployerOfAPE {
     event VaultInitialized(
@@ -30,6 +30,8 @@ library DeployerOfAPE {
         address collateralToken,
         int8 leverageTier
     ) external {
+        assert(vaultId > 0);
+
         /**
          * Set the parameters that will be read during the instantiation of the tokens.
          * This pattern is used to avoid passing arguments to the constructor explicitly.
