@@ -12,6 +12,8 @@ import {FullMath} from "./FullMath.sol";
 import {APE} from "../APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
+import "forge-std/Test.sol";
+
 library DeployerOfAPE {
     event VaultInitialized(
         address indexed debtToken,
@@ -37,7 +39,7 @@ library DeployerOfAPE {
         tokenParameters.decimals = IERC20(collateralToken).decimals();
 
         // Deploy APE
-        APE ape = new APE{salt: bytes32(vaultId)}();
+        new APE{salt: bytes32(vaultId)}();
 
         emit VaultInitialized(debtToken, collateralToken, leverageTier, vaultId);
     }
@@ -52,23 +54,14 @@ library DeployerOfAPE {
         address addrCollateralToken,
         int8 leverageTier
     ) private view returns (string memory) {
+        assert(leverageTier >= -3 && leverageTier <= 2);
         string memory leverageStr;
-        if (leverageTier >= 0) {
-            return Strings.toString(1 + 2 ** uint256(int256(leverageTier)));
-        } else {
-            // Get leverage tier string without decimal point
-            uint256 negLeverageTier = uint256(int256(-leverageTier));
-            bytes memory nonDecimalPoinStr = bytes(
-                Strings.toString(FullMath.mulDiv(1 + 2 ** negLeverageTier, 10 ** negLeverageTier, 2 ** negLeverageTier))
-            );
-
-            // Add decimal point
-            bytes memory decimalPartStr = new bytes(nonDecimalPoinStr.length - 2);
-            for (uint256 i = 0; i < decimalPartStr.length; i++) {
-                decimalPartStr[i] = nonDecimalPoinStr[i + 2];
-            }
-            leverageStr = string(abi.encodePacked("1.", decimalPartStr));
-        }
+        if (leverageTier == -3) leverageStr = "1.125";
+        else if (leverageTier == -2) leverageStr = "1.25";
+        else if (leverageTier == -1) leverageStr = "1.5";
+        else if (leverageTier == 0) leverageStr = "2";
+        else if (leverageTier == 1) leverageStr = "3";
+        else if (leverageTier == 2) leverageStr = "5";
 
         return
             string(
