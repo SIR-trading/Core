@@ -1,13 +1,6 @@
 {
-    "devDependencies": {
-        "@nomicfoundation/hardhat-foundry": "^1.0.2",
-        "@nomiclabs/hardhat-ethers": "^2.2.3",
-        "chai": "^4.3.7",
-        "ethereum-waffle": "^4.0.10",
-        "ethers": "^5.7.2",
-        "fraction.js": "^4.2.0",
-        "hardhat": "^2.16.1",
-        "ieee754-buffer": "^2.0.0",
-        "seedrandom": "^3.0.5"
-    }
+  "dependencies": {
+    "decimal.js": "^10.4.3",
+    "ethers": "^6.8.1"
+  }
 }
