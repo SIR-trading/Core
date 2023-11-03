@@ -33,6 +33,7 @@ contract TickMathPrecisionTest is Test {
             .toUInt();
 
         assertApproxEqRel(ratioX64, ratioX64Bis, 1);
+        assertLe(ratioX64, ratioX64Bis, "Not rounding down");
     }
 
     function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public {
@@ -85,6 +86,7 @@ contract TickMathPrecisionTest is Test {
         );
 
         assertApproxEqAbs(tickX42, tickX42Bis, 1);
+        assertLe(tickX42, tickX42Bis, "Not rounding down");
     }
 
     function testFuzz_getTickAtRatioWrongNumerator(uint256 num, uint256 den) public {
@@ -102,6 +104,4 @@ contract TickMathPrecisionTest is Test {
         vm.expectRevert();
         TickMathPrecision.getTickAtRatio(num, den);
     }
-
-    // MAKE AN INVARIANT TEST THAT CHECKS THE DRIF OF APPLYING BOTH OPERATIONS CONSECUTIVELY. I DESIGNED THEM TO DRIFT IN A CERTAIN WAY.
 }

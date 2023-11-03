@@ -432,16 +432,16 @@ contract Vault is SystemState {
                         reserves.apesReserve = 1;
                     } else {
                         uint256 den = poweredPriceRatio + (poweredPriceRatio << absLeverageTier);
-                        /** Rounds up.
+                        /** Rounds up apesReserve, rounds down lpReserve.
                             Cannot OF.
                             64 bits because getRatioAtTick returns a Q64.64 number.
                          */
                         reserves.apesReserve = uint152(
-                            (uint256(state_.totalReserves) * 2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier) - 1) /
+                            ((uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier)) - 1) /
                                 den +
                                 1
                         );
-                        assert(reserves.apesReserve != 0); // It should not be ever 0 because it's rounded up. Important for the protocol that it is at least 1.
+                        assert(reserves.apesReserve != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
                     }
 
                     reserves.lpReserve = state_.totalReserves - reserves.apesReserve;
@@ -462,17 +462,17 @@ contract Vault is SystemState {
                         reserves.lpReserve = 1;
                     } else {
                         uint256 den = priceRatio + (priceRatio << absLeverageTier);
-                        /** Rounds up.
+                        /** Rounds up lpReserve, rounds down apesReserve.
                             Cannot OF.
                             64 bits because getRatioAtTick returns a Q64.64 number.
                          */
                         reserves.lpReserve = uint152(
-                            (uint256(state_.totalReserves) * 2 ** (leverageTier >= 0 ? 64 : 64 + absLeverageTier) - 1) /
+                            ((uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier)) - 1) /
                                 den +
                                 1
                         );
 
-                        assert(reserves.lpReserve != 0);
+                        assert(reserves.lpReserve != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
                     }
 
                     reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
@@ -538,7 +538,7 @@ contract Vault is SystemState {
                 if (leverageTier > 0) {
                     if (
                         uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=2
+                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
                     {
                         isPowerZone = true;
                     } else {
@@ -547,7 +547,7 @@ contract Vault is SystemState {
                 } else {
                     if (
                         reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=2
+                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
                     {
                         isPowerZone = true;
                     } else {
