@@ -86,7 +86,7 @@ library TickMathPrecision {
     }
 
     /// @return tickX42 Q21.42 (+1 bit for sign)
-    /// @notice The result is never positive, but it is returned as an int for compatibilty with other negative ticks.
+    /// @notice The result is never negative, but it is returned as an int for compatibilty with negative ticks used outside this library.
     function getTickAtRatio(uint256 num, uint256 den) internal pure returns (int64 tickX42) {
         assert(num >= den);
         assert(den != 0);
