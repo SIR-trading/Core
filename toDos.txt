@@ -1,3 +1,7 @@
 # Emergency Admin Withdrawals
 When only withdrawals are allowed. Add a time interval after which the owner can withdraw all the funds without interacting with the oracle.
 This is to save the TVL if the oracle is buggy and reverts.
+
+# Functions susceptible to be externalized
+latestTokenParams
+paramsById (function and variables)

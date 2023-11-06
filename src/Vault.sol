@@ -431,16 +431,17 @@ contract Vault is SystemState {
                     if (OF) {
                         reserves.apesReserve = 1;
                     } else {
-                        uint256 den = poweredPriceRatio + (poweredPriceRatio << absLeverageTier);
                         /** Rounds up apesReserve, rounds down lpReserve.
                             Cannot OF.
                             64 bits because getRatioAtTick returns a Q64.64 number.
                          */
                         reserves.apesReserve = uint152(
-                            ((uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier)) - 1) /
-                                den +
-                                1
+                            _divRoundUp(
+                                uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
+                                poweredPriceRatio + (poweredPriceRatio << absLeverageTier)
+                            )
                         );
+
                         assert(reserves.apesReserve != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
                     }
 
@@ -461,15 +462,15 @@ contract Vault is SystemState {
                     if (OF) {
                         reserves.lpReserve = 1;
                     } else {
-                        uint256 den = priceRatio + (priceRatio << absLeverageTier);
                         /** Rounds up lpReserve, rounds down apesReserve.
                             Cannot OF.
                             64 bits because getRatioAtTick returns a Q64.64 number.
                          */
                         reserves.lpReserve = uint152(
-                            ((uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier)) - 1) /
-                                den +
-                                1
+                            _divRoundUp(
+                                uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
+                                priceRatio + (priceRatio << absLeverageTier)
+                            )
                         );
 
                         assert(reserves.lpReserve != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
@@ -478,6 +479,12 @@ contract Vault is SystemState {
                     reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
                 }
             }
+        }
+    }
+
+    function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
+        unchecked {
+            return (a - 1) / b + 1;
         }
     }
 

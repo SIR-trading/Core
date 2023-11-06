@@ -5,7 +5,7 @@ pragma solidity >=0.8.0;
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import {Strings} from "openzeppelin/utils/Strings.sol";
+import {ExternalFunctions} from "./libraries/ExternalFunctions.sol";
 
 // Contracts
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -15,26 +15,8 @@ abstract contract TEA is ERC1155 {
     mapping(uint256 vaultId => uint256) public totalSupply;
 
     function uri(uint256 vaultId) public view override returns (string memory) {
-        string memory vaultIdStr = Strings.toString(vaultId);
         (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
-        return
-            string.concat(
-                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-",
-                vaultIdStr,
-                "%22%2C%22symbol%22%3A%22TEA-",
-                vaultIdStr,
-                "%22%2C%22decimals%22%3A",
-                Strings.toString(IERC20(collateralToken).decimals()),
-                "%2C%22chainId%22%3A1%2C%22debtToken%22%3A%22",
-                Strings.toHexString(debtToken),
-                "%22%2C%22collateralToken%22%3A%22",
-                Strings.toHexString(collateralToken),
-                "%22%2C%22leverageTier%22%3A",
-                Strings.toString(leverageTier),
-                "%2C%22totalSupply%22%3A",
-                Strings.toString(totalSupply[vaultId]),
-                "%7D"
-            );
+        return ExternalFunctions.uri(vaultId, debtToken, collateralToken, leverageTier, totalSupply[vaultId]);
     }
 
     function safeTransferFrom(
