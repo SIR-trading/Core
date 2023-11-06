@@ -7,12 +7,13 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 // Libraries
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {SaltedAddress} from "./libraries/SaltedAddress.sol";
-import {DeployerOfAPE, APE, FullMath} from "./libraries/DeployerOfAPE.sol";
+import {FullMath} from "./libraries/FullMath.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {Fees} from "./libraries/Fees.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 
 // Contracts
+import {APE} from "./APE.sol";
 import {Oracle} from "./Oracle.sol";
 import {SystemState} from "./SystemState.sol";
 
@@ -21,53 +22,19 @@ contract Vault is SystemState {
     error VaultDoesNotExist();
     error LeverageTierOutOfRange();
 
-    // Used to pass parameters to the APE token constructor
-    VaultStructs.TokenParameters private _transientTokenParameters;
-
     Oracle private immutable oracle;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
         public state; // Do not use vaultId 0
-    VaultStructs.Parameters[] private _paramsById; // Never used in-contract. Just for users to access vault parameters by vault ID.
 
-    constructor(address systemControl_, address sir, address oracle_) SystemState(systemControl_, sir) {
+    constructor(
+        address systemControl_,
+        address sir,
+        address oracle_,
+        address vaultExternal_
+    ) SystemState(systemControl_, sir, vaultExternal_) {
         // Price oracle
         oracle = Oracle(oracle_);
-
-        /** We rely on vaultId == 0 to test if a particular vault exists.
-         *  To make sure vault Id 0 is never used, we push one empty element as first entry.
-         */
-        _paramsById.push(VaultStructs.Parameters(address(0), address(0), 0));
-    }
-
-    function paramsById(
-        uint256 vaultId
-    ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {
-        debtToken = _paramsById[vaultId].debtToken;
-        collateralToken = _paramsById[vaultId].collateralToken;
-        leverageTier = _paramsById[vaultId].leverageTier;
-    }
-
-    function latestTokenParams()
-        external
-        view
-        returns (
-            string memory name,
-            string memory symbol,
-            uint8 decimals,
-            address debtToken,
-            address collateralToken,
-            int8 leverageTier
-        )
-    {
-        name = _transientTokenParameters.name;
-        symbol = _transientTokenParameters.symbol;
-        decimals = _transientTokenParameters.decimals;
-
-        VaultStructs.Parameters memory params = _paramsById[_paramsById.length - 1];
-        debtToken = params.debtToken;
-        collateralToken = params.collateralToken;
-        leverageTier = params.leverageTier;
     }
 
     /**
@@ -90,17 +57,10 @@ contract Vault is SystemState {
         VaultStructs.State storage state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId != 0) revert VaultAlreadyInitialized();
 
-        // Next vault ID
-        uint256 vaultId = _paramsById.length;
-        require(vaultId <= type(uint40).max); // It has to fit in a uint40
-
-        // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
-        _paramsById.push(VaultStructs.Parameters(debtToken, collateralToken, leverageTier));
-
         // Deploy APE token, and initialize it
-        DeployerOfAPE.deploy(_transientTokenParameters, vaultId, debtToken, collateralToken, leverageTier);
+        uint256 vaultId = vaultExternal.deployAPE(debtToken, collateralToken, leverageTier);
 
-        // Save vaultId and parameters
+        // Save vaultId
         state_.vaultId = uint40(vaultId);
     }
 
@@ -606,7 +566,7 @@ contract Vault is SystemState {
     ////////////////////////////////////////////////////////////////*/
 
     function widhtdrawDAOFees(uint40 vaultId, address to) external onlySystemControl {
-        (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
+        (address debtToken, address collateralToken, int8 leverageTier) = vaultExternal.paramsById(vaultId);
 
         uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
         state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy

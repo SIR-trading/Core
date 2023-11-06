@@ -5,18 +5,23 @@ pragma solidity >=0.8.0;
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import {ExternalFunctions} from "./libraries/ExternalFunctions.sol";
+import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 
 // Contracts
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import "forge-std/Test.sol";
 
 abstract contract TEA is ERC1155 {
+    IVaultExternal internal immutable vaultExternal;
+
     mapping(uint256 vaultId => uint256) public totalSupply;
 
+    constructor(address vaultExternal_) {
+        vaultExternal = IVaultExternal(vaultExternal_);
+    }
+
     function uri(uint256 vaultId) public view override returns (string memory) {
-        (address debtToken, address collateralToken, int8 leverageTier) = paramsById(vaultId);
-        return ExternalFunctions.uri(vaultId, debtToken, collateralToken, leverageTier, totalSupply[vaultId]);
+        return vaultExternal.teaURI(vaultId, totalSupply[vaultId]);
     }
 
     function safeTransferFrom(
@@ -134,8 +139,4 @@ abstract contract TEA is ERC1155 {
         address lper1,
         bool sirIsCaller
     ) internal virtual returns (uint104 unclaimedRewards);
-
-    function paramsById(
-        uint256 vaultId
-    ) public view virtual returns (address debtToken, address collateralToken, int8 leverageTier);
 }

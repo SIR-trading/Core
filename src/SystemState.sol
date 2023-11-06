@@ -49,7 +49,11 @@ abstract contract SystemState is SystemCommons, TEA {
      */
     // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor(address systemControl, address sir) SystemCommons(systemControl) {
+    constructor(
+        address systemControl,
+        address sir,
+        address vaultExternal_
+    ) SystemCommons(systemControl) TEA(vaultExternal_) {
         _SIR = sir;
     }
 
