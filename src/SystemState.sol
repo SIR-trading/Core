@@ -188,6 +188,7 @@ abstract contract SystemState is SystemCommons, TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /// @dev All checks and balances to be done at system control
     function updateSystemState(SystemParameters calldata systemParams_) external onlySystemControl {
         systemParams = systemParams_;
     }
