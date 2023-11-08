@@ -33,3 +33,6 @@
 [submodule "lib/uniswap-openzeppelin"]
 	path = lib/uniswap-openzeppelin
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
+[submodule "lib/ERC1155-in-pure-yul"]
+	path = lib/ERC1155-in-pure-yul
+	url = https://github.com/Frenchkebab/ERC1155-in-pure-yul
