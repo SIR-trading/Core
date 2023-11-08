@@ -29,7 +29,7 @@ contract OracleNewFeeTiersTest is Test, Oracle {
     function test_GetUniswapFeeTiers() public {
         Oracle.UniswapFeeTier[] memory uniswapFeeTiers = _oracle.getUniswapFeeTiers();
 
-        IUniswapV3Factory uniswapFactory = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY);
+        IUniswapV3Factory uniswapFactory = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY);
 
         assertEq(uniswapFeeTiers[0].fee, 100);
         assertEq(uniswapFeeTiers[0].tickSpacing, uniswapFactory.feeAmountTickSpacing(100));
@@ -53,7 +53,7 @@ contract OracleNewFeeTiersTest is Test, Oracle {
         uint24 fee = 42;
         int24 tickSpacing = 69;
         vm.prank(Addresses._ADDR_UNISWAPV3_OWNER);
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee, tickSpacing);
+        IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee, tickSpacing);
 
         vm.expectEmit(address(_oracle));
         emit UniswapFeeTierAdded(fee);
@@ -67,7 +67,7 @@ contract OracleNewFeeTiersTest is Test, Oracle {
         int24 tickSpacing = 69;
         vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
         for (uint24 i = 0; i < 5; i++) {
-            IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee + i, tickSpacing + int24(i));
+            IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee + i, tickSpacing + int24(i));
         }
 
         vm.stopPrank();
@@ -85,7 +85,7 @@ contract OracleNewFeeTiersTest is Test, Oracle {
         int24 tickSpacing = 69;
         vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
         for (uint24 i = 0; i < 6; i++) {
-            IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee + i, tickSpacing + int24(i));
+            IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee + i, tickSpacing + int24(i));
         }
 
         vm.stopPrank();
@@ -240,7 +240,7 @@ contract OracleInitializeTest is Test, Oracle {
         // Add them to Uniswap v3
         vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
         for (uint256 i = 4; i < 9; i++) {
-            IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+            IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
                 uniswapFeeTiers[i].fee,
                 uniswapFeeTiers[i].tickSpacing
             );
@@ -317,7 +317,7 @@ contract OracleInitializeTest is Test, Oracle {
     function _preparePoolNoInitialization(uint24 fee) private returns (UniswapPoolAddress.PoolKey memory poolKey) {
         // Deploy Uniswap v3 pool
         UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
+        IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
 
         poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
     }
@@ -336,7 +336,7 @@ contract OracleInitializeTest is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -494,7 +494,7 @@ contract OracleGetPrice is Test, Oracle {
             Addresses._ADDR_ALUSD,
             500
         );
-        address uniswapPool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        address uniswapPool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
         (, int24 tick, uint16 observationIndex, uint16 observationCardinality, , , ) = IUniswapV3Pool(uniswapPool)
             .slot0();
         (uint32 blockTimestampOldest, , , ) = IUniswapV3Pool(uniswapPool).observations(observationIndex);
@@ -636,7 +636,7 @@ contract OracleGetPrice is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -705,7 +705,7 @@ contract OracleGetPrice is Test, Oracle {
             address(tokenOut),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
         (, int24 tick, , , , , ) = IUniswapV3Pool(pool).slot0();
 
         // Swap
@@ -933,7 +933,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
                 Addresses._ADDR_USDC,
                 fee
             );
-            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tick;
             (sqrtPriceX96, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
 
@@ -1007,7 +1007,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
         // Enable it in Uniswap v3
         vm.startPrank(Addresses._ADDR_UNISWAPV3_OWNER);
-        IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).enableFeeAmount(newFeeTier, newTickSpacing);
+        IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(newFeeTier, newTickSpacing);
         vm.stopPrank();
 
         // Enable it in the oracle
@@ -1031,7 +1031,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
 /////////////////////////////////////////////
 
 contract UniswapHandler is Test {
-    IUniswapV3Factory private constant _uniswapFactory = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY);
+    IUniswapV3Factory private constant _uniswapFactory = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY);
     INonfungiblePositionManager private constant _positionManager =
         INonfungiblePositionManager(Addresses._ADDR_UNISWAPV3_POSITION_MANAGER);
     ISwapRouter private constant _swapRouter = ISwapRouter(Addresses._ADDR_UNISWAPV3_SWAP_ROUTER);
@@ -1069,7 +1069,7 @@ contract UniswapHandler is Test {
             address(_tokenB),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinalityNext);
     }
 
@@ -1097,7 +1097,7 @@ contract UniswapHandler is Test {
             address(_tokenB),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
         if (pool.code.length > 0) return; // already instantiated
 
         sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO - 1));
@@ -1124,7 +1124,7 @@ contract UniswapHandler is Test {
                 address(_tokenB),
                 feeTier
             );
-            address pool = UniswapPoolAddress.computeAddress(Addresses._ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
             (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
             int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 

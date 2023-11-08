@@ -390,7 +390,7 @@ contract Oracle {
         require(uniswapFeeTiers.length < 9); // 4 basic fee tiers + 5 extra fee tiers max
 
         // Check fee tier actually exists in Uniswap v3
-        int24 tickSpacing = IUniswapV3Factory(Addresses._ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
+        int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
         require(tickSpacing > 0);
 
         // Check fee tier has not been added yet
@@ -744,7 +744,7 @@ contract Oracle {
         return
             IUniswapV3Pool(
                 UniswapPoolAddress.computeAddress(
-                    Addresses._ADDR_UNISWAPV3_FACTORY,
+                    Addresses.ADDR_UNISWAPV3_FACTORY,
                     UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee)
                 )
             );

@@ -22,7 +22,7 @@ contract Vault is SystemState {
     error VaultDoesNotExist();
     error LeverageTierOutOfRange();
 
-    Oracle private immutable oracle;
+    Oracle private immutable _oracle;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
         public state; // Do not use vaultId 0
@@ -33,8 +33,8 @@ contract Vault is SystemState {
         address oracle_,
         address vaultExternal_
     ) SystemState(systemControl_, sir, vaultExternal_) {
-        // Price oracle
-        oracle = Oracle(oracle_);
+        // Price _oracle
+        _oracle = Oracle(oracle_);
     }
 
     /**
@@ -47,22 +47,22 @@ contract Vault is SystemState {
         if (leverageTier > 2 || leverageTier < -3) revert LeverageTierOutOfRange();
 
         /**
-         * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
+         * 1. This will initialize the _oracle for this pair of tokens if it has not been initialized before.
          * 2. It also will revert if there are no pools with liquidity, which implicitly solves the case where the user
          *    tries to instantiate an invalid pair of tokens like address(0)
          */
-        oracle.initialize(debtToken, collateralToken);
+        _oracle.initialize(debtToken, collateralToken);
 
         // Check the vault has not been initialized previously
         VaultStructs.State storage state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId != 0) revert VaultAlreadyInitialized();
 
         // Deploy APE token, and initialize it
-        uint256 vaultId = vaultExternal.deployAPE(debtToken, collateralToken, leverageTier);
+        uint256 vaultId = VAULT_EXTERNAL.deployAPE(debtToken, collateralToken, leverageTier);
 
         // Approve control to withdraw any amount of collateral.
-        // The checks and balanced are implemented in the control contract to minimize contract size
-        IERC20(collateralToken).approve(_SYSTEM_CONTROL, type(uint256).max);
+        // The checks and balances are implemented in the control contract to minimize contract size
+        IERC20(collateralToken).approve(SYSTEM_CONTROL, type(uint256).max);
 
         // Save vaultId
         state_.vaultId = uint40(vaultId);
@@ -160,10 +160,10 @@ contract Vault is SystemState {
 
                 // Mint APE/TEA
                 if (isAPE) ape.mint(msg.sender, amount);
-                else _mint(msg.sender, state_.vaultId, amount);
+                else mint(msg.sender, state_.vaultId, amount);
 
                 // Mint protocol-owned liquidity if necessary
-                _mint(address(this), state_.vaultId, amountPOL);
+                mint(address(this), state_.vaultId, amountPOL);
 
                 /** UPDATE THE RESERVES
                     1. DAO collects up to 10% of the fees
@@ -261,10 +261,10 @@ contract Vault is SystemState {
 
         // Burn APE/TEA
         if (isAPE) ape.burn(msg.sender, amountToken);
-        else _burn(msg.sender, state_.vaultId, amountToken);
+        else burn(msg.sender, state_.vaultId, amountToken);
 
         // Mint protocol-owned liquidity if necessary
-        _mint(address(this), state_.vaultId, amountPOL);
+        mint(address(this), state_.vaultId, amountPOL);
 
         /** UPDATE THE RESERVES
             1. DAO collects up to 10% of the fees
@@ -323,9 +323,9 @@ contract Vault is SystemState {
     //     VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
     //     if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-    //     // Retrieve price from oracle if not retrieved in a previous tx in this block
+    //     // Retrieve price from _oracle if not retrieved in a previous tx in this block
     //     if (state_.timeStampPrice != block.timestamp) {
-    //         state_.tickPriceX42 = oracle.getPrice(collateralToken, debtToken);
+    //         state_.tickPriceX42 = _oracle.getPrice(collateralToken, debtToken);
     //         state_.timeStampPrice = uint40(block.timestamp);
     //     }
 
@@ -461,9 +461,9 @@ contract Vault is SystemState {
         state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-        // Retrieve price from oracle if not retrieved in a previous tx in this block
+        // Retrieve price from _oracle if not retrieved in a previous tx in this block
         if (state_.timeStampPrice != block.timestamp) {
-            state_.tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
+            state_.tickPriceX42 = _oracle.updateOracleState(collateralToken, debtToken);
             state_.timeStampPrice = uint40(block.timestamp);
         }
     }
@@ -570,7 +570,7 @@ contract Vault is SystemState {
     ////////////////////////////////////////////////////////////////*/
 
     // function widhtdrawDAOFees(uint40 vaultId, address to) external onlySystemControl {
-    //     (address debtToken, address collateralToken, int8 leverageTier) = vaultExternal.paramsById(vaultId);
+    //     (address debtToken, address collateralToken, int8 leverageTier) = VAULT_EXTERNAL.paramsById(vaultId);
 
     //     uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
     //     state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy

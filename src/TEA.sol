@@ -12,16 +12,16 @@ import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import "forge-std/Test.sol";
 
 abstract contract TEA is ERC1155 {
-    IVaultExternal internal immutable vaultExternal;
+    IVaultExternal internal immutable VAULT_EXTERNAL;
 
     mapping(uint256 vaultId => uint256) public totalSupply;
 
     constructor(address vaultExternal_) {
-        vaultExternal = IVaultExternal(vaultExternal_);
+        VAULT_EXTERNAL = IVaultExternal(vaultExternal_);
     }
 
     function uri(uint256 vaultId) public view override returns (string memory) {
-        return vaultExternal.teaURI(vaultId, totalSupply[vaultId]);
+        return VAULT_EXTERNAL.teaURI(vaultId, totalSupply[vaultId]);
     }
 
     function safeTransferFrom(
@@ -34,7 +34,7 @@ abstract contract TEA is ERC1155 {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        _updateLPerIssuanceParams(vaultId, from, to, false);
+        updateLPerIssuanceParams(false, vaultId, from, to);
 
         // Transfer
         balanceOf[from][vaultId] -= amount;
@@ -71,7 +71,7 @@ abstract contract TEA is ERC1155 {
             amount = amounts[i];
 
             // Update SIR issuances
-            _updateLPerIssuanceParams(vaultId, from, to, false);
+            updateLPerIssuanceParams(false, vaultId, from, to);
 
             // Transfer
             balanceOf[from][vaultId] -= amount;
@@ -95,9 +95,9 @@ abstract contract TEA is ERC1155 {
         );
     }
 
-    function _mint(address to, uint256 vaultId, uint256 amount) internal {
+    function mint(address to, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        _updateLPerIssuanceParams(vaultId, to, address(0), false);
+        updateLPerIssuanceParams(false, vaultId, to, address(0));
 
         // Mint
         totalSupply[vaultId] += amount;
@@ -116,9 +116,9 @@ abstract contract TEA is ERC1155 {
         );
     }
 
-    function _burn(address from, uint256 vaultId, uint256 amount) internal override {
+    function burn(address from, uint256 vaultId, uint256 amount) internal {
         // Update SIR issuance
-        _updateLPerIssuanceParams(vaultId, from, address(0), false);
+        updateLPerIssuanceParams(false, vaultId, from, address(0));
 
         // Burn
         unchecked {
@@ -133,10 +133,10 @@ abstract contract TEA is ERC1155 {
                             VIRTUAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _updateLPerIssuanceParams(
+    function updateLPerIssuanceParams(
+        bool sirIsCaller,
         uint256 vaultId,
         address lper0,
-        address lper1,
-        bool sirIsCaller
+        address lper1
     ) internal virtual returns (uint104 unclaimedRewards);
 }

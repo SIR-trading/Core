@@ -84,9 +84,9 @@ abstract contract SystemState is SystemCommons, TEA {
                 : vaultIssuanceParams_.tsLastUpdate;
 
             // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
-            uint40 ts3Years = systemParams_.tsIssuanceStart + _THREE_YEARS;
+            uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
             if (tsStart < ts3Years) {
-                uint256 issuance = (uint256(_AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
+                uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
                     systemParams_.aggTaxesToDAO;
                 vaultIssuanceParams_.cumSIRperTEA += uint152(
                     ((issuance *
@@ -145,14 +145,20 @@ abstract contract SystemState is SystemCommons, TEA {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
+        require(msg.sender == _SIR);
+
+        unclaimedRewards = updateLPerIssuanceParams(true, vaultId, lper, address(0));
+    }
+
     /**
      * @dev To be called BEFORE transfering/minting/burning TEA
      */
-    function _updateLPerIssuanceParams(
+    function updateLPerIssuanceParams(
+        bool sirIsCaller,
         uint256 vaultId,
         address lper0,
-        address lper1,
-        bool sirIsCaller
+        address lper1
     ) internal override returns (uint104 unclaimedRewards) {
         // If issuance has not started, return
         if (systemParams.tsIssuanceStart == 0) return 0;
@@ -165,23 +171,26 @@ abstract contract SystemState is SystemCommons, TEA {
 
         // Update lpers issuances params
         if (sirIsCaller) {
-            // SIR contract is the caller and resets rewards
+            /** LPer claiming SIR
+                1. Must update the caller's issuance
+                2. Pass accumulated rewards and nil them 
+             */
             unclaimedRewards = lper0IssuanceParams_.unclaimedRewards;
             lper0IssuanceParams_.unclaimedRewards = 0;
         } else if (lper1 != address(0))
-            // Transfer of TEA, we need to update the 2nd LPer
+            /** Transfer of TEA
+                1. Must update the sender and destinatary's issuances
+                2. Valut issuance does not need to be updated because totalSupply does not change
+             */
             _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
         else {
-            // Mint or burning of TEA, we need to update the vault
+            /** Mint or burn TEA
+                1. Must update the caller's issuance
+                2. Must update the vault's issuance
+             */
             _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
         }
         _lpersIssuances[vaultId][lper0] = lper0IssuanceParams_;
-    }
-
-    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
-        require(msg.sender == _SIR);
-
-        unclaimedRewards = _updateLPerIssuanceParams(vaultId, lper, address(0), true);
     }
 
     /*////////////////////////////////////////////////////////////////

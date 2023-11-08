@@ -10,10 +10,10 @@ import {APE} from "./APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
 contract VaultExternal {
-    address public immutable vault;
+    address public immutable VAULT;
 
     modifier onlyVault() {
-        require(msg.sender == vault);
+        require(msg.sender == VAULT);
         _;
     }
 
@@ -30,7 +30,7 @@ contract VaultExternal {
     VaultStructs.TokenParameters private _transientTokenParameters;
 
     constructor(address vault_) {
-        vault = vault_;
+        VAULT = vault_;
 
         /** We rely on vaultId == 0 to test if a particular vault exists.
             To make sure vault Id 0 is never used, we push one empty element as first entry.

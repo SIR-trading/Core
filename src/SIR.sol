@@ -16,7 +16,7 @@ contract SIR is ERC20, SystemCommons {
 
     SystemState private immutable _SYSTEM_STATE;
 
-    uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - _AGG_ISSUANCE_VAULTS
+    uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - AGG_ISSUANCE_VAULTS
 
     address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
@@ -56,7 +56,7 @@ contract SIR is ERC20, SystemCommons {
             contributorParams = _contributorsIssuances[contributor];
 
             // Last date of unclaimedRewards
-            uint40 tsIssuanceEnd = tsIssuanceStart + _THREE_YEARS;
+            uint40 tsIssuanceEnd = tsIssuanceStart + THREE_YEARS;
 
             // If issuance is over and unclaimedRewards have already been updated
             if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
@@ -136,7 +136,7 @@ contract SIR is ERC20, SystemCommons {
         uint256 aggIssuanceContributors_ = aggIssuanceContributors + aggIssuanceToAdd - aggIssuanceToRemove;
 
         aggIssuanceContributors = uint72(aggIssuanceContributors_);
-        if (aggIssuanceContributors_ > ISSUANCE - _AGG_ISSUANCE_VAULTS) return false;
+        if (aggIssuanceContributors_ > ISSUANCE - AGG_ISSUANCE_VAULTS) return false;
         return true;
     }
 
