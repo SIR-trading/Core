@@ -8,6 +8,8 @@ import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 contract VaultExternalTest is Test {
+    int8 leverageTier = -1;
+
     VaultExternal vaultExternal;
 
     event VaultInitialized(
@@ -24,8 +26,6 @@ contract VaultExternalTest is Test {
     }
 
     function test_deployETHvsUSDC() public {
-        int8 leverageTier = -1;
-
         vm.expectEmit();
         emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, 1);
         vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
@@ -43,12 +43,18 @@ contract VaultExternalTest is Test {
         assertEq(leverageTier, leverageTier_);
     }
 
-    function testFuzz_deployETHvsUSDC(int8 leverageTier) public {
-        leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
+    function test_deployCallerIsNotVault() public {
+        vm.prank(vm.addr(1));
+        vm.expectRevert();
+        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
+    }
+
+    function testFuzz_deployETHvsUSDC(int8 leverageTier_) public {
+        leverageTier_ = int8(bound(leverageTier_, -3, 2)); // Only accepted values in the system
 
         vm.expectEmit();
-        emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, 1);
-        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
+        emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier_, 1);
+        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier_);
 
         address ape = SaltedAddress.getAddress(address(vaultExternal), 1);
         assertGt(ape.code.length, 0);
@@ -59,19 +65,17 @@ contract VaultExternalTest is Test {
         (address debtToken, address collateralToken, int8 leverageTier_) = vaultExternal.paramsById(1);
         assertEq(debtToken, Addresses.ADDR_USDC);
         assertEq(collateralToken, Addresses.ADDR_WETH);
-        assertEq(leverageTier, leverageTier_);
+        assertEq(leverageTier_, leverageTier_);
     }
 
-    function testFuzz_deployETHvsUSDCWrongLeverage(int8 leverageTier) public {
-        vm.assume(leverageTier < -3 || leverageTier > 2); // Non accepted values in the system
+    function testFuzz_deployETHvsUSDCWrongLeverage(int8 leverageTier_) public {
+        vm.assume(leverageTier_ < -3 || leverageTier_ > 2); // Non accepted values in the system
 
         vm.expectRevert();
-        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
+        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier_);
     }
 
     function test_deploy10Vaults() public {
-        int8 leverageTier = 0;
-
         for (uint256 vaultId = 1; vaultId <= 10; vaultId++) {
             vm.expectEmit();
             emit VaultInitialized(Addresses.ADDR_ALUSD, Addresses.ADDR_USDC, leverageTier, vaultId);
@@ -90,5 +94,22 @@ contract VaultExternalTest is Test {
         }
     }
 
-    // TEST THE LIMIT ON THE NUMBER OF VAULTS
+    function test_deployExceedsMaxVaults() public {
+        // Element of paramsById with the highest possible index
+        vm.store(address(vaultExternal), 0, bytes32(uint256(type(uint40).max)));
+
+        vm.expectEmit();
+        emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, type(uint40).max);
+        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
+
+        address ape = SaltedAddress.getAddress(address(vaultExternal), type(uint40).max);
+        assertGt(ape.code.length, 0);
+
+        assertEq(IERC20(ape).name(), "Tokenized WETH/USDC with x1.5 leverage");
+        assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(type(uint40).max)));
+        assertEq(IERC20(ape).decimals(), 18);
+
+        vm.expectRevert();
+        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
+    }
 }
