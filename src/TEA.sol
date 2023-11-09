@@ -16,8 +16,8 @@ abstract contract TEA is ERC1155 {
 
     mapping(uint256 vaultId => uint256) public totalSupply;
 
-    constructor(address vaultExternal_) {
-        VAULT_EXTERNAL = IVaultExternal(vaultExternal_);
+    constructor(address vaultExternal) {
+        VAULT_EXTERNAL = IVaultExternal(vaultExternal);
     }
 
     function uri(uint256 vaultId) public view override returns (string memory) {

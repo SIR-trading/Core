@@ -28,11 +28,11 @@ contract Vault is SystemState {
         public state; // Do not use vaultId 0
 
     constructor(
-        address systemControl_,
+        address systemControl,
         address sir,
         address oracle_,
-        address vaultExternal_
-    ) SystemState(systemControl_, sir, vaultExternal_) {
+        address vaultExternal
+    ) SystemState(systemControl, sir, vaultExternal) {
         // Price _oracle
         _oracle = Oracle(oracle_);
     }

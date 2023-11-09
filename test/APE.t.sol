@@ -22,8 +22,8 @@ contract APETest is Test {
                 "Tokenized ETH/USDC with x1.25 leverage",
                 "APE-42",
                 uint8(18),
-                Addresses._ADDR_USDC,
-                Addresses._ADDR_WETH,
+                Addresses.ADDR_USDC,
+                Addresses.ADDR_WETH,
                 int8(-2)
             )
         );
@@ -37,8 +37,8 @@ contract APETest is Test {
         assertEq(ape.totalSupply(), 0);
         assertEq(ape.balanceOf(alice), 0);
         assertEq(ape.balanceOf(bob), 0);
-        assertEq(ape.debtToken(), Addresses._ADDR_USDC);
-        assertEq(ape.collateralToken(), Addresses._ADDR_WETH);
+        assertEq(ape.debtToken(), Addresses.ADDR_USDC);
+        assertEq(ape.collateralToken(), Addresses.ADDR_WETH);
         assertEq(ape.leverageTier(), -2);
         assertEq(ape.name(), "Tokenized ETH/USDC with x1.25 leverage");
         assertEq(ape.symbol(), "APE-42");

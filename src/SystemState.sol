@@ -52,8 +52,8 @@ abstract contract SystemState is SystemCommons, TEA {
     constructor(
         address systemControl,
         address sir,
-        address vaultExternal_
-    ) SystemCommons(systemControl) TEA(vaultExternal_) {
+        address vaultExternal
+    ) SystemCommons(systemControl) TEA(vaultExternal) {
         _SIR = sir;
     }
 

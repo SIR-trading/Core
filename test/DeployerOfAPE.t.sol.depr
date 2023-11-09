@@ -67,10 +67,10 @@ contract DeployerOfAPETest is Test {
         uint40 vaultId = 42;
         int8 leverageTier = -2;
 
-        mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
+        mockCaller = new MockCaller(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
 
         vm.expectEmit();
-        emit VaultInitialized(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier, vaultId);
+        emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
         mockCaller.deploy(vaultId, leverageTier);
 
         address ape = mockCaller.getApeAddress(vaultId);
@@ -95,7 +95,7 @@ contract DeployerOfAPETest is Test {
         uint40 vaultId = 0;
         int8 leverageTier = -2;
 
-        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
+        MockCaller mockCaller = new MockCaller(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
 
         vm.expectRevert();
         mockCaller.deploy(vaultId, leverageTier);
@@ -105,24 +105,24 @@ contract DeployerOfAPETest is Test {
         vm.assume(vaultId > 0);
         leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
 
-        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
+        MockCaller mockCaller = new MockCaller(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
 
         vm.expectEmit();
-        emit VaultInitialized(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier, vaultId);
+        emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
         mockCaller.deploy(vaultId, leverageTier);
 
         address ape = mockCaller.getApeAddress(vaultId);
         assertGt(ape.code.length, 0);
 
         assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(vaultId)));
-        assertEq(IERC20(ape).decimals(), IERC20(Addresses._ADDR_WETH).decimals());
+        assertEq(IERC20(ape).decimals(), IERC20(Addresses.ADDR_WETH).decimals());
     }
 
     function testFuzz_deployETHvsUSDCWrongLeverage(uint40 vaultId, int8 leverageTier) public {
         vm.assume(vaultId > 0);
         vm.assume(leverageTier < -3 || leverageTier > 2); // Non accepted values in the system
 
-        MockCaller mockCaller = new MockCaller(Addresses._ADDR_USDC, Addresses._ADDR_WETH, leverageTier);
+        MockCaller mockCaller = new MockCaller(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier);
 
         vm.expectRevert();
         mockCaller.deploy(vaultId, leverageTier);
@@ -132,16 +132,16 @@ contract DeployerOfAPETest is Test {
         vm.assume(vaultId > 0);
         leverageTier = int8(bound(leverageTier, -3, 2)); // Only accepted values in the system
 
-        MockCaller mockCaller = new MockCaller(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, leverageTier);
+        MockCaller mockCaller = new MockCaller(Addresses.ADDR_ALUSD, Addresses.ADDR_USDC, leverageTier);
 
         vm.expectEmit();
-        emit VaultInitialized(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, leverageTier, vaultId);
+        emit VaultInitialized(Addresses.ADDR_ALUSD, Addresses.ADDR_USDC, leverageTier, vaultId);
         mockCaller.deploy(vaultId, leverageTier);
 
         address ape = mockCaller.getApeAddress(vaultId);
         assertGt(ape.code.length, 0);
 
         assertEq(IERC20(ape).symbol(), string.concat("APE-", Strings.toString(vaultId)));
-        assertEq(IERC20(ape).decimals(), IERC20(Addresses._ADDR_USDC).decimals());
+        assertEq(IERC20(ape).decimals(), IERC20(Addresses.ADDR_USDC).decimals());
     }
 }

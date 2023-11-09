@@ -5,44 +5,32 @@ import "forge-std/Test.sol";
 import {TEA} from "src/TEA.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {VaultExternal} from "src/libraries/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 contract TEAInstance is TEA {
-    VaultStructs.Parameters[] private _paramsById;
+    // VaultStructs.Parameters[] private _paramsById;
 
-    constructor() {
-        /** We rely on vaultId == 0 to test if a particular vault exists.
-         *  To make sure vault Id 0 is never used, we push one empty element as first entry.
-         */
-        _paramsById.push(VaultStructs.Parameters(address(0), address(0), 0));
+    constructor(address vaultExternal) TEA(vaultExternal) {}
 
-        // Add two vaults to test
-        _paramsById.push(VaultStructs.Parameters(Addresses._ADDR_USDC, Addresses._ADDR_WETH, -2));
-        _paramsById.push(VaultStructs.Parameters(Addresses._ADDR_ALUSD, Addresses._ADDR_USDC, 1));
+    function mintE(address to, uint256 vaultId, uint256 amount) external {
+        mint(to, vaultId, amount);
     }
 
-    function mint(address to, uint256 vaultId, uint256 amount) external {
-        _mint(to, vaultId, amount);
-    }
-
-    function burn(address from, uint256 vaultId, uint256 amount) external {
-        _burn(from, vaultId, amount);
-    }
-
-    function _updateLPerIssuanceParams(
+    function updateLPerIssuanceParams(
+        bool sirIsCaller,
         uint256 vaultId,
         address lper0,
-        address lper1,
-        bool sirIsCaller
+        address lper1
     ) internal override returns (uint104 unclaimedRewards) {}
 
-    function paramsById(
-        uint256 vaultId
-    ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {
-        debtToken = _paramsById[vaultId].debtToken;
-        collateralToken = _paramsById[vaultId].collateralToken;
-        leverageTier = _paramsById[vaultId].leverageTier;
-    }
+    // function paramsById(
+    //     uint256 vaultId
+    // ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {
+    //     debtToken = _paramsById[vaultId].debtToken;
+    //     collateralToken = _paramsById[vaultId].collateralToken;
+    //     leverageTier = _paramsById[vaultId].leverageTier;
+    // }
 }
 
 contract TEATest is Test {
@@ -64,7 +52,9 @@ contract TEATest is Test {
 
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
+    VaultExternal vaultExternal;
     TEAInstance tea;
+
     address alice;
     address bob;
     address charlie;
@@ -74,6 +64,10 @@ contract TEATest is Test {
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
+
+        vaultExternal = new VaultExternal(address(this));
+        vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -2);
+        vaultExternal.deployAPE(Addresses.ADDR_ALUSD, Addresses.ADDR_USDC, 1);
 
         tea = new TEAInstance();
         alice = vm.addr(1);
@@ -125,7 +119,7 @@ contract TEATest is Test {
         mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
-        tea.mint(bob, vaultId, mintAmount);
+        tea.mintE(bob, vaultId, mintAmount);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -155,7 +149,7 @@ contract TEATest is Test {
         mintAmount = bound(mintAmount, 0, transferAmount - 1);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
-        tea.mint(bob, vaultId, mintAmount);
+        tea.mintE(bob, vaultId, mintAmount);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -177,7 +171,7 @@ contract TEATest is Test {
         mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
-        tea.mint(bob, vaultId, mintAmount);
+        tea.mintE(bob, vaultId, mintAmount);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -195,7 +189,7 @@ contract TEATest is Test {
         mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
-        tea.mint(bob, vaultId, mintAmount);
+        tea.mintE(bob, vaultId, mintAmount);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -223,7 +217,7 @@ contract TEATest is Test {
         mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
-        tea.mint(bob, vaultId, mintAmount);
+        tea.mintE(bob, vaultId, mintAmount);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -251,7 +245,7 @@ contract TEATest is Test {
         mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
-        tea.mint(bob, vaultId, mintAmount);
+        tea.mintE(bob, vaultId, mintAmount);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -289,11 +283,11 @@ contract TEATest is Test {
     ) public {
         transferAmountA = bound(transferAmountA, 1, type(uint256).max);
         mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
-        tea.mint(bob, vaultIdA, mintAmountA);
+        tea.mintE(bob, vaultIdA, mintAmountA);
 
         transferAmountB = bound(transferAmountB, 1, type(uint256).max);
         mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
-        tea.mint(bob, vaultIdB, mintAmountB);
+        tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -333,11 +327,11 @@ contract TEATest is Test {
     ) public {
         transferAmountA = bound(transferAmountA, 1, type(uint256).max);
         mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
-        tea.mint(bob, vaultIdA, mintAmountA);
+        tea.mintE(bob, vaultIdA, mintAmountA);
 
         transferAmountB = bound(transferAmountB, 1, type(uint256).max);
         mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
-        tea.mint(bob, vaultIdB, mintAmountB);
+        tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -363,11 +357,11 @@ contract TEATest is Test {
     ) public {
         transferAmountA = bound(transferAmountA, 1, type(uint256).max);
         mintAmountA = bound(mintAmountA, 0, transferAmountA - 1);
-        tea.mint(bob, vaultIdA, mintAmountA);
+        tea.mintE(bob, vaultIdA, mintAmountA);
 
         transferAmountB = bound(transferAmountB, 1, type(uint256).max);
         mintAmountB = bound(mintAmountB, 0, transferAmountB - 1);
-        tea.mint(bob, vaultIdB, mintAmountB);
+        tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -393,11 +387,11 @@ contract TEATest is Test {
     ) public {
         transferAmountA = bound(transferAmountA, 1, type(uint256).max);
         mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
-        tea.mint(bob, vaultIdA, mintAmountA);
+        tea.mintE(bob, vaultIdA, mintAmountA);
 
         transferAmountB = bound(transferAmountB, 1, type(uint256).max);
         mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
-        tea.mint(bob, vaultIdB, mintAmountB);
+        tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -429,11 +423,11 @@ contract TEATest is Test {
 
         transferAmountA = bound(transferAmountA, 1, type(uint256).max);
         mintAmountA = bound(mintAmountA, transferAmountA, type(uint256).max);
-        tea.mint(bob, vaultIdA, mintAmountA);
+        tea.mintE(bob, vaultIdA, mintAmountA);
 
         transferAmountB = bound(transferAmountB, 1, type(uint256).max);
         mintAmountB = bound(mintAmountB, transferAmountB, type(uint256).max);
-        tea.mint(bob, vaultIdB, mintAmountB);
+        tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);
@@ -465,7 +459,7 @@ contract TEATestInternal is Test, TEA {
         charlie = vm.addr(3);
     }
 
-    function _updateLPerIssuanceParams(
+    function updateLPerIssuanceParams(
         uint256 vaultId,
         address lper0,
         address lper1,
@@ -477,7 +471,7 @@ contract TEATestInternal is Test, TEA {
     ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {}
 
     function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
-        _mint(alice, vaultId, mintAmountA);
+        mint(alice, vaultId, mintAmountA);
         assertEq(balanceOf[alice][vaultId], mintAmountA);
         assertEq(totalSupply[vaultId], mintAmountA);
 
@@ -485,30 +479,30 @@ contract TEATestInternal is Test, TEA {
 
         vm.expectEmit();
         emit TransferSingle(msg.sender, address(0), bob, vaultId, mintAmountB);
-        _mint(bob, vaultId, mintAmountB);
+        mint(bob, vaultId, mintAmountB);
         assertEq(balanceOf[bob][vaultId], mintAmountB);
         assertEq(totalSupply[vaultId], mintAmountA + mintAmountB);
     }
 
     function testFuzz_mintFails(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
         mintAmountA = bound(mintAmountA, 1, type(uint256).max);
-        _mint(alice, vaultId, mintAmountA);
+        mint(alice, vaultId, mintAmountA);
 
         mintAmountB = bound(mintAmountB, type(uint256).max - mintAmountA + 1, type(uint256).max);
         vm.expectRevert();
-        _mint(bob, vaultId, mintAmountB);
+        mint(bob, vaultId, mintAmountB);
     }
 
     function testFuzz_burn(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
         mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
         burnAmountB = bound(burnAmountB, 0, mintAmountB);
 
-        _mint(alice, vaultId, mintAmountA);
-        _mint(bob, vaultId, mintAmountB);
+        mint(alice, vaultId, mintAmountA);
+        mint(bob, vaultId, mintAmountB);
 
         vm.expectEmit();
         emit TransferSingle(msg.sender, bob, address(0), vaultId, burnAmountB);
-        _burn(bob, vaultId, burnAmountB);
+        burn(bob, vaultId, burnAmountB);
 
         assertEq(balanceOf[bob][vaultId], mintAmountB - burnAmountB);
         assertEq(totalSupply[vaultId], mintAmountA + mintAmountB - burnAmountB);
@@ -524,10 +518,10 @@ contract TEATestInternal is Test, TEA {
         mintAmountB = bound(mintAmountB, 1, type(uint256).max - mintAmountA);
         burnAmountB = bound(burnAmountB, mintAmountB + 1, type(uint256).max);
 
-        _mint(alice, vaultId, mintAmountA);
-        _mint(bob, vaultId, mintAmountB);
+        mint(alice, vaultId, mintAmountA);
+        mint(bob, vaultId, mintAmountB);
 
         vm.expectRevert();
-        _burn(bob, vaultId, burnAmountB);
+        burn(bob, vaultId, burnAmountB);
     }
 }
