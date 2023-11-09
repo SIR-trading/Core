@@ -22,7 +22,7 @@ contract Vault is SystemState {
     error VaultDoesNotExist();
     error LeverageTierOutOfRange();
 
-    Oracle private immutable _oracle;
+    Oracle private immutable _ORACLE;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
         public state; // Do not use vaultId 0
@@ -30,11 +30,11 @@ contract Vault is SystemState {
     constructor(
         address systemControl,
         address sir,
-        address oracle_,
+        address oracle,
         address vaultExternal
     ) SystemState(systemControl, sir, vaultExternal) {
-        // Price _oracle
-        _oracle = Oracle(oracle_);
+        // Price _ORACLE
+        _ORACLE = Oracle(oracle);
     }
 
     /**
@@ -47,11 +47,11 @@ contract Vault is SystemState {
         if (leverageTier > 2 || leverageTier < -3) revert LeverageTierOutOfRange();
 
         /**
-         * 1. This will initialize the _oracle for this pair of tokens if it has not been initialized before.
+         * 1. This will initialize the _ORACLE for this pair of tokens if it has not been initialized before.
          * 2. It also will revert if there are no pools with liquidity, which implicitly solves the case where the user
          *    tries to instantiate an invalid pair of tokens like address(0)
          */
-        _oracle.initialize(debtToken, collateralToken);
+        _ORACLE.initialize(debtToken, collateralToken);
 
         // Check the vault has not been initialized previously
         VaultStructs.State storage state_ = state[debtToken][collateralToken][leverageTier];
@@ -323,9 +323,9 @@ contract Vault is SystemState {
     //     VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
     //     if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-    //     // Retrieve price from _oracle if not retrieved in a previous tx in this block
+    //     // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
     //     if (state_.timeStampPrice != block.timestamp) {
-    //         state_.tickPriceX42 = _oracle.getPrice(collateralToken, debtToken);
+    //         state_.tickPriceX42 = _ORACLE.getPrice(collateralToken, debtToken);
     //         state_.timeStampPrice = uint40(block.timestamp);
     //     }
 
@@ -342,7 +342,7 @@ contract Vault is SystemState {
         VaultStructs.Reserves memory reserves
     ) private view returns (APE ape, uint152 syntheticTokenReserve, uint256 syntheticTokenSupply) {
         if (isAPE) {
-            ape = APE(SaltedAddress.getAddress(state_.vaultId));
+            ape = APE(SaltedAddress.getAddress(address(VAULT_EXTERNAL), state_.vaultId));
             syntheticTokenReserve = reserves.apesReserve;
             syntheticTokenSupply = ape.totalSupply();
         } else {
@@ -369,7 +369,7 @@ contract Vault is SystemState {
                     reserves.lpReserve = 1;
                 }
             } else if (state_.tickPriceSatX42 == type(int64).max) {
-                if (APE(SaltedAddress.getAddress(state_.vaultId)).totalSupply() == 0) {
+                if (APE(SaltedAddress.getAddress(address(VAULT_EXTERNAL), state_.vaultId)).totalSupply() == 0) {
                     reserves.lpReserve = state_.totalReserves; // type(int64).max represents +∞ => apesReserve = 0
                 } else {
                     reserves.apesReserve = 1;
@@ -461,9 +461,9 @@ contract Vault is SystemState {
         state_ = state[debtToken][collateralToken][leverageTier];
         if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-        // Retrieve price from _oracle if not retrieved in a previous tx in this block
+        // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
         if (state_.timeStampPrice != block.timestamp) {
-            state_.tickPriceX42 = _oracle.updateOracleState(collateralToken, debtToken);
+            state_.tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
             state_.timeStampPrice = uint40(block.timestamp);
         }
     }

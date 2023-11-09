@@ -6,13 +6,13 @@ import {APE} from "../APE.sol";
 library SaltedAddress {
     bytes32 private constant _HASH_CREATION_CODE_APE = keccak256(type(APE).creationCode);
 
-    function getAddress(uint256 vaultId) internal view returns (address) {
+    function getAddress(address vaultExternal, uint256 vaultId) internal pure returns (address) {
         return
             address(
                 uint160(
                     uint(
                         keccak256(
-                            abi.encodePacked(bytes1(0xff), address(this), bytes32(vaultId), _HASH_CREATION_CODE_APE)
+                            abi.encodePacked(bytes1(0xff), vaultExternal, bytes32(vaultId), _HASH_CREATION_CODE_APE)
                         )
                     )
                 )

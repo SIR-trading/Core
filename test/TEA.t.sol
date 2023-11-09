@@ -4,13 +4,10 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {TEA} from "src/TEA.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {VaultExternal} from "src/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 contract TEAInstance is TEA {
-    // VaultStructs.Parameters[] private _paramsById;
-
     constructor(address vaultExternal) TEA(vaultExternal) {}
 
     function mintE(address to, uint256 vaultId, uint256 amount) external {
