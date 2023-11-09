@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {TEA} from "src/TEA.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
-import {VaultExternal} from "src/libraries/VaultExternal.sol";
+import {VaultExternal} from "src/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 contract TEAInstance is TEA {
@@ -69,7 +69,8 @@ contract TEATest is Test {
         vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -2);
         vaultExternal.deployAPE(Addresses.ADDR_ALUSD, Addresses.ADDR_USDC, 1);
 
-        tea = new TEAInstance();
+        tea = new TEAInstance(address(vaultExternal));
+
         alice = vm.addr(1);
         bob = vm.addr(2);
         charlie = vm.addr(3);
@@ -209,7 +210,7 @@ contract TEATest is Test {
         vm.mockCall(
             address(this),
             abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
-            abi.encode(TEAInstance.mint.selector) // Wrong selector
+            abi.encode(TEAInstance.mintE.selector) // Wrong selector
         );
 
         // Bounds the amounts
@@ -418,7 +419,7 @@ contract TEATest is Test {
         vm.mockCall(
             address(this),
             abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155BatchReceived.selector),
-            abi.encode(TEAInstance.mint.selector) // Wrong selector
+            abi.encode(TEAInstance.mintE.selector) // Wrong selector
         );
 
         transferAmountA = bound(transferAmountA, 1, type(uint256).max);
@@ -446,7 +447,7 @@ contract TEATest is Test {
     }
 }
 
-contract TEATestInternal is Test, TEA {
+contract TEATestInternal is Test, TEA(address(0)) {
     address alice;
     address bob;
     address charlie;
@@ -460,15 +461,11 @@ contract TEATestInternal is Test, TEA {
     }
 
     function updateLPerIssuanceParams(
+        bool sirIsCaller,
         uint256 vaultId,
         address lper0,
-        address lper1,
-        bool sirIsCaller
+        address lper1
     ) internal override returns (uint104 unclaimedRewards) {}
-
-    function paramsById(
-        uint256 vaultId
-    ) public view override returns (address debtToken, address collateralToken, int8 leverageTier) {}
 
     function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
         mint(alice, vaultId, mintAmountA);
