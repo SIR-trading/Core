@@ -62,10 +62,10 @@ contract VaultExternalTest is Test {
         assertEq(IERC20(ape).symbol(), string.concat("APE-1"));
         assertEq(IERC20(ape).decimals(), IERC20(Addresses.ADDR_WETH).decimals());
 
-        (address debtToken, address collateralToken, int8 leverageTier_) = vaultExternal.paramsById(1);
+        (address debtToken, address collateralToken, int8 leverageTier__) = vaultExternal.paramsById(1);
         assertEq(debtToken, Addresses.ADDR_USDC);
         assertEq(collateralToken, Addresses.ADDR_WETH);
-        assertEq(leverageTier_, leverageTier_);
+        assertEq(leverageTier__, leverageTier_);
     }
 
     function testFuzz_deployETHvsUSDCWrongLeverage(int8 leverageTier_) public {

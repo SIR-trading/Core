@@ -5,9 +5,10 @@ pragma solidity >=0.8.0;
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
+import {TEAExternal} from "./libraries/TEAExternal.sol";
 
 // Contracts
+import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import "forge-std/Test.sol";
 
@@ -31,24 +32,10 @@ abstract contract TEA is ERC1155 {
         uint256 amount,
         bytes calldata data
     ) public override {
-        require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
-
         // Update SIR issuances
         updateLPerIssuanceParams(false, vaultId, from, to);
 
-        // Transfer
-        balanceOf[from][vaultId] -= amount;
-        balanceOf[to][vaultId] += amount;
-
-        emit TransferSingle(msg.sender, from, to, vaultId, amount);
-
-        require(
-            to.code.length == 0
-                ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) ==
-                    ERC1155TokenReceiver.onERC1155Received.selector,
-            "UNSAFE_RECIPIENT"
-        );
+        TEAExternal.safeTransferFrom(balanceOf, isApprovedForAll, from, to, vaultId, amount, data);
     }
 
     function safeBatchTransferFrom(
@@ -58,24 +45,9 @@ abstract contract TEA is ERC1155 {
         uint256[] calldata amounts,
         bytes calldata data
     ) public override {
-        require(vaultIds.length == amounts.length, "LENGTH_MISMATCH");
-
-        require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
-
-        // Storing these outside the loop saves ~15 gas per iteration.
-        uint256 vaultId;
-        uint256 amount;
-
         for (uint256 i = 0; i < vaultIds.length; ) {
-            vaultId = vaultIds[i];
-            amount = amounts[i];
-
             // Update SIR issuances
-            updateLPerIssuanceParams(false, vaultId, from, to);
-
-            // Transfer
-            balanceOf[from][vaultId] -= amount;
-            balanceOf[to][vaultId] += amount;
+            updateLPerIssuanceParams(false, vaultIds[i], from, to);
 
             // An array can't have a total length
             // larger than the max uint256 value.
@@ -84,15 +56,7 @@ abstract contract TEA is ERC1155 {
             }
         }
 
-        emit TransferBatch(msg.sender, from, to, vaultIds, amounts);
-
-        require(
-            to.code.length == 0
-                ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) ==
-                    ERC1155TokenReceiver.onERC1155BatchReceived.selector,
-            "UNSAFE_RECIPIENT"
-        );
+        TEAExternal.safeBatchTransferFrom(balanceOf, isApprovedForAll, from, to, vaultIds, amounts, data);
     }
 
     function mint(address to, uint256 vaultId, uint256 amount) internal {

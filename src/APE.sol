@@ -2,7 +2,7 @@
 pragma solidity >=0.8.0;
 
 // Interfaces
-import {IVault} from "./interfaces/IVault.sol";
+import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 
 // Contracts
 import {Owned} from "./Owned.sol";
@@ -48,7 +48,7 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = IVault(msg.sender).latestTokenParams();
+        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = IVaultExternal(msg.sender).latestTokenParams();
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();

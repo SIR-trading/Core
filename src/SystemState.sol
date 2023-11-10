@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 // Contracts
 import {TEA, IERC20} from "./TEA.sol";
 import {SystemCommons} from "./SystemCommons.sol";
+import {VaultStructs} from "./libraries/VaultStructs.sol";
 
 abstract contract SystemState is SystemCommons, TEA {
     struct VaultIssuanceParams {
@@ -12,26 +13,13 @@ abstract contract SystemState is SystemCommons, TEA {
         uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
-    struct SystemParameters {
-        // Timestamp when issuance (re)started. 0 => issuance has not started yet
-        uint40 tsIssuanceStart;
-        /**
-         * Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
-         * For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
-         */
-        uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
-        uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
-        bool emergencyStop;
-        uint184 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
-    }
-
     address private immutable _SIR;
 
     mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
-    SystemParameters public systemParams =
-        SystemParameters({
+    VaultStructs.SystemParameters public systemParams =
+        VaultStructs.SystemParameters({
             tsIssuanceStart: 0,
             baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
             lpFee: 50,
@@ -63,7 +51,7 @@ abstract contract SystemState is SystemCommons, TEA {
 
     function vaultIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
         unchecked {
-            SystemParameters memory systemParams_ = systemParams;
+            VaultStructs.SystemParameters memory systemParams_ = systemParams;
 
             // Get the vault issuance parameters
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
@@ -198,70 +186,46 @@ abstract contract SystemState is SystemCommons, TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /// @dev All checks and balances to be done at system control
-    function updateSystemState(SystemParameters calldata systemParams_) external onlySystemControl {
+    function updateSystemState(VaultStructs.SystemParameters calldata systemParams_) external onlySystemControl {
         systemParams = systemParams_;
     }
 
-    // function updateSystemState(
-    //     uint40 tsIssuanceStart_,
-    //     uint16 baseFee_,
-    //     uint8 lpFee_,
-    //     bool isEmergency,
-    //     bool isNotEmergency,
-    //     uint40[] calldata oldVaults,
-    //     uint40[] calldata newVaults,
-    //     uint16[] calldata newTaxes
-    // ) external onlySystemControl {
-    //     if (tsIssuanceStart_ != 0) {
-    //         require(systemParams.tsIssuanceStart == 0 && tsIssuanceStart_ >= block.timestamp);
-    //         systemParams.tsIssuanceStart = tsIssuanceStart_;
-    //     } else if (baseFee_ != 0) systemParams.baseFee = baseFee_;
-    //     else if (lpFee_ != 0) systemParams.lpFee = lpFee_;
-    //     else if (isEmergency) {
-    //         require(!systemParams.emergencyStop);
-    //         systemParams.emergencyStop = true;
-    //     } else if (isNotEmergency) {
-    //         require(systemParams.emergencyStop);
-    //         systemParams.emergencyStop = false;
-    //     } else {
-    //         VaultIssuanceParams memory vaultIssuanceParams_;
+    function updateSystemState(
+        uint40[] calldata oldVaults,
+        uint40[] calldata newVaults,
+        uint16[] calldata newTaxes,
+        uint184 aggTaxesToDAO
+    ) external onlySystemControl {
+        VaultIssuanceParams memory vaultIssuanceParams_;
 
-    //         // Stop old issuances
-    //         uint256 lenVaults = oldVaults.length;
-    //         for (uint256 i = 0; i < lenVaults; ++i) {
-    //             // Retrieve the vault's current issuance state and parameters
-    //             vaultIssuanceParams_ = vaultIssuanceParams(oldVaults[i]);
+        // Stop old issuances
+        uint256 lenVaults = oldVaults.length;
+        for (uint256 i = 0; i < lenVaults; ++i) {
+            // Retrieve the vault's current issuance state and parameters
+            vaultIssuanceParams_ = vaultIssuanceParams(oldVaults[i]);
 
-    //             // Nul tax, and consequently nul issuance
-    //             vaultIssuanceParams_.taxToDAO = 0;
+            // Nul tax, and consequently nul issuance
+            vaultIssuanceParams_.taxToDAO = 0;
 
-    //             // Update storage
-    //             _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
-    //         }
+            // Update storage
+            _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
+        }
 
-    //         // Aggregate taxes and squared taxes
-    //         lenVaults = newVaults.length;
-    //         uint184 aggTaxesToDAO;
-    //         for (uint256 i = 0; i < lenVaults; ++i) {
-    //             aggTaxesToDAO += newTaxes[i];
-    //         }
+        // Start new issuances
+        for (uint256 i = 0; i < lenVaults; ++i) {
+            // if (i > 0) require(newVaults[i] > newVaults[i - 1]); // Ensure increasing order
 
-    //         // Start new issuances
-    //         for (uint256 i = 0; i < lenVaults; ++i) {
-    //             // if (i > 0) require(newVaults[i] > newVaults[i - 1]); // Ensure increasing order
+            // Retrieve the vault's current issuance state and parameters
+            vaultIssuanceParams_ = vaultIssuanceParams(newVaults[i]);
 
-    //             // Retrieve the vault's current issuance state and parameters
-    //             vaultIssuanceParams_ = vaultIssuanceParams(newVaults[i]);
+            // Nul tax, and consequently nul issuance
+            vaultIssuanceParams_.taxToDAO = newTaxes[i];
 
-    //             // Nul tax, and consequently nul issuance
-    //             vaultIssuanceParams_.taxToDAO = newTaxes[i];
+            // Update storage
+            _vaultsIssuanceParams[newVaults[i]] = vaultIssuanceParams_;
+        }
 
-    //             // Update storage
-    //             _vaultsIssuanceParams[newVaults[i]] = vaultIssuanceParams_;
-    //         }
-
-    //         // Update storage
-    //         systemParams.aggTaxesToDAO = aggTaxesToDAO;
-    //     }
-    // }
+        // Update storage
+        systemParams.aggTaxesToDAO = aggTaxesToDAO;
+    }
 }

@@ -5,6 +5,9 @@ pragma solidity ^0.8.0;
 import {Vault} from "./Vault.sol";
 import {SIR} from "./SIR.sol";
 
+// Libraries
+import {VaultStructs} from "./libraries/VaultStructs.sol";
+
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
@@ -15,11 +18,14 @@ contract SystemControl is Ownable {
     event NewLPFee(uint8 lpFee);
     event BetaIsOver();
 
+    error IssuanceOfSIRAlreadyStarted();
+    error FeeCannotBeZero();
+    error MintingAlreadyHaulted();
+    error MintingIsAlreadyOn();
     error CannotCallWhenBetaIsOver();
     error ArraysLengthMismatch();
     error ContributorsIssuanceExceedsMaxIssuance();
-    error WrongOldVaultsOrder();
-    error WrongNewVaultsOrder();
+    error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
     Vault public immutable VAULT;
@@ -31,7 +37,7 @@ contract SystemControl is Ownable {
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
-        in an arry, but it requires that system control keeps track of the active vaults.
+        in an array, but it requires that system control keeps track of the active vaults.
         If the vaults were in an unknown order, it maybe be problem because the hash would change.
         So by default the vaults must be ordered in increasing order.
 
@@ -59,33 +65,72 @@ contract SystemControl is Ownable {
 
     function exitBeta() external onlyOwner betaIsOn {
         betaPeriod = false;
+
+        // CHECK MINTING IS NOT HAULTED
+
         emit BetaIsOver();
     }
 
     /// @notice Issuance may start after the beta period is over
-    function startIssuanceOfSIR(uint40 tsStart) external onlyOwner {
-        VAULT.updateSystemState(tsStart, 0, 0, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
-        emit IssuanceStart(tsStart);
+    function startIssuanceOfSIR(uint40 tsIssuanceStart_) external onlyOwner {
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 aggTaxesToDAO) = VAULT
+            .systemParams();
+
+        if (tsIssuanceStart != 0) revert IssuanceOfSIRAlreadyStarted();
+
+        VAULT.updateSystemState(
+            VaultStructs.SystemParameters(tsIssuanceStart_, baseFee, lpFee, emergencyStop, aggTaxesToDAO)
+        );
+
+        emit IssuanceStart(tsIssuanceStart_);
     }
 
-    function setBaseFee(uint16 baseFee) external onlyOwner betaIsOn {
-        VAULT.updateSystemState(0, baseFee, 0, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
+    function setBaseFee(uint16 baseFee_) external onlyOwner betaIsOn {
+        if (baseFee_ == 0) revert FeeCannotBeZero();
+
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 aggTaxesToDAO) = VAULT
+            .systemParams();
+
+        VAULT.updateSystemState(
+            VaultStructs.SystemParameters(tsIssuanceStart, baseFee_, lpFee, emergencyStop, aggTaxesToDAO)
+        );
+
         emit NewBaseFee(baseFee);
     }
 
-    function setLPFee(uint8 lpFee) external onlyOwner betaIsOn {
-        VAULT.updateSystemState(0, 0, lpFee, false, false, new uint40[](0), new uint40[](0), new uint16[](0));
+    function setLPFee(uint8 lpFee_) external onlyOwner betaIsOn {
+        if (lpFee_ == 0) revert FeeCannotBeZero();
+
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 aggTaxesToDAO) = VAULT
+            .systemParams();
+
+        VAULT.updateSystemState(
+            VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee_, emergencyStop, aggTaxesToDAO)
+        );
+
         emit NewLPFee(lpFee);
     }
 
     function haultMinting() external onlyOwner betaIsOn {
-        VAULT.updateSystemState(0, 0, 0, true, false, new uint40[](0), new uint40[](0), new uint16[](0));
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 aggTaxesToDAO) = VAULT
+            .systemParams();
+
+        if (emergencyStop) revert MintingAlreadyHaulted();
+
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, true, aggTaxesToDAO));
+
         emit EmergencyStop(true);
     }
 
     /// @notice We should be allowed to resume the operations of the protocol even if the best is over.
     function resumeMinting() external onlyOwner {
-        VAULT.updateSystemState(0, 0, 0, false, true, new uint40[](0), new uint40[](0), new uint16[](0));
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 aggTaxesToDAO) = VAULT
+            .systemParams();
+
+        if (!emergencyStop) revert MintingIsAlreadyOn();
+
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, false, aggTaxesToDAO));
+
         emit EmergencyStop(false);
     }
 
@@ -98,13 +143,13 @@ contract SystemControl is Ownable {
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
 
         // Check the array of old vaults is correct
-        if (_hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOldVaultsOrder();
+        if (_hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
 
         // Aggregate taxes and squared taxes
         uint256 aggSquaredTaxesToDAO;
         for (uint256 i = 0; i < lenNewVaults; ++i) {
             aggSquaredTaxesToDAO += uint256(newTaxes[i]) ** 2;
-            if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongNewVaultsOrder();
+            if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongOrderOfVaults();
         }
 
         // Condition on squares

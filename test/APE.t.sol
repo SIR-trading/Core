@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import {APE} from "src/APE.sol";
-import {IVault} from "src/Interfaces/IVault.sol";
+import {IVaultExternal} from "src/Interfaces/IVaultExternal.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 
 contract APETest is Test {
@@ -17,7 +17,7 @@ contract APETest is Test {
     function setUp() public {
         vm.mockCall(
             address(this),
-            abi.encodeWithSelector(IVault.latestTokenParams.selector),
+            abi.encodeWithSelector(IVaultExternal.latestTokenParams.selector),
             abi.encode(
                 "Tokenized ETH/USDC with x1.25 leverage",
                 "APE-42",
