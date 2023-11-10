@@ -60,9 +60,9 @@ contract Vault is SystemState {
         // Deploy APE token, and initialize it
         uint256 vaultId = VAULT_EXTERNAL.deployAPE(debtToken, collateralToken, leverageTier);
 
-        // Approve control to withdraw any amount of collateral.
-        // The checks and balances are implemented in the control contract to minimize contract size
-        IERC20(collateralToken).approve(SYSTEM_CONTROL, type(uint256).max);
+        // // Approve control to withdraw any amount of collateral.
+        // // The checks and balances are implemented in the control contract to minimize contract size
+        // IERC20(collateralToken).approve(SYSTEM_CONTROL, type(uint256).max);
 
         // Save vaultId
         state_.vaultId = uint40(vaultId);
@@ -569,12 +569,12 @@ contract Vault is SystemState {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // function widhtdrawDAOFees(uint40 vaultId, address to) external onlySystemControl {
-    //     (address debtToken, address collateralToken, int8 leverageTier) = VAULT_EXTERNAL.paramsById(vaultId);
+    function widhtdrawDAOFees(uint40 vaultId, address to) external onlySystemControl {
+        (address debtToken, address collateralToken, int8 leverageTier) = VAULT_EXTERNAL.paramsById(vaultId);
 
-    //     uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
-    //     state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy
+        uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
+        state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy
 
-    //     TransferHelper.safeTransfer(collateralToken, to, daoFees);
-    // }
+        TransferHelper.safeTransfer(collateralToken, to, daoFees);
+    }
 }

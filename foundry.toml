@@ -3,7 +3,7 @@ src = "src"
 out = "out"
 libs = ["lib"]
 optimizer = true
-optimizer_runs = 8_000
+optimizer_runs = 7_000
 # solc = "0.8.20"
 fs_permissions = [{ access = "read-write", path = "./"}]
 # libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4"]

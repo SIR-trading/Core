@@ -30,7 +30,7 @@ library VaultStructs {
         uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
         uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
         bool emergencyStop;
-        uint184 aggTaxesToDAO; // Aggregated taxToDAO of all vaults
+        uint184 cumTaxes; // Aggregated taxToDAO of all vaults
     }
 
     /** Data tightly packed into 2 words to save gas.

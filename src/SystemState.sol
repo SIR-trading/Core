@@ -24,7 +24,7 @@ abstract contract SystemState is SystemCommons, TEA {
             baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
             lpFee: 50,
             emergencyStop: false, // Emergency stop is off
-            aggTaxesToDAO: 0
+            cumTaxes: 0
         });
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
@@ -75,7 +75,7 @@ abstract contract SystemState is SystemCommons, TEA {
             uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
             if (tsStart < ts3Years) {
                 uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
-                    systemParams_.aggTaxesToDAO;
+                    systemParams_.cumTaxes;
                 vaultIssuanceParams_.cumSIRperTEA += uint152(
                     ((issuance *
                         ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) << 48) /
@@ -85,7 +85,7 @@ abstract contract SystemState is SystemCommons, TEA {
 
             // Aggregate SIR issued after the first 3 years
             if (uint40(block.timestamp) > ts3Years) {
-                uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.aggTaxesToDAO;
+                uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.cumTaxes;
                 vaultIssuanceParams_.cumSIRperTEA += uint152(
                     ((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
                         totalSupply[vaultId]
@@ -190,11 +190,11 @@ abstract contract SystemState is SystemCommons, TEA {
         systemParams = systemParams_;
     }
 
-    function updateSystemState(
+    function updateVaults(
         uint40[] calldata oldVaults,
         uint40[] calldata newVaults,
         uint16[] calldata newTaxes,
-        uint184 aggTaxesToDAO
+        uint184 cumTaxes
     ) external onlySystemControl {
         VaultIssuanceParams memory vaultIssuanceParams_;
 
@@ -226,6 +226,6 @@ abstract contract SystemState is SystemCommons, TEA {
         }
 
         // Update storage
-        systemParams.aggTaxesToDAO = aggTaxesToDAO;
+        systemParams.cumTaxes = cumTaxes;
     }
 }
