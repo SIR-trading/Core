@@ -29,6 +29,8 @@ library TEAExternal {
         uint256 amount,
         bytes calldata data
     ) external {
+        require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
+
         balanceOf[from][id] -= amount;
         balanceOf[to][id] += amount;
 

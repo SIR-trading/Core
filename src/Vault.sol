@@ -573,7 +573,7 @@ contract Vault is SystemState {
         (address debtToken, address collateralToken, int8 leverageTier) = VAULT_EXTERNAL.paramsById(vaultId);
 
         uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
-        state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy
+        state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy attack
 
         TransferHelper.safeTransfer(collateralToken, to, daoFees);
     }
