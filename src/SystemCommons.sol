@@ -9,7 +9,7 @@ abstract contract SystemCommons {
     }
 
     struct LPerIssuanceParams {
-        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
+        uint152 cumSIRPerTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
         uint104 unclaimedRewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 

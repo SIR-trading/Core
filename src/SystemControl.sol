@@ -13,13 +13,13 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
 contract SystemControl is Ownable {
-    event IssuanceStart(uint40 tsIssuanceStart);
+    event SIRIssuanceStarted(uint40 tsIssuanceStart);
     event EmergencyStop(bool indexed);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint8 lpFee);
     event BetaIsOver();
 
-    error IssuanceOfSIRAlreadyStarted();
+    error SIRIssuanceIsOn();
     error FeeCannotBeZero();
     error Minting(bool on);
     error BetaPeriodIsOver();
@@ -79,13 +79,13 @@ contract SystemControl is Ownable {
         (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 cumTaxes) = VAULT
             .systemParams();
 
-        if (tsIssuanceStart != 0) revert IssuanceOfSIRAlreadyStarted();
+        if (tsIssuanceStart != 0) revert SIRIssuanceIsOn();
 
         VAULT.updateSystemState(
             VaultStructs.SystemParameters(tsIssuanceStart_, baseFee, lpFee, emergencyStop, cumTaxes)
         );
 
-        emit IssuanceStart(tsIssuanceStart_);
+        emit SIRIssuanceStarted(tsIssuanceStart_);
     }
 
     function setBaseFee(uint16 baseFee_) external onlyOwner betaIsOn {

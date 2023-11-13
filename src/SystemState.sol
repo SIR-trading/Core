@@ -6,11 +6,11 @@ import {TEA, IERC20} from "./TEA.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 
-abstract contract SystemState is SystemCommons, TEA {
+contract SystemState is SystemCommons, TEA {
     struct VaultIssuanceParams {
         uint16 taxToDAO; // (taxToDAO / type(uint16).max * 10%) of its fee revenue is directed to the DAO.
-        uint40 tsLastUpdate; // timestamp of the last time cumSIRperTEA was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint152 cumSIRperTEA; // Q104.48, cumulative SIR minted by the vaultId per unit of TEA.
+        uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEA was updated. 0 => use systemParams.tsIssuanceStart instead
+        uint152 cumSIRPerTEA; // Q104.48, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
     address private immutable _SIR;
@@ -49,22 +49,19 @@ abstract contract SystemState is SystemCommons, TEA {
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function vaultIssuanceParams(uint256 vaultId) public view returns (VaultIssuanceParams memory) {
+    function cumulativeSIRPerTEA(uint256 vaultId) public view returns (uint152 cumSIRPerTEA) {
         unchecked {
             VaultStructs.SystemParameters memory systemParams_ = systemParams;
 
             // Get the vault issuance parameters
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
-            // Update timestamp
-            vaultIssuanceParams_.tsLastUpdate = uint40(block.timestamp);
-
             // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
             if (
                 systemParams_.tsIssuanceStart == 0 ||
                 vaultIssuanceParams_.taxToDAO == 0 ||
                 vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
-            ) return vaultIssuanceParams_;
+            ) return vaultIssuanceParams_.cumSIRPerTEA;
 
             // Find starting time to compute cumulative SIR per unit of TEA
             uint40 tsStart = systemParams_.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
@@ -76,7 +73,7 @@ abstract contract SystemState is SystemCommons, TEA {
             if (tsStart < ts3Years) {
                 uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
                     systemParams_.cumTaxes;
-                vaultIssuanceParams_.cumSIRperTEA += uint152(
+                cumSIRPerTEA += uint152(
                     ((issuance *
                         ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) << 48) /
                         totalSupply[vaultId]
@@ -86,24 +83,22 @@ abstract contract SystemState is SystemCommons, TEA {
             // Aggregate SIR issued after the first 3 years
             if (uint40(block.timestamp) > ts3Years) {
                 uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.cumTaxes;
-                vaultIssuanceParams_.cumSIRperTEA += uint152(
+                cumSIRPerTEA += uint152(
                     ((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
                         totalSupply[vaultId]
                 );
             }
-
-            return vaultIssuanceParams_;
         }
     }
 
     function lperIssuanceParams(uint256 vaultId, address lper) external view returns (LPerIssuanceParams memory) {
-        return _lperIssuanceParams(vaultId, lper, vaultIssuanceParams(vaultId));
+        return _lperIssuanceParams(vaultId, lper, cumulativeSIRPerTEA(vaultId));
     }
 
     function _lperIssuanceParams(
         uint256 vaultId,
         address lper,
-        VaultIssuanceParams memory vaultIssuanceParams_
+        uint152 cumSIRPerTEA
     ) private view returns (LPerIssuanceParams memory lperIssuanceParams_) {
         unchecked {
             // Get the lper issuance parameters
@@ -116,15 +111,15 @@ abstract contract SystemState is SystemCommons, TEA {
             if (balance == 0) return lperIssuanceParams_;
 
             // If unclaimedRewards need to be updated
-            if (vaultIssuanceParams_.cumSIRperTEA != lperIssuanceParams_.cumSIRperTEA) {
+            if (cumSIRPerTEA != lperIssuanceParams_.cumSIRPerTEA) {
                 /** Cannot OF/UF because:
-                    (1) balance * vaultIssuanceParams_.cumSIRperTEA ≤ issuance * 1000 years * 2^48 ≤ 2^104 * 2^48
-                    (2) vaultIssuanceParams_.cumSIRperTEA ≥ lperIssuanceParams_.cumSIRperTEA
+                    (1) balance * cumSIRPerTEA ≤ issuance * 1000 years * 2^48 ≤ 2^104 * 2^48
+                    (2) cumSIRPerTEA ≥ lperIssuanceParams_.cumSIRPerTEA
                  */
                 lperIssuanceParams_.unclaimedRewards += uint104(
-                    (balance * uint256(vaultIssuanceParams_.cumSIRperTEA - lperIssuanceParams_.cumSIRperTEA)) >> 48
+                    (balance * uint256(cumSIRPerTEA - lperIssuanceParams_.cumSIRPerTEA)) >> 48
                 );
-                lperIssuanceParams_.cumSIRperTEA = vaultIssuanceParams_.cumSIRperTEA;
+                lperIssuanceParams_.cumSIRPerTEA = cumSIRPerTEA;
             }
         }
     }
@@ -152,10 +147,10 @@ abstract contract SystemState is SystemCommons, TEA {
         if (systemParams.tsIssuanceStart == 0) return 0;
 
         // Retrieve updated vault issuance parameters
-        VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams(vaultId);
+        uint152 cumSIRPerTEA = cumulativeSIRPerTEA(vaultId);
 
         // Retrieve updated LPer issuance parameters
-        LPerIssuanceParams memory lper0IssuanceParams_ = _lperIssuanceParams(vaultId, lper0, vaultIssuanceParams_);
+        LPerIssuanceParams memory lper0IssuanceParams_ = _lperIssuanceParams(vaultId, lper0, cumSIRPerTEA);
 
         // Update lpers issuances params
         if (sirIsCaller) {
@@ -170,13 +165,14 @@ abstract contract SystemState is SystemCommons, TEA {
                 1. Must update the sender and destinatary's issuances
                 2. Valut issuance does not need to be updated because totalSupply does not change
              */
-            _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, vaultIssuanceParams_);
+            _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, cumSIRPerTEA);
         else {
             /** Mint or burn TEA
                 1. Must update the caller's issuance
                 2. Must update the vault's issuance
              */
-            _vaultsIssuanceParams[vaultId] = vaultIssuanceParams_;
+            _vaultsIssuanceParams[vaultId].cumSIRPerTEA = cumSIRPerTEA;
+            _vaultsIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
         }
         _lpersIssuances[vaultId][lper0] = lper0IssuanceParams_;
     }
@@ -196,36 +192,34 @@ abstract contract SystemState is SystemCommons, TEA {
         uint16[] calldata newTaxes,
         uint184 cumTaxes
     ) external onlySystemControl {
-        VaultIssuanceParams memory vaultIssuanceParams_;
-
         // Stop old issuances
         uint256 lenVaults = oldVaults.length;
         for (uint256 i = 0; i < lenVaults; ++i) {
-            // Retrieve the vault's current issuance state and parameters
-            vaultIssuanceParams_ = vaultIssuanceParams(oldVaults[i]);
+            // Retrieve the vault's current cumulative SIR per unit of TEA
+            uint152 cumSIRPerTEA = cumulativeSIRPerTEA(oldVaults[i]);
 
-            // Nul tax, and consequently nul issuance
-            vaultIssuanceParams_.taxToDAO = 0;
-
-            // Update storage
-            _vaultsIssuanceParams[oldVaults[i]] = vaultIssuanceParams_;
+            // Update vault issuance parameters
+            _vaultsIssuanceParams[oldVaults[i]] = VaultIssuanceParams({
+                taxToDAO: 0, // Nul tax, and consequently nul SIR issuance
+                tsLastUpdate: uint40(block.timestamp),
+                cumSIRPerTEA: cumSIRPerTEA
+            });
         }
 
         // Start new issuances
         for (uint256 i = 0; i < lenVaults; ++i) {
-            // if (i > 0) require(newVaults[i] > newVaults[i - 1]); // Ensure increasing order
+            // Retrieve the vault's current cumulative SIR per unit of TEA
+            uint152 cumSIRPerTEA = cumulativeSIRPerTEA(newVaults[i]);
 
-            // Retrieve the vault's current issuance state and parameters
-            vaultIssuanceParams_ = vaultIssuanceParams(newVaults[i]);
-
-            // Nul tax, and consequently nul issuance
-            vaultIssuanceParams_.taxToDAO = newTaxes[i];
-
-            // Update storage
-            _vaultsIssuanceParams[newVaults[i]] = vaultIssuanceParams_;
+            // Update vault issuance parameters
+            _vaultsIssuanceParams[newVaults[i]] = VaultIssuanceParams({
+                taxToDAO: newTaxes[i],
+                tsLastUpdate: uint40(block.timestamp),
+                cumSIRPerTEA: cumSIRPerTEA
+            });
         }
 
-        // Update storage
+        // Update cumulative taxes
         systemParams.cumTaxes = cumTaxes;
     }
 }
