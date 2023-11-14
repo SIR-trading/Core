@@ -53,7 +53,7 @@ contract SystemControl is Ownable {
 
     constructor(address systemState, address vaultExternal, address sir) {
         VAULT = Vault(systemState);
-        VAULT_EXTERNAL = VaultExternal(systemState);
+        VAULT_EXTERNAL = VaultExternal(vaultExternal);
         SIR_TOKEN = SIR(sir);
     }
 

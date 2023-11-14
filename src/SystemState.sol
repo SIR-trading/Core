@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import {TEA, IERC20} from "./TEA.sol";
 import {SystemCommons} from "./SystemCommons.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
+import "forge-std/Test.sol";
 
 contract SystemState is SystemCommons, TEA {
     struct VaultIssuanceParams {
@@ -57,10 +58,15 @@ contract SystemState is SystemCommons, TEA {
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
             // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
+            console.log("tsIssuanceStart", systemParams_.tsIssuanceStart);
+            console.log("taxToDAO", vaultIssuanceParams_.taxToDAO);
+            console.log("tsLastUpdate", vaultIssuanceParams_.tsLastUpdate);
+            console.log("totalSupply", totalSupply[vaultId]);
             if (
                 systemParams_.tsIssuanceStart == 0 ||
                 vaultIssuanceParams_.taxToDAO == 0 ||
-                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp)
+                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp) ||
+                totalSupply[vaultId] == 0
             ) return vaultIssuanceParams_.cumSIRPerTEA;
 
             // Find starting time to compute cumulative SIR per unit of TEA
@@ -73,6 +79,9 @@ contract SystemState is SystemCommons, TEA {
             if (tsStart < ts3Years) {
                 uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
                     systemParams_.cumTaxes;
+                // console.log("issuance", issuance);
+                // console.log("tsStart", tsStart);
+                // console.log("tsNow", block.timestamp);
                 cumSIRPerTEA += uint152(
                     ((issuance *
                         ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) << 48) /
@@ -193,8 +202,7 @@ contract SystemState is SystemCommons, TEA {
         uint184 cumTaxes
     ) external onlySystemControl {
         // Stop old issuances
-        uint256 lenVaults = oldVaults.length;
-        for (uint256 i = 0; i < lenVaults; ++i) {
+        for (uint256 i = 0; i < oldVaults.length; ++i) {
             // Retrieve the vault's current cumulative SIR per unit of TEA
             uint152 cumSIRPerTEA = cumulativeSIRPerTEA(oldVaults[i]);
 
@@ -207,11 +215,13 @@ contract SystemState is SystemCommons, TEA {
         }
 
         // Start new issuances
-        for (uint256 i = 0; i < lenVaults; ++i) {
+        for (uint256 i = 0; i < newVaults.length; ++i) {
             // Retrieve the vault's current cumulative SIR per unit of TEA
             uint152 cumSIRPerTEA = cumulativeSIRPerTEA(newVaults[i]);
 
             // Update vault issuance parameters
+            console.log("vaultId", newVaults[i]);
+            console.log("taxToDAO", newTaxes[i]);
             _vaultsIssuanceParams[newVaults[i]] = VaultIssuanceParams({
                 taxToDAO: newTaxes[i],
                 tsLastUpdate: uint40(block.timestamp),
