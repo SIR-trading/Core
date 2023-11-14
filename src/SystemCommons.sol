@@ -16,7 +16,7 @@ abstract contract SystemCommons {
     // Tokens issued per second
     uint72 public constant ISSUANCE = 1e2 ether; // Not really "ether" but we use it anyway to simulate 18 decimals
 
-    uint72 internal constant AGG_ISSUANCE_VAULTS = (ISSUANCE * 9) / 10;
+    uint72 internal constant AGG_ISSUANCE_VAULTS = (ISSUANCE * 8) / 10;
 
     uint40 internal constant THREE_YEARS = 3 * 365 days;
 

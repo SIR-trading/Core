@@ -58,10 +58,6 @@ contract SystemState is SystemCommons, TEA {
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
 
             // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
-            console.log("tsIssuanceStart", systemParams_.tsIssuanceStart);
-            console.log("taxToDAO", vaultIssuanceParams_.taxToDAO);
-            console.log("tsLastUpdate", vaultIssuanceParams_.tsLastUpdate);
-            console.log("totalSupply", totalSupply[vaultId]);
             if (
                 systemParams_.tsIssuanceStart == 0 ||
                 vaultIssuanceParams_.taxToDAO == 0 ||
@@ -76,25 +72,27 @@ contract SystemState is SystemCommons, TEA {
 
             // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
             uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
+            // console.log("tsStart", tsStart);
+            // console.log("ts3Years", ts3Years);
             if (tsStart < ts3Years) {
                 uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
                     systemParams_.cumTaxes;
                 // console.log("issuance", issuance);
-                // console.log("tsStart", tsStart);
                 // console.log("tsNow", block.timestamp);
                 cumSIRPerTEA += uint152(
                     ((issuance *
                         ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) << 48) /
                         totalSupply[vaultId]
                 );
+                // console.log("cumSIRPerTEA", cumSIRPerTEA);
             }
 
             // Aggregate SIR issued after the first 3 years
             if (uint40(block.timestamp) > ts3Years) {
                 uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.cumTaxes;
                 cumSIRPerTEA += uint152(
-                    ((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
-                        totalSupply[vaultId]
+                    (((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
+                        totalSupply[vaultId])
                 );
             }
         }
@@ -220,8 +218,6 @@ contract SystemState is SystemCommons, TEA {
             uint152 cumSIRPerTEA = cumulativeSIRPerTEA(newVaults[i]);
 
             // Update vault issuance parameters
-            console.log("vaultId", newVaults[i]);
-            console.log("taxToDAO", newTaxes[i]);
             _vaultsIssuanceParams[newVaults[i]] = VaultIssuanceParams({
                 taxToDAO: newTaxes[i],
                 tsLastUpdate: uint40(block.timestamp),

@@ -26,6 +26,7 @@ contract SystemStateInstance is SystemState {
 
 contract SystemStateTest is Test, SystemCommons {
     uint40 constant VAULT_ID = 42;
+    uint40 constant MAX_TS = 5000000000; // 11 June 2128
     SystemStateInstance systemState;
 
     constructor() SystemCommons(address(0)) {}
@@ -97,15 +98,14 @@ contract SystemStateTest is Test, SystemCommons {
         uint16 tax,
         uint256 teaAmount
     ) public {
-        vm.assume(tsIssuanceStart > 0);
-        vm.assume(tsCheckVault > 0);
+        // tsIssuanceStart is not 0 because it is a special value whhich indicates issuance has not started
+        tsIssuanceStart = uint40(bound(tsIssuanceStart, 1, type(uint40).max - 365 days * 3));
+        // Checking the rewards within the first 3 years of issuance.
+        tsCheckVault = uint40(
+            bound(tsCheckVault, uint256(tsIssuanceStart) + 1, uint256(tsIssuanceStart) + 365 days * 3)
+        );
         vm.assume(tax > 0);
         vm.assume(teaAmount > 0);
-
-        // Checking the rewards within the first 3 years of issuance.
-        tsIssuanceStart = uint40(
-            bound(tsIssuanceStart, tsCheckVault > 3 * 365 days ? tsCheckVault - 3 * 365 days : 0, tsCheckVault)
-        );
 
         // In this test we wish to update the vault before we check the cumulative SIR.
         tsUpdateVault = uint40(bound(tsUpdateVault, 0, tsCheckVault - 1));
@@ -131,9 +131,63 @@ contract SystemStateTest is Test, SystemCommons {
         uint152 cumSIRPerTEA = systemState.cumulativeSIRPerTEA(VAULT_ID);
 
         uint40 tsStart = tsIssuanceStart > tsUpdateVault ? tsIssuanceStart : tsUpdateVault;
-        // console.log("test issuance", AGG_ISSUANCE_VAULTS);
         // console.log("test tsStart", tsStart);
+        // console.log("test issuance", AGG_ISSUANCE_VAULTS);
         // console.log("test tsNow", block.timestamp);
+        // vm.writeLine("./cumSIRPerTEA.log", vm.toString(cumSIRPerTEA));
         assertEq(cumSIRPerTEA, ((uint256(AGG_ISSUANCE_VAULTS) * (block.timestamp - tsStart)) << 48) / teaAmount);
+    }
+
+    function testFuzz_cumulativeSIRPerTEAAfter3Years(
+        uint40 tsIssuanceStart,
+        uint40 tsUpdateVault,
+        uint40 tsCheckVault,
+        uint16 tax,
+        uint256 teaAmount
+    ) public {
+        // tsIssuanceStart is not 0 because it is a special value whhich indicates issuance has not started
+        tsIssuanceStart = uint40(bound(tsIssuanceStart, 1, MAX_TS - 365 days * 3 - 1));
+        // Checking the rewards after the first 3 years of issuance.
+        tsCheckVault = uint40(bound(tsCheckVault, uint256(tsIssuanceStart) + 365 days * 3 + 1, MAX_TS));
+        vm.assume(tax > 0);
+        vm.assume(teaAmount > 0);
+
+        // In this test we wish to update the vault before we check the cumulative SIR.
+        tsUpdateVault = uint40(bound(tsUpdateVault, 0, tsCheckVault - 1));
+
+        // Mint some TEA
+        systemState.mint(teaAmount);
+
+        // Set start of issuance
+        vm.prank(vm.addr(1));
+        systemState.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, 0, 0, false, 0));
+
+        // Activate 1 vault
+        vm.warp(tsUpdateVault);
+        vm.prank(vm.addr(1));
+        uint40[] memory oldVaults = new uint40[](0);
+        uint40[] memory newVaults = new uint40[](1);
+        newVaults[0] = VAULT_ID;
+        uint16[] memory newTaxes = new uint16[](1);
+        newTaxes[0] = tax;
+        systemState.updateVaults(oldVaults, newVaults, newTaxes, tax);
+
+        vm.warp(tsCheckVault);
+        uint152 cumSIRPerTEA = systemState.cumulativeSIRPerTEA(VAULT_ID);
+
+        uint40 tsStart = tsIssuanceStart > tsUpdateVault ? tsIssuanceStart : tsUpdateVault;
+        uint256 cumSIRPerTEA_test;
+        if (tsStart < tsIssuanceStart + 365 days * 3) {
+            cumSIRPerTEA_test =
+                ((uint256(AGG_ISSUANCE_VAULTS) * (tsIssuanceStart + 365 days * 3 - tsStart)) << 48) /
+                teaAmount;
+            cumSIRPerTEA_test +=
+                ((uint256(ISSUANCE) * (tsCheckVault - tsIssuanceStart - 365 days * 3)) << 48) /
+                teaAmount;
+        } else {
+            cumSIRPerTEA_test = ((uint256(ISSUANCE) * (tsCheckVault - tsStart)) << 48) / teaAmount;
+        }
+
+        assertEq(cumSIRPerTEA, cumSIRPerTEA_test);
     }
 }
