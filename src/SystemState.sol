@@ -56,78 +56,76 @@ contract SystemState is SystemCommons, TEA {
 
             // Get the vault issuance parameters
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
+            cumSIRPerTEA = vaultIssuanceParams_.cumSIRPerTEA;
 
-            // Return the current vault issuance parameters if no SIR is issued, or it has already been updated
+            // Do nothing if no new SIR has been issued, or it has already been updated
+            uint256 totalSupply_ = totalSupply[vaultId];
             if (
-                systemParams_.tsIssuanceStart == 0 ||
-                vaultIssuanceParams_.taxToDAO == 0 ||
-                vaultIssuanceParams_.tsLastUpdate == uint40(block.timestamp) ||
-                totalSupply[vaultId] == 0
-            ) return vaultIssuanceParams_.cumSIRPerTEA;
+                systemParams_.tsIssuanceStart != 0 &&
+                vaultIssuanceParams_.taxToDAO != 0 &&
+                vaultIssuanceParams_.tsLastUpdate != uint40(block.timestamp) &&
+                totalSupply_ != 0
+            ) {
+                // Find starting time to compute cumulative SIR per unit of TEA
+                uint40 tsStart = systemParams_.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
+                    ? systemParams_.tsIssuanceStart
+                    : vaultIssuanceParams_.tsLastUpdate;
 
-            // Find starting time to compute cumulative SIR per unit of TEA
-            uint40 tsStart = systemParams_.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
-                ? systemParams_.tsIssuanceStart
-                : vaultIssuanceParams_.tsLastUpdate;
+                // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
+                uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
+                // console.log("tsStart", tsStart);
+                // console.log("ts3Years", ts3Years);
+                if (tsStart < ts3Years) {
+                    uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
+                        systemParams_.cumTaxes;
+                    cumSIRPerTEA += uint152(
+                        ((issuance *
+                            ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) <<
+                            48) / totalSupply_
+                    );
+                    // console.log("cumSIRPerTEA", cumSIRPerTEA);
+                }
 
-            // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
-            uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
-            // console.log("tsStart", tsStart);
-            // console.log("ts3Years", ts3Years);
-            if (tsStart < ts3Years) {
-                uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.taxToDAO) /
-                    systemParams_.cumTaxes;
-                // console.log("issuance", issuance);
-                // console.log("tsNow", block.timestamp);
-                cumSIRPerTEA += uint152(
-                    ((issuance *
-                        ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) << 48) /
-                        totalSupply[vaultId]
-                );
-                // console.log("cumSIRPerTEA", cumSIRPerTEA);
-            }
-
-            // Aggregate SIR issued after the first 3 years
-            if (uint40(block.timestamp) > ts3Years) {
-                uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.cumTaxes;
-                cumSIRPerTEA += uint152(
-                    (((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
-                        totalSupply[vaultId])
-                );
+                // Aggregate SIR issued after the first 3 years
+                console.log("uint40(block.timestamp)", uint40(block.timestamp));
+                console.log("ts3Years", ts3Years);
+                if (uint40(block.timestamp) > ts3Years) {
+                    console.log("time interval", uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years));
+                    uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.taxToDAO) / systemParams_.cumTaxes;
+                    console.log("issuance", issuance);
+                    console.log("contract cumSIRPerTEA", cumSIRPerTEA);
+                    cumSIRPerTEA += uint152(
+                        (((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 48) /
+                            totalSupply_)
+                    );
+                    console.log("contract cumSIRPerTEA", cumSIRPerTEA);
+                }
             }
         }
     }
 
-    function lperIssuanceParams(uint256 vaultId, address lper) external view returns (LPerIssuanceParams memory) {
-        return _lperIssuanceParams(vaultId, lper, cumulativeSIRPerTEA(vaultId));
+    function unclaimedRewards(uint256 vaultId, address lper) external view returns (uint104) {
+        return _unclaimedRewards(vaultId, lper, cumulativeSIRPerTEA(vaultId));
     }
 
-    function _lperIssuanceParams(
-        uint256 vaultId,
-        address lper,
-        uint152 cumSIRPerTEA
-    ) private view returns (LPerIssuanceParams memory lperIssuanceParams_) {
+    function _unclaimedRewards(uint256 vaultId, address lper, uint152 cumSIRPerTEA) private view returns (uint104) {
         unchecked {
             // Get the lper issuance parameters
-            lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
+            LPerIssuanceParams memory lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
 
             // Get the LPer balance of TEA
             uint256 balance = balanceOf[lper][vaultId];
 
             // If LPer has no TEA
-            if (balance == 0) return lperIssuanceParams_;
+            if (balance == 0) return lperIssuanceParams_.unclaimedRewards;
 
-            // If unclaimedRewards need to be updated
-            if (cumSIRPerTEA != lperIssuanceParams_.cumSIRPerTEA) {
-                /** Cannot OF/UF because:
+            /** Cannot OF/UF because:
                     (1) balance * cumSIRPerTEA ≤ issuance * 1000 years * 2^48 ≤ 2^104 * 2^48
                     (2) cumSIRPerTEA ≥ lperIssuanceParams_.cumSIRPerTEA
                  */
-                lperIssuanceParams_.unclaimedRewards += uint104(
-                    (balance * uint256(cumSIRPerTEA - lperIssuanceParams_.cumSIRPerTEA)) >> 48
-                );
-                lperIssuanceParams_.cumSIRPerTEA = cumSIRPerTEA;
-            }
+            return
+                lperIssuanceParams_.unclaimedRewards +
+                uint104((balance * uint256(cumSIRPerTEA - lperIssuanceParams_.cumSIRPerTEA)) >> 48);
         }
     }
 
@@ -135,10 +133,10 @@ contract SystemState is SystemCommons, TEA {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104 unclaimedRewards) {
+    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint104) {
         require(msg.sender == _SIR);
 
-        unclaimedRewards = updateLPerIssuanceParams(true, vaultId, lper, address(0));
+        return updateLPerIssuanceParams(true, vaultId, lper, address(0));
     }
 
     /**
@@ -149,39 +147,36 @@ contract SystemState is SystemCommons, TEA {
         uint256 vaultId,
         address lper0,
         address lper1
-    ) internal override returns (uint104 unclaimedRewards) {
+    ) internal override returns (uint104 unclaimedRewards0) {
         // If issuance has not started, return
         if (systemParams.tsIssuanceStart == 0) return 0;
 
         // Retrieve updated vault issuance parameters
         uint152 cumSIRPerTEA = cumulativeSIRPerTEA(vaultId);
+        console.log("contract cumSIRPerTEA", cumSIRPerTEA);
 
         // Retrieve updated LPer issuance parameters
-        LPerIssuanceParams memory lper0IssuanceParams_ = _lperIssuanceParams(vaultId, lper0, cumSIRPerTEA);
+        unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, cumSIRPerTEA);
 
-        // Update lpers issuances params
-        if (sirIsCaller) {
-            /** LPer claiming SIR
-                1. Must update the caller's issuance
-                2. Pass accumulated rewards and nil them 
-             */
-            unclaimedRewards = lper0IssuanceParams_.unclaimedRewards;
-            lper0IssuanceParams_.unclaimedRewards = 0;
-        } else if (lper1 != address(0))
+        // Update LPer0 issuance parameters
+        _lpersIssuances[vaultId][lper0] = LPerIssuanceParams(cumSIRPerTEA, sirIsCaller ? 0 : unclaimedRewards0);
+
+        if (lper1 != address(0))
             /** Transfer of TEA
-                1. Must update the sender and destinatary's issuances
+                1. Must update the destinatary's issuance parameters too
                 2. Valut issuance does not need to be updated because totalSupply does not change
              */
-            _lpersIssuances[vaultId][lper1] = _lperIssuanceParams(vaultId, lper1, cumSIRPerTEA);
+            _lpersIssuances[vaultId][lper1] = LPerIssuanceParams(
+                cumSIRPerTEA,
+                _unclaimedRewards(vaultId, lper1, cumSIRPerTEA)
+            );
         else {
             /** Mint or burn TEA
-                1. Must update the caller's issuance
-                2. Must update the vault's issuance
+                1. Must update the vault's issuance
              */
             _vaultsIssuanceParams[vaultId].cumSIRPerTEA = cumSIRPerTEA;
             _vaultsIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
         }
-        _lpersIssuances[vaultId][lper0] = lper0IssuanceParams_;
     }
 
     /*////////////////////////////////////////////////////////////////

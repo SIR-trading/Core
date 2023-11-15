@@ -19,20 +19,30 @@ contract SystemStateInstance is SystemState {
         return updateLPerIssuanceParams(false, VAULT_ID, lper0, lper1);
     }
 
-    function mint(uint256 amount) external {
-        mint(tx.origin, VAULT_ID, amount);
+    function mint(address to, uint256 amount) external {
+        mint(to, VAULT_ID, amount);
+    }
+
+    function burn(address from, uint256 amount) external {
+        burn(from, VAULT_ID, amount);
     }
 }
 
 contract SystemStateTest is Test, SystemCommons {
     uint40 constant VAULT_ID = 42;
-    uint40 constant MAX_TS = 5000000000; // 11 June 2128
+    uint40 constant MAX_TS = 202824096036; // type(uint152).max/(100*10**18*2**48)
     SystemStateInstance systemState;
+
+    address alice;
+    address bob;
 
     constructor() SystemCommons(address(0)) {}
 
     function setUp() public {
         systemState = new SystemStateInstance(vm.addr(1), vm.addr(2), vm.addr(3));
+
+        alice = vm.addr(4);
+        bob = vm.addr(5);
     }
 
     function testFuzz_cumulativeSIRPerTEABeforeStart(uint16 tax, uint256 teaAmount) public {
@@ -46,7 +56,7 @@ contract SystemStateTest is Test, SystemCommons {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, tax);
 
         // Mint some TEA
-        systemState.mint(teaAmount);
+        systemState.mint(alice, teaAmount);
 
         skip(69 seconds);
 
@@ -61,7 +71,7 @@ contract SystemStateTest is Test, SystemCommons {
         systemState.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, 0, 0, false, 0));
 
         // Mint some TEA
-        systemState.mint(teaAmount);
+        systemState.mint(alice, teaAmount);
 
         skip(69 seconds);
 
@@ -111,7 +121,7 @@ contract SystemStateTest is Test, SystemCommons {
         tsUpdateVault = uint40(bound(tsUpdateVault, 0, tsCheckVault - 1));
 
         // Mint some TEA
-        systemState.mint(teaAmount);
+        systemState.mint(alice, teaAmount);
 
         // Set start of issuance
         vm.prank(vm.addr(1));
@@ -136,6 +146,9 @@ contract SystemStateTest is Test, SystemCommons {
         // console.log("test tsNow", block.timestamp);
         // vm.writeLine("./cumSIRPerTEA.log", vm.toString(cumSIRPerTEA));
         assertEq(cumSIRPerTEA, ((uint256(AGG_ISSUANCE_VAULTS) * (block.timestamp - tsStart)) << 48) / teaAmount);
+
+        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        assertEq(unclaimedSIR, (teaAmount * cumSIRPerTEA) >> 48);
     }
 
     function testFuzz_cumulativeSIRPerTEAAfter3Years(
@@ -156,7 +169,7 @@ contract SystemStateTest is Test, SystemCommons {
         tsUpdateVault = uint40(bound(tsUpdateVault, 0, tsCheckVault - 1));
 
         // Mint some TEA
-        systemState.mint(teaAmount);
+        systemState.mint(alice, teaAmount);
 
         // Set start of issuance
         vm.prank(vm.addr(1));
@@ -189,5 +202,64 @@ contract SystemStateTest is Test, SystemCommons {
         }
 
         assertEq(cumSIRPerTEA, cumSIRPerTEA_test);
+
+        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        assertEq(unclaimedSIR, (teaAmount * cumSIRPerTEA) >> 48);
+    }
+
+    function test_unclaimedRewardsSplitBetweenTwo() public {
+        // Set start of issuance
+        vm.prank(vm.addr(1));
+        systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
+
+        // Activate 1 vault
+        vm.prank(vm.addr(1));
+        uint40[] memory oldVaults = new uint40[](0);
+        uint40[] memory newVaults = new uint40[](1);
+        newVaults[0] = VAULT_ID;
+        uint16[] memory newTaxes = new uint16[](1);
+        newTaxes[0] = 1;
+        systemState.updateVaults(oldVaults, newVaults, newTaxes, 1);
+
+        // Mint some TEA
+        systemState.mint(alice, 1);
+        systemState.mint(bob, 1);
+
+        vm.warp(1 + 2 * THREE_YEARS);
+
+        uint104 unclaimedSIRAlice = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint104 unclaimedSIRBob = systemState.unclaimedRewards(VAULT_ID, alice);
+
+        assertEq(unclaimedSIRAlice, ((uint256(AGG_ISSUANCE_VAULTS) + uint256(ISSUANCE)) * THREE_YEARS) / 2);
+        assertEq(unclaimedSIRBob, ((uint256(AGG_ISSUANCE_VAULTS) + uint256(ISSUANCE)) * THREE_YEARS) / 2);
+    }
+
+    function test_unclaimedRewardsHalfTheTime() public {
+        // Set start of issuance
+        vm.prank(vm.addr(1));
+        systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
+
+        // Activate 1 vault
+        vm.prank(vm.addr(1));
+        uint40[] memory oldVaults = new uint40[](0);
+        uint40[] memory newVaults = new uint40[](1);
+        newVaults[0] = VAULT_ID;
+        uint16[] memory newTaxes = new uint16[](1);
+        newTaxes[0] = 1;
+        systemState.updateVaults(oldVaults, newVaults, newTaxes, 1);
+
+        // Mint some TEA
+        systemState.mint(alice, 1);
+
+        vm.warp(1 + THREE_YEARS);
+        systemState.mint(bob, 1);
+        systemState.burn(alice, 1);
+
+        vm.warp(1 + 2 * THREE_YEARS);
+        uint104 unclaimedSIRAlice = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint104 unclaimedSIRBob = systemState.unclaimedRewards(VAULT_ID, bob);
+
+        assertEq(unclaimedSIRAlice, uint256(AGG_ISSUANCE_VAULTS) * THREE_YEARS, "Alice unclaimed SIR is wrong");
+        assertEq(unclaimedSIRBob, uint256(ISSUANCE) * THREE_YEARS, "Bob unclaimed SIR is wrong");
     }
 }
