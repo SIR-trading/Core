@@ -33,21 +33,29 @@ contract SystemStateTest is Test, SystemCommons {
     uint40 constant MAX_TS = 202824096036; // type(uint152).max/(100*10**18*2**48)
     SystemStateInstance systemState;
 
+    address systemControl;
+    address sir;
+    address vaultExternal;
+
     address alice;
     address bob;
 
     constructor() SystemCommons(address(0)) {}
 
     function setUp() public {
-        systemState = new SystemStateInstance(vm.addr(1), vm.addr(2), vm.addr(3));
+        systemControl = vm.addr(1);
+        sir = vm.addr(2);
+        vaultExternal = vm.addr(3);
 
         alice = vm.addr(4);
         bob = vm.addr(5);
+
+        systemState = new SystemStateInstance(systemControl, sir, vaultExternal);
     }
 
     function testFuzz_cumulativeSIRPerTEABeforeStart(uint16 tax, uint256 teaAmount) public {
         // Activate 1 vault
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         uint40[] memory oldVaults = new uint40[](0);
         uint40[] memory newVaults = new uint40[](1);
         newVaults[0] = VAULT_ID;
@@ -67,7 +75,7 @@ contract SystemStateTest is Test, SystemCommons {
 
     function testFuzz_cumulativeSIRPerTEANoTax(uint40 tsIssuanceStart, uint256 teaAmount) public {
         // Set start of issuance
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         systemState.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, 0, 0, false, 0));
 
         // Mint some TEA
@@ -82,11 +90,11 @@ contract SystemStateTest is Test, SystemCommons {
 
     function testFuzz_cumulativeSIRPerTEANoTEA(uint40 tsIssuanceStart, uint16 tax) public {
         // Set start of issuance
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         systemState.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, 0, 0, false, 0));
 
         // Activate 1 vault
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         uint40[] memory oldVaults = new uint40[](0);
         uint40[] memory newVaults = new uint40[](1);
         newVaults[0] = VAULT_ID;
@@ -124,12 +132,12 @@ contract SystemStateTest is Test, SystemCommons {
         systemState.mint(alice, teaAmount);
 
         // Set start of issuance
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         systemState.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, 0, 0, false, 0));
 
         // Activate 1 vault
         vm.warp(tsUpdateVault);
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         uint40[] memory oldVaults = new uint40[](0);
         uint40[] memory newVaults = new uint40[](1);
         newVaults[0] = VAULT_ID;
@@ -172,12 +180,12 @@ contract SystemStateTest is Test, SystemCommons {
         systemState.mint(alice, teaAmount);
 
         // Set start of issuance
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         systemState.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, 0, 0, false, 0));
 
         // Activate 1 vault
         vm.warp(tsUpdateVault);
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         uint40[] memory oldVaults = new uint40[](0);
         uint40[] memory newVaults = new uint40[](1);
         newVaults[0] = VAULT_ID;
@@ -209,11 +217,11 @@ contract SystemStateTest is Test, SystemCommons {
 
     function test_unclaimedRewardsSplitBetweenTwo() public {
         // Set start of issuance
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
 
         // Activate 1 vault
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         uint40[] memory oldVaults = new uint40[](0);
         uint40[] memory newVaults = new uint40[](1);
         newVaults[0] = VAULT_ID;
@@ -236,11 +244,11 @@ contract SystemStateTest is Test, SystemCommons {
 
     function test_unclaimedRewardsHalfTheTime() public {
         // Set start of issuance
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
 
         // Activate 1 vault
-        vm.prank(vm.addr(1));
+        vm.prank(systemControl);
         uint40[] memory oldVaults = new uint40[](0);
         uint40[] memory newVaults = new uint40[](1);
         newVaults[0] = VAULT_ID;
