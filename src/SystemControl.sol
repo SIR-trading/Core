@@ -76,14 +76,11 @@ contract SystemControl is Ownable {
 
     /// @notice Issuance may start after the beta period is over
     function startIssuanceOfSIR(uint40 tsIssuanceStart_) external onlyOwner {
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 cumTaxes) = VAULT
-            .systemParams();
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
 
         if (tsIssuanceStart != 0) revert SIRIssuanceIsOn();
 
-        VAULT.updateSystemState(
-            VaultStructs.SystemParameters(tsIssuanceStart_, baseFee, lpFee, emergencyStop, cumTaxes)
-        );
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart_, baseFee, lpFee, emergencyStop, cumTax));
 
         emit SIRIssuanceStarted(tsIssuanceStart_);
     }
@@ -91,12 +88,9 @@ contract SystemControl is Ownable {
     function setBaseFee(uint16 baseFee_) external onlyOwner betaIsOn {
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 cumTaxes) = VAULT
-            .systemParams();
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
 
-        VAULT.updateSystemState(
-            VaultStructs.SystemParameters(tsIssuanceStart, baseFee_, lpFee, emergencyStop, cumTaxes)
-        );
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee_, lpFee, emergencyStop, cumTax));
 
         emit NewBaseFee(baseFee);
     }
@@ -104,35 +98,30 @@ contract SystemControl is Ownable {
     function setLPFee(uint8 lpFee_) external onlyOwner betaIsOn {
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 cumTaxes) = VAULT
-            .systemParams();
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
 
-        VAULT.updateSystemState(
-            VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee_, emergencyStop, cumTaxes)
-        );
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee_, emergencyStop, cumTax));
 
         emit NewLPFee(lpFee);
     }
 
     function haultMinting() external onlyOwner betaIsOn {
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 cumTaxes) = VAULT
-            .systemParams();
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
 
         if (emergencyStop) revert Minting(false);
 
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, true, cumTaxes));
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, true, cumTax));
 
         emit EmergencyStop(true);
     }
 
     /// @notice We should be allowed to resume the operations of the protocol even if the best is over.
     function resumeMinting() external onlyOwner {
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint184 cumTaxes) = VAULT
-            .systemParams();
+        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
 
         if (!emergencyStop) revert Minting(true);
 
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, false, cumTaxes));
+        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, false, cumTax));
 
         emit EmergencyStop(false);
     }
@@ -140,7 +129,7 @@ contract SystemControl is Ownable {
     function updateVaultsIssuances(
         uint40[] calldata oldVaults,
         uint40[] calldata newVaults,
-        uint16[] calldata newTaxes
+        uint8[] calldata newTaxes
     ) public onlyOwner {
         uint256 lenNewVaults = newVaults.length;
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
@@ -149,19 +138,19 @@ contract SystemControl is Ownable {
         if (_hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
 
         // Aggregate taxes and squared taxes
-        uint184 cumTaxes;
+        uint16 cumTax;
         uint256 cumSquaredTaxes;
         for (uint256 i = 0; i < lenNewVaults; ++i) {
-            cumTaxes += newTaxes[i];
+            cumTax += newTaxes[i];
             cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
             if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongOrderOfVaults();
         }
 
         // Condition on squares
-        if (cumSquaredTaxes > uint256(type(uint16).max) ** 2) revert NewTaxesTooHigh();
+        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
-        VAULT.updateVaults(oldVaults, newVaults, newTaxes, cumTaxes);
+        VAULT.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
 
         // Update hash of active vaults
         _hashActiveVaults == keccak256(abi.encodePacked(newVaults));

@@ -8,16 +8,17 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {TEAExternal} from "./libraries/TEAExternal.sol";
 
 // Contracts
+import {SystemCommons} from "./SystemCommons.sol";
 import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import "forge-std/Test.sol";
 
-abstract contract TEA is ERC1155 {
+abstract contract TEA is ERC1155, SystemCommons {
     IVaultExternal internal immutable VAULT_EXTERNAL;
 
     mapping(uint256 vaultId => uint256) public totalSupply;
 
-    constructor(address vaultExternal) {
+    constructor(address systemControl, address vaultExternal) SystemCommons(systemControl) {
         VAULT_EXTERNAL = IVaultExternal(vaultExternal);
     }
 
@@ -60,24 +61,28 @@ abstract contract TEA is ERC1155 {
     }
 
     function mint(address to, uint256 vaultId, uint256 amount) internal {
-        // Update SIR issuance
-        updateLPerIssuanceParams(false, vaultId, to, address(0));
-
-        // Mint
-        totalSupply[vaultId] += amount;
         unchecked {
+            // Update SIR issuance
+            updateLPerIssuanceParams(false, vaultId, to, address(0));
+
+            // Mint
+            uint256 totalSupply_ = totalSupply[vaultId];
+            uint256 totalSupplyPlusAmount = totalSupply_ + amount;
+            require(totalSupplyPlusAmount > totalSupply_ && totalSupplyPlusAmount <= TEA_MAX_SUPPLY, "OF");
+
+            totalSupply[vaultId] = totalSupplyPlusAmount;
             balanceOf[to][vaultId] += amount;
+
+            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
+
+            require(
+                to.code.length == 0
+                    ? to != address(0)
+                    : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") ==
+                        ERC1155TokenReceiver.onERC1155Received.selector,
+                "UNSAFE_RECIPIENT"
+            );
         }
-
-        emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
-
-        require(
-            to.code.length == 0
-                ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") ==
-                    ERC1155TokenReceiver.onERC1155Received.selector,
-            "UNSAFE_RECIPIENT"
-        );
     }
 
     function burn(address from, uint256 vaultId, uint256 amount) internal {
@@ -102,5 +107,5 @@ abstract contract TEA is ERC1155 {
         uint256 vaultId,
         address lper0,
         address lper1
-    ) internal virtual returns (uint104 unclaimedRewards);
+    ) internal virtual returns (uint80 unclaimedRewards);
 }

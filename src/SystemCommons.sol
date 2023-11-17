@@ -8,15 +8,17 @@ abstract contract SystemCommons {
         _;
     }
 
-    struct LPerIssuanceParams {
-        uint152 cumSIRPerTEA; // Q104.48, cumulative SIR minted by an LPer per unit of TEA
-        uint104 unclaimedRewards; // SIR owed to the LPer. 104 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
-    }
+    uint8 internal constant SIR_DECIMALS = 12;
 
-    // Tokens issued per second
-    uint72 public constant ISSUANCE = 1e2 ether; // Not really "ether" but we use it anyway to simulate 18 decimals
+    /** SIR Token Issuance Rate
+        If we want to issue 2,015,000,000 SIR per year, this implies an issuance rate of 63.9 SIR/s.
+     */
+    uint72 public constant ISSUANCE = uint72(2015000000 * 10 ** SIR_DECIMALS) / 365 days; // [sir/s]
 
+    // During the first 3 years, 20% of the emissions are diverged to contributors.
     uint72 internal constant AGG_ISSUANCE_VAULTS = (ISSUANCE * 8) / 10;
+
+    uint256 internal constant TEA_MAX_SUPPLY = (uint256(AGG_ISSUANCE_VAULTS) << 96) / type(uint16).max;
 
     uint40 internal constant THREE_YEARS = 3 * 365 days;
 

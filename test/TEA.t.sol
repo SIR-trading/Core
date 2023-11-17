@@ -8,7 +8,7 @@ import {VaultExternal} from "src/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 contract TEAInstance is TEA {
-    constructor(address vaultExternal) TEA(vaultExternal) {}
+    constructor(address systemControl, address vaultExternal) TEA(systemControl, vaultExternal) {}
 
     function mintE(address to, uint256 vaultId, uint256 amount) external {
         mint(to, vaultId, amount);
@@ -19,7 +19,7 @@ contract TEAInstance is TEA {
         uint256 vaultId,
         address lper0,
         address lper1
-    ) internal override returns (uint104 unclaimedRewards) {}
+    ) internal override returns (uint80 unclaimedRewards) {}
 
     // function paramsById(
     //     uint256 vaultId
@@ -66,7 +66,7 @@ contract TEATest is Test {
         vaultExternal.deployAPE(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -2);
         vaultExternal.deployAPE(Addresses.ADDR_ALUSD, Addresses.ADDR_USDC, 1);
 
-        tea = new TEAInstance(address(vaultExternal));
+        tea = new TEAInstance(address(0), address(vaultExternal));
 
         alice = vm.addr(1);
         bob = vm.addr(2);
@@ -444,7 +444,7 @@ contract TEATest is Test {
     }
 }
 
-contract TEATestInternal is Test, TEA(address(0)) {
+contract TEATestInternal is Test, TEA(address(0), address(0)) {
     address alice;
     address bob;
     address charlie;
@@ -462,7 +462,7 @@ contract TEATestInternal is Test, TEA(address(0)) {
         uint256 vaultId,
         address lper0,
         address lper1
-    ) internal override returns (uint104 unclaimedRewards) {}
+    ) internal override returns (uint80 unclaimedRewards) {}
 
     function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
         mint(alice, vaultId, mintAmountA);

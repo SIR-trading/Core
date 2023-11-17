@@ -23,14 +23,22 @@ library VaultStructs {
     struct SystemParameters {
         // Timestamp when issuance (re)started. 0 => issuance has not started yet
         uint40 tsIssuanceStart;
-        /**
-         * Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
-         * For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
+        /** Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
+            For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
          */
         uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
         uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
         bool emergencyStop;
-        uint184 cumTaxes; // Aggregated taxToDAO of all vaults
+        /** Aggregated taxes for all vaults. Choice of uint32 type.
+            For vault i, (tax_i / type(uint8).max)*10% is charged, where tax_i is of type uint8.
+            They must satisfy the condition
+                Σ_i (tax_i / type(uint8).max)^2 ≤ 0.1^2
+            Under this constraint, cumTax = Σ_i tax_i is maximized when all taxes are equal (tax_i = tax for all i) and
+                tax = type(uint8).max / sqrt(Nvaults)
+            Since the lowest non-zero value is tax=1, the maximum number of vaults with non-zero tax is
+                Nvaults = type(uint8).max^2 < type(uint16).max
+         */
+        uint16 cumTax;
     }
 
     /** Data tightly packed into 2 words to save gas.

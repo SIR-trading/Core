@@ -150,8 +150,8 @@ contract Vault is SystemState {
 
                 // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
                 uint152 feeToDAO = uint152(
-                    (collateralFee * _vaultsIssuanceParams[state_.vaultId].taxToDAO) / (10 * type(uint16).max)
-                ); // Cannot OF cuz collateralFee is uint152 and taxToDAO is uint16
+                    (collateralFee * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)
+                ); // Cannot OF cuz collateralFee is uint152 and tax is uint8
 
                 /** MINTING
                     1. Mint APE or TEA for the user
@@ -249,9 +249,7 @@ contract Vault is SystemState {
         // At most 10% of the collected fees go to the DAO
         uint152 feeToDAO;
         unchecked {
-            feeToDAO = uint152(
-                (collateralFee * _vaultsIssuanceParams[state_.vaultId].taxToDAO) / (10 * type(uint16).max)
-            ); // Cannot OF cuz collateralFee is uint152 and taxToDAO is uint16
+            feeToDAO = uint152((collateralFee * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)); // Cannot OF cuz collateralFee is uint152 and tax is uint8
         }
 
         /** BURNING AND MINTING

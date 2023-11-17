@@ -24,7 +24,7 @@ contract SIR is ERC20, SystemCommons {
     constructor(
         address systemState,
         address systemControl
-    ) ERC20("Synthetics Implemented Right", "SIR", 18) SystemCommons(systemControl) {
+    ) ERC20("Synthetics Implemented Right", "SIR", SIR_DECIMALS) SystemCommons(systemControl) {
         _SYSTEM_STATE = SystemState(systemState);
     }
 
