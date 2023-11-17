@@ -26,8 +26,6 @@ contract SystemState is TEA {
         If TEA has 18 decimals
             Max Supply of TEA = T / 10^18 ≈ 6.18 * 10^19
         which is more than a Quintillion TEA, sufficient for almost any ERC-20.
-
-        or in words, a bit more than a Sextillion TEA, sufficient for almost any ERC-20.
      */
     struct LPerIssuanceParams {
         uint176 cumSIRPerTEAx96; // Q80.96, cumulative SIR minted by an LPer per unit of TEA
@@ -97,21 +95,31 @@ contract SystemState is TEA {
                 uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
                 if (tsStart < ts3Years) {
                     uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.tax) / systemParams_.cumTax;
+                    console.log("contract issuance", issuance);
+                    console.log(
+                        "contract interval",
+                        (block.timestamp > ts3Years ? ts3Years : block.timestamp) - tsStart
+                    );
+                    console.log("contract totalSupply", totalSupply_);
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumSIRPerTEAx96 += uint176(
-                        ((issuance *
-                            ((uint40(block.timestamp) > ts3Years ? ts3Years : uint40(block.timestamp)) - tsStart)) <<
-                            96) / totalSupply_
+                        ((issuance * ((block.timestamp > ts3Years ? ts3Years : block.timestamp) - tsStart)) << 96) /
+                            totalSupply_
                     );
+                    console.log("contract cumSIRPerTEAx96", cumSIRPerTEAx96);
                 }
 
                 // Aggregate SIR issued after the first 3 years
                 if (uint40(block.timestamp) > ts3Years) {
                     uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.tax) / systemParams_.cumTax;
+                    console.log("contract issuance", issuance);
+                    console.log("contract interval", block.timestamp - (tsStart > ts3Years ? tsStart : ts3Years));
+                    console.log("contract totalSupply", totalSupply_);
                     cumSIRPerTEAx96 += uint176(
-                        (((issuance * (uint40(block.timestamp) - (tsStart > ts3Years ? tsStart : ts3Years))) << 96) /
+                        (((issuance * (block.timestamp - (tsStart > ts3Years ? tsStart : ts3Years))) << 96) /
                             totalSupply_)
                     );
+                    console.log("contract cumSIRPerTEAx96", cumSIRPerTEAx96);
                 }
             }
         }
