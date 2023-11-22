@@ -1291,7 +1291,6 @@ contract SirOracleHandler is Test {
     }
 
     function newUniswapFeeTier(uint24 timeSkip, uint256 feeTierIndex) external {
-        console.log("newUniswapFeeTier");
         _oracleInvariantTest.skip(timeSkip);
 
         uint24[] memory feeTiers = _uniswapHandler.getFeeTiers();
@@ -1304,7 +1303,6 @@ contract SirOracleHandler is Test {
             if (feeTier == uniswapFeeTiers[i].fee) return; // already added
         }
 
-        console.log("Adding fee tier:", feeTier);
         oracle.newUniswapFeeTier(feeTier);
     }
 
@@ -1348,7 +1346,6 @@ contract OracleInvariantTest is Test, Oracle {
 
         targetContract(address(uniswapHandler));
         targetContract(address(_oracleHandler));
-        console.log("__________________________________");
     }
 
     function skip(uint40 timeSkip) external {

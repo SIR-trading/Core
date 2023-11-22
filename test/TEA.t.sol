@@ -358,11 +358,11 @@ contract TEATest is Test, SystemCommons {
     ) public {
         transferAmountA = bound(transferAmountA, 1, TEA_MAX_SUPPLY);
         mintAmountA = bound(mintAmountA, 0, transferAmountA - 1);
-        if (mintAmountA > 0) tea.mintE(bob, vaultIdA, mintAmountA);
+        tea.mintE(bob, vaultIdA, mintAmountA);
 
         transferAmountB = bound(transferAmountB, 1, TEA_MAX_SUPPLY);
         mintAmountB = bound(mintAmountB, 0, transferAmountB - 1);
-        if (mintAmountB > 0) tea.mintE(bob, vaultIdB, mintAmountB);
+        tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(bob);

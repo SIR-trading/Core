@@ -70,6 +70,21 @@ contract SystemState is TEA {
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /** 
+        @dev Ideally, the cumulative SIR minted by the vaultId per unit of TEA (a).
+        @dev    a_i = a_{i-i} + issuance * Δt_i * 2^96 / totalSupplyTEA_i
+        @dev where i is the i-th time the cumulative SIR is updated, and timeInterval is the time since the last update.
+        @dev Because of the implicity rounding of the division operation the actual computed value of
+        @dev    â_i = â_{i-1} + issuance * Δt_i * 2^96 / totalSupplyTEA_i + n_i
+        @dev        = â_{i-1} + Δa_i + n_i
+        @dev where n_i ∈ (- 1,0] is the rounding error due to the division, and Δa_i = issuance * Δt_i * 2^96 / totalSupplyTEA_i.
+        @dev Alternatively,
+        @dev    â_i = Σ_i (Δa_i + n_i)
+        @dev        = Σ_i Δa_i + n
+        @dev where n ∈ (- M,0] is the cumulative rounding error, and M is the number of updates on the cumulative SIR per unit of TEA.
+        @param vaultId The id of the vault to query.
+        @return cumSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
+    */
     function cumulativeSIRPerTEA(uint256 vaultId) public view returns (uint176 cumSIRPerTEAx96) {
         unchecked {
             VaultStructs.SystemParameters memory systemParams_ = systemParams;
@@ -95,31 +110,20 @@ contract SystemState is TEA {
                 uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
                 if (tsStart < ts3Years) {
                     uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.tax) / systemParams_.cumTax;
-                    console.log("contract issuance", issuance);
-                    console.log(
-                        "contract interval",
-                        (block.timestamp > ts3Years ? ts3Years : block.timestamp) - tsStart
-                    );
-                    console.log("contract totalSupply", totalSupply_);
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumSIRPerTEAx96 += uint176(
                         ((issuance * ((block.timestamp > ts3Years ? ts3Years : block.timestamp) - tsStart)) << 96) /
                             totalSupply_
                     );
-                    console.log("contract cumSIRPerTEAx96", cumSIRPerTEAx96);
                 }
 
                 // Aggregate SIR issued after the first 3 years
                 if (uint40(block.timestamp) > ts3Years) {
                     uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.tax) / systemParams_.cumTax;
-                    console.log("contract issuance", issuance);
-                    console.log("contract interval", block.timestamp - (tsStart > ts3Years ? tsStart : ts3Years));
-                    console.log("contract totalSupply", totalSupply_);
                     cumSIRPerTEAx96 += uint176(
                         (((issuance * (block.timestamp - (tsStart > ts3Years ? tsStart : ts3Years))) << 96) /
                             totalSupply_)
                     );
-                    console.log("contract cumSIRPerTEAx96", cumSIRPerTEAx96);
                 }
             }
         }
@@ -129,6 +133,24 @@ contract SystemState is TEA {
         return _unclaimedRewards(vaultId, lper, cumulativeSIRPerTEA(vaultId));
     }
 
+    /**
+        @dev Ideally, the unclaimed SIR of an LPer is computed as
+        @dev    u = balance * (a_i - a_j) / 2^96
+        @dev where i is the last time the cumulative SIR was updated, and j is the last time the LPer claimed its rewards.
+        @dev In reality we only have access to â_i,
+        @dev    û = balance * (â_i - â_j) / 2^96 =
+        @dev      = balance * (Σ_{k=j+1}^i Δa_k + Σ_{k=j+1}^i n_k)) / 2^96
+        @dev      = u + balance * (Σ_{k=j+1}^i n_k)) / 2^96
+        @dev      = u + balance * q / 2^96
+        @dev where q ∈ (- M,0] is the rounding whose range depends on the number (M) of updates on the cumulative SIR per unit of TEA (x).
+        @dev Because of the division error, we actually compute
+        @dev    ũ = û + r
+        @dev where r ∈ (- 1,0] is the rounding error. Thus,
+        @dev    ũ ∈ u + (-balance * M / 2^96 -1, 0]
+        @param vaultId The id of the vault to query.
+        @param lper The address of the LPer to query.
+        @param cumSIRPerTEAx96 The current cumulative SIR minted by the vaultId per unit of TEA.
+     */
     function _unclaimedRewards(uint256 vaultId, address lper, uint176 cumSIRPerTEAx96) private view returns (uint80) {
         unchecked {
             // Get the lper issuance parameters
@@ -151,7 +173,7 @@ contract SystemState is TEA {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function updateLPerIssuanceParams(uint256 vaultId, address lper) external returns (uint80) {
+    function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
         require(msg.sender == _SIR);
 
         return updateLPerIssuanceParams(true, vaultId, lper, address(0));

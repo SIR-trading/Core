@@ -99,7 +99,7 @@ contract SIR is ERC20, SystemCommons {
 
     function lPerMint(uint256 vaultId) external {
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = _SYSTEM_STATE.unclaimedRewards(vaultId, msg.sender);
+        uint104 unclaimedRewards = claimSIR.unclaimedRewards(vaultId, msg.sender);
 
         // Mint if any unclaimedRewards
         require(unclaimedRewards > 0);

@@ -68,7 +68,7 @@ abstract contract TEA is ERC1155, SystemCommons {
             // Mint
             uint256 totalSupply_ = totalSupply[vaultId];
             uint256 totalSupplyPlusAmount = totalSupply_ + amount;
-            require(totalSupplyPlusAmount > totalSupply_ && totalSupplyPlusAmount <= TEA_MAX_SUPPLY, "OF");
+            require(totalSupplyPlusAmount >= totalSupply_ && totalSupplyPlusAmount <= TEA_MAX_SUPPLY, "OF");
 
             totalSupply[vaultId] = totalSupplyPlusAmount;
             balanceOf[to][vaultId] += amount;
