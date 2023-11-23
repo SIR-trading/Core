@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Contracts
-abstract contract SystemCommons {
-    modifier onlySystemControl() {
-        require(msg.sender == SYSTEM_CONTROL);
-        _;
-    }
-
+contract SystemConstants {
     uint8 internal constant SIR_DECIMALS = 12;
 
     /** SIR Token Issuance Rate
@@ -23,10 +17,4 @@ abstract contract SystemCommons {
     uint40 internal constant THREE_YEARS = 3 * 365 days;
 
     address internal constant ADDR_UNISWAPV3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
-
-    address internal immutable SYSTEM_CONTROL;
-
-    constructor(address systemControl) {
-        SYSTEM_CONTROL = systemControl;
-    }
 }

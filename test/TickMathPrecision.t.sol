@@ -15,7 +15,7 @@ contract TickMathPrecisionTest is Test {
     }
 
     function testFuzz_getRatioAtTick(uint64 tickX42Uint) public {
-        int64 tickX42 = int64(int256(bound(tickX42Uint, 0, uint64(TickMathPrecision.MAX_TICK_X42))));
+        int64 tickX42 = int64(int256(_bound(tickX42Uint, 0, uint64(TickMathPrecision.MAX_TICK_X42))));
 
         (bool OF, uint128 ratioX64) = TickMathPrecision.getRatioAtTick(tickX42);
 
@@ -37,7 +37,7 @@ contract TickMathPrecisionTest is Test {
     }
 
     function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public {
-        tickX42ActiveBit = uint8(bound(tickX42ActiveBit, 0, 60)); // Because 2^60 < MAX_TICK_X42 and 2^61 > MAX_TICK_X42
+        tickX42ActiveBit = uint8(_bound(tickX42ActiveBit, 0, 60)); // Because 2^60 < MAX_TICK_X42 and 2^61 > MAX_TICK_X42
         int64 tickX42 = int64(int256(1 << tickX42ActiveBit));
 
         (bool OF, uint128 ratioX64) = TickMathPrecision.getRatioAtTick(tickX42);
@@ -60,7 +60,7 @@ contract TickMathPrecisionTest is Test {
 
     function testFuzz_getRatioAtTickOverflows(uint64 tickX42Uint) public {
         int64 tickX42 = int64(
-            int256(bound(tickX42Uint, uint64(TickMathPrecision.MAX_TICK_X42) + 1, uint64(type(int64).max)))
+            int256(_bound(tickX42Uint, uint64(TickMathPrecision.MAX_TICK_X42) + 1, uint64(type(int64).max)))
         );
 
         (bool OF, ) = TickMathPrecision.getRatioAtTick(tickX42);
@@ -71,7 +71,7 @@ contract TickMathPrecisionTest is Test {
     function testFuzz_getTickAtRatio(uint256 num, uint256 den) public {
         // console.log("num: %d, den: %d", num, den);
         vm.assume(den > 0);
-        num = bound(num, den, type(uint256).max);
+        num = _bound(num, den, type(uint256).max);
 
         int64 tickX42 = TickMathPrecision.getTickAtRatio(num, den);
 
@@ -91,7 +91,7 @@ contract TickMathPrecisionTest is Test {
 
     function testFuzz_getTickAtRatioWrongNumerator(uint256 num, uint256 den) public {
         vm.assume(den > 0);
-        num = bound(num, 0, den - 1);
+        num = _bound(num, 0, den - 1);
 
         vm.expectRevert();
         TickMathPrecision.getTickAtRatio(num, den);
@@ -99,7 +99,7 @@ contract TickMathPrecisionTest is Test {
 
     function testFuzz_getTickAtRatioWrongDenominator(uint256 num) public {
         uint256 den = 0;
-        num = bound(num, den, type(uint256).max);
+        num = _bound(num, den, type(uint256).max);
 
         vm.expectRevert();
         TickMathPrecision.getTickAtRatio(num, den);

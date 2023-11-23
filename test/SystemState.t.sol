@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {SystemState} from "src/SystemState.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
-import {SystemCommons} from "src/SystemCommons.sol";
+import {SystemConstants} from "src/SystemConstants.sol";
 
 contract SystemStateInstance is SystemState {
     uint40 constant VAULT_ID = 42;
@@ -28,7 +28,7 @@ contract SystemStateInstance is SystemState {
     }
 }
 
-contract SystemStateTest is Test, SystemCommons {
+contract SystemStateTest is Test, SystemConstants {
     uint40 constant VAULT_ID = 42;
     uint40 constant MAX_TS = 599 * 365 days; // See SystemState.sol comments for explanation
     SystemStateInstance systemState;
@@ -40,7 +40,7 @@ contract SystemStateTest is Test, SystemCommons {
     address alice;
     address bob;
 
-    constructor() SystemCommons(address(0)) {}
+    constructor() {}
 
     function setUp() public {
         systemControl = vm.addr(1);
@@ -54,7 +54,7 @@ contract SystemStateTest is Test, SystemCommons {
     }
 
     function testFuzz_cumulativeSIRPerTEABeforeStart(uint8 tax, uint256 teaAmount) public {
-        teaAmount = bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
 
         // Activate 1 vault
         vm.prank(systemControl);
@@ -76,7 +76,7 @@ contract SystemStateTest is Test, SystemCommons {
     }
 
     function testFuzz_cumulativeSIRPerTEANoTax(uint40 tsIssuanceStart, uint256 teaAmount) public {
-        teaAmount = bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
 
         // Set start of issuance
         vm.prank(systemControl);
@@ -121,16 +121,16 @@ contract SystemStateTest is Test, SystemCommons {
         uint256 teaAmount
     ) public {
         // tsIssuanceStart is not 0 because it is a special value whhich indicates issuance has not started
-        tsIssuanceStart = uint40(bound(tsIssuanceStart, 1, type(uint40).max - 365 days * 3));
+        tsIssuanceStart = uint40(_bound(tsIssuanceStart, 1, type(uint40).max - 365 days * 3));
         // Checking the rewards within the first 3 years of issuance.
         tsCheckVault = uint40(
-            bound(tsCheckVault, uint256(tsIssuanceStart) + 1, uint256(tsIssuanceStart) + 365 days * 3)
+            _bound(tsCheckVault, uint256(tsIssuanceStart) + 1, uint256(tsIssuanceStart) + 365 days * 3)
         );
         vm.assume(tax > 0);
-        teaAmount = bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
 
         // In this test we wish to update the vault before we check the cumulative SIR.
-        tsUpdateVault = uint40(bound(tsUpdateVault, 0, tsCheckVault - 1));
+        tsUpdateVault = uint40(_bound(tsUpdateVault, 0, tsCheckVault - 1));
 
         // Mint some TEA
         systemState.mint(alice, teaAmount);
@@ -171,14 +171,14 @@ contract SystemStateTest is Test, SystemCommons {
         uint256 teaAmount
     ) public {
         // tsIssuanceStart is not 0 because it is a special value whhich indicates issuance has not started
-        tsIssuanceStart = uint40(bound(tsIssuanceStart, 1, MAX_TS - 365 days * 3 - 1));
+        tsIssuanceStart = uint40(_bound(tsIssuanceStart, 1, MAX_TS - 365 days * 3 - 1));
         // Checking the rewards after the first 3 years of issuance.
-        tsCheckVault = uint40(bound(tsCheckVault, uint256(tsIssuanceStart) + 365 days * 3 + 1, MAX_TS));
+        tsCheckVault = uint40(_bound(tsCheckVault, uint256(tsIssuanceStart) + 365 days * 3 + 1, MAX_TS));
         vm.assume(tax > 0);
-        teaAmount = bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
 
         // In this test we wish to update the vault before we check the cumulative SIR.
-        tsUpdateVault = uint40(bound(tsUpdateVault, 0, tsCheckVault - 1));
+        tsUpdateVault = uint40(_bound(tsUpdateVault, 0, tsCheckVault - 1));
 
         // Mint some TEA
         systemState.mint(alice, teaAmount);
@@ -361,122 +361,165 @@ contract SystemStateTest is Test, SystemCommons {
 //// I N V A R I A N T //// T E S T I N G ////
 /////////////////////////////////////////////
 
-contract SystemStateHandler is SystemState, Test {
-    uint40 private currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
+contract SystemStateHandler is Test, SystemConstants {
+    uint40 public startTime;
+    uint40 public currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
 
-    uint256 constant VAULT_ID = 42;
+    uint40 constant VAULT_ID = 42;
     uint public totalClaimedSIR;
-    uint public cumSIRMaxError;
-    uint40 public totalTimeWithoutIssuance;
+    uint public totalSIRMaxError;
+    uint40 public totalTimeWithoutIssuanceFirst3Years;
+    uint40 public totalTimeWithoutIssuanceAfter3Years;
 
-    // Time stamps of the every update on the cumulative SIR per TEA
-    uint40[] public updateCumSIRPerTEATimeStamps = new uint40[]();
-    mapping(uint256 idUser => uint256) public indexLastSIRTimestamp;
+    uint256 private _numUpdatesCumSIRPerTEA;
+    mapping(uint256 idUser => uint256) private _numUpdatesCumSIRPerTEAForUser;
 
-    SystemState private _systemState;
+    SystemStateInstance private _systemState;
 
-    modifier advanceTime(uint20 timeSkip) {
+    modifier advanceTime(uint24 timeSkip) {
         vm.warp(currentTime);
-        if (_systemState.totalSupply() == 0) {
-            totalTimeWithoutIssuance += timeSkip;
+        if (_systemState.totalSupply(VAULT_ID) == 0) {
+            if (currentTime < startTime + 365 days * 3) {
+                if (currentTime + timeSkip <= startTime + 365 days * 3) {
+                    totalTimeWithoutIssuanceFirst3Years += timeSkip;
+                } else {
+                    totalTimeWithoutIssuanceFirst3Years += startTime + 365 days * 3 - currentTime;
+                    totalTimeWithoutIssuanceAfter3Years += currentTime + timeSkip - (startTime + 365 days * 3);
+                }
+            } else {
+                totalTimeWithoutIssuanceAfter3Years += timeSkip;
+            }
         }
         currentTime += timeSkip;
         _;
         vm.warp(currentTime);
     }
 
-    function setUp() public {
-        currentTime = uint40(block.timestamp);
-        if (currentTime == 0) {
-            currentTime = 1;
-            vm.warp(1);
-        }
+    constructor(uint40 currentTime_) {
+        startTime = currentTime_;
+        currentTime = currentTime_;
+        vm.warp(currentTime_);
 
         // We DO need the system control to start the emission of SIR.
         // We DO need the SIR address to be able to claim SIR.
         // We do NOT vault external in this test.
-        _systemState = new SystemState(msg.sender, msg.sender, address(0));
+        _systemState = new SystemStateInstance(address(this), address(this), address(0));
 
         // Start issuance
-        _systemState.updateSystemState(VaultStructs.SystemParameters(currentTime, 0, 0, false, 0));
+        _systemState.updateSystemState(
+            VaultStructs.SystemParameters(currentTime, uint16(0), uint8(0), false, uint16(0))
+        );
+
+        // Activate one vault (VERY IMPORTANT to do it after updateSystemState)
+        uint40[] memory newVaults = new uint40[](1);
+        newVaults[0] = VAULT_ID;
+        uint8[] memory newTaxes = new uint8[](1);
+        newTaxes[0] = 1;
+        _systemState.updateVaults(new uint40[](0), newVaults, newTaxes, 1);
     }
 
-    function _randomUser(uint id) private returns (address) {
-        id = bound(id, 1, 5);
+    function _idToAddr(uint id) private pure returns (address) {
+        id = _bound(id, 1, 5);
         return vm.addr(id);
     }
 
-    function transfer(uint256 from, uint256 to, uint256 amount, uint20 timeSkip) external advanceTime(timeSkip) {
-        address fromAddr = _randomUser(from);
-        uint256 preBalance = _systemState.balanceOf(fromAddr);
-        amount = bound(amount, 0, preBalance);
+    function transfer(uint256 from, uint256 to, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
+        address fromAddr = _idToAddr(from);
+        address toAddr = _idToAddr(to);
+        uint256 preBalance = _systemState.balanceOf(fromAddr, VAULT_ID);
+        amount = _bound(amount, 0, preBalance);
+        console.log("action: transfer", amount);
 
-        _systemState.transfer(fromAddr, _randomUser(to), amount);
+        vm.prank(fromAddr);
+        _systemState.safeTransferFrom(fromAddr, toAddr, VAULT_ID, amount, "");
 
-        // Update cumSIRMaxError
-        uint256 numUpdatesCumSIRPerTEA = updateCumSIRPerTEATimeStamps.length - indexLastSIRTimestamp[from];
-        cumSIRMaxError += (preBalance * numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
-        numUpdatesCumSIRPerTEA = updateCumSIRPerTEATimeStamps.length - indexLastSIRTimestamp[to];
-        cumSIRMaxError += (preBalance * numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[from] + 1;
+        totalSIRMaxError += (preBalance * _numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[to] + 1;
+        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update indexes
-        indexLastSIRTimestamp[from] = updateCumSIRPerTEATimeStamps.length;
-        indexLastSIRTimestamp[to] = updateCumSIRPerTEATimeStamps.length;
+        _numUpdatesCumSIRPerTEAForUser[from] = _numUpdatesCumSIRPerTEA;
+        _numUpdatesCumSIRPerTEAForUser[to] = _numUpdatesCumSIRPerTEA;
     }
 
-    function mint(uint256 user, uint256 amount, uint20 timeSkip) external advanceTime(timeSkip) {
-        address addr = _randomUser(user);
+    function mint(uint256 user, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
+        address addr = _idToAddr(user);
 
-        if (timeSkip > 0) {
-            updateCumSIRPerTEATimeStamps = updateCumSIRPerTEATimeStamps.push(currentTime);
-        }
+        uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
 
-        uint256 preBalance = _systemState.balanceOf(addr);
-
-        uint256 totalSupply = _systemState.totalSupply();
-        amount = bound(amount, 0, TEA_MAX_SUPPLY - totalSupply);
+        uint256 totalSupply = _systemState.totalSupply(VAULT_ID);
+        amount = _bound(amount, 0, TEA_MAX_SUPPLY - totalSupply);
+        console.log("action: mint", amount, "to user", addr);
 
         _systemState.mint(addr, amount);
 
-        // Update cumSIRMaxError
-        uint256 numUpdatesCumSIRPerTEA = updateCumSIRPerTEATimeStamps.length - indexLastSIRTimestamp[user];
-        cumSIRMaxError += (preBalance * numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
+        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update index
-        indexLastSIRTimestamp[user] = updateCumSIRPerTEATimeStamps.length;
+        _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
+
+        // Vault's cumulative SIR per TEA is updated
+        _numUpdatesCumSIRPerTEA++;
     }
 
-    function burn(uint256 user, uint256 amount, uint20 timeSkip) external advanceTime(timeSkip) {
-        if (timeSkip > 0) {
-            updateCumSIRPerTEATimeStamps = updateCumSIRPerTEATimeStamps.push(currentTime);
-        }
-
-        address addr = _randomUser(user);
-        uint256 preBalance = _systemState.balanceOf(addr);
-        amount = bound(amount, 0, preBalance);
+    function burn(uint256 user, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
+        address addr = _idToAddr(user);
+        uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
+        amount = _bound(amount, 0, preBalance);
+        console.log("action: burn", amount);
 
         _systemState.burn(addr, amount);
 
-        // Update cumSIRMaxError
-        uint256 numUpdatesCumSIRPerTEA = updateCumSIRPerTEATimeStamps.length - indexLastSIRTimestamp[user];
-        cumSIRMaxError += (preBalance * numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
+        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update index
-        indexLastSIRTimestamp[user] = updateCumSIRPerTEATimeStamps.length;
+        _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
+
+        // Vault's cumulative SIR per TEA is updated
+        _numUpdatesCumSIRPerTEA++;
     }
 
-    function claim(uint256 user, uint20 timeSkip) external advanceTime(timeSkip) {
-        address fromAddr = _randomUser(user);
+    function claim(uint256 user, uint24 timeSkip) external advanceTime(timeSkip) {
+        address addr = _idToAddr(user);
+        uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
 
-        uint256 unclaimedSIR = _systemState.claimSIR(VAULT_ID, fromAddr);
+        uint256 unclaimedSIR = _systemState.claimSIR(VAULT_ID, addr);
+        console.log("action: claim", unclaimedSIR);
         totalClaimedSIR += unclaimedSIR;
 
-        // Update cumSIRMaxError
-        uint256 numUpdatesCumSIRPerTEA = updateCumSIRPerTEATimeStamps.length - indexLastSIRTimestamp[user];
-        cumSIRMaxError += (preBalance * numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
+        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update index
-        indexLastClaimedSIRTimestamp[user] = updateCumSIRPerTEATimeStamps.length;
+        _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
+    }
+
+    // function cumulativeSIRPerTEA() external view returns (uint176 cumSIRPerTEAx96) {
+    //     return _systemState.cumulativeSIRPerTEA(VAULT_ID);
+    // }
+
+    function issuanceFirst3Years() external pure returns (uint256) {
+        return ISSUANCE;
+    }
+
+    function issuanceAfter3Years() external pure returns (uint256) {
+        return AGG_ISSUANCE_VAULTS;
+    }
+
+    function totalUnclaimedSIR() external view returns (uint256) {
+        return
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(1)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(2)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(3)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(4)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(5));
     }
 }
 
@@ -490,14 +533,60 @@ contract SystemStateInvariantTest is Test {
     }
 
     function setUp() public {
-        _systemStateHandler = new SystemStateHandler();
+        uint40 startTime = uint40(block.timestamp);
+        if (startTime == 0) {
+            startTime = 1;
+        }
 
-        // targetContract(address(uniswapHandler));
+        _systemStateHandler = new SystemStateHandler(startTime);
+
+        targetContract(address(_systemStateHandler));
     }
 
-    function invariant_cumulativeSIRPerTEA() public updateTime {}
+    // function invariant_cumulativeSIRPerTEA() public updateTime {
+    //     assertEq(_systemStateHandler.cumSIRMaxError(), 0);
+    // }
 
-    function invariant_cumulativeSIR() public updateTime {}
+    function invariant_cumulativeSIR() public updateTime {
+        uint256 totalSIR;
+        uint40 startTime = _systemStateHandler.startTime();
+        uint40 currentTime = _systemStateHandler.currentTime();
+        vm.warp(currentTime);
+        if (currentTime < startTime + 365 days * 3) {
+            totalSIR =
+                _systemStateHandler.issuanceFirst3Years() *
+                (currentTime - startTime - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years());
+        } else {
+            totalSIR =
+                _systemStateHandler.issuanceFirst3Years() *
+                (365 days * 3 - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years()) +
+                _systemStateHandler.issuanceAfter3Years() *
+                (currentTime - startTime - 365 days * 3 - _systemStateHandler.totalTimeWithoutIssuanceAfter3Years());
+        }
+
+        assertLe(
+            _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR(),
+            totalSIR,
+            "Total SIR is too high"
+        );
+
+        uint256 totalSIRMaxError = _systemStateHandler.totalSIRMaxError();
+        console.log("time elapsed", (currentTime - startTime) / (3600 * 24), "days");
+        console.log(
+            "total time without issuance",
+            (_systemStateHandler.totalTimeWithoutIssuanceFirst3Years() +
+                _systemStateHandler.totalTimeWithoutIssuanceAfter3Years()) / (3600 * 24)
+        );
+        console.log("total SIR", _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR());
+        console.log("expected total SIR", totalSIR);
+        console.log("max error", _systemStateHandler.totalSIRMaxError());
+        assertGe(
+            _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR(),
+            totalSIR > totalSIRMaxError ? totalSIR - totalSIRMaxError : 0,
+            "Total SIR is too low"
+        );
+        console.log("---------------------------------------");
+    }
 }
 
 // INVARIANT TEST THAT CHECKS THAT SUM OF UNCLAIMED REWARDS MATCHES THE ISSUANCE

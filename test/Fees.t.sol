@@ -8,7 +8,7 @@ import {FullMath} from "src/libraries/FullMath.sol";
 contract FeesTest is Test {
     function testFuzz_APE(uint16 baseFee, uint152 collateralAmount, int8 leverageTier) public {
         // Constraint leverageTier to supported values
-        leverageTier = int8(bound(leverageTier, -3, 2));
+        leverageTier = int8(_bound(leverageTier, -3, 2));
 
         (uint152 collateralFeeFree, uint152 comission) = Fees.hiddenFee(baseFee, collateralAmount, leverageTier);
 

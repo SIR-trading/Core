@@ -52,7 +52,7 @@ contract APETest is Test {
         assertEq(ape.balanceOf(alice), mintAmountA);
         assertEq(ape.totalSupply(), mintAmountA);
 
-        mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
+        mintAmountB = _bound(mintAmountB, 0, type(uint256).max - mintAmountA);
 
         vm.expectEmit();
         emit Transfer(address(0), bob, mintAmountB);
@@ -62,10 +62,10 @@ contract APETest is Test {
     }
 
     function testFuzz_mintFails(uint256 mintAmountA, uint256 mintAmountB) public {
-        mintAmountA = bound(mintAmountA, 1, type(uint256).max);
+        mintAmountA = _bound(mintAmountA, 1, type(uint256).max);
         ape.mint(alice, mintAmountA);
 
-        mintAmountB = bound(mintAmountB, type(uint256).max - mintAmountA + 1, type(uint256).max);
+        mintAmountB = _bound(mintAmountB, type(uint256).max - mintAmountA + 1, type(uint256).max);
         vm.expectRevert();
         ape.mint(bob, mintAmountB);
     }
@@ -76,8 +76,8 @@ contract APETest is Test {
     }
 
     function testFuzz_burn(uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-        mintAmountB = bound(mintAmountB, 0, type(uint256).max - mintAmountA);
-        burnAmountB = bound(burnAmountB, 0, mintAmountB);
+        mintAmountB = _bound(mintAmountB, 0, type(uint256).max - mintAmountA);
+        burnAmountB = _bound(burnAmountB, 0, mintAmountB);
 
         ape.mint(alice, mintAmountA);
         ape.mint(bob, mintAmountB);
@@ -91,9 +91,9 @@ contract APETest is Test {
     }
 
     function testFuzz_burnMoreThanBalance(uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-        mintAmountA = bound(mintAmountA, 0, type(uint256).max - 1);
-        mintAmountB = bound(mintAmountB, 1, type(uint256).max - mintAmountA);
-        burnAmountB = bound(burnAmountB, mintAmountB + 1, type(uint256).max);
+        mintAmountA = _bound(mintAmountA, 0, type(uint256).max - 1);
+        mintAmountB = _bound(mintAmountB, 1, type(uint256).max - mintAmountA);
+        burnAmountB = _bound(burnAmountB, mintAmountB + 1, type(uint256).max);
 
         ape.mint(alice, mintAmountA);
         ape.mint(bob, mintAmountB);
@@ -103,8 +103,8 @@ contract APETest is Test {
     }
 
     function testFuzz_transfer(uint256 transferAmount, uint256 mintAmount) public {
-        transferAmount = bound(transferAmount, 1, type(uint256).max);
-        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
         ape.mint(alice, mintAmount);
 
@@ -117,8 +117,8 @@ contract APETest is Test {
     }
 
     function testFuzz_transferMoreThanBalance(uint256 transferAmount, uint256 mintAmount) public {
-        transferAmount = bound(transferAmount, 1, type(uint256).max);
-        mintAmount = bound(mintAmount, 0, transferAmount - 1);
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, 0, transferAmount - 1);
 
         ape.mint(alice, mintAmount);
 
@@ -133,8 +133,8 @@ contract APETest is Test {
     }
 
     function testFuzz_transferFrom(uint256 transferAmount, uint256 mintAmount) public {
-        transferAmount = bound(transferAmount, 1, type(uint256).max);
-        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
         ape.mint(bob, mintAmount);
 
@@ -154,8 +154,8 @@ contract APETest is Test {
     }
 
     function testFuzz_transferFromWithoutApproval(uint256 transferAmount, uint256 mintAmount) public {
-        transferAmount = bound(transferAmount, 1, type(uint256).max);
-        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
         ape.mint(bob, mintAmount);
 
@@ -169,9 +169,9 @@ contract APETest is Test {
         uint256 mintAmount,
         uint256 allowedAmount
     ) public {
-        transferAmount = bound(transferAmount, 1, type(uint256).max);
-        mintAmount = bound(mintAmount, transferAmount, type(uint256).max);
-        allowedAmount = bound(allowedAmount, 0, transferAmount - 1);
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
+        allowedAmount = _bound(allowedAmount, 0, transferAmount - 1);
 
         ape.mint(bob, mintAmount);
 

@@ -198,10 +198,10 @@ contract OracleInitializeTest is Test, Oracle {
             bool noRoundingConfusion = true;
             for (uint256 i = 0; i < 9 && noRoundingConfusion; i++) {
                 // We limit the value of period to avoid overflows
-                period[i] = uint32(bound(period[i], 0, 2 ^ 25));
+                period[i] = uint32(_bound(period[i], 0, 2 ^ 25));
 
                 if (liquidity[i] == 0) continue;
-                liquidity[i] = uint128(bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity per tick
+                liquidity[i] = uint128(_bound(liquidity[i], 0, 2 ** 100)); // To avoid exceeding max liquidity per tick
 
                 // Check liquidity is sufficiently apart that rounding errors cause the oracle selection diverge in the test
                 (uint128 min, uint128 max) = _safeRange(liquidity[i], period[i]);
@@ -557,7 +557,7 @@ contract OracleGetPrice is Test, Oracle {
             (uint256(TWAP_DURATION) ** 2 * uint64(MAX_TICK_INC_PER_SEC)) /
             (uint256(887271) << 42) -
             1;
-        periodTick0 = uint16(bound(periodTick0, 0, maxPeriodTick0));
+        periodTick0 = uint16(_bound(periodTick0, 0, maxPeriodTick0));
 
         // Store price in the oracle
         int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
@@ -590,7 +590,7 @@ contract OracleGetPrice is Test, Oracle {
         uint256 minPeriodTick0 = TWAP_DURATION -
             (uint256(TWAP_DURATION) ** 2 * uint64(MAX_TICK_INC_PER_SEC)) /
             (uint256(887271) << 42);
-        periodTick0 = uint16(bound(periodTick0, minPeriodTick0, TWAP_DURATION));
+        periodTick0 = uint16(_bound(periodTick0, minPeriodTick0, TWAP_DURATION));
 
         // Store price in the oracle
         int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
@@ -1076,10 +1076,10 @@ contract UniswapHandler is Test {
     function enableFeeTier(uint24 timeSkip, uint24 fee, int24 tickSpacingUint) external {
         _oracleInvariantTest.skip(timeSkip);
 
-        fee = uint24(bound(fee, 0, 1000000 - 1));
+        fee = uint24(_bound(fee, 0, 1000000 - 1));
         if (_uniswapFactory.feeAmountTickSpacing(fee) != 0) return; // already enabled
 
-        int24 tickSpacing = int24(bound(tickSpacingUint, 1, 16384 - 1));
+        int24 tickSpacing = int24(_bound(tickSpacingUint, 1, 16384 - 1));
 
         vm.prank(Addresses.ADDR_UNISWAPV3_OWNER);
         _uniswapFactory.enableFeeAmount(fee, tickSpacing);
@@ -1100,7 +1100,7 @@ contract UniswapHandler is Test {
         address pool = UniswapPoolAddress.computeAddress(Addresses.ADDR_UNISWAPV3_FACTORY, poolKey);
         if (pool.code.length > 0) return; // already instantiated
 
-        sqrtPriceX96 = uint160(bound(sqrtPriceX96, TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO - 1));
+        sqrtPriceX96 = uint160(_bound(sqrtPriceX96, TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO - 1));
 
         // Create and initialize Uniswap v3 pool
         _positionManager.createAndInitializePoolIfNecessary(address(_tokenA), address(_tokenB), feeTier, sqrtPriceX96);
@@ -1112,7 +1112,7 @@ contract UniswapHandler is Test {
         _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
-        liquidity = uint96(bound(liquidity, 1, type(uint96).max));
+        liquidity = uint96(_bound(liquidity, 1, type(uint96).max));
 
         uint160 sqrtPriceX96;
         int24 minTick;
@@ -1196,7 +1196,7 @@ contract UniswapHandler is Test {
         _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
-        liquidity = uint96(bound(liquidity, 1, type(uint96).max));
+        liquidity = uint96(_bound(liquidity, 1, type(uint96).max));
 
         while (liquidity > 0 && _tokenIds[feeTier].length > 0) {
             uint256 tokenId = _tokenIds[feeTier][_tokenIds[feeTier].length - 1];
@@ -1220,7 +1220,7 @@ contract UniswapHandler is Test {
         _oracleInvariantTest.skip(timeSkip);
 
         uint24 feeTier = _getInitializedFeeTier(feeTierIndex);
-        amountIn = uint128(bound(amountIn, 1, type(uint128).max));
+        amountIn = uint128(_bound(amountIn, 1, type(uint128).max));
         // If amountIn is too large for the entire pool liquidity, the remainer will be returned.
 
         // Mint mock tokens
@@ -1263,11 +1263,11 @@ contract UniswapHandler is Test {
     }
 
     function _getFeeTier(uint256 feeTierIndex) private view returns (uint24 feeTier) {
-        feeTier = feeTiers[bound(feeTierIndex, 0, feeTiers.length - 1)];
+        feeTier = feeTiers[_bound(feeTierIndex, 0, feeTiers.length - 1)];
     }
 
     function _getInitializedFeeTier(uint256 feeTierIndex) private view returns (uint24 feeTier) {
-        feeTier = initializedFeeTiers[bound(feeTierIndex, 0, initializedFeeTiers.length - 1)];
+        feeTier = initializedFeeTiers[_bound(feeTierIndex, 0, initializedFeeTiers.length - 1)];
     }
 }
 
@@ -1295,7 +1295,7 @@ contract SirOracleHandler is Test {
 
         uint24[] memory feeTiers = _uniswapHandler.getFeeTiers();
         if (feeTiers.length >= 9) return; // already 9 fee tiers
-        uint24 feeTier = feeTiers[bound(feeTierIndex, 0, feeTiers.length - 1)];
+        uint24 feeTier = feeTiers[_bound(feeTierIndex, 0, feeTiers.length - 1)];
 
         // Check it has not been added yet
         Oracle.UniswapFeeTier[] memory uniswapFeeTiers = oracle.getUniswapFeeTiers();
@@ -1362,8 +1362,6 @@ contract OracleInvariantTest is Test, Oracle {
         uint256 tickPriceDiff = tickPriceX42_A > tickPriceX42_B
             ? uint64(tickPriceX42_A - tickPriceX42_B)
             : uint64(tickPriceX42_B - tickPriceX42_A);
-
-        console.logInt(tickPriceX42_B);
 
         assertLe(tickPriceDiff, uint256(uint64(MAX_TICK_INC_PER_SEC)) * (block.timestamp - timeStampPrice));
     }

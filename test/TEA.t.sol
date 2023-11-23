@@ -6,7 +6,7 @@ import {TEA} from "src/TEA.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultExternal} from "src/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
-import {SystemCommons} from "src/SystemCommons.sol";
+import {SystemConstants} from "src/SystemConstants.sol";
 
 contract TEAInstance is TEA {
     constructor(address systemControl, address vaultExternal) TEA(systemControl, vaultExternal) {}
@@ -31,7 +31,7 @@ contract TEAInstance is TEA {
     // }
 }
 
-contract TEATest is Test, SystemCommons {
+contract TEATest is Test, SystemConstants {
     event TransferSingle(
         address indexed operator,
         address indexed from,
@@ -59,8 +59,6 @@ contract TEATest is Test, SystemCommons {
 
     uint256 constant vaultIdA = 1;
     uint256 constant vaultIdB = 2;
-
-    constructor() SystemCommons(address(0)) {}
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
@@ -116,8 +114,8 @@ contract TEATest is Test, SystemCommons {
 
     function testFuzz_safeTransferFrom(uint256 vaultId, uint256 transferAmount, uint256 mintAmount) public {
         // Bounds the amounts
-        transferAmount = bound(transferAmount, 1, TEA_MAX_SUPPLY);
-        mintAmount = bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
+        transferAmount = _bound(transferAmount, 1, TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
         tea.mintE(bob, vaultId, mintAmount);
@@ -146,8 +144,8 @@ contract TEATest is Test, SystemCommons {
         uint256 mintAmount
     ) public {
         // Bounds the amounts
-        transferAmount = bound(transferAmount, 1, TEA_MAX_SUPPLY);
-        mintAmount = bound(mintAmount, 0, transferAmount - 1);
+        transferAmount = _bound(transferAmount, 1, TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, 0, transferAmount - 1);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
         if (mintAmount > 0) tea.mintE(bob, vaultId, mintAmount);
@@ -168,8 +166,8 @@ contract TEATest is Test, SystemCommons {
         uint256 mintAmount
     ) public {
         // Bounds the amounts
-        transferAmount = bound(transferAmount, 1, TEA_MAX_SUPPLY);
-        mintAmount = bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
+        transferAmount = _bound(transferAmount, 1, TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
         tea.mintE(bob, vaultId, mintAmount);
@@ -186,8 +184,8 @@ contract TEATest is Test, SystemCommons {
 
     function testFuzz_safeTransferFromToContract(uint256 vaultId, uint256 transferAmount, uint256 mintAmount) public {
         // Bounds the amounts
-        transferAmount = bound(transferAmount, 1, TEA_MAX_SUPPLY);
-        mintAmount = bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
+        transferAmount = _bound(transferAmount, 1, TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
         tea.mintE(bob, vaultId, mintAmount);
@@ -214,8 +212,8 @@ contract TEATest is Test, SystemCommons {
         );
 
         // Bounds the amounts
-        transferAmount = bound(transferAmount, 1, TEA_MAX_SUPPLY);
-        mintAmount = bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
+        transferAmount = _bound(transferAmount, 1, TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
         tea.mintE(bob, vaultId, mintAmount);
@@ -242,8 +240,8 @@ contract TEATest is Test, SystemCommons {
         );
 
         // Bounds the amounts
-        transferAmount = bound(transferAmount, 1, TEA_MAX_SUPPLY);
-        mintAmount = bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
+        transferAmount = _bound(transferAmount, 1, TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, TEA_MAX_SUPPLY);
 
         // Suppose you have a mint function for TEA, otherwise adapt as necessary
         tea.mintE(bob, vaultId, mintAmount);
@@ -282,12 +280,12 @@ contract TEATest is Test, SystemCommons {
         uint256 mintAmountA,
         uint256 mintAmountB
     ) public {
-        transferAmountA = bound(transferAmountA, 1, TEA_MAX_SUPPLY);
-        mintAmountA = bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdA, mintAmountA);
 
-        transferAmountB = bound(transferAmountB, 1, TEA_MAX_SUPPLY);
-        mintAmountB = bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
+        transferAmountB = _bound(transferAmountB, 1, TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -326,12 +324,12 @@ contract TEATest is Test, SystemCommons {
         uint256 mintAmountA,
         uint256 mintAmountB
     ) public {
-        transferAmountA = bound(transferAmountA, 1, TEA_MAX_SUPPLY);
-        mintAmountA = bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdA, mintAmountA);
 
-        transferAmountB = bound(transferAmountB, 1, TEA_MAX_SUPPLY);
-        mintAmountB = bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
+        transferAmountB = _bound(transferAmountB, 1, TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -356,12 +354,12 @@ contract TEATest is Test, SystemCommons {
         uint256 mintAmountA,
         uint256 mintAmountB
     ) public {
-        transferAmountA = bound(transferAmountA, 1, TEA_MAX_SUPPLY);
-        mintAmountA = bound(mintAmountA, 0, transferAmountA - 1);
+        transferAmountA = _bound(transferAmountA, 1, TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, 0, transferAmountA - 1);
         tea.mintE(bob, vaultIdA, mintAmountA);
 
-        transferAmountB = bound(transferAmountB, 1, TEA_MAX_SUPPLY);
-        mintAmountB = bound(mintAmountB, 0, transferAmountB - 1);
+        transferAmountB = _bound(transferAmountB, 1, TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, 0, transferAmountB - 1);
         tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -386,12 +384,12 @@ contract TEATest is Test, SystemCommons {
         uint256 mintAmountA,
         uint256 mintAmountB
     ) public {
-        transferAmountA = bound(transferAmountA, 1, TEA_MAX_SUPPLY);
-        mintAmountA = bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdA, mintAmountA);
 
-        transferAmountB = bound(transferAmountB, 1, TEA_MAX_SUPPLY);
-        mintAmountB = bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
+        transferAmountB = _bound(transferAmountB, 1, TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -422,12 +420,12 @@ contract TEATest is Test, SystemCommons {
             abi.encode(TEAInstance.mintE.selector) // Wrong selector
         );
 
-        transferAmountA = bound(transferAmountA, 1, TEA_MAX_SUPPLY);
-        mintAmountA = bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdA, mintAmountA);
 
-        transferAmountB = bound(transferAmountB, 1, TEA_MAX_SUPPLY);
-        mintAmountB = bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
+        transferAmountB = _bound(transferAmountB, 1, TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, TEA_MAX_SUPPLY);
         tea.mintE(bob, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -468,13 +466,13 @@ contract TEATestInternal is Test, TEA(address(0), address(0)) {
     ) internal override returns (uint80 unclaimedRewards) {}
 
     function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
-        mintAmountA = bound(mintAmountA, 1, TEA_MAX_SUPPLY - 1);
+        mintAmountA = _bound(mintAmountA, 1, TEA_MAX_SUPPLY - 1);
 
         mint(alice, vaultId, mintAmountA);
         assertEq(balanceOf[alice][vaultId], mintAmountA);
         assertEq(totalSupply[vaultId], mintAmountA);
 
-        mintAmountB = bound(mintAmountB, 1, TEA_MAX_SUPPLY - mintAmountA);
+        mintAmountB = _bound(mintAmountB, 1, TEA_MAX_SUPPLY - mintAmountA);
 
         vm.expectEmit();
         emit TransferSingle(msg.sender, address(0), bob, vaultId, mintAmountB);
@@ -484,18 +482,18 @@ contract TEATestInternal is Test, TEA(address(0), address(0)) {
     }
 
     function testFuzz_mintFails(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
-        mintAmountA = bound(mintAmountA, 1, TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, 1, TEA_MAX_SUPPLY);
         mint(alice, vaultId, mintAmountA);
 
-        mintAmountB = bound(mintAmountB, TEA_MAX_SUPPLY - mintAmountA + 1, type(uint256).max);
+        mintAmountB = _bound(mintAmountB, TEA_MAX_SUPPLY - mintAmountA + 1, type(uint256).max);
         vm.expectRevert();
         mint(bob, vaultId, mintAmountB);
     }
 
     function testFuzz_burn(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-        mintAmountA = bound(mintAmountA, 1, TEA_MAX_SUPPLY - 1);
-        mintAmountB = bound(mintAmountB, 1, TEA_MAX_SUPPLY - mintAmountA);
-        burnAmountB = bound(burnAmountB, 0, mintAmountB);
+        mintAmountA = _bound(mintAmountA, 1, TEA_MAX_SUPPLY - 1);
+        mintAmountB = _bound(mintAmountB, 1, TEA_MAX_SUPPLY - mintAmountA);
+        burnAmountB = _bound(burnAmountB, 0, mintAmountB);
 
         mint(alice, vaultId, mintAmountA);
         mint(bob, vaultId, mintAmountB);
@@ -514,9 +512,9 @@ contract TEATestInternal is Test, TEA(address(0), address(0)) {
         uint256 mintAmountB,
         uint256 burnAmountB
     ) public {
-        mintAmountA = bound(mintAmountA, 1, TEA_MAX_SUPPLY - 1);
-        mintAmountB = bound(mintAmountB, 1, TEA_MAX_SUPPLY - mintAmountA);
-        burnAmountB = bound(burnAmountB, mintAmountB + 1, type(uint256).max);
+        mintAmountA = _bound(mintAmountA, 1, TEA_MAX_SUPPLY - 1);
+        mintAmountB = _bound(mintAmountB, 1, TEA_MAX_SUPPLY - mintAmountA);
+        burnAmountB = _bound(burnAmountB, mintAmountB + 1, type(uint256).max);
 
         mint(alice, vaultId, mintAmountA);
         mint(bob, vaultId, mintAmountB);

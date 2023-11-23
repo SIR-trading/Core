@@ -3,11 +3,11 @@ pragma solidity ^0.8.0;
 
 // Contracts
 import {SystemState} from "./SystemState.sol";
-import {SystemCommons} from "./SystemCommons.sol";
+import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
-contract SIR is ERC20, SystemCommons {
+contract SIR is ERC20, SystemControlAccess {
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
@@ -24,7 +24,7 @@ contract SIR is ERC20, SystemCommons {
     constructor(
         address systemState,
         address systemControl
-    ) ERC20("Synthetics Implemented Right", "SIR", SIR_DECIMALS) SystemCommons(systemControl) {
+    ) ERC20("Synthetics Implemented Right", "SIR", SIR_DECIMALS) SystemControlAccess(systemControl) {
         _SYSTEM_STATE = SystemState(systemState);
     }
 
@@ -99,7 +99,7 @@ contract SIR is ERC20, SystemCommons {
 
     function lPerMint(uint256 vaultId) external {
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = claimSIR.unclaimedRewards(vaultId, msg.sender);
+        uint104 unclaimedRewards = _SYSTEM_STATE.claimSIR(vaultId, msg.sender);
 
         // Mint if any unclaimedRewards
         require(unclaimedRewards > 0);

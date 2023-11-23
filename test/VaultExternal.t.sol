@@ -50,7 +50,7 @@ contract VaultExternalTest is Test {
     }
 
     function testFuzz_deployETHvsUSDC(int8 leverageTier_) public {
-        leverageTier_ = int8(bound(leverageTier_, -3, 2)); // Only accepted values in the system
+        leverageTier_ = int8(_bound(leverageTier_, -3, 2)); // Only accepted values in the system
 
         vm.expectEmit();
         emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier_, 1);

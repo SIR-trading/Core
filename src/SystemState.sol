@@ -6,7 +6,7 @@ import {TEA, IERC20} from "./TEA.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import "forge-std/Test.sol";
 
-contract SystemState is TEA {
+contract SystemState is TEA, Test {
     /** Choice of types for 'cumSIRPerTEAx96' and 'unclaimedRewards'
 
         unclaimedRewards ~ uint80
@@ -101,6 +101,8 @@ contract SystemState is TEA {
                 vaultIssuanceParams_.tsLastUpdate != uint40(block.timestamp) &&
                 totalSupply_ != 0
             ) {
+                assert(vaultIssuanceParams_.tax <= systemParams_.cumTax);
+
                 // Find starting time to compute cumulative SIR per unit of TEA
                 uint40 tsStart = systemParams_.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
                     ? systemParams_.tsIssuanceStart
@@ -163,6 +165,13 @@ contract SystemState is TEA {
             if (balance == 0) return lperIssuanceParams_.unclaimedRewards;
 
             // It does not OF because uint80 is chosen so that it can stored all issued SIR for almost 600 years.
+            // console.log("Computing _unclaimedRewards for lper", lper);
+            // console.log(
+            //     "New cumSIRPerTEAx96",
+            //     cumSIRPerTEAx96,
+            //     ", Old cumSIRPerTEAx96",
+            //     lperIssuanceParams_.cumSIRPerTEAx96
+            // );
             return
                 lperIssuanceParams_.unclaimedRewards +
                 uint80((balance * uint256(cumSIRPerTEAx96 - lperIssuanceParams_.cumSIRPerTEAx96)) >> 96);
@@ -193,7 +202,6 @@ contract SystemState is TEA {
 
         // Retrieve updated vault issuance parameters
         uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(vaultId);
-        console.log("contract cumSIRPerTEAx96", cumSIRPerTEAx96);
 
         // Retrieve updated LPer issuance parameters
         unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, cumSIRPerTEAx96);
