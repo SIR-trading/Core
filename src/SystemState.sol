@@ -111,7 +111,8 @@ contract SystemState is TEA, Test {
                 // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
                 uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
                 if (tsStart < ts3Years) {
-                    uint256 issuance = (uint256(AGG_ISSUANCE_VAULTS) * vaultIssuanceParams_.tax) / systemParams_.cumTax;
+                    uint256 issuance = (uint256(ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
+                        systemParams_.cumTax;
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumSIRPerTEAx96 += uint176(
                         ((issuance * ((block.timestamp > ts3Years ? ts3Years : block.timestamp) - tsStart)) << 96) /

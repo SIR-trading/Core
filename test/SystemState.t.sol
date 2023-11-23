@@ -154,10 +154,10 @@ contract SystemStateTest is Test, SystemConstants {
 
         uint40 tsStart = tsIssuanceStart > tsUpdateVault ? tsIssuanceStart : tsUpdateVault;
         // console.log("test tsStart", tsStart);
-        // console.log("test issuance", AGG_ISSUANCE_VAULTS);
+        // console.log("test issuance", ISSUANCE_FIRST_3_YEARS);
         // console.log("test tsNow", block.timestamp);
         // vm.writeLine("./cumSIRPerTEAx96.log", vm.toString(cumSIRPerTEAx96));
-        assertEq(cumSIRPerTEAx96, ((uint256(AGG_ISSUANCE_VAULTS) * (block.timestamp - tsStart)) << 96) / teaAmount);
+        assertEq(cumSIRPerTEAx96, ((uint256(ISSUANCE_FIRST_3_YEARS) * (block.timestamp - tsStart)) << 96) / teaAmount);
 
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         assertEq(unclaimedSIR, (teaAmount * cumSIRPerTEAx96) >> 96);
@@ -204,7 +204,7 @@ contract SystemStateTest is Test, SystemConstants {
         uint256 cumSIRPerTEA_test;
         if (tsStart < tsIssuanceStart + 365 days * 3) {
             cumSIRPerTEA_test =
-                ((uint256(AGG_ISSUANCE_VAULTS) * (tsIssuanceStart + 365 days * 3 - tsStart)) << 96) /
+                ((uint256(ISSUANCE_FIRST_3_YEARS) * (tsIssuanceStart + 365 days * 3 - tsStart)) << 96) /
                 teaAmount;
             cumSIRPerTEA_test +=
                 ((uint256(ISSUANCE) * (tsCheckVault - tsIssuanceStart - 365 days * 3)) << 96) /
@@ -247,13 +247,13 @@ contract SystemStateTest is Test, SystemConstants {
 
         assertApproxEqAbs(
             unclaimedSIRAlice,
-            ((uint256(AGG_ISSUANCE_VAULTS) + uint256(ISSUANCE)) * THREE_YEARS) / 2,
+            ((uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * THREE_YEARS) / 2,
             1,
             "Alice unclaimed SIR is wrong"
         );
         assertApproxEqAbs(
             unclaimedSIRBob,
-            ((uint256(AGG_ISSUANCE_VAULTS) + uint256(ISSUANCE)) * THREE_YEARS) / 2,
+            ((uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * THREE_YEARS) / 2,
             1,
             "Bob unclaimed SIR is wrong"
         );
@@ -289,7 +289,7 @@ contract SystemStateTest is Test, SystemConstants {
 
         assertApproxEqAbs(
             unclaimedSIRAlice,
-            uint256(AGG_ISSUANCE_VAULTS) * THREE_YEARS,
+            uint256(ISSUANCE_FIRST_3_YEARS) * THREE_YEARS,
             1,
             "Alice unclaimed SIR is wrong"
         );
@@ -321,7 +321,7 @@ contract SystemStateTest is Test, SystemConstants {
         vm.prank(sir);
         uint104 unclaimedSIRAlice = systemState.claimSIR(VAULT_ID, alice);
 
-        assertApproxEqAbs(unclaimedSIRAlice, (uint256(AGG_ISSUANCE_VAULTS) + uint256(ISSUANCE)) * THREE_YEARS, 1);
+        assertApproxEqAbs(unclaimedSIRAlice, (uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * THREE_YEARS, 1);
         assertEq(systemState.unclaimedRewards(VAULT_ID, alice), 0);
     }
 
@@ -391,8 +391,8 @@ contract SystemStateHandler is Test, SystemConstants {
             }
         }
         currentTime += timeSkip;
-        _;
         vm.warp(currentTime);
+        _;
     }
 
     constructor(uint40 currentTime_) {
@@ -506,11 +506,11 @@ contract SystemStateHandler is Test, SystemConstants {
     // }
 
     function issuanceFirst3Years() external pure returns (uint256) {
-        return ISSUANCE;
+        return ISSUANCE_FIRST_3_YEARS;
     }
 
     function issuanceAfter3Years() external pure returns (uint256) {
-        return AGG_ISSUANCE_VAULTS;
+        return ISSUANCE;
     }
 
     function totalUnclaimedSIR() external view returns (uint256) {
@@ -577,7 +577,8 @@ contract SystemStateInvariantTest is Test {
             (_systemStateHandler.totalTimeWithoutIssuanceFirst3Years() +
                 _systemStateHandler.totalTimeWithoutIssuanceAfter3Years()) / (3600 * 24)
         );
-        console.log("total SIR", _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR());
+        console.log("total claimed SIR", _systemStateHandler.totalClaimedSIR());
+        console.log("total unclaimed SIR", _systemStateHandler.totalUnclaimedSIR());
         console.log("expected total SIR", totalSIR);
         console.log("max error", _systemStateHandler.totalSIRMaxError());
         assertGe(
@@ -588,5 +589,3 @@ contract SystemStateInvariantTest is Test {
         console.log("---------------------------------------");
     }
 }
-
-// INVARIANT TEST THAT CHECKS THAT SUM OF UNCLAIMED REWARDS MATCHES THE ISSUANCE

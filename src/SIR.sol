@@ -16,7 +16,7 @@ contract SIR is ERC20, SystemControlAccess {
 
     SystemState private immutable _SYSTEM_STATE;
 
-    uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - AGG_ISSUANCE_VAULTS
+    uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
 
     address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
@@ -136,7 +136,7 @@ contract SIR is ERC20, SystemControlAccess {
         uint256 aggIssuanceContributors_ = aggIssuanceContributors + aggIssuanceToAdd - aggIssuanceToRemove;
 
         aggIssuanceContributors = uint72(aggIssuanceContributors_);
-        if (aggIssuanceContributors_ > ISSUANCE - AGG_ISSUANCE_VAULTS) return false;
+        if (aggIssuanceContributors_ > ISSUANCE - ISSUANCE_FIRST_3_YEARS) return false;
         return true;
     }
 
