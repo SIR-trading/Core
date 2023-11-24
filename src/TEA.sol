@@ -9,11 +9,12 @@ import {TEAExternal} from "./libraries/TEAExternal.sol";
 
 // Contracts
 import {SystemControlAccess} from "./SystemControlAccess.sol";
+import {SystemConstants} from "./SystemConstants.sol";
 import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import "forge-std/Test.sol";
 
-abstract contract TEA is ERC1155, SystemControlAccess {
+abstract contract TEA is ERC1155, SystemControlAccess, SystemConstants {
     IVaultExternal internal immutable VAULT_EXTERNAL;
 
     mapping(uint256 vaultId => uint256) public totalSupply;

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {SystemConstants} from "./SystemConstants.sol";
+// import {SystemConstants} from "./SystemConstants.sol";
 
-contract SystemControlAccess is SystemConstants {
+contract SystemControlAccess {
     address internal immutable SYSTEM_CONTROL;
 
     modifier onlySystemControl() {

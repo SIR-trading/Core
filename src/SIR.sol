@@ -4,10 +4,11 @@ pragma solidity ^0.8.0;
 // Contracts
 import {SystemState} from "./SystemState.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
+import {SystemConstants} from "./SystemConstants.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
-contract SIR is ERC20, SystemControlAccess {
+contract SIR is ERC20, SystemControlAccess, SystemConstants {
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead

@@ -166,13 +166,6 @@ contract SystemState is TEA, Test {
             if (balance == 0) return lperIssuanceParams_.unclaimedRewards;
 
             // It does not OF because uint80 is chosen so that it can stored all issued SIR for almost 600 years.
-            // console.log("Computing _unclaimedRewards for lper", lper);
-            // console.log(
-            //     "New cumSIRPerTEAx96",
-            //     cumSIRPerTEAx96,
-            //     ", Old cumSIRPerTEAx96",
-            //     lperIssuanceParams_.cumSIRPerTEAx96
-            // );
             return
                 lperIssuanceParams_.unclaimedRewards +
                 uint80((balance * uint256(cumSIRPerTEAx96 - lperIssuanceParams_.cumSIRPerTEAx96)) >> 96);

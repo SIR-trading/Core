@@ -153,10 +153,6 @@ contract SystemStateTest is Test, SystemConstants {
         uint176 cumSIRPerTEAx96 = systemState.cumulativeSIRPerTEA(VAULT_ID);
 
         uint40 tsStart = tsIssuanceStart > tsUpdateVault ? tsIssuanceStart : tsUpdateVault;
-        // console.log("test tsStart", tsStart);
-        // console.log("test issuance", ISSUANCE_FIRST_3_YEARS);
-        // console.log("test tsNow", block.timestamp);
-        // vm.writeLine("./cumSIRPerTEAx96.log", vm.toString(cumSIRPerTEAx96));
         assertEq(cumSIRPerTEAx96, ((uint256(ISSUANCE_FIRST_3_YEARS) * (block.timestamp - tsStart)) << 96) / teaAmount);
 
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
@@ -367,7 +363,7 @@ contract SystemStateHandler is Test, SystemConstants {
 
     uint40 constant VAULT_ID = 42;
     uint public totalClaimedSIR;
-    uint public totalSIRMaxError;
+    uint public _totalSIRMaxError;
     uint40 public totalTimeWithoutIssuanceFirst3Years;
     uint40 public totalTimeWithoutIssuanceAfter3Years;
 
@@ -428,16 +424,15 @@ contract SystemStateHandler is Test, SystemConstants {
         address toAddr = _idToAddr(to);
         uint256 preBalance = _systemState.balanceOf(fromAddr, VAULT_ID);
         amount = _bound(amount, 0, preBalance);
-        console.log("action: transfer", amount);
 
         vm.prank(fromAddr);
         _systemState.safeTransferFrom(fromAddr, toAddr, VAULT_ID, amount, "");
 
-        // Update totalSIRMaxError
+        // Update _totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[from] + 1;
-        totalSIRMaxError += (preBalance * _numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
+        _totalSIRMaxError += (preBalance * _numUpdatesCumSIRPerTEA) / 2 ** 96 + 1;
         numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[to] + 1;
-        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
+        _totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update indexes
         _numUpdatesCumSIRPerTEAForUser[from] = _numUpdatesCumSIRPerTEA;
@@ -451,13 +446,12 @@ contract SystemStateHandler is Test, SystemConstants {
 
         uint256 totalSupply = _systemState.totalSupply(VAULT_ID);
         amount = _bound(amount, 0, TEA_MAX_SUPPLY - totalSupply);
-        console.log("action: mint", amount, "to user", addr);
 
         _systemState.mint(addr, amount);
 
-        // Update totalSIRMaxError
+        // Update _totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
-        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
+        _totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
@@ -470,13 +464,12 @@ contract SystemStateHandler is Test, SystemConstants {
         address addr = _idToAddr(user);
         uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
         amount = _bound(amount, 0, preBalance);
-        console.log("action: burn", amount);
 
         _systemState.burn(addr, amount);
 
-        // Update totalSIRMaxError
+        // Update _totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
-        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
+        _totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
@@ -487,23 +480,18 @@ contract SystemStateHandler is Test, SystemConstants {
 
     function claim(uint256 user, uint24 timeSkip) external advanceTime(timeSkip) {
         address addr = _idToAddr(user);
-        uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
+        uint256 balance = _systemState.balanceOf(addr, VAULT_ID);
 
         uint256 unclaimedSIR = _systemState.claimSIR(VAULT_ID, addr);
-        console.log("action: claim", unclaimedSIR);
         totalClaimedSIR += unclaimedSIR;
 
-        // Update totalSIRMaxError
+        // Update _totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
-        totalSIRMaxError += (preBalance * numUpdates) / 2 ** 96 + 1;
+        _totalSIRMaxError += (balance * numUpdates) / 2 ** 96 + 1;
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
     }
-
-    // function cumulativeSIRPerTEA() external view returns (uint176 cumSIRPerTEAx96) {
-    //     return _systemState.cumulativeSIRPerTEA(VAULT_ID);
-    // }
 
     function issuanceFirst3Years() external pure returns (uint256) {
         return ISSUANCE_FIRST_3_YEARS;
@@ -520,6 +508,32 @@ contract SystemStateHandler is Test, SystemConstants {
             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(3)) +
             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(4)) +
             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(5));
+    }
+
+    function totalSIRMaxError() external view returns (uint256 maxError) {
+        uint256 numUpdates;
+        uint256 balance;
+        maxError = _totalSIRMaxError;
+
+        balance = _systemState.balanceOf(_idToAddr(1), VAULT_ID);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[1];
+        maxError += (balance * numUpdates) / 2 ** 96 + 1;
+
+        balance = _systemState.balanceOf(_idToAddr(2), VAULT_ID);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[2];
+        maxError += (balance * numUpdates) / 2 ** 96 + 1;
+
+        balance = _systemState.balanceOf(_idToAddr(3), VAULT_ID);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[3];
+        maxError += (balance * numUpdates) / 2 ** 96 + 1;
+
+        balance = _systemState.balanceOf(_idToAddr(4), VAULT_ID);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[4];
+        maxError += (balance * numUpdates) / 2 ** 96 + 1;
+
+        balance = _systemState.balanceOf(_idToAddr(5), VAULT_ID);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[5];
+        maxError += (balance * numUpdates) / 2 ** 96 + 1;
     }
 }
 
@@ -552,6 +566,7 @@ contract SystemStateInvariantTest is Test {
         uint40 startTime = _systemStateHandler.startTime();
         uint40 currentTime = _systemStateHandler.currentTime();
         vm.warp(currentTime);
+
         if (currentTime < startTime + 365 days * 3) {
             totalSIR =
                 _systemStateHandler.issuanceFirst3Years() *
@@ -571,21 +586,10 @@ contract SystemStateInvariantTest is Test {
         );
 
         uint256 totalSIRMaxError = _systemStateHandler.totalSIRMaxError();
-        console.log("time elapsed", (currentTime - startTime) / (3600 * 24), "days");
-        console.log(
-            "total time without issuance",
-            (_systemStateHandler.totalTimeWithoutIssuanceFirst3Years() +
-                _systemStateHandler.totalTimeWithoutIssuanceAfter3Years()) / (3600 * 24)
-        );
-        console.log("total claimed SIR", _systemStateHandler.totalClaimedSIR());
-        console.log("total unclaimed SIR", _systemStateHandler.totalUnclaimedSIR());
-        console.log("expected total SIR", totalSIR);
-        console.log("max error", _systemStateHandler.totalSIRMaxError());
         assertGe(
             _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR(),
             totalSIR > totalSIRMaxError ? totalSIR - totalSIRMaxError : 0,
             "Total SIR is too low"
         );
-        console.log("---------------------------------------");
     }
 }
