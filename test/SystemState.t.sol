@@ -403,14 +403,9 @@ contract SystemStateTest is Test, SystemConstants {
         // Mint for Alice for two years
         testFuzz_mintFirst3Years(1, 1, 1 + 365 days * 2, 1, teaAmount);
 
-        console.log("Bob address", bob);
-        console.log("Bob balance", systemState.balanceOf(bob, VAULT_ID));
-
         // Transfer some to Bob
         vm.prank(alice);
         systemState.safeTransferFrom(alice, bob, VAULT_ID, teaAmount, "");
-
-        console.log("Bob balance", systemState.balanceOf(bob, VAULT_ID));
 
         skip(365 days * 2);
 
@@ -420,22 +415,40 @@ contract SystemStateTest is Test, SystemConstants {
         uint256 unclaimedSIRAliceTheoretical = uint256(ISSUANCE_FIRST_3_YEARS) * 365 days * 2;
         uint256 unclaimedSIRBobTheoretical = (uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * 365 days;
 
-        assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical, "Alice");
-        assertGe(
-            unclaimedSIRAlice,
-            unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1),
-            "Alice"
-        );
+        assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical);
+        assertGe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1)); // 1 update during safeTransferFrom
 
-        assertLe(unclaimedSIRBob, unclaimedSIRBobTheoretical, "Bob");
-        assertGe(
-            unclaimedSIRBob,
-            unclaimedSIRBobTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2),
-            "Bob"
-        ); // Passing 3 years causes two updates in cumSIRPerTEAx96
+        assertLe(unclaimedSIRBob, unclaimedSIRBobTheoretical);
+        assertGe(unclaimedSIRBob, unclaimedSIRBobTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2)); // 1 update crossing 3 years + 1 update when calling unclaimedRewards
     }
 
-    // function testFuzz_transferSome
+    function testFuzz_transferSome(uint256 teaAmount, uint256 transferAmount) public {
+        teaAmount = _bound(teaAmount, 2, TEA_MAX_SUPPLY);
+        transferAmount = _bound(transferAmount, 1, teaAmount - 1);
+
+        // Mint for Alice for two years
+        testFuzz_mintFirst3Years(1, 1, 1 + 365 days * 2, 1, teaAmount);
+
+        // Transfer some to Bob
+        vm.prank(alice);
+        systemState.safeTransferFrom(alice, bob, VAULT_ID, transferAmount, "");
+
+        skip(365 days * 2);
+
+        uint104 unclaimedSIRAlice = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint104 unclaimedSIRBob = systemState.unclaimedRewards(VAULT_ID, bob);
+
+        uint256 unclaimedSIRTheoretical = uint256(ISSUANCE_FIRST_3_YEARS) * THREE_YEARS + uint256(ISSUANCE) * 365 days;
+
+        assertLe(unclaimedSIRAlice + unclaimedSIRBob, unclaimedSIRTheoretical);
+        assertGe(
+            unclaimedSIRAlice + unclaimedSIRBob,
+            unclaimedSIRTheoretical -
+                ErrorComputation.maxErrorBalanceSIR(teaAmount, 1) - // 1 update during safeTransferFrom
+                ErrorComputation.maxErrorBalanceSIR(teaAmount - transferAmount, 2) - // 1 update crossing 3 years + 1 update when calling unclaimedRewards
+                ErrorComputation.maxErrorBalanceSIR(transferAmount, 2) // 1 update crossing 3 years + 1 update when calling unclaimedRewards
+        );
+    }
 }
 
 ///////////////////////////////////////////////
