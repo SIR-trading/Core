@@ -397,7 +397,45 @@ contract SystemStateTest is Test, SystemConstants {
         systemState.claimSIR(VAULT_ID, alice);
     }
 
-    // ALSO CHECK MINT, BURN AND TRANSFER OF TEA
+    function testFuzz_transferAll(uint256 teaAmount) public {
+        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+
+        // Mint for Alice for two years
+        testFuzz_mintFirst3Years(1, 1, 1 + 365 days * 2, 1, teaAmount);
+
+        console.log("Bob address", bob);
+        console.log("Bob balance", systemState.balanceOf(bob, VAULT_ID));
+
+        // Transfer some to Bob
+        vm.prank(alice);
+        systemState.safeTransferFrom(alice, bob, VAULT_ID, teaAmount, "");
+
+        console.log("Bob balance", systemState.balanceOf(bob, VAULT_ID));
+
+        skip(365 days * 2);
+
+        uint104 unclaimedSIRAlice = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint104 unclaimedSIRBob = systemState.unclaimedRewards(VAULT_ID, bob);
+
+        uint256 unclaimedSIRAliceTheoretical = uint256(ISSUANCE_FIRST_3_YEARS) * 365 days * 2;
+        uint256 unclaimedSIRBobTheoretical = (uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * 365 days;
+
+        assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical, "Alice");
+        assertGe(
+            unclaimedSIRAlice,
+            unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1),
+            "Alice"
+        );
+
+        assertLe(unclaimedSIRBob, unclaimedSIRBobTheoretical, "Bob");
+        assertGe(
+            unclaimedSIRBob,
+            unclaimedSIRBobTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2),
+            "Bob"
+        ); // Passing 3 years causes two updates in cumSIRPerTEAx96
+    }
+
+    // function testFuzz_transferSome
 }
 
 ///////////////////////////////////////////////
@@ -468,6 +506,12 @@ contract SystemStateHandler is Test, SystemConstants {
         return vm.addr(id);
     }
 
+    function _updateCumSIRPerTEA() private {
+        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        if (crossThreeYears) _numUpdatesCumSIRPerTEA += 2;
+        else _numUpdatesCumSIRPerTEA++;
+    }
+
     function transfer(uint256 from, uint256 to, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
         address fromAddr = _idToAddr(from);
         address toAddr = _idToAddr(to);
@@ -477,14 +521,13 @@ contract SystemStateHandler is Test, SystemConstants {
         vm.prank(fromAddr);
         _systemState.safeTransferFrom(fromAddr, toAddr, VAULT_ID, amount, "");
 
-        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
         // Update _totalSIRMaxError
-        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[from] + 1;
-        if (crossThreeYears) numUpdates++;
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[from];
         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
-        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[to] + 1;
-        if (crossThreeYears) numUpdates++;
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[to];
         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
 
         // Update indexes
@@ -502,19 +545,15 @@ contract SystemStateHandler is Test, SystemConstants {
 
         _systemState.mint(addr, amount);
 
-        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
         // Update _totalSIRMaxError
-        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
-        if (crossThreeYears) numUpdates++;
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user];
         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
-
-        // Vault's cumulative SIR per TEA is updated
-        if (crossThreeYears) _numUpdatesCumSIRPerTEA++;
-        _numUpdatesCumSIRPerTEA++;
     }
 
     function burn(uint256 user, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
@@ -524,19 +563,15 @@ contract SystemStateHandler is Test, SystemConstants {
 
         _systemState.burn(addr, amount);
 
-        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
         // Update _totalSIRMaxError
-        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
-        if (crossThreeYears) numUpdates++;
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user];
         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
-
-        // Vault's cumulative SIR per TEA is updated
-        if (crossThreeYears) _numUpdatesCumSIRPerTEA++;
-        _numUpdatesCumSIRPerTEA++;
     }
 
     function claim(uint256 user, uint24 timeSkip) external advanceTime(timeSkip) {
@@ -546,11 +581,11 @@ contract SystemStateHandler is Test, SystemConstants {
         uint256 unclaimedSIR = _systemState.claimSIR(VAULT_ID, addr);
         totalClaimedSIR += unclaimedSIR;
 
-        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
         // Update _totalSIRMaxError
-        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user] + 1;
-        if (crossThreeYears) numUpdates++;
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user];
         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
 
         // Update index
@@ -579,25 +614,17 @@ contract SystemStateHandler is Test, SystemConstants {
         uint256 balance;
         maxError = _totalSIRMaxError;
 
-        balance = _systemState.balanceOf(_idToAddr(1), VAULT_ID);
-        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[1];
-        maxError += (balance * numUpdates) / 2 ** 96 + 1;
+        // Vault's cumulative SIR per TEA is updated
+        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        uint256 numUpdatesCumSIRPerTEA = crossThreeYears ? _numUpdatesCumSIRPerTEA + 2 : _numUpdatesCumSIRPerTEA + 1;
 
-        balance = _systemState.balanceOf(_idToAddr(2), VAULT_ID);
-        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[2];
-        maxError += (balance * numUpdates) / 2 ** 96 + 1;
-
-        balance = _systemState.balanceOf(_idToAddr(3), VAULT_ID);
-        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[3];
-        maxError += (balance * numUpdates) / 2 ** 96 + 1;
-
-        balance = _systemState.balanceOf(_idToAddr(4), VAULT_ID);
-        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[4];
-        maxError += (balance * numUpdates) / 2 ** 96 + 1;
-
-        balance = _systemState.balanceOf(_idToAddr(5), VAULT_ID);
-        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[5];
-        maxError += (balance * numUpdates) / 2 ** 96 + 1;
+        for (uint256 i = 1; i <= 5; i++) {
+            balance = _systemState.balanceOf(_idToAddr(i), VAULT_ID);
+            if (balance > 0) {
+                numUpdates = numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[i];
+                maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
+            }
+        }
     }
 }
 

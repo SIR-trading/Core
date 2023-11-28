@@ -197,13 +197,13 @@ contract SystemState is TEA, Test {
         // Retrieve updated vault issuance parameters
         uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(vaultId);
 
-        // Retrieve updated LPer issuance parameters
+        // Retrieve updated LPer0 issuance parameters
         unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, cumSIRPerTEAx96);
 
         // Update LPer0 issuance parameters
         _lpersIssuances[vaultId][lper0] = LPerIssuanceParams(cumSIRPerTEAx96, sirIsCaller ? 0 : unclaimedRewards0);
 
-        if (lper1 != address(0))
+        if (lper1 != address(0)) {
             /** Transfer of TEA
                 1. Must update the destinatary's issuance parameters too
                 2. Valut issuance does not need to be updated because totalSupply does not change
@@ -212,10 +212,13 @@ contract SystemState is TEA, Test {
                 cumSIRPerTEAx96,
                 _unclaimedRewards(vaultId, lper1, cumSIRPerTEAx96)
             );
-        else if (!sirIsCaller) {
-            /** Mint or burn TEA
-                1. Must update the vault's issuance
-             */
+        }
+
+        /** Update the vault's issuance
+            We may be tempted to skip updating the vault's issuance if the vault's issuance has not changed (i.e. totalSupply has not changed),
+            like in the case of a Transfer of TEA. However, this could result in rounding errors causing SIR issuance to be larger than expected.
+         */
+        if (_vaultsIssuanceParams[vaultId].tsLastUpdate != block.timestamp) {
             _vaultsIssuanceParams[vaultId].cumSIRPerTEAx96 = cumSIRPerTEAx96;
             _vaultsIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
         }
