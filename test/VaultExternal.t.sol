@@ -2,22 +2,15 @@
 pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
-import {VaultExternal, Strings} from "src/VaultExternal.sol";
+import {VaultExternal, VaultEvents, Strings} from "src/VaultExternal.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
-contract VaultExternalTest is Test {
+contract VaultExternalTest is Test, VaultEvents {
     int8 leverageTier = -1;
 
     VaultExternal vaultExternal;
-
-    event VaultInitialized(
-        address indexed debtToken,
-        address indexed collateralToken,
-        int8 indexed leverageTier,
-        uint256 vaultId
-    );
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);

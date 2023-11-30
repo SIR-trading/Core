@@ -60,10 +60,6 @@ contract Vault is SystemState {
         // Deploy APE token, and initialize it
         uint256 vaultId = VAULT_EXTERNAL.deployAPE(debtToken, collateralToken, leverageTier);
 
-        // // Approve control to withdraw any amount of collateral.
-        // // The checks and balances are implemented in the control contract to minimize contract size
-        // IERC20(collateralToken).approve(SYSTEM_CONTROL, type(uint256).max);
-
         // Save vaultId
         state_.vaultId = uint40(vaultId);
     }
@@ -71,11 +67,6 @@ contract Vault is SystemState {
     /*////////////////////////////////////////////////////////////////
                             MINT/BURN FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-
-    /**
-        ADD QUOTING FUNCTIONS TO THE PERIPHERY?
-        ADD GET RESERVES FUNCTION TO THE PERIPHERY?
-     */
 
     /** @notice Function for minting APE or TEA
      */

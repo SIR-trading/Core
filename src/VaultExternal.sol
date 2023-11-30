@@ -4,25 +4,19 @@ pragma solidity ^0.8.0;
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {VaultEvents} from "./interfaces/VaultEvents.sol";
 
 // Contracts
 import {APE} from "./APE.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 
-contract VaultExternal {
+contract VaultExternal is VaultEvents {
     address public immutable VAULT;
 
     modifier onlyVault() {
         require(msg.sender == VAULT);
         _;
     }
-
-    event VaultInitialized(
-        address indexed debtToken,
-        address indexed collateralToken,
-        int8 indexed leverageTier,
-        uint256 vaultId
-    );
 
     VaultStructs.Parameters[] public paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
 

@@ -4,3 +4,7 @@ This is to save the TVL if the oracle is buggy and reverts.
 
 # Optimizations
 Minimize # hot SLOADs
+
+# Periphery
+- Add quoting functions
+- Add getReserves function
