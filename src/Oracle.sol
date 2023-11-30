@@ -335,12 +335,6 @@ contract Oracle {
             );
 
             if (oracleData.avLiquidity > 0) {
-                // console.log("_________________________________________");
-                // console.log("uniswapFeeTiers[i].fee", uniswapFeeTiers[i].fee);
-                // console.log("oracleData.avLiquidity", oracleData.avLiquidity);
-                // console.log("oracleData.period", oracleData.period);
-                // console.log("oracleData.cardinalityToIncrease", oracleData.cardinalityToIncrease);
-
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
                     we do not want to select a fee tier whose liquidity is easy manipulated.
@@ -349,7 +343,6 @@ contract Oracle {
                 uint256 scoreTemp = oracleData.period == 0
                     ? 1
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
-                // console.log("score", scoreTemp);
 
                 // Update best score
                 if (scoreTemp > score) {
@@ -424,8 +417,6 @@ contract Oracle {
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Price is updated once per block at most
-        // console.log("block.timestamp", block.timestamp);
-        // console.log("oracleState.timeStampPrice", oracleState.timeStampPrice);
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
@@ -482,12 +473,6 @@ contract Oracle {
                         oracleDataProbed.cardinalityToIncrease
                     );
 
-                    // console.log("_________________________________________");
-                    // console.log("uniswapFeeTierProbed.fee", uniswapFeeTierProbed.fee);
-                    // console.logInt(oracleDataProbed.aggPriceTick);
-                    // console.log("oracleDataProbed.avLiquidity", oracleDataProbed.avLiquidity);
-                    // console.log("oracleDataProbed.period", oracleDataProbed.period);
-                    // console.log("oracleDataProbed.cardinalityToIncrease", oracleDataProbed.cardinalityToIncrease);
                     if (oracleDataProbed.avLiquidity > 0) {
                         /** Compute scores.
                 
@@ -519,7 +504,6 @@ contract Oracle {
                                     oracleState.uniswapFeeTier.fee,
                                     uniswapFeeTierProbed.fee
                                 );
-                                console.log("FEE TIER CHANGE");
                                 oracleState.uniswapFeeTier = uniswapFeeTierProbed;
                             }
                         } else {
