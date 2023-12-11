@@ -7,8 +7,6 @@ import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 // Contracts
 import {Owned} from "./Owned.sol";
 
-import "forge-std/Test.sol";
-
 /**
  * @dev Modified from Solmate's ERC20.sol
  */
@@ -48,7 +46,8 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = IVaultExternal(msg.sender).latestTokenParams();
+        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = IVaultExternal(msg.sender)
+            .latestTokenParams();
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();

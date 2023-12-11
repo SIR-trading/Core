@@ -6,25 +6,23 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {TEAExternal} from "./libraries/TEAExternal.sol";
+import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {VaultExternal} from "./libraries/VaultExternal.sol";
 
 // Contracts
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./SystemConstants.sol";
-import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
-import "forge-std/Test.sol";
 
 abstract contract TEA is ERC1155, SystemControlAccess, SystemConstants {
-    IVaultExternal internal immutable VAULT_EXTERNAL;
+    VaultStructs.Parameters[] public paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
 
     mapping(uint256 vaultId => uint256) public totalSupply;
 
-    constructor(address systemControl, address vaultExternal) SystemControlAccess(systemControl) {
-        VAULT_EXTERNAL = IVaultExternal(vaultExternal);
-    }
+    constructor(address systemControl) SystemControlAccess(systemControl) {}
 
     function uri(uint256 vaultId) public view override returns (string memory) {
-        return VAULT_EXTERNAL.teaURI(vaultId, totalSupply[vaultId]);
+        return VaultExternal.teaURI(paramsById, vaultId, totalSupply[vaultId]);
     }
 
     function safeTransferFrom(

@@ -14,19 +14,53 @@ import {VaultStructs} from "src/libraries/VaultStructs.sol";
 contract VaultTest is Test, VaultEvents {
     address public systemControl = vm.addr(1);
     address public sir = vm.addr(2);
-    address public vaultExternal = vm.addr(3);
 
-    Vault public vault = Vault(vm.addr(4));
+    Vault public vault;
 
-    address public alice = vm.addr(5);
+    address public alice = vm.addr(3);
 
     address public debtToken = Addresses.ADDR_USDT;
     address public collateralToken = Addresses.ADDR_WETH;
 
+    function _predictAddress(
+        address deployer,
+        bytes32 salt,
+        address oracle,
+        address vaultExternal
+    ) internal view returns (address) {
+        return
+            address(
+                uint160(
+                    uint256(
+                        keccak256(
+                            abi.encodePacked(
+                                bytes1(0xff),
+                                deployer,
+                                salt,
+                                keccak256(
+                                    abi.encodePacked(
+                                        type(Vault).creationCode,
+                                        abi.encode(systemControl, sir, oracle, vaultExternal)
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+    }
+
     function setUp() public {
-        Oracle oracle = new Oracle();
-        deployCodeTo("VaultExternal.sol", abi.encode(vm.addr(4)), vaultExternal);
-        deployCodeTo("Vault.sol", abi.encode(systemControl, sir, address(oracle), vaultExternal), address(vault));
+        address oracle = new Oracle();
+
+        // Predict address of vault
+        vault = Vault(_predictAddress(address(this), bytes32(0), oracle));
+
+        // Deploy vaultExternal
+        address vaultExternal = new VaultExternal(address(vault));
+
+        // Deploy vault
+        vault = new Vault{salt: 0}(systemControl, sir, oracle, vaultExternal);
 
         vm.createSelectFork("mainnet", 18128102);
     }

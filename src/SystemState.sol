@@ -4,9 +4,8 @@ pragma solidity ^0.8.0;
 // Contracts
 import {TEA, IERC20} from "./TEA.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
-import "forge-std/Test.sol";
 
-contract SystemState is TEA, Test {
+contract SystemState is TEA {
     /** Choice of types for 'cumSIRPerTEAx96' and 'unclaimedRewards'
 
         unclaimedRewards ~ uint80
@@ -62,7 +61,7 @@ contract SystemState is TEA, Test {
      */
     // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor(address systemControl, address sir, address vaultExternal) TEA(systemControl, vaultExternal) {
+    constructor(address systemControl, address sir) TEA(systemControl) {
         _SIR = sir;
     }
 

@@ -12,8 +12,6 @@ import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 // Contracts
 import {Addresses} from "./libraries/Addresses.sol";
 
-import "forge-std/console.sol";
-
 /**
  *     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
  *     @dev Gas cost: Around 10k gas for calling Uniswap v3 oracle, plus 10k gas for each different fee pool, making a min gas of approx 20k. For reference a Uniswap trade costs around 120k.

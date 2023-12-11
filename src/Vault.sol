@@ -5,19 +5,23 @@ pragma solidity ^0.8.0;
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
+import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {SaltedAddress} from "./libraries/SaltedAddress.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {Fees} from "./libraries/Fees.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {VaultEvents} from "./interfaces/VaultEvents.sol";
 
 // Contracts
 import {APE} from "./APE.sol";
 import {Oracle} from "./Oracle.sol";
 import {SystemState} from "./SystemState.sol";
 
-contract Vault is SystemState {
+import "forge-std/console.sol";
+
+contract Vault is SystemState, VaultEvents {
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
     error LeverageTierOutOfRange();
@@ -27,14 +31,15 @@ contract Vault is SystemState {
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
         public state; // Do not use vaultId 0
 
-    constructor(
-        address systemControl,
-        address sir,
-        address oracle,
-        address vaultExternal
-    ) SystemState(systemControl, sir, vaultExternal) {
+    // Used to pass parameters to the APE token constructor
+    VaultStructs.TokenParameters private _transientTokenParameters;
+
+    constructor(address systemControl, address sir, address oracle) SystemState(systemControl, sir) {
         // Price _ORACLE
         _ORACLE = Oracle(oracle);
+
+        // Push empty parameters to avoid vaultId 0
+        paramsById.push(VaultStructs.Parameters(address(0), address(0), 0));
     }
 
     /**
@@ -58,10 +63,40 @@ contract Vault is SystemState {
         if (state_.vaultId != 0) revert VaultAlreadyInitialized();
 
         // Deploy APE token, and initialize it
-        uint256 vaultId = VAULT_EXTERNAL.deployAPE(debtToken, collateralToken, leverageTier);
+        uint256 vaultId = VaultExternal.deployAPE(
+            paramsById,
+            _transientTokenParameters,
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
 
         // Save vaultId
         state_.vaultId = uint40(vaultId);
+
+        emit VaultInitialized(debtToken, collateralToken, leverageTier, vaultId);
+    }
+
+    function latestTokenParams()
+        external
+        view
+        returns (
+            string memory name,
+            string memory symbol,
+            uint8 decimals,
+            address debtToken,
+            address collateralToken,
+            int8 leverageTier
+        )
+    {
+        name = _transientTokenParameters.name;
+        symbol = _transientTokenParameters.symbol;
+        decimals = _transientTokenParameters.decimals;
+
+        VaultStructs.Parameters memory params = paramsById[paramsById.length - 1];
+        debtToken = params.debtToken;
+        collateralToken = params.collateralToken;
+        leverageTier = params.leverageTier;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -168,7 +203,7 @@ contract Vault is SystemState {
             }
 
             // Update state from new reserves
-            _updateState(state_, reserves, leverageTier);
+            VaultExternal.updateState(state_, reserves, leverageTier);
 
             // Store new state reserves
             state[debtToken][collateralToken][leverageTier] = state_;
@@ -279,7 +314,7 @@ contract Vault is SystemState {
          */
 
         // Update state from new reserves
-        _updateState(state_, reserves, leverageTier);
+        VaultExternal.updateState(state_, reserves, leverageTier);
 
         // Store new state
         state[debtToken][collateralToken][leverageTier] = state_;
@@ -331,7 +366,7 @@ contract Vault is SystemState {
         VaultStructs.Reserves memory reserves
     ) private view returns (APE ape, uint152 syntheticTokenReserve, uint256 syntheticTokenSupply) {
         if (isAPE) {
-            ape = APE(SaltedAddress.getAddress(address(VAULT_EXTERNAL), state_.vaultId));
+            ape = APE(SaltedAddress.getAddress(address(this), state_.vaultId));
             syntheticTokenReserve = reserves.apesReserve;
             syntheticTokenSupply = ape.totalSupply();
         } else {
@@ -358,7 +393,7 @@ contract Vault is SystemState {
                     reserves.lpReserve = 1;
                 }
             } else if (state_.tickPriceSatX42 == type(int64).max) {
-                if (APE(SaltedAddress.getAddress(address(VAULT_EXTERNAL), state_.vaultId)).totalSupply() == 0) {
+                if (APE(SaltedAddress.getAddress(address(this), state_.vaultId)).totalSupply() == 0) {
                     reserves.lpReserve = state_.totalReserves; // type(int64).max represents +∞ => apesReserve = 0
                 } else {
                     reserves.apesReserve = 1;
@@ -471,99 +506,16 @@ contract Vault is SystemState {
         }
     }
 
-    /// @dev Make sure before calling that apesReserve + lpReserve does not OF uint152
-    function _updateState(
-        VaultStructs.State memory state_,
-        VaultStructs.Reserves memory reserves,
-        int8 leverageTier
-    ) private pure {
-        unchecked {
-            state_.daoFees = reserves.daoFees;
-            state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
-
-            if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined
-
-            // Compute tickPriceSatX42
-            if (reserves.apesReserve == 0) {
-                state_.tickPriceSatX42 = type(int64).max;
-            } else if (reserves.lpReserve == 0) {
-                state_.tickPriceSatX42 = type(int64).min;
-            } else {
-                /**
-                 * Decide if we are in the power or saturation zone
-                 * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
-                 */
-                uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
-                bool isPowerZone;
-                if (leverageTier > 0) {
-                    if (
-                        uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
-                    {
-                        isPowerZone = true;
-                    } else {
-                        isPowerZone = false;
-                    }
-                } else {
-                    if (
-                        reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
-                    {
-                        isPowerZone = true;
-                    } else {
-                        isPowerZone = false;
-                    }
-                }
-
-                if (isPowerZone) {
-                    /**
-                     * PRICE IN POWER ZONE
-                     * priceSat = price*(R/(lA))^(r-1)
-                     */
-
-                    int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier, // Cannot OF cuz totalReserves is uint152, and |leverageTier|<=3
-                        (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve // Cannot OF cuz apesReserve is uint152, and |leverageTier|<=3
-                    );
-
-                    // Compute saturation price
-                    int256 temptickPriceSatX42 = state_.tickPriceX42 +
-                        (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier);
-
-                    // Check if overflow
-                    if (temptickPriceSatX42 > type(int64).max) state_.tickPriceSatX42 = type(int64).max;
-                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
-                } else {
-                    /**
-                     * PRICE IN SATURATION ZONE
-                     * priceSat = r*price*L/R
-                     */
-                    int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? uint256(state_.totalReserves) << absLeverageTier : state_.totalReserves,
-                        (uint256(reserves.lpReserve) << absLeverageTier) + reserves.lpReserve
-                    );
-
-                    // Compute saturation price
-                    int256 temptickPriceSatX42 = state_.tickPriceX42 - tickRatioX42;
-
-                    // Check if underflow
-                    if (temptickPriceSatX42 < type(int64).min) state_.tickPriceSatX42 = type(int64).min;
-                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
-                }
-            }
-        }
-    }
-
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
     function widhtdrawDAOFees(uint40 vaultId, address to) external onlySystemControl {
-        (address debtToken, address collateralToken, int8 leverageTier) = VAULT_EXTERNAL.paramsById(vaultId);
+        VaultStructs.Parameters memory params = paramsById[vaultId];
 
-        uint256 daoFees = state[debtToken][collateralToken][leverageTier].daoFees;
-        state[debtToken][collateralToken][leverageTier].daoFees = 0; // Null balance to avoid reentrancy attack
+        uint256 daoFees = state[params.debtToken][params.collateralToken][params.leverageTier].daoFees;
+        state[params.debtToken][params.collateralToken][params.leverageTier].daoFees = 0; // Null balance to avoid reentrancy attack
 
-        TransferHelper.safeTransfer(collateralToken, to, daoFees);
+        TransferHelper.safeTransfer(params.collateralToken, to, daoFees);
     }
 }

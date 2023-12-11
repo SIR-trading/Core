@@ -19,11 +19,7 @@ library ErrorComputation {
 contract SystemStateInstance is SystemState {
     uint40 constant VAULT_ID = 42;
 
-    constructor(
-        address systemControl,
-        address sir,
-        address vaultExternal
-    ) SystemState(systemControl, sir, vaultExternal) {}
+    constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
 
     function updateLPerIssuanceParams(address lper0, address lper1) external returns (uint104 unclaimedRewards) {
         return updateLPerIssuanceParams(false, VAULT_ID, lper0, lper1);

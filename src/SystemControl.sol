@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {Vault, IERC20} from "./Vault.sol";
-import {VaultExternal} from "./VaultExternal.sol";
 import {SIR} from "./SIR.sol";
 
 // Libraries
@@ -29,7 +28,6 @@ contract SystemControl is Ownable {
     error NewTaxesTooHigh();
 
     Vault public immutable VAULT;
-    VaultExternal public immutable VAULT_EXTERNAL;
     SIR public immutable SIR_TOKEN;
 
     uint256 private _sumTaxesToDAO;
@@ -51,9 +49,8 @@ contract SystemControl is Ownable {
         _;
     }
 
-    constructor(address systemState, address vaultExternal, address sir) {
+    constructor(address systemState, address sir) {
         VAULT = Vault(systemState);
-        VAULT_EXTERNAL = VaultExternal(vaultExternal);
         SIR_TOKEN = SIR(sir);
     }
 
