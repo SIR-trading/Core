@@ -2,10 +2,11 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {TEA, IERC20} from "./TEA.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SystemControlAccess} from "./SystemControlAccess.sol";
+import {SystemConstants} from "./SystemConstants.sol";
 
-contract SystemState is TEA {
+abstract contract SystemState is SystemControlAccess, SystemConstants {
     /** Choice of types for 'cumSIRPerTEAx96' and 'unclaimedRewards'
 
         unclaimedRewards ~ uint80
@@ -61,7 +62,7 @@ contract SystemState is TEA {
      */
     // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor(address systemControl, address sir) TEA(systemControl) {
+    constructor(address systemControl, address sir) SystemControlAccess(systemControl) {
         _SIR = sir;
     }
 
@@ -84,16 +85,17 @@ contract SystemState is TEA {
         @param vaultId The id of the vault to query.
         @return cumSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
     */
-    function cumulativeSIRPerTEA(uint256 vaultId) public view returns (uint176 cumSIRPerTEAx96) {
+    function cumulativeSIRPerTEA(
+        uint256 vaultId,
+        VaultStructs.SystemParameters memory systemParams_,
+        uint256 totalSupply_
+    ) internal view returns (uint176 cumSIRPerTEAx96) {
         unchecked {
-            VaultStructs.SystemParameters memory systemParams_ = systemParams;
-
             // Get the vault issuance parameters
             VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
             cumSIRPerTEAx96 = vaultIssuanceParams_.cumSIRPerTEAx96;
 
             // Do nothing if no new SIR has been issued, or it has already been updated
-            uint256 totalSupply_ = totalSupply[vaultId];
             if (
                 systemParams_.tsIssuanceStart != 0 &&
                 vaultIssuanceParams_.tax != 0 &&
@@ -131,10 +133,6 @@ contract SystemState is TEA {
         }
     }
 
-    function unclaimedRewards(uint256 vaultId, address lper) external view returns (uint80) {
-        return _unclaimedRewards(vaultId, lper, cumulativeSIRPerTEA(vaultId));
-    }
-
     /**
         @dev Ideally, the unclaimed SIR of an LPer is computed as
         @dev    u = balance * (a_i - a_j) / 2^96
@@ -153,13 +151,15 @@ contract SystemState is TEA {
         @param lper The address of the LPer to query.
         @param cumSIRPerTEAx96 The current cumulative SIR minted by the vaultId per unit of TEA.
      */
-    function _unclaimedRewards(uint256 vaultId, address lper, uint176 cumSIRPerTEAx96) private view returns (uint80) {
+    function _unclaimedRewards(
+        uint256 vaultId,
+        address lper,
+        uint256 balance,
+        uint176 cumSIRPerTEAx96
+    ) private view returns (uint80) {
         unchecked {
             // Get the lper issuance parameters
             LPerIssuanceParams memory lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
-
-            // Get the LPer balance of TEA
-            uint256 balance = balanceOf[lper][vaultId];
 
             // If LPer has no TEA
             if (balance == 0) return lperIssuanceParams_.unclaimedRewards;
@@ -171,15 +171,15 @@ contract SystemState is TEA {
         }
     }
 
+    function cumulativeSIRPerTEA(uint256 vaultId) external view virtual returns (uint176 cumSIRPerTEAx96);
+
+    function unclaimedRewards(uint256 vaultId, address lper) external view virtual returns (uint80);
+
     /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
-        require(msg.sender == _SIR);
-
-        return updateLPerIssuanceParams(true, vaultId, lper, address(0));
-    }
+    function claimSIR(uint256 vaultId, address lper) external virtual returns (uint80);
 
     /**
      * @dev To be called BEFORE transfering/minting/burning TEA
@@ -187,29 +187,32 @@ contract SystemState is TEA {
     function updateLPerIssuanceParams(
         bool sirIsCaller,
         uint256 vaultId,
+        VaultStructs.SystemParameters memory systemParams_,
+        uint256 totalSupply_,
         address lper0,
-        address lper1
-    ) internal override returns (uint80 unclaimedRewards0) {
+        uint256 balance0,
+        address lper1,
+        uint256 balance1
+    ) internal returns (uint80 unclaimedRewards0) {
         // If issuance has not started, return
-        if (systemParams.tsIssuanceStart == 0) return 0;
+        if (systemParams_.tsIssuanceStart == 0) return 0;
 
         // Retrieve updated vault issuance parameters
-        uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(vaultId);
+        uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(vaultId, systemParams_, totalSupply_);
 
         // Retrieve updated LPer0 issuance parameters
-        unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, cumSIRPerTEAx96);
+        unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, balance0, cumSIRPerTEAx96);
 
         // Update LPer0 issuance parameters
         _lpersIssuances[vaultId][lper0] = LPerIssuanceParams(cumSIRPerTEAx96, sirIsCaller ? 0 : unclaimedRewards0);
 
         if (lper1 != address(0)) {
-            /** Transfer of TEA
-                1. Must update the destinatary's issuance parameters too
-                2. Valut issuance does not need to be updated because totalSupply does not change
+            /** Transfer/mint of TEA
+                Must update the 2nd user's issuance parameters too
              */
             _lpersIssuances[vaultId][lper1] = LPerIssuanceParams(
                 cumSIRPerTEAx96,
-                _unclaimedRewards(vaultId, lper1, cumSIRPerTEAx96)
+                _unclaimedRewards(vaultId, lper1, balance1, cumSIRPerTEAx96)
             );
         }
 
@@ -237,34 +240,5 @@ contract SystemState is TEA {
         uint40[] calldata newVaults,
         uint8[] calldata newTaxes,
         uint16 cumTax
-    ) external onlySystemControl {
-        // Stop old issuances
-        for (uint256 i = 0; i < oldVaults.length; ++i) {
-            // Retrieve the vault's current cumulative SIR per unit of TEA
-            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(oldVaults[i]);
-
-            // Update vault issuance parameters
-            _vaultsIssuanceParams[oldVaults[i]] = VaultIssuanceParams({
-                tax: 0, // Nul tax, and consequently nul SIR issuance
-                tsLastUpdate: uint40(block.timestamp),
-                cumSIRPerTEAx96: cumSIRPerTEAx96
-            });
-        }
-
-        // Start new issuances
-        for (uint256 i = 0; i < newVaults.length; ++i) {
-            // Retrieve the vault's current cumulative SIR per unit of TEA
-            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(newVaults[i]);
-
-            // Update vault issuance parameters
-            _vaultsIssuanceParams[newVaults[i]] = VaultIssuanceParams({
-                tax: newTaxes[i],
-                tsLastUpdate: uint40(block.timestamp),
-                cumSIRPerTEAx96: cumSIRPerTEAx96
-            });
-        }
-
-        // Update cumulative taxes
-        systemParams.cumTax = cumTax;
-    }
+    ) external virtual;
 }

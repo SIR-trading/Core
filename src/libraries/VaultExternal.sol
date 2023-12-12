@@ -7,6 +7,7 @@ import {VaultStructs} from "./VaultStructs.sol";
 
 // Libraries
 import {TickMathPrecision} from "./TickMathPrecision.sol";
+import {SaltedAddress} from "./libraries/SaltedAddress.sol";
 
 // Contracts
 import {APE} from "../APE.sol";
@@ -106,6 +107,99 @@ library VaultExternal {
             );
     }
 
+    function getReserves(
+        bool isAPE,
+        VaultStructs.State memory state_,
+        int8 leverageTier
+    ) external pure returns (VaultStructs.Reserves memory reserves, APE ape) {
+        unchecked {
+            reserves.daoFees = state_.daoFees;
+
+            // Derive APE address if needed
+            if (isAPE) ape = APE(SaltedAddress.getAddress(address(this), state_.vaultId));
+
+            // Reserve is empty only in the 1st mint
+            if (state_.totalReserves != 0) return (reserves, ape);
+
+            if (state_.tickPriceSatX42 == type(int64).min) {
+                // type(int64).min represents -∞ => lpReserve = 0
+                reserves.apesReserve = state_.totalReserves - 1;
+                reserves.lpReserve = 1;
+            } else if (state_.tickPriceSatX42 == type(int64).max) {
+                // type(int64).max represents +∞ => apesReserve = 0
+                reserves.apesReserve = 1;
+                reserves.lpReserve = state_.totalReserves - 1;
+            } else {
+                uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+
+                if (state_.tickPriceX42 < state_.tickPriceSatX42) {
+                    /**
+                     * POWER ZONE
+                     * A = (price/priceSat)^(l-1) R/l
+                     * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+                     * We use the fact that l = 1+2^leverageTier
+                     * apesReserve is rounded up
+                     */
+                    (bool ovrFlw, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
+                        leverageTier > 0
+                            ? (state_.tickPriceSatX42 - state_.tickPriceX42) << absLeverageTier
+                            : (state_.tickPriceSatX42 - state_.tickPriceX42) >> absLeverageTier
+                    );
+
+                    if (ovrFlw) {
+                        reserves.apesReserve = 1;
+                    } else {
+                        /** Rounds up apesReserve, rounds down lpReserve.
+                            Cannot ovrFlw.
+                            64 bits because getRatioAtTick returns a Q64.64 number.
+                         */
+                        reserves.apesReserve = uint152(
+                            _divRoundUp(
+                                uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
+                                poweredPriceRatio + (poweredPriceRatio << absLeverageTier)
+                            )
+                        );
+
+                        assert(reserves.apesReserve != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
+                    }
+
+                    reserves.lpReserve = state_.totalReserves - reserves.apesReserve;
+                } else {
+                    /**
+                     * SATURATION ZONE
+                     * LPers are 100% pegged to debt token.
+                     * L = (priceSat/price) R/r
+                     * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+                     * We use the fact that lr = 1+2^-leverageTier
+                     * lpReserve is rounded up
+                     */
+                    (bool ovrFlw, uint256 priceRatio) = TickMathPrecision.getRatioAtTick(
+                        state_.tickPriceX42 - state_.tickPriceSatX42
+                    );
+
+                    if (ovrFlw) {
+                        reserves.lpReserve = 1;
+                    } else {
+                        /** Rounds up lpReserve, rounds down apesReserve.
+                            Cannot ovrFlw.
+                            64 bits because getRatioAtTick returns a Q64.64 number.
+                         */
+                        reserves.lpReserve = uint152(
+                            _divRoundUp(
+                                uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
+                                priceRatio + (priceRatio << absLeverageTier)
+                            )
+                        );
+
+                        assert(reserves.lpReserve != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
+                    }
+
+                    reserves.apesReserve = state_.totalReserves - reserves.lpReserve;
+                }
+            }
+        }
+    }
+
     /// @dev Make sure before calling that apesReserve + lpReserve does not OF uint152
     function updateState(
         VaultStructs.State memory state_,
@@ -117,6 +211,7 @@ library VaultExternal {
             state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
             if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined
+            // WHAT IF WE DO NOT ALLOW THE RESERVE TO EVER BE 0?!?!?!?
 
             // Compute tickPriceSatX42
             if (reserves.apesReserve == 0) {
@@ -186,6 +281,12 @@ library VaultExternal {
                     else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
                 }
             }
+        }
+    }
+
+    function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
+        unchecked {
+            return (a - 1) / b + 1;
         }
     }
 }

@@ -4,6 +4,10 @@ pragma solidity >=0.8.0;
 // Interfaces
 import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 
+// Libraries
+import {Fees} from "./libraries/Fees.sol";
+import {FullMath} from "./libraries/FullMath.sol";
+
 // Contracts
 import {Owned} from "./Owned.sol";
 
@@ -168,7 +172,27 @@ contract APE is Owned {
                        MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function mint(address to, uint256 amount) external onlyOwner {
+    function mint(address to, uint16 baseFee, uint152 collateralIn, uint152 apesReserve) external onlyOwner {
+        // Computes supply and balance of TEA
+        uint256 supplyAPE = totalSupply;
+        uint256 balanceTo = balanceOf[to];
+
+        // Substract fee
+        (uint152 collateralDeposited, uint152 collateralFee) = Fees.hiddenFee(baseFee, collateralIn, leverageTier);
+
+        // Compute amount of TEA to mint for the user and amount diverted as protocol owned liquidity (POL)
+        (uint256 amount, uint256 amountPOL) = supplyAPE == 0 // By design apesReserve can never be 0 unless it is the first mint ever
+            ? (collateralDeposited, collateralFee / 10 + apesReserve)
+            : (
+                FullMath.mulDiv(supplyAPE, collateralDeposited, apesReserve),
+                FullMath.mulDiv(supplyAPE, collateralFee / 10, apesReserve)
+            );
+
+        // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
+        uint152 collateralDAO = uint152(
+            (uint256(collateralFee) * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)
+        ); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+
         totalSupply += amount;
 
         // Cannot overflow because the sum of all user
