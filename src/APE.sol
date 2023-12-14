@@ -172,34 +172,42 @@ contract APE is Owned {
                        MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function mint(address to, uint16 baseFee, uint152 collateralIn, uint152 apesReserve) external onlyOwner {
+    function mint(
+        address to,
+        uint16 baseFee,
+        uint8 tax,
+        uint152 collateralIn,
+        uint152 apesReserve
+    )
+        external
+        onlyOwner
+        returns (uint152 collateralDAO, uint152 collateralPOL, uint152 collateralFee, uint152 collateralApesReserve)
+    {
         // Computes supply and balance of TEA
         uint256 supplyAPE = totalSupply;
-        uint256 balanceTo = balanceOf[to];
 
         // Substract fee
-        (uint152 collateralDeposited, uint152 collateralFee) = Fees.hiddenFee(baseFee, collateralIn, leverageTier);
+        (collateralIn, collateralFee) = Fees.hiddenFeeAPE(baseFee, collateralIn, leverageTier);
 
-        // Compute amount of TEA to mint for the user and amount diverted as protocol owned liquidity (POL)
-        (uint256 amount, uint256 amountPOL) = supplyAPE == 0 // By design apesReserve can never be 0 unless it is the first mint ever
-            ? (collateralDeposited, collateralFee / 10 + apesReserve)
-            : (
-                FullMath.mulDiv(supplyAPE, collateralDeposited, apesReserve),
-                FullMath.mulDiv(supplyAPE, collateralFee / 10, apesReserve)
-            );
-
-        // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
-        uint152 collateralDAO = uint152(
-            (uint256(collateralFee) * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)
-        ); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
-
-        totalSupply += amount;
-
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint256 value.
+        uint256 amount;
         unchecked {
+            // Compute amount of APE to mint for the user
+            collateralPOL = collateralFee / 10;
+            amount = supplyAPE == 0 // By design apesReserve can never be 0 unless it is the first mint ever
+                ? collateralIn + apesReserve // Any ownless APE reserve is minted by the first ape
+                : FullMath.mulDiv(supplyAPE, collateralIn, apesReserve);
+
+            // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
+            collateralDAO = uint152((uint256(collateralFee) * tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+
+            collateralApesReserve = collateralIn - collateralDAO;
+
+            // Cannot overflow because the sum of all user
+            // balances can't exceed the max uint256 value.
             balanceOf[to] += amount;
         }
+
+        totalSupply = supplyAPE + amount;
 
         emit Transfer(address(0), to, amount);
     }

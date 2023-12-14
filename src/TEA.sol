@@ -9,6 +9,7 @@ import {TEAExternal} from "./libraries/TEAExternal.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {FullMath} from "./libraries/FullMath.sol";
+import {Fees} from "./libraries/Fees.sol";
 
 // Contracts
 import {ERC1155, ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -59,55 +60,66 @@ abstract contract TEA is SystemState, ERC1155 {
         TEAExternal.safeBatchTransferFrom(balanceOf, isApprovedForAll, from, to, vaultIds, amounts, data);
     }
 
+    /**
+        @dev To avoid extra SLOADs, we also mint POL when minting TEA.
+        @dev If to == address(this), we know this is just POL when minting/burning APE.
+     */
     function mint(
-        // ADD isAPE????
         address to,
         VaultStructs.State memory state_,
         VaultStructs.SystemParameters memory systemParams_,
+        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint152 collateralIn,
         uint152 lpReserve
-    ) internal {
+    ) internal returns (uint152 collateralDAO, uint152 collateralLpReserve) {
         unchecked {
             // Computes supply and balance of TEA
             uint256 supplyTEA = totalSupply[state_.vaultId];
             uint256 balanceTo = balanceOf[to][state_.vaultId];
-            uint256 balanceVault = balanceOf[address(this)][state_.vaultId];
+            uint256 balanceVault;
+            if (to != address(this)) balanceVault = balanceOf[address(this)][state_.vaultId];
 
             // Update SIR issuance
             updateLPerIssuanceParams(
                 false,
                 state_.vaultId,
                 systemParams_,
+                vaultIssuanceParams_,
                 supplyTEA,
                 to,
                 balanceTo,
-                address(this),
+                to == address(this) ? address(0) : address(this), // We only need to update 1 address when it's POL only mint
                 balanceVault
             );
 
-            // Ensures we can do unchecked math for the entire function
-            uint256 temp = uint256(collateralIn) + state_.totalReserves + state_.daoFees;
-            require(uint152(temp) == temp); // Sufficient condition to avoid overflow in the remaining operations.
+            uint256 amount;
+            uint256 amountPOL;
+            if (to != address(this)) {
+                // Substract fee
+                uint152 collateralFee;
+                (collateralIn, collateralFee) = Fees.hiddenFeeTEA(systemParams_.lpFee, collateralIn, lpReserve);
 
-            // Substract fee
-            uint152 collateralDeposited = uint152(
-                (uint256(collateralIn) * 10000) / (10000 + uint256(systemParams_.lpFee))
-            );
-            uint152 collateralFee = uint152(collateralIn) - collateralDeposited;
+                // Compute amount of TEA diverted as protocol owned liquidity (POL)
+                uint152 collateralPOL = collateralFee / 10;
+                uint256 amountPOL = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
+                    ? collateralPOL + lpReserve // Any ownless LP reserve is minted as POL too
+                    : FullMath.mulDiv(supplyTEA, collateralPOL, lpReserve);
 
-            // Compute amount of TEA to mint for the user and amount diverted as protocol owned liquidity (POL)
-            // POL SHOULD NOT BE ADDED WHEN MINTING APE FIRST!!
-            (uint256 amount, uint256 amountPOL) = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
-                ? (collateralDeposited, collateralFee / 10 + lpReserve)
-                : (
-                    FullMath.mulDiv(supplyTEA, collateralDeposited, lpReserve),
-                    FullMath.mulDiv(supplyTEA, collateralFee / 10, lpReserve)
-                );
+                // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
+                collateralDAO = uint152((uint256(collateralFee) * vaultIssuanceParams_.tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
 
-            // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
-            uint152 collateralDAO = uint152(
-                (uint256(collateralFee) * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)
-            ); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+                /** Collateral that is desposited into the LP reserve.
+                    1. collateralIn is for the minting gentleman
+                    2. collateralFee includes a fee for all gentlemen LPing, a fee for POL and a fee to the DAO,
+                       only the latter is not part of the LP reserve
+                 */
+                collateralLpReserve = collateralIn + collateralFee - collateralDAO;
+            }
+
+            // Compute amount of TEA to mint
+            uint256 amount = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
+                ? collateralIn
+                : FullMath.mulDiv(supplyTEA, collateralIn, lpReserve);
 
             // Update supply and balances
             uint256 newSupplyTEA = supplyTEA + amount + amountPOL;
@@ -115,9 +127,11 @@ abstract contract TEA is SystemState, ERC1155 {
 
             totalSupply[state_.vaultId] = newSupplyTEA;
             balanceOf[to][state_.vaultId] = balanceTo + amount;
-            balanceOf[address(this)][state_.vaultId] = balanceVault + amountPOL;
+            if (to != address(this)) balanceOf[address(this)][state_.vaultId] = balanceVault + amountPOL;
 
             emit TransferSingle(msg.sender, address(0), to, state_.vaultId, amount);
+            if (to != address(this))
+                emit TransferSingle(msg.sender, address(0), address(this), state_.vaultId, amountPOL);
 
             require(
                 to.code.length == 0
@@ -168,12 +182,12 @@ abstract contract TEA is SystemState, ERC1155 {
                 vaultId,
                 lper,
                 balanceOf[lper][vaultId],
-                cumulativeSIRPerTEA(vaultId, systemParams, totalSupply[vaultId])
+                cumulativeSIRPerTEA(systemParams, _vaultsIssuanceParams[vaultId], totalSupply[vaultId])
             );
     }
 
     function cumulativeSIRPerTEA(uint256 vaultId) external view override returns (uint176 cumSIRPerTEAx96) {
-        return cumulativeSIRPerTEA(vaultId, systemParams, totalSupply[vaultId]);
+        return cumulativeSIRPerTEA(vaultId, systemParams, _vaultsIssuanceParams[vaultId], totalSupply[vaultId]);
     }
 
     function updateVaults(
@@ -187,7 +201,12 @@ abstract contract TEA is SystemState, ERC1155 {
         // Stop old issuances
         for (uint256 i = 0; i < oldVaults.length; ++i) {
             // Retrieve the vault's current cumulative SIR per unit of TEA
-            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(oldVaults[i], systemParams_, totalSupply[oldVaults[i]]);
+            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(
+                oldVaults[i],
+                systemParams_,
+                _vaultsIssuanceParams[oldVaults[i]],
+                totalSupply[oldVaults[i]]
+            );
 
             // Update vault issuance parameters
             _vaultsIssuanceParams[oldVaults[i]] = VaultIssuanceParams({
@@ -200,7 +219,12 @@ abstract contract TEA is SystemState, ERC1155 {
         // Start new issuances
         for (uint256 i = 0; i < newVaults.length; ++i) {
             // Retrieve the vault's current cumulative SIR per unit of TEA
-            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(newVaults[i], systemParams_, totalSupply[newVaults[i]]);
+            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(
+                newVaults[i],
+                systemParams_,
+                _vaultsIssuanceParams[newVaults[i]],
+                totalSupply[newVaults[i]]
+            );
 
             // Update vault issuance parameters
             _vaultsIssuanceParams[newVaults[i]] = VaultIssuanceParams({

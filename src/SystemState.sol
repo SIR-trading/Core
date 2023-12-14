@@ -32,15 +32,9 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint80 unclaimedRewards; // SIR owed to the LPer. 80 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
-    struct VaultIssuanceParams {
-        uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the DAO.
-        uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEAx96 was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint176 cumSIRPerTEAx96; // Q104.96, cumulative SIR minted by the vaultId per unit of TEA.
-    }
-
     address private immutable _SIR;
 
-    mapping(uint256 vaultId => VaultIssuanceParams) internal _vaultsIssuanceParams;
+    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
     VaultStructs.SystemParameters public systemParams =
@@ -86,13 +80,12 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         @return cumSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
     */
     function cumulativeSIRPerTEA(
-        uint256 vaultId,
         VaultStructs.SystemParameters memory systemParams_,
+        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 totalSupply_
     ) internal view returns (uint176 cumSIRPerTEAx96) {
         unchecked {
             // Get the vault issuance parameters
-            VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[vaultId];
             cumSIRPerTEAx96 = vaultIssuanceParams_.cumSIRPerTEAx96;
 
             // Do nothing if no new SIR has been issued, or it has already been updated
@@ -188,6 +181,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         bool sirIsCaller,
         uint256 vaultId,
         VaultStructs.SystemParameters memory systemParams_,
+        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 totalSupply_,
         address lper0,
         uint256 balance0,
@@ -198,7 +192,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         if (systemParams_.tsIssuanceStart == 0) return 0;
 
         // Retrieve updated vault issuance parameters
-        uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(vaultId, systemParams_, totalSupply_);
+        uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, totalSupply_);
 
         // Retrieve updated LPer0 issuance parameters
         unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, balance0, cumSIRPerTEAx96);

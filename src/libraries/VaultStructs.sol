@@ -2,6 +2,12 @@
 pragma solidity ^0.8.0;
 
 library VaultStructs {
+    struct VaultIssuanceParams {
+        uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the DAO.
+        uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEAx96 was updated. 0 => use systemParams.tsIssuanceStart instead
+        uint176 cumSIRPerTEAx96; // Q104.96, cumulative SIR minted by the vaultId per unit of TEA.
+    }
+
     struct Parameters {
         address debtToken;
         address collateralToken;

@@ -127,62 +127,53 @@ contract Vault is TEA, VaultEvents {
                 collateralFee - The amount of collateral paid in fees
                 amount        - The amount of APE/TEA minted for the user
                 feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
-                feeToDAO      - The amount of fees (collateral) diverged to the DAO
+                collateralDAO      - The amount of fees (collateral) diverged to the DAO
                 amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
             */
 
             // Get deposited collateral
+            // THIS CAN ALSO BE EXTERNALIZED!
             uint152 collateralIn = _getCollateralDeposited(state_, collateralToken);
 
             // Ensures we can do unchecked math for the entire function.
             uint256 temp = collateralIn + state_.totalReserves + state_.daoFees;
             require(uint152(temp) == temp); // Sufficient condition to avoid overflow in the remaining operations.
 
-            // Substract fee
-            uint152 collateralFee;
-            (collateralIn, collateralFee) = Fees.hiddenFee(
-                isAPE ? systemParams_.baseFee : systemParams_.lpFee,
-                collateralIn,
-                isAPE ? leverageTier : int8(0)
-            );
+            //////////////////////////////////////
+            VaultStructs.SystemParameters memory systemParams_ = systemParams;
+            VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[state_.vaultId];
+            uint152 collateralDAO;
+            uint152 collateralLpReserve;
+            uint152 collateralApesReserve;
+            if (isAPE) {
+                // Mint APE for user
+                uint152 collateralPOL;
+                (collateralDAO, collateralPOL, collateralLpReserve, collateralApesReserve) = ape.mint(
+                    msg.sender,
+                    systemParams.baseFee,
+                    vaultIssuanceParams_.tax,
+                    collateralIn,
+                    reserves.apesReserve
+                );
 
-            // Compute amount TEA or APE to mint for the user
-            uint256 amount = syntheticTokenReserve == 0 // ALSO IF syntheticTokenSupply == 0
-                ? collateralIn
-                : FullMath.mulDiv(syntheticTokenSupply, collateralIn, syntheticTokenReserve);
+                // Mint TEA for POL
+                mint(address(this), state_, systemParams_, vaultIssuanceParams_, collateralPOL, reserves.lpReserve);
+            } else {
+                // Mint TEA for user and POL
+                (collateralDAO, collateralLpReserve) = mint(
+                    msg.sender,
+                    state_,
+                    systemParams_,
+                    vaultIssuanceParams_,
+                    collateralIn,
+                    reserves.lpReserve
+                );
+            }
 
-            // Compute amount TEA to mint as POL (max 10% of collateralFee)
-            uint152 feeToPOL = collateralFee / 10;
-            uint256 amountPOL = reserves.lpReserve == 0
-                ? feeToPOL
-                : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
-
-            // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
-            uint152 feeToDAO = uint152(
-                (collateralFee * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)
-            ); // Cannot ovrFlw cuz collateralFee is uint152 and tax is uint8
-
-            /** MINTING
-                1. Mint APE or TEA for the user
-                2. Mint TEA to protocol owned liquidity (POL)
-            */
-
-            // Mint APE/TEA
-            if (isAPE) ape.mint(msg.sender, amount);
-            else mint(msg.sender, state_.vaultId, amount);
-
-            // Mint protocol-owned liquidity if necessary
-            mint(address(this), state_.vaultId, amountPOL);
-
-            /** UPDATE THE RESERVES
-                    1. DAO collects up to 10% of the fees
-                    2. The LPers collect the rest of the fees
-                    3. The reserve of the synthetic token is increased
-                */
-            reserves.daoFees += feeToDAO;
-            reserves.lpReserve += collateralFee - feeToDAO;
-            if (isAPE) reserves.apesReserve += collateralIn;
-            else reserves.lpReserve += collateralIn;
+            // Update the reserves
+            reserves.daoFees += collateralDAO;
+            reserves.lpReserve += collateralLpReserve;
+            if (isAPE) reserves.apesReserve += collateralApesReserve;
 
             // Update state from new reserves
             VaultExternal.updateState(state_, reserves, leverageTier);
@@ -217,7 +208,7 @@ contract Vault is TEA, VaultEvents {
                 collateralWidthdrawn - The amount of collateral that is actually withdrawn by the user
                 collateralFee - The amount of collateral paid in fees
                 feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
-                feeToDAO      - The amount of fees (collateral) diverged to the DAO
+                collateralDAO      - The amount of fees (collateral) diverged to the DAO
                 amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
             */
 
@@ -226,12 +217,12 @@ contract Vault is TEA, VaultEvents {
 
         // Substract fee
         if (isAPE)
-            (uint152 collateralWidthdrawn, uint152 collateralFee) = Fees.hiddenFee(
+            (uint152 collateralWidthdrawn, uint152 collateralFee) = Fees.hiddenFeeAPE(
                 systemParams_.baseFee,
                 collateralOut,
                 leverageTier
             );
-        else (collateralWidthdrawn, collateralFee) = Fees.hiddenFee(systemParams_.lpFee, collateralOut, int8(0));
+        else (collateralWidthdrawn, collateralFee) = Fees.hiddenFeeAPE(systemParams_.lpFee, collateralOut, int8(0));
 
         // Compute amount TEA to mint as POL (max 10% of collateralFee)
         uint152 feeToPOL = collateralFee / 10;
@@ -240,9 +231,11 @@ contract Vault is TEA, VaultEvents {
             : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
 
         // At most 10% of the collected fees go to the DAO
-        uint152 feeToDAO;
+        uint152 collateralDAO;
         unchecked {
-            feeToDAO = uint152((collateralFee * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)); // Cannot ovrFlw cuz collateralFee is uint152 and tax is uint8
+            collateralDAO = uint152(
+                (collateralFee * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)
+            ); // Cannot ovrFlw cuz collateralFee is uint152 and tax is uint8
         }
 
         /** BURNING AND MINTING
@@ -263,8 +256,8 @@ contract Vault is TEA, VaultEvents {
             3. The reserve of the synthetic token is reduced
          */
 
-        reserves.daoFees += feeToDAO;
-        reserves.lpReserve += collateralFee - feeToDAO;
+        reserves.daoFees += collateralDAO;
+        reserves.lpReserve += collateralFee - collateralDAO;
         /** Cannot UF because
             (1) burn() of APE/TEA ensures amountToken ≤ syntheticTokenSupply => collateralOut ≤ syntheticTokenReserve
             (2) isAPE==true => syntheticTokenReserve == apesReserve & isAPE==false => syntheticTokenReserve == lpReserve

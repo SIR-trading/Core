@@ -18,14 +18,14 @@ pragma solidity ^0.8.0;
 
 library Fees {
     /**
-     *  @return collateralFeeFree
+     *  @return collateralAfterFee
      *  @return comission to LPers
      */
-    function hiddenFee(
+    function hiddenFeeAPE(
         uint16 baseFee,
         uint152 collateralAmount,
         int256 leverageTier
-    ) internal pure returns (uint152 collateralFeeFree, uint152 comission) {
+    ) internal pure returns (uint152 collateralAfterFee, uint152 comission) {
         unchecked {
             uint256 feeNum;
             uint256 feeDen;
@@ -38,9 +38,23 @@ library Fees {
                 feeDen = temp + uint256(baseFee);
             }
 
-            // Split collateralAmount into comission and collateralFeeFree
-            collateralFeeFree = uint152((uint256(collateralAmount) * feeNum) / feeDen);
-            comission = collateralAmount - collateralFeeFree;
+            // Split collateralAmount into comission and collateralAfterFee
+            collateralAfterFee = uint152((uint256(collateralAmount) * feeNum) / feeDen);
+            comission = collateralAmount - collateralAfterFee;
+        }
+    }
+
+    function hiddenFeeTEA(
+        uint16 lpFee,
+        uint152 collateralAmount
+    ) internal pure returns (uint152 collateralAfterFee, uint152 comission) {
+        unchecked {
+            uint256 feeNum = 10000;
+            uint256 feeDen = 10000 + uint256(lpFee);
+
+            // Split collateralAmount into comission and collateralAfterFee
+            collateralAfterFee = uint152((uint256(collateralAmount) * feeNum) / feeDen);
+            comission = collateralAmount - collateralAfterFee;
         }
     }
 }
