@@ -92,29 +92,22 @@ abstract contract TEA is SystemState, ERC1155 {
                 balanceVault
             );
 
+            uint152 collateralFee;
+            uint152 treasuryFee;
             uint256 amountPOL;
             if (to != address(this)) {
                 // Substract fee
-                uint152 collateralFee;
                 (collateralIn, collateralFee) = Fees.hiddenFeeTEA(systemParams_.lpFee, collateralIn);
 
                 // Diverge some collateral to the Treasury (max 10% of collateralFee)
-                uint152 treasuryFee = uint152(
-                    (uint256(collateralFee) * vaultIssuanceParams_.tax) / (10 * type(uint8).max)
-                ); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+                treasuryFee = uint152((uint256(collateralFee) * vaultIssuanceParams_.tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
                 reserves.treasury += treasuryFee;
 
-                // Mint protocol owned liquidity (POL)
+                // Compute amount of TEA to mint for protocol owned liquidity (POL)
                 uint152 collateralPOL = collateralFee / 10;
                 amountPOL = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
                     ? collateralPOL + reserves.lpReserve // Any ownless LP reserve is minted as POL too
                     : FullMath.mulDiv(supplyTEA, collateralPOL, reserves.lpReserve);
-
-                /** Before minting: lpReserve = x
-                    After minting: lpReserve = x + collateralIn + collateralFee - collateralAddedToTreasury
-                    Difference: collateralIn + collateralFee - collateralAddedToTreasury
-                */
-                collateralAddedToLpReserve = collateralIn + collateralFee - collateralAddedToTreasury;
             }
 
             // Compute amount of TEA to mint
@@ -122,13 +115,18 @@ abstract contract TEA is SystemState, ERC1155 {
                 ? collateralIn
                 : FullMath.mulDiv(supplyTEA, collateralIn, reserves.lpReserve);
 
-            // Update supply and balances
-            uint256 newSupplyTEA = supplyTEA + amount + amountPOL;
-            require(newSupplyTEA >= supplyTEA && newSupplyTEA <= TEA_MAX_SUPPLY, "OF");
+            // Mint
+            supplyTEA = _increaseSupplyTEA(supplyTEA, amount + amountPOL); // Fails if TEA_MAX_SUPPLY is exceeded
+            balanceTo += amount;
+            if (to != address(this)) balanceVault += amountPOL;
 
+            // Deposit collateral
+            reserves.lpReserve += collateralIn + collateralFee - treasuryFee;
+
+            // Update
             totalSupply[vaultId] = newSupplyTEA;
-            balanceOf[to][vaultId] = balanceTo + amount;
-            if (to != address(this)) balanceOf[address(this)][vaultId] = balanceVault + amountPOL;
+            balanceOf[to][vaultId] = balanceTo;
+            if (to != address(this)) balanceOf[address(this)][vaultId] = balanceVault;
 
             emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
             if (to != address(this)) emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountPOL);
