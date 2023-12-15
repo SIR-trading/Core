@@ -181,7 +181,7 @@ contract APE is Owned {
     )
         external
         onlyOwner
-        returns (uint152 collateralDAO, uint152 collateralPOL, uint152 collateralFee, uint152 collateralApesReserve)
+        returns (uint152 collateralTreasury, uint152 collateralPOL, uint152 collateralFee, uint152 collateralApesReserve)
     {
         // Computes supply and balance of TEA
         uint256 supplyAPE = totalSupply;
@@ -197,10 +197,10 @@ contract APE is Owned {
                 ? collateralIn + apesReserve // Any ownless APE reserve is minted by the first ape
                 : FullMath.mulDiv(supplyAPE, collateralIn, apesReserve);
 
-            // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
-            collateralDAO = uint152((uint256(collateralFee) * tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+            // Compute amount of collateral diverged to the Treasury (max 10% of collateralFee)
+            collateralTreasury = uint152((uint256(collateralFee) * tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
 
-            collateralApesReserve = collateralIn - collateralDAO;
+            collateralApesReserve = collateralIn - collateralTreasury;
 
             // Cannot overflow because the sum of all user
             // balances can't exceed the max uint256 value.

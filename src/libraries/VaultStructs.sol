@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 library VaultStructs {
     struct VaultIssuanceParams {
-        uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the DAO.
+        uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the Treasury.
         uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEAx96 was updated. 0 => use systemParams.tsIssuanceStart instead
         uint176 cumSIRPerTEAx96; // Q104.96, cumulative SIR minted by the vaultId per unit of TEA.
     }
@@ -21,7 +21,7 @@ library VaultStructs {
     }
 
     struct Reserves {
-        uint152 daoFees;
+        uint152 treasury;
         uint152 apesReserve;
         uint152 lpReserve;
     }
@@ -61,7 +61,7 @@ library VaultStructs {
          */
         int64 tickPriceSatX42;
         uint40 vaultId; // Allows creation of 1 trillion vaults approx
-        uint152 daoFees; // If the uint192 is close to overflow, the DAO can withdraw the fees to unlock the pool
+        uint152 treasury; // If the uint192 is close to overflow, the Treasury can withdraw the fees to unlock the pool
     }
 
     // UNISWAP V2 USES ONLY 112 BITS FOR THE RESERVES!!!

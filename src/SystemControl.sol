@@ -30,7 +30,7 @@ contract SystemControl is Ownable {
     Vault public immutable VAULT;
     SIR public immutable SIR_TOKEN;
 
-    uint256 private _sumTaxesToDAO;
+    uint256 private _sumTaxesToTreasury;
 
     bool public betaPeriod = true;
 
@@ -165,7 +165,7 @@ contract SystemControl is Ownable {
             revert ContributorsExceedsMaxIssuance();
     }
 
-    function widhtdrawDAOFees(uint40 vaultId, address to) external onlyOwner {
-        VAULT.widhtdrawDAOFees(vaultId, to);
+    function widhtdrawTreasuryFees(uint40 vaultId, address to) external onlyOwner {
+        VAULT.widhtdrawTreasuryFees(vaultId, to);
     }
 }

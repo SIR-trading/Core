@@ -8,10 +8,10 @@ import {VaultStructs} from "./VaultStructs.sol";
 // Libraries
 import {TickMathPrecision} from "./TickMathPrecision.sol";
 import {SaltedAddress} from "./libraries/SaltedAddress.sol";
+import {Strings} from "openzeppelin/utils/Strings.sol";
 
 // Contracts
 import {APE} from "../APE.sol";
-import {Strings} from "openzeppelin/utils/Strings.sol";
 
 library VaultExternal {
     // Deploy APE token
@@ -113,7 +113,7 @@ library VaultExternal {
         int8 leverageTier
     ) external pure returns (VaultStructs.Reserves memory reserves, APE ape) {
         unchecked {
-            reserves.daoFees = state_.daoFees;
+            reserves.treasury = state_.treasury;
 
             // Derive APE address if needed
             if (isAPE) ape = APE(SaltedAddress.getAddress(address(this), state_.vaultId));
@@ -207,7 +207,7 @@ library VaultExternal {
         int8 leverageTier
     ) external pure {
         unchecked {
-            state_.daoFees = reserves.daoFees;
+            state_.treasury = reserves.treasury;
             state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
 
             if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined

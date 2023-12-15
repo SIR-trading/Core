@@ -66,23 +66,23 @@ abstract contract TEA is SystemState, ERC1155 {
      */
     function mint(
         address to,
-        VaultStructs.State memory state_,
+        uint40 vaultId,
         VaultStructs.SystemParameters memory systemParams_,
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        uint152 collateralIn,
-        uint152 lpReserve
-    ) internal returns (uint152 collateralDAO, uint152 collateralLpReserve) {
+        VaultStructs.Reserves memory reserves,
+        uint152 collateralIn
+    ) internal returns (uint152 collateralAddedToTreasury, uint152 collateralAddedToLpReserve) {
         unchecked {
             // Computes supply and balance of TEA
-            uint256 supplyTEA = totalSupply[state_.vaultId];
-            uint256 balanceTo = balanceOf[to][state_.vaultId];
+            uint256 supplyTEA = totalSupply[vaultId];
+            uint256 balanceTo = balanceOf[to][vaultId];
             uint256 balanceVault;
-            if (to != address(this)) balanceVault = balanceOf[address(this)][state_.vaultId];
+            if (to != address(this)) balanceVault = balanceOf[address(this)][vaultId];
 
             // Update SIR issuance
             updateLPerIssuanceParams(
                 false,
-                state_.vaultId,
+                vaultId,
                 systemParams_,
                 vaultIssuanceParams_,
                 supplyTEA,
@@ -92,68 +92,129 @@ abstract contract TEA is SystemState, ERC1155 {
                 balanceVault
             );
 
-            uint256 amount;
             uint256 amountPOL;
             if (to != address(this)) {
                 // Substract fee
                 uint152 collateralFee;
-                (collateralIn, collateralFee) = Fees.hiddenFeeTEA(systemParams_.lpFee, collateralIn, lpReserve);
+                (collateralIn, collateralFee) = Fees.hiddenFeeTEA(systemParams_.lpFee, collateralIn);
 
-                // Compute amount of TEA diverted as protocol owned liquidity (POL)
+                // Diverge some collateral to the Treasury (max 10% of collateralFee)
+                uint152 treasuryFee = uint152(
+                    (uint256(collateralFee) * vaultIssuanceParams_.tax) / (10 * type(uint8).max)
+                ); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+                reserves.treasury += treasuryFee;
+
+                // Mint protocol owned liquidity (POL)
                 uint152 collateralPOL = collateralFee / 10;
-                uint256 amountPOL = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
-                    ? collateralPOL + lpReserve // Any ownless LP reserve is minted as POL too
-                    : FullMath.mulDiv(supplyTEA, collateralPOL, lpReserve);
+                amountPOL = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
+                    ? collateralPOL + reserves.lpReserve // Any ownless LP reserve is minted as POL too
+                    : FullMath.mulDiv(supplyTEA, collateralPOL, reserves.lpReserve);
 
-                // Compute amount of collateral diverged to the DAO (max 10% of collateralFee)
-                collateralDAO = uint152((uint256(collateralFee) * vaultIssuanceParams_.tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
-
-                /** Collateral that is desposited into the LP reserve.
-                    1. collateralIn is for the minting gentleman
-                    2. collateralFee includes a fee for all gentlemen LPing, a fee for POL and a fee to the DAO,
-                       only the latter is not part of the LP reserve
-                 */
-                collateralLpReserve = collateralIn + collateralFee - collateralDAO;
+                /** Before minting: lpReserve = x
+                    After minting: lpReserve = x + collateralIn + collateralFee - collateralAddedToTreasury
+                    Difference: collateralIn + collateralFee - collateralAddedToTreasury
+                */
+                collateralAddedToLpReserve = collateralIn + collateralFee - collateralAddedToTreasury;
             }
 
             // Compute amount of TEA to mint
             uint256 amount = supplyTEA == 0 // By design lpReserve can never be 0 unless it is the first mint ever
                 ? collateralIn
-                : FullMath.mulDiv(supplyTEA, collateralIn, lpReserve);
+                : FullMath.mulDiv(supplyTEA, collateralIn, reserves.lpReserve);
 
             // Update supply and balances
             uint256 newSupplyTEA = supplyTEA + amount + amountPOL;
             require(newSupplyTEA >= supplyTEA && newSupplyTEA <= TEA_MAX_SUPPLY, "OF");
 
-            totalSupply[state_.vaultId] = newSupplyTEA;
-            balanceOf[to][state_.vaultId] = balanceTo + amount;
-            if (to != address(this)) balanceOf[address(this)][state_.vaultId] = balanceVault + amountPOL;
+            totalSupply[vaultId] = newSupplyTEA;
+            balanceOf[to][vaultId] = balanceTo + amount;
+            if (to != address(this)) balanceOf[address(this)][vaultId] = balanceVault + amountPOL;
 
-            emit TransferSingle(msg.sender, address(0), to, state_.vaultId, amount);
-            if (to != address(this))
-                emit TransferSingle(msg.sender, address(0), address(this), state_.vaultId, amountPOL);
+            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
+            if (to != address(this)) emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountPOL);
 
             require(
                 to.code.length == 0
                     ? to != address(0)
-                    : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), state_.vaultId, amount, "") ==
+                    : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") ==
                         ERC1155TokenReceiver.onERC1155Received.selector,
                 "UNSAFE_RECIPIENT"
             );
         }
     }
 
-    function burn(address from, uint256 vaultId, uint256 amount) internal {
+    function burn(
+        address from,
+        uint40 vaultId,
+        VaultStructs.SystemParameters memory systemParams_,
+        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        VaultStructs.Reserves memory reserves,
+        uint152 amount
+    ) internal returns (uint152 collateralWidthdrawn) {
+        // Computes supply and balance of TEA
+        uint256 supplyTEA = totalSupply[vaultId];
+        uint256 balanceFrom = balanceOf[from][vaultId];
+        uint256 balanceVault = balanceOf[address(this)][vaultId];
+
         // Update SIR issuance
-        updateLPerIssuanceParams(false, vaultId, from, address(0));
+        updateLPerIssuanceParams(
+            false,
+            vaultId,
+            systemParams_,
+            vaultIssuanceParams_,
+            supplyTEA,
+            from,
+            balanceFrom,
+            address(this),
+            balanceVault
+        );
 
-        // Burn
+        // Compute amount of collateral
+        uint152 collateralOut = uint152(FullMath.mulDiv(reserves.lpReserve, amount, supplyTEA));
+
         unchecked {
-            totalSupply[vaultId] -= amount;
+            // Remove collateral from LP reserve and decrease the user balance
+            reserves.lpReserve -= collateralOut;
+            supplyTEA -= amount;
         }
-        balanceOf[from][vaultId] -= amount;
+        balanceFrom -= amount; // Fails if user tries to burn more than balance
 
-        emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
+        unchecked {
+            // Substract fee
+            uint152 collateralFee;
+            (collateralWidthdrawn, collateralFee) = Fees.hiddenFeeTEA(systemParams_.lpFee, collateralOut);
+
+            // Diverge some collateral to the Treasury (max 10% of collateralFee)
+            uint152 treasuryFee = uint152((uint256(collateralFee) * vaultIssuanceParams_.tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+            reserves.treasury += treasuryFee;
+
+            // Mint protocol owned liquidity (POL)
+            uint152 collateralPOL = collateralFee / 10;
+            uint256 amountPOL = supplyTEA == 0 // It implicityly includes the case lpReserve == 0
+                ? collateralPOL + reserves.lpReserve
+                : FullMath.mulDiv(supplyTEA, collateralPOL, reserves.lpReserve);
+
+            // Redeposit the fees
+            reserves.lpReserve += collateralFee - treasuryFee; // Includes collateral for POL and fees to LPers
+            supplyTEA = _increaseSupplyTEA(supplyTEA, amountPOL); // Fails if TEA_MAX_SUPPLY is exceeded
+            balanceVault += amountPOL;
+
+            // DO SMTH IF reserves.lpReserve == 0 HERE!!?? JUST TRANSFER 1 TOKEN TO LPRESERVE?? MAYBE IT'S HANDLED AUTOMATICATLLY WHEN COMPUTING STATE
+            // JUST CHECK THET totalReserves>2 BEFORE ALL ENDS
+
+            // Update
+            totalSupply[vaultId] = supplyTEA;
+            balanceOf[from][vaultId] = balanceFrom;
+            balanceOf[address(this)][vaultId] = balanceVault;
+
+            emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
+            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountPOL);
+        }
+    }
+
+    function _increaseSupplyTEA(uint256 supplyTEA, uint256 amount) internal pure returns (uint256 newSupplyTEA) {
+        newSupplyTEA = supplyTEA + amount;
+        require(newSupplyTEA >= supplyTEA && newSupplyTEA <= TEA_MAX_SUPPLY, "OF");
     }
 
     /*////////////////////////////////////////////////////////////////
