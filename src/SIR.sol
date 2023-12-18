@@ -15,7 +15,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
         uint104 unclaimedRewards; // SIR owed to the contributor
     }
 
-    SystemState private immutable _SYSTEM_STATE;
+    SystemState private immutable _VAULT;
 
     uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
 
@@ -26,7 +26,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
         address systemState,
         address systemControl
     ) ERC20("Synthetics Implemented Right", "SIR", SIR_DECIMALS) SystemControlAccess(systemControl) {
-        _SYSTEM_STATE = SystemState(systemState);
+        _VAULT = SystemState(systemState);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -35,7 +35,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
 
     /// @notice Not all tokens may be in circulation. This function outputs the total supply if ALL tokens where in circulation.
     function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , , ) = _SYSTEM_STATE.systemParams();
+        (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
 
         if (tsIssuanceStart == 0) return 0;
         return ISSUANCE * (block.timestamp - tsIssuanceStart);
@@ -45,7 +45,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
         address contributor
     ) public view returns (ContributorIssuanceParams memory contributorParams) {
         unchecked {
-            (uint40 tsIssuanceStart, , , , ) = _SYSTEM_STATE.systemParams();
+            (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
 
             // Update timestamp
             contributorParams.tsLastUpdate = uint40(block.timestamp);
@@ -100,11 +100,25 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
 
     function lPerMint(uint256 vaultId) external {
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = _SYSTEM_STATE.claimSIR(vaultId, msg.sender);
+        uint104 unclaimedRewards = _VAULT.claimSIR(vaultId, msg.sender);
 
         // Mint if any unclaimedRewards
         require(unclaimedRewards > 0);
         _mint(msg.sender, unclaimedRewards);
+    }
+
+    /** @notice Mint the SIR earnt by the protocol owned liquidity
+     */
+    function treasuryMint(uint256 vaultId, address to) external {
+        require(msg.sender == address(_VAULT));
+
+        // Get LPer issuance parameters
+        uint104 unclaimedRewards = _VAULT.claimSIR(vaultId, msg.sender);
+
+        // Mint if any unclaimedRewards
+        if (unclaimedRewards > 0) {
+            _mint(to, unclaimedRewards);
+        }
     }
 
     /*////////////////////////////////////////////////////////////////

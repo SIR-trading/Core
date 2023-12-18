@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-// Interfaces
-import {IERC20} from "v2-core/interfaces/IERC20.sol";
-
 // Libraries
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {VaultExternal} from "./libraries/VaultExternal.sol";

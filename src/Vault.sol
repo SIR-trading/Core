@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+// Interfaces
+import {ISIR} from "./interfaces/ISIR.sol";
+
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
@@ -210,8 +213,8 @@ contract Vault is TEA, VaultEvents {
         TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWidthdrawn);
     }
 
-    /*/////////////////////f//////////////////////////////////////////
-                            READ-ONLY FUNCTIONS
+    /*////////////////////////////////////////////////////////////////
+                            PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
     /**
@@ -330,44 +333,10 @@ contract Vault is TEA, VaultEvents {
     // }
 
     /*////////////////////////////////////////////////////////////////
-                            PRIVATE FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
-
-    // function _getState(
-    //     address debtToken,
-    //     address collateralToken,
-    //     int8 leverageTier
-    // ) private returns (VaultStructs.State memory state_) {
-    //     // Retrieve state and check it actually exists
-    //     state_ = state[debtToken][collateralToken][leverageTier];
-    //     if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-    //     // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
-    //     if (state_.timeStampPrice != block.timestamp) {
-    //         state_.tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
-    //         state_.timeStampPrice = uint40(block.timestamp);
-    //     }
-    // }
-
-    // // OPTIMIZE WITH THIS?? https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/UniswapV3Pool.sol#L140
-    // function _getCollateralDeposited(
-    //     VaultStructs.State memory state_,
-    //     address collateralToken
-    // ) private view returns (uint152) {
-    //     // Get deposited collateral
-    //     unchecked {
-    //         uint256 balance = IERC20(collateralToken).balanceOf(address(this)) - state_.treasury - state_.totalReserves;
-
-    //         require(uint152(balance) == balance);
-    //         return uint152(balance);
-    //     }
-    // }
-
-    /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function widhtdrawTreasuryFees(uint40 vaultId, address to) external onlySystemControl {
+    function widhtdrawTreasuryFeesAndSIR(uint40 vaultId, address to) external onlySystemControl {
         VaultStructs.Parameters memory params = paramsById[vaultId];
 
         uint256 treasury = state[params.debtToken][params.collateralToken][params.leverageTier].treasury;
@@ -375,6 +344,7 @@ contract Vault is TEA, VaultEvents {
 
         TransferHelper.safeTransfer(params.collateralToken, to, treasury);
 
-        // ALSO TRANSFER EARNT SIR DUE TO POL!!
+        // Also transfer SIR
+        ISIR(sir).lPerMint(vaultId, to);
     }
 }

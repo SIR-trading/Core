@@ -165,7 +165,7 @@ contract SystemControl is Ownable {
             revert ContributorsExceedsMaxIssuance();
     }
 
-    function widhtdrawTreasuryFees(uint40 vaultId, address to) external onlyOwner {
-        VAULT.widhtdrawTreasuryFees(vaultId, to);
+    function widhtdrawTreasuryFeesAndSIR(uint40 vaultId, address to) external onlyOwner {
+        VAULT.widhtdrawTreasuryFeesAndSIR(vaultId, to);
     }
 }
