@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Interfaces
-import {IERC20} from "v2-core/interfaces/IERC20.sol";
-
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
@@ -32,7 +29,7 @@ contract Vault is TEA, VaultEvents {
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
 
-    constructor(address systemControl, address sir, address oracle) SystemState(systemControl, sir) {
+    constructor(address systemControl, address sir, address oracle) TEA(systemControl, sir) {
         // Price _ORACLE
         _ORACLE = Oracle(oracle);
 
@@ -108,9 +105,9 @@ contract Vault is TEA, VaultEvents {
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) external returns (uint256) {
+    ) external returns (uint152 amount) {
         unchecked {
-            VaultStructs.SystemParameters memory systemParams_ = systemParams_;
+            VaultStructs.SystemParameters memory systemParams_ = systemParams;
             require(!systemParams_.emergencyStop);
 
             // Until SIR is running, only LPers are allowed to mint (deposit collateral)
@@ -120,69 +117,43 @@ contract Vault is TEA, VaultEvents {
             VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
 
             // Compute reserves from state
-            (VaultStructs.Reserves memory reserves, APE ape) = getReserves(isAPE, state_, leverageTier);
+            (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) = VaultExternal.getReserves(
+                true,
+                isAPE,
+                state_,
+                collateralToken,
+                leverageTier
+            );
 
-            /** COMPUTE AMOUNTS
-                collateralIn  - The amount of collateral that has been sent to the contract
-                collateralFee - The amount of collateral paid in fees
-                amount        - The amount of APE/TEA minted for the user
-                feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
-                treasuryInc      - The amount of fees (collateral) diverged to the Treasury
-                amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
-            */
-
-            // Get deposited collateral
-            uint152 collateralIn = _getCollateralDeposited(state_, collateralToken);
-
-            // Ensures we can do unchecked math for the entire function.
-            uint256 temp = collateralIn + state_.totalReserves + state_.treasury;
-            require(uint152(temp) == temp); // Sufficient condition to avoid overflow in the remaining operations.
-
-            //////////////////////////////////////
-            VaultStructs.SystemParameters memory systemParams_ = systemParams;
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[state_.vaultId];
-            uint152 treasuryInc;
-            uint152 lpReserveInc;
-            uint152 apesReserveInc;
             if (isAPE) {
-                // Mint APE for user
-                uint152 collateralPOL;
-                (treasuryInc, collateralPOL, lpReserveInc, apesReserveInc) = ape.mint(
+                // Mint APE
+                uint152 polFee;
+                (reserves, polFee, amount) = ape.mint(
                     msg.sender,
-                    systemParams.baseFee,
+                    systemParams_.baseFee,
                     vaultIssuanceParams_.tax,
-                    collateralIn,
-                    reserves.apesReserve
+                    reserves,
+                    collateralDeposited
                 );
 
-                // Mint TEA for POL
-                mint(
-                    address(this),
-                    state_.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    collateralPOL,
-                    reserves.lpReserve
-                );
+                // Mint TEA for protocol owned liquidity (POL)
+                mint(address(this), state_.vaultId, systemParams_, vaultIssuanceParams_, reserves, polFee);
             } else {
-                // Mint TEA for user and POL
-                (treasuryInc, lpReserveInc) = mint(
+                // Mint TEA for user and protocol owned liquidity (POL)
+                amount = mint(
                     msg.sender,
                     state_.vaultId,
                     systemParams_,
                     vaultIssuanceParams_,
-                    collateralIn,
-                    reserves.lpReserve
+                    reserves,
+                    collateralDeposited
                 );
             }
 
-            // Update the reserves
-            reserves.treasury += treasuryInc;
-            reserves.lpReserve += lpReserveInc;
-            if (isAPE) reserves.apesReserve += apesReserveInc;
-
             // Update state from new reserves
             VaultExternal.updateState(state_, reserves, leverageTier);
+            require(state_.totalReserves >= 2);
 
             // Store new state reserves
             state[debtToken][collateralToken][leverageTier] = state_;
@@ -198,93 +169,56 @@ contract Vault is TEA, VaultEvents {
         address debtToken,
         address collateralToken,
         int8 leverageTier,
-        uint256 amountToken
-    ) external returns (uint152) {
+        uint256 amount
+    ) external returns (uint152 collateralWidthdrawn) {
         // Get the state
         VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
 
         // Compute reserves from state
-        VaultStructs.Reserves memory reserves = _getReserves(state_, leverageTier);
+        (VaultStructs.Reserves memory reserves, APE ape, ) = VaultExternal.getReserves(
+            false,
+            isAPE,
+            state_,
+            address(0),
+            leverageTier
+        );
 
-        // Compute reserves from state
-        (VaultStructs.Reserves memory reserves, APE ape) = getReserves(isAPE, state_, leverageTier);
-
-        /** COMPUTE AMOUNTS
-                collateralOut - The amount of collateral that is removed from the reserve
-                collateralWidthdrawn - The amount of collateral that is actually withdrawn by the user
-                collateralFee - The amount of collateral paid in fees
-                feeToPOL      - The amount of fees (collateral) diverged to protocol owned liquidity (POL)
-                treasuryInc      - The amount of fees (collateral) diverged to the Treasury
-                amountPOL     - The amount of TEA minted to protocol owned liquidity (POL)
-            */
-
-        // Get collateralOut
-        uint152 collateralOut = uint152(FullMath.mulDiv(syntheticTokenReserve, amountToken, syntheticTokenSupply));
-
-        // Substract fee
-        if (isAPE)
-            (uint152 collateralWidthdrawn, uint152 collateralFee) = Fees.hiddenFeeAPE(
+        VaultStructs.SystemParameters memory systemParams_ = systemParams;
+        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = _vaultsIssuanceParams[state_.vaultId];
+        if (isAPE) {
+            // Burn APE
+            uint152 polFee;
+            (reserves, polFee, collateralWidthdrawn) = ape.burn(
+                msg.sender,
                 systemParams_.baseFee,
-                collateralOut,
-                leverageTier
+                vaultIssuanceParams_.tax,
+                reserves,
+                amount
             );
-        else (collateralWidthdrawn, collateralFee) = Fees.hiddenFeeTEA(systemParams_.lpFee, collateralOut);
 
-        // Compute amount TEA to mint as POL (max 10% of collateralFee)
-        uint152 feeToPOL = collateralFee / 10;
-        uint256 amountPOL = reserves.lpReserve == 0
-            ? feeToPOL
-            : FullMath.mulDiv(syntheticTokenSupply, feeToPOL, reserves.lpReserve);
-
-        // At most 10% of the collected fees go to the Treasury
-        uint152 treasuryInc;
-        unchecked {
-            treasuryInc = uint152((collateralFee * _vaultsIssuanceParams[state_.vaultId].tax) / (10 * type(uint8).max)); // Cannot ovrFlw cuz collateralFee is uint152 and tax is uint8
+            // Mint TEA for protocol owned liquidity (POL)
+            mint(address(this), state_.vaultId, systemParams_, vaultIssuanceParams_, reserves, polFee);
+        } else {
+            // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
+            collateralWidthdrawn = burn(
+                msg.sender,
+                state_.vaultId,
+                systemParams_,
+                vaultIssuanceParams_,
+                reserves,
+                amount
+            );
         }
-
-        /** BURNING AND MINTING
-            1. Burn APE or TEA from the user
-            2. Mint TEA to protocol owned liquidity (POL)
-         */
-
-        // Burn APE/TEA
-        if (isAPE) ape.burn(msg.sender, amountToken);
-        else burn(msg.sender, state_.vaultId, amountToken);
-
-        // Mint protocol-owned liquidity if necessary
-        mint(address(this), state_.vaultId, amountPOL);
-
-        /** UPDATE THE RESERVES
-            1. Treasury collects up to 10% of the fees
-            2. The LPers collect the rest of the fees
-            3. The reserve of the synthetic token is reduced
-         */
-
-        reserves.treasury += treasuryInc;
-        reserves.lpReserve += collateralFee - treasuryInc;
-        /** Cannot UF because
-            (1) burn() of APE/TEA ensures amountToken ≤ syntheticTokenSupply => collateralOut ≤ syntheticTokenReserve
-            (2) isAPE==true => syntheticTokenReserve == apesReserve & isAPE==false => syntheticTokenReserve == lpReserve
-         */
-        unchecked {
-            if (isAPE) reserves.apesReserve -= collateralOut;
-            else reserves.lpReserve -= collateralOut;
-        }
-
-        /** REMAINING TASKS
-            1. Update state from new reserves
-            2. Store new state
-            3. Send collateral
-         */
 
         // Update state from new reserves
         VaultExternal.updateState(state_, reserves, leverageTier);
+        require(state_.totalReserves >= 2);
 
         // Store new state
         state[debtToken][collateralToken][leverageTier] = state_;
 
         // Send collateral
-        TransferHelper.safeTransfer(collateralToken, msg.sender, amountToken);
+        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWidthdrawn);
 
         return collateralWidthdrawn;
     }
@@ -340,19 +274,19 @@ contract Vault is TEA, VaultEvents {
         }
     }
 
-    // OPTIMIZE WITH THIS?? https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/UniswapV3Pool.sol#L140
-    function _getCollateralDeposited(
-        VaultStructs.State memory state_,
-        address collateralToken
-    ) private view returns (uint152) {
-        // Get deposited collateral
-        unchecked {
-            uint256 balance = IERC20(collateralToken).balanceOf(address(this)) - state_.treasury - state_.totalReserves;
+    // // OPTIMIZE WITH THIS?? https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/UniswapV3Pool.sol#L140
+    // function _getCollateralDeposited(
+    //     VaultStructs.State memory state_,
+    //     address collateralToken
+    // ) private view returns (uint152) {
+    //     // Get deposited collateral
+    //     unchecked {
+    //         uint256 balance = IERC20(collateralToken).balanceOf(address(this)) - state_.treasury - state_.totalReserves;
 
-            require(uint152(balance) == balance);
-            return uint152(balance);
-        }
-    }
+    //         require(uint152(balance) == balance);
+    //         return uint152(balance);
+    //     }
+    // }
 
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS

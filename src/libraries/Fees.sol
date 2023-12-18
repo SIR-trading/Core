@@ -18,14 +18,14 @@ pragma solidity ^0.8.0;
 
 library Fees {
     /**
-     *  @return collateralAfterFee
-     *  @return comission to LPers
+     *  @return collateralInOrWidthdrawn
      */
     function hiddenFeeAPE(
+        uint152 collateralDepositedOrOut,
         uint16 baseFee,
-        uint152 collateralAmount,
-        int256 leverageTier
-    ) internal pure returns (uint152 collateralAfterFee, uint152 comission) {
+        int256 leverageTier,
+        uint8 tax
+    ) internal pure returns (uint152 collateralInOrWidthdrawn, uint152 treasuryFee, uint152 lpersFee, uint152 polFee) {
         unchecked {
             uint256 feeNum;
             uint256 feeDen;
@@ -38,23 +38,42 @@ library Fees {
                 feeDen = temp + uint256(baseFee);
             }
 
-            // Split collateralAmount into comission and collateralAfterFee
-            collateralAfterFee = uint152((uint256(collateralAmount) * feeNum) / feeDen);
-            comission = collateralAmount - collateralAfterFee;
+            // Split collateralDepositedOrOut into fee and collateralInOrWidthdrawn
+            collateralInOrWidthdrawn = uint152((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
+            uint256 fee = collateralDepositedOrOut - collateralInOrWidthdrawn;
+
+            // Depending on the tax, between 0 and 10% of the fee is added to the treasury
+            treasuryFee = uint152((fee * tax) / (10 * type(uint8).max)); // Cannot overflow cuz fee is uint152 and tax is uint8
+
+            // 10% of the fee is added as protocol owned liquidity (POL)
+            polFee = uint152(fee) / 10;
+
+            // The rest of the fee is added to the LPers
+            lpersFee = uint152(fee) - treasuryFee - polFee;
         }
     }
 
     function hiddenFeeTEA(
+        uint152 collateralDepositedOrOut,
         uint16 lpFee,
-        uint152 collateralAmount
-    ) internal pure returns (uint152 collateralAfterFee, uint152 comission) {
+        uint8 tax
+    ) internal pure returns (uint152 collateralInOrWidthdrawn, uint152 treasuryFee, uint152 lpersFee, uint152 polFee) {
         unchecked {
             uint256 feeNum = 10000;
             uint256 feeDen = 10000 + uint256(lpFee);
 
-            // Split collateralAmount into comission and collateralAfterFee
-            collateralAfterFee = uint152((uint256(collateralAmount) * feeNum) / feeDen);
-            comission = collateralAmount - collateralAfterFee;
+            // Split collateralDepositedOrOut into fee and collateralInOrWidthdrawn
+            collateralInOrWidthdrawn = uint152((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
+            uint256 fee = collateralDepositedOrOut - collateralInOrWidthdrawn;
+
+            // Depending on the tax, between 0 and 10% of the fee is added to the treasury
+            treasuryFee = uint152((fee * tax) / (10 * type(uint8).max)); // Cannot overflow cuz fee is uint152 and tax is uint8
+
+            // 10% of the fee is added as protocol owned liquidity (POL)
+            polFee = uint152(fee) / 10;
+
+            // The rest of the fee is added to the LPers
+            lpersFee = uint152(fee) - treasuryFee - polFee;
         }
     }
 }

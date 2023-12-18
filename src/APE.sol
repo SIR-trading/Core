@@ -7,6 +7,7 @@ import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
 // Libraries
 import {Fees} from "./libraries/Fees.sol";
 import {FullMath} from "./libraries/FullMath.sol";
+import {VaultStructs} from "./libraries/VaultStructs.sol";
 
 // Contracts
 import {Owned} from "./Owned.sol";
@@ -176,51 +177,82 @@ contract APE is Owned {
         address to,
         uint16 baseFee,
         uint8 tax,
-        uint152 collateralIn,
-        uint152 apesReserve
+        VaultStructs.Reserves memory reserves,
+        uint152 collateralDeposited
+    ) external onlyOwner returns (VaultStructs.Reserves memory newReserves, uint152 polFee, uint256 amount) {
+        // Loads supply of APE
+        uint256 supplyAPE = totalSupply;
+
+        // Substract fees
+        uint152 collateralIn;
+        uint152 treasuryFee;
+        uint152 lpersFee;
+        (collateralIn, treasuryFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
+            collateralDeposited,
+            baseFee,
+            leverageTier,
+            tax
+        );
+
+        unchecked {
+            // Diverge some of the deposited collateral to the Treasury
+            reserves.treasury += treasuryFee;
+
+            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
+            reserves.lpReserve += lpersFee;
+
+            // Mint APE
+            amount = supplyAPE == 0 // By design apesReserve can never be 0 unless it is the first mint ever
+                ? collateralIn + reserves.apesReserve // Any ownless APE reserve is minted by the first ape
+                : FullMath.mulDiv(supplyAPE, collateralIn, reserves.apesReserve);
+            balanceOf[to] += amount;
+            reserves.apesReserve += collateralIn;
+        }
+        totalSupply = supplyAPE + amount; // Unchcecked math to ensure totalSupply never overflows
+        emit Transfer(address(0), to, amount);
+
+        newReserves = reserves; // Important because memory is not persistent across external calls
+    }
+
+    function burn(
+        address from,
+        uint16 baseFee,
+        uint8 tax,
+        VaultStructs.Reserves memory reserves,
+        uint256 amount
     )
         external
         onlyOwner
-        returns (uint152 collateralTreasury, uint152 collateralPOL, uint152 collateralFee, uint152 collateralApesReserve)
+        returns (VaultStructs.Reserves memory newReserves, uint152 polFee, uint152 collateralWidthdrawn)
     {
-        // Computes supply and balance of TEA
+        // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
-        // Substract fee
-        (collateralIn, collateralFee) = Fees.hiddenFeeAPE(baseFee, collateralIn, leverageTier);
-
-        uint256 amount;
+        // Burn APE
+        uint152 collateralOut = uint152(FullMath.mulDiv(reserves.apesReserve, amount, supplyAPE)); // Compute amount of collateral
+        balanceOf[from] -= amount; // Checks for underflow
         unchecked {
-            // Compute amount of APE to mint for the user
-            collateralPOL = collateralFee / 10;
-            amount = supplyAPE == 0 // By design apesReserve can never be 0 unless it is the first mint ever
-                ? collateralIn + apesReserve // Any ownless APE reserve is minted by the first ape
-                : FullMath.mulDiv(supplyAPE, collateralIn, apesReserve);
+            totalSupply = supplyAPE - amount;
+            reserves.apesReserve -= collateralOut;
+            emit Transfer(from, address(0), amount);
 
-            // Compute amount of collateral diverged to the Treasury (max 10% of collateralFee)
-            collateralTreasury = uint152((uint256(collateralFee) * tax) / (10 * type(uint8).max)); // Cannot overflow cuz collateralFee is uint152 and tax is uint8
+            // Substract fees
+            uint152 treasuryFee;
+            uint152 lpersFee;
+            (collateralWidthdrawn, treasuryFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
+                collateralOut,
+                baseFee,
+                leverageTier,
+                tax
+            );
 
-            collateralApesReserve = collateralIn - collateralTreasury;
+            // Diverge some of the deposited collateral to the Treasury
+            reserves.treasury += treasuryFee;
 
-            // Cannot overflow because the sum of all user
-            // balances can't exceed the max uint256 value.
-            balanceOf[to] += amount;
+            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
+            reserves.lpReserve += lpersFee;
+
+            newReserves = reserves; // Important because memory is not persistent across external calls
         }
-
-        totalSupply = supplyAPE + amount;
-
-        emit Transfer(address(0), to, amount);
-    }
-
-    function burn(address from, uint256 amount) external onlyOwner {
-        balanceOf[from] -= amount;
-
-        // Cannot underflow because a user's balance
-        // will never be larger than the total supply.
-        unchecked {
-            totalSupply -= amount;
-        }
-
-        emit Transfer(from, address(0), amount);
     }
 }

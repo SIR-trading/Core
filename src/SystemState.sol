@@ -32,7 +32,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint80 unclaimedRewards; // SIR owed to the LPer. 80 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
-    address private immutable _SIR;
+    address internal immutable sir;
 
     mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal _vaultsIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
@@ -56,8 +56,8 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
      */
     // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor(address systemControl, address sir) SystemControlAccess(systemControl) {
-        _SIR = sir;
+    constructor(address systemControl, address sir_) SystemControlAccess(systemControl) {
+        sir = sir_;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -76,7 +76,6 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         @dev    â_i = Σ_i (Δa_i + n_i)
         @dev        = Σ_i Δa_i + n
         @dev where n ∈ (- M,0] is the cumulative rounding error, and M is the number of updates on the cumulative SIR per unit of TEA.
-        @param vaultId The id of the vault to query.
         @return cumSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
     */
     function cumulativeSIRPerTEA(
@@ -144,12 +143,12 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         @param lper The address of the LPer to query.
         @param cumSIRPerTEAx96 The current cumulative SIR minted by the vaultId per unit of TEA.
      */
-    function _unclaimedRewards(
+    function unclaimedRewards(
         uint256 vaultId,
         address lper,
         uint256 balance,
         uint176 cumSIRPerTEAx96
-    ) private view returns (uint80) {
+    ) internal view returns (uint80) {
         unchecked {
             // Get the lper issuance parameters
             LPerIssuanceParams memory lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
@@ -195,7 +194,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, totalSupply_);
 
         // Retrieve updated LPer0 issuance parameters
-        unclaimedRewards0 = _unclaimedRewards(vaultId, lper0, balance0, cumSIRPerTEAx96);
+        unclaimedRewards0 = unclaimedRewards(vaultId, lper0, balance0, cumSIRPerTEAx96);
 
         // Update LPer0 issuance parameters
         _lpersIssuances[vaultId][lper0] = LPerIssuanceParams(cumSIRPerTEAx96, sirIsCaller ? 0 : unclaimedRewards0);
@@ -206,7 +205,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
              */
             _lpersIssuances[vaultId][lper1] = LPerIssuanceParams(
                 cumSIRPerTEAx96,
-                _unclaimedRewards(vaultId, lper1, balance1, cumSIRPerTEAx96)
+                unclaimedRewards(vaultId, lper1, balance1, cumSIRPerTEAx96)
             );
         }
 

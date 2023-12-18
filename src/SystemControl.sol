@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import {Vault, IERC20} from "./Vault.sol";
+import {Vault} from "./Vault.sol";
 import {SIR} from "./SIR.sol";
 
 // Libraries
