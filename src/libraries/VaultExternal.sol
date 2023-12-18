@@ -12,8 +12,11 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 
 // Contracts
 import {APE} from "../APE.sol";
+import {Oracle} from "../Oracle.sol";
 
 library VaultExternal {
+    error VaultDoesNotExist();
+
     // Deploy APE token
     function deployAPE(
         VaultStructs.Parameters[] storage paramsById,
@@ -110,11 +113,22 @@ library VaultExternal {
     function getReserves(
         bool isMint,
         bool isAPE,
+        Oracle oracle,
         VaultStructs.State memory state_,
+        address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) external view returns (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) {
+    ) external returns (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) {
         unchecked {
+            // Retrieve state and check it actually exists
+            if (state_.vaultId == 0) revert VaultDoesNotExist();
+
+            // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
+            if (state_.timeStampPrice != block.timestamp) {
+                state_.tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
+                state_.timeStampPrice = uint40(block.timestamp);
+            }
+
             reserves.treasury = state_.treasury;
 
             // Derive APE address if needed
@@ -207,90 +221,6 @@ library VaultExternal {
                 require(balance <= type(uint152).max); // Ensure total collateral still fits in a uint152
 
                 collateralDeposited = uint152(balance - state_.treasury - state_.totalReserves);
-            }
-        }
-    }
-
-    /// @dev Make sure before calling that apesReserve + lpReserve does not OF uint152
-    function updateState(
-        VaultStructs.State memory state_,
-        VaultStructs.Reserves memory reserves,
-        int8 leverageTier
-    ) external pure {
-        unchecked {
-            state_.treasury = reserves.treasury;
-            state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
-
-            if (state_.totalReserves == 0) return; // When the reserve is empty, tickPriceSatX42 is undetermined
-            // WHAT IF WE DO NOT ALLOW THE RESERVE TO EVER BE 0?!?!?!?
-
-            // Compute tickPriceSatX42
-            if (reserves.apesReserve == 0) {
-                state_.tickPriceSatX42 = type(int64).max;
-            } else if (reserves.lpReserve == 0) {
-                state_.tickPriceSatX42 = type(int64).min;
-            } else {
-                /**
-                 * Decide if we are in the power or saturation zone
-                 * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
-                 */
-                uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
-                bool isPowerZone;
-                if (leverageTier > 0) {
-                    if (
-                        uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
-                    {
-                        isPowerZone = true;
-                    } else {
-                        isPowerZone = false;
-                    }
-                } else {
-                    if (
-                        reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
-                    {
-                        isPowerZone = true;
-                    } else {
-                        isPowerZone = false;
-                    }
-                }
-
-                if (isPowerZone) {
-                    /**
-                     * PRICE IN POWER ZONE
-                     * priceSat = price*(R/(lA))^(r-1)
-                     */
-
-                    int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier, // Cannot OF cuz totalReserves is uint152, and |leverageTier|<=3
-                        (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve // Cannot OF cuz apesReserve is uint152, and |leverageTier|<=3
-                    );
-
-                    // Compute saturation price
-                    int256 temptickPriceSatX42 = state_.tickPriceX42 +
-                        (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier);
-
-                    // Check if overflow
-                    if (temptickPriceSatX42 > type(int64).max) state_.tickPriceSatX42 = type(int64).max;
-                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
-                } else {
-                    /**
-                     * PRICE IN SATURATION ZONE
-                     * priceSat = r*price*L/R
-                     */
-                    int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? uint256(state_.totalReserves) << absLeverageTier : state_.totalReserves,
-                        (uint256(reserves.lpReserve) << absLeverageTier) + reserves.lpReserve
-                    );
-
-                    // Compute saturation price
-                    int256 temptickPriceSatX42 = state_.tickPriceX42 - tickRatioX42;
-
-                    // Check if underflow
-                    if (temptickPriceSatX42 < type(int64).min) state_.tickPriceSatX42 = type(int64).min;
-                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
-                }
             }
         }
     }

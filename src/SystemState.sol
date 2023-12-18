@@ -32,9 +32,16 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint80 unclaimedRewards; // SIR owed to the LPer. 80 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
     }
 
+    struct LPersBalances {
+        address lper0;
+        uint256 balance0;
+        address lper1;
+        uint256 balance1;
+    }
+
     address internal immutable sir;
 
-    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal _vaultsIssuanceParams;
+    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
     VaultStructs.SystemParameters public systemParams =
@@ -182,10 +189,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         VaultStructs.SystemParameters memory systemParams_,
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 totalSupply_,
-        address lper0,
-        uint256 balance0,
-        address lper1,
-        uint256 balance1
+        LPersBalances memory lpersBalances
     ) internal returns (uint80 unclaimedRewards0) {
         // If issuance has not started, return
         if (systemParams_.tsIssuanceStart == 0) return 0;
@@ -194,18 +198,21 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, totalSupply_);
 
         // Retrieve updated LPer0 issuance parameters
-        unclaimedRewards0 = unclaimedRewards(vaultId, lper0, balance0, cumSIRPerTEAx96);
+        unclaimedRewards0 = unclaimedRewards(vaultId, lpersBalances.lper0, lpersBalances.balance0, cumSIRPerTEAx96);
 
         // Update LPer0 issuance parameters
-        _lpersIssuances[vaultId][lper0] = LPerIssuanceParams(cumSIRPerTEAx96, sirIsCaller ? 0 : unclaimedRewards0);
+        _lpersIssuances[vaultId][lpersBalances.lper0] = LPerIssuanceParams(
+            cumSIRPerTEAx96,
+            sirIsCaller ? 0 : unclaimedRewards0
+        );
 
-        if (lper1 != address(0)) {
+        if (lpersBalances.lper1 != address(0)) {
             /** Transfer/mint of TEA
                 Must update the 2nd user's issuance parameters too
              */
-            _lpersIssuances[vaultId][lper1] = LPerIssuanceParams(
+            _lpersIssuances[vaultId][lpersBalances.lper1] = LPerIssuanceParams(
                 cumSIRPerTEAx96,
-                unclaimedRewards(vaultId, lper1, balance1, cumSIRPerTEAx96)
+                unclaimedRewards(vaultId, lpersBalances.lper1, lpersBalances.balance1, cumSIRPerTEAx96)
             );
         }
 
@@ -213,9 +220,9 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
             We may be tempted to skip updating the vault's issuance if the vault's issuance has not changed (i.e. totalSupply has not changed),
             like in the case of a Transfer of TEA. However, this could result in rounding errors causing SIR issuance to be larger than expected.
          */
-        if (_vaultsIssuanceParams[vaultId].tsLastUpdate != block.timestamp) {
-            _vaultsIssuanceParams[vaultId].cumSIRPerTEAx96 = cumSIRPerTEAx96;
-            _vaultsIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
+        if (vaultIssuanceParams[vaultId].tsLastUpdate != block.timestamp) {
+            vaultIssuanceParams[vaultId].cumSIRPerTEAx96 = cumSIRPerTEAx96;
+            vaultIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
         }
     }
 
