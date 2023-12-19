@@ -214,6 +214,30 @@ contract Vault is TEA, VaultEvents {
     }
 
     /*////////////////////////////////////////////////////////////////
+                            READ ONLY FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    // /** @dev Kick it to periphery if more space is needed
+    //  */
+    // function getReserves(
+    //     address debtToken,
+    //     address collateralToken,
+    //     int8 leverageTier
+    // ) external view returns (VaultStructs.Reserves memory) {
+    //     VaultExternal.getReserves(
+    //     false,
+    //     false,
+    //     _ORACLE,
+    //     VaultStructs.State memory state_,
+    //     address debtToken,
+    //     address collateralToken,
+    //     int8 leverageTier
+    // )
+
+    //     return _getReserves(state_, leverageTier);
+    // }
+
+    /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
@@ -313,25 +337,6 @@ contract Vault is TEA, VaultEvents {
         }
     }
 
-    // getReserves CAN GO TO THE PERIPHERY!!
-    // function getReserves(
-    //     address debtToken,
-    //     address collateralToken,
-    //     int8 leverageTier
-    // ) external view returns (VaultStructs.Reserves memory) {
-    //     // Get the state and check it actually exists
-    //     VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
-    //     if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-    //     // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
-    //     if (state_.timeStampPrice != block.timestamp) {
-    //         state_.tickPriceX42 = _ORACLE.getPrice(collateralToken, debtToken);
-    //         state_.timeStampPrice = uint40(block.timestamp);
-    //     }
-
-    //     return _getReserves(state_, leverageTier);
-    // }
-
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
@@ -342,9 +347,9 @@ contract Vault is TEA, VaultEvents {
         uint256 treasury = state[params.debtToken][params.collateralToken][params.leverageTier].treasury;
         state[params.debtToken][params.collateralToken][params.leverageTier].treasury = 0; // Null balance to avoid reentrancy attack
 
-        TransferHelper.safeTransfer(params.collateralToken, to, treasury);
+        if (treasury > 0) TransferHelper.safeTransfer(params.collateralToken, to, treasury);
 
         // Also transfer SIR
-        ISIR(sir).lPerMint(vaultId, to);
+        ISIR(sir).treasuryMint(vaultId, to);
     }
 }

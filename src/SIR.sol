@@ -113,12 +113,10 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
         require(msg.sender == address(_VAULT));
 
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = _VAULT.claimSIR(vaultId, msg.sender);
+        uint104 unclaimedRewards = _VAULT.claimSIR(vaultId, address(_VAULT));
 
         // Mint if any unclaimedRewards
-        if (unclaimedRewards > 0) {
-            _mint(to, unclaimedRewards);
-        }
+        if (unclaimedRewards > 0) _mint(to, unclaimedRewards);
     }
 
     /*////////////////////////////////////////////////////////////////
