@@ -20,6 +20,7 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA, VaultEvents {
+    error VaultDoesNotExist();
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
 
@@ -115,14 +116,14 @@ contract Vault is TEA, VaultEvents {
             // Until SIR is running, only LPers are allowed to mint (deposit collateral)
             if (isAPE) require(systemParams_.tsIssuanceStart > 0);
 
+            // Get state
+            VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
+
             // Compute reserves from state
-            VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
             (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) = VaultExternal.getReserves(
                 true,
                 isAPE,
-                _ORACLE,
                 state_,
-                debtToken,
                 collateralToken,
                 leverageTier
             );
@@ -167,14 +168,14 @@ contract Vault is TEA, VaultEvents {
         int8 leverageTier,
         uint256 amount
     ) external returns (uint152 collateralWidthdrawn) {
+        // Get state
+        VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
+
         // Compute reserves from state
-        VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
         (VaultStructs.Reserves memory reserves, APE ape, ) = VaultExternal.getReserves(
             false,
             isAPE,
-            _ORACLE,
             state_,
-            debtToken,
             collateralToken,
             leverageTier
         );
@@ -217,25 +218,25 @@ contract Vault is TEA, VaultEvents {
                             READ ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // /** @dev Kick it to periphery if more space is needed
-    //  */
-    // function getReserves(
-    //     address debtToken,
-    //     address collateralToken,
-    //     int8 leverageTier
-    // ) external view returns (VaultStructs.Reserves memory) {
-    //     VaultExternal.getReserves(
-    //     false,
-    //     false,
-    //     _ORACLE,
-    //     VaultStructs.State memory state_,
-    //     address debtToken,
-    //     address collateralToken,
-    //     int8 leverageTier
-    // )
+    /** @dev Kick it to periphery if more space is needed
+     */
+    function getReserves(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier
+    ) external view returns (VaultStructs.Reserves memory reserves) {
+        // Retrieve state and check it actually exists
+        VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
 
-    //     return _getReserves(state_, leverageTier);
-    // }
+        // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
+        if (state_.timeStampPrice != block.timestamp) {
+            state_.tickPriceX42 = _ORACLE.getPrice(collateralToken, debtToken);
+            state_.timeStampPrice = uint40(block.timestamp);
+        }
+
+        (reserves, , ) = VaultExternal.getReserves(false, false, state_, collateralToken, leverageTier);
+    }
 
     /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
@@ -248,6 +249,22 @@ contract Vault is TEA, VaultEvents {
      *     (R,  ∞  ) ⇔ (0,L)
      *     (R,  0  ) ⇔ (A,0)
      */
+
+    function _getState(
+        address debtToken,
+        address collateralToken,
+        int8 leverageTier
+    ) private returns (VaultStructs.State memory state_) {
+        // Retrieve state and check it actually exists
+        state_ = state[debtToken][collateralToken][leverageTier];
+        if (state_.vaultId == 0) revert VaultDoesNotExist();
+
+        // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
+        if (state_.timeStampPrice != block.timestamp) {
+            state_.tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
+            state_.timeStampPrice = uint40(block.timestamp);
+        }
+    }
 
     function _updateState(
         VaultStructs.State memory state_,

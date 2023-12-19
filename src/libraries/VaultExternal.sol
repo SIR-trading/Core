@@ -12,11 +12,8 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 
 // Contracts
 import {APE} from "../APE.sol";
-import {Oracle} from "../Oracle.sol";
 
 library VaultExternal {
-    error VaultDoesNotExist();
-
     // Deploy APE token
     function deployAPE(
         VaultStructs.Parameters[] storage paramsById,
@@ -113,22 +110,11 @@ library VaultExternal {
     function getReserves(
         bool isMint,
         bool isAPE,
-        Oracle oracle,
         VaultStructs.State memory state_,
-        address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) external returns (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) {
+    ) external view returns (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) {
         unchecked {
-            // Retrieve state and check it actually exists
-            if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-            // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
-            if (state_.timeStampPrice != block.timestamp) {
-                state_.tickPriceX42 = oracle.updateOracleState(collateralToken, debtToken);
-                state_.timeStampPrice = uint40(block.timestamp);
-            }
-
             reserves.treasury = state_.treasury;
 
             // Derive APE address if needed
