@@ -218,6 +218,8 @@ contract Vault is TEA, VaultEvents {
                             READ ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    // TODO: Add simulateMint and simulateBurn functions to the periphery
+
     /** @dev Kick it to periphery if more space is needed
      */
     function getReserves(
