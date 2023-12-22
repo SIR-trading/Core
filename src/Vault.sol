@@ -141,10 +141,19 @@ contract Vault is TEA, VaultEvents {
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
-                mint(address(this), state_.vaultId, systemParams_, vaultIssuanceParams_, reserves, polFee);
+                mint(
+                    collateralToken,
+                    address(this),
+                    state_.vaultId,
+                    systemParams_,
+                    vaultIssuanceParams_,
+                    reserves,
+                    polFee
+                );
             } else {
                 // Mint TEA for user and protocol owned liquidity (POL)
                 amount = mint(
+                    collateralToken,
                     msg.sender,
                     state_.vaultId,
                     systemParams_,
@@ -194,10 +203,11 @@ contract Vault is TEA, VaultEvents {
             );
 
             // Mint TEA for protocol owned liquidity (POL)
-            mint(address(this), state_.vaultId, systemParams_, vaultIssuanceParams_, reserves, polFee);
+            mint(collateralToken, address(this), state_.vaultId, systemParams_, vaultIssuanceParams_, reserves, polFee);
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
             collateralWidthdrawn = burn(
+                collateralToken,
                 msg.sender,
                 state_.vaultId,
                 systemParams_,
