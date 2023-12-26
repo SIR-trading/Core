@@ -43,7 +43,7 @@ library Fees {
             uint256 fee = collateralDepositedOrOut - collateralInOrWidthdrawn;
 
             // Depending on the tax, between 0 and 10% of the fee is added to the treasury
-            treasuryFee = uint152((fee * tax) / (10 * type(uint8).max)); // Cannot overflow cuz fee is uint152 and tax is uint8
+            treasuryFee = uint152((fee * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint152 and tax is uint8
 
             // 10% of the fee is added as protocol owned liquidity (POL)
             polFee = uint152(fee) / 10;
@@ -67,7 +67,7 @@ library Fees {
             uint256 fee = collateralDepositedOrOut - collateralInOrWidthdrawn;
 
             // Depending on the tax, between 0 and 10% of the fee is added to the treasury
-            treasuryFee = uint152((fee * tax) / (10 * type(uint8).max)); // Cannot overflow cuz fee is uint152 and tax is uint8
+            treasuryFee = uint152((fee * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint152 and tax is uint8
 
             // 10% of the fee is added as protocol owned liquidity (POL)
             polFee = uint152(fee) / 10;
