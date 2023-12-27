@@ -55,7 +55,7 @@ library Fees {
 
     function hiddenFeeTEA(
         uint152 collateralDepositedOrOut,
-        uint16 lpFee,
+        uint8 lpFee,
         uint8 tax
     ) internal pure returns (uint152 collateralInOrWidthdrawn, uint152 treasuryFee, uint152 lpersFee, uint152 polFee) {
         unchecked {

@@ -45,9 +45,11 @@ contract FeesTest is Test {
 
         assertLe(totalFeeLowerBound, totalFee, "Total fee too low");
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
+        assertEq(treasuryFee, (uint256(totalFee) * tax) / (uint256(10) * type(uint8).max), "Treasury fee incorrect");
+        assertEq(polFee, totalFee / 10, "LPers fee incorrect");
     }
 
-    function testFuzz_FeeTEA(uint152 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public {
+    function testFuzz_FeeTEA(uint152 collateralDepositedOrOut, uint8 lpFee, uint8 tax) public {
         (uint152 collateralInOrWidthdrawn, uint152 treasuryFee, uint152 lpersFee, uint152 polFee) = Fees.hiddenFeeTEA(
             collateralDepositedOrOut,
             lpFee,
@@ -67,5 +69,7 @@ contract FeesTest is Test {
 
         assertLe(totalFeeLowerBound, totalFee, "Total fee too low");
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
+        assertEq(treasuryFee, (uint256(totalFee) * tax) / (uint256(10) * type(uint8).max), "Treasury fee incorrect");
+        assertEq(polFee, totalFee / 10, "LPers fee incorrect");
     }
 }
