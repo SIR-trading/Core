@@ -337,7 +337,9 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
      */
     function _amountFirstMint(address collateral, uint152 collateralIn) private view returns (uint256 amount) {
         uint256 collateralTotalSupply = IERC20(collateral).totalSupply();
-        amount = FullMath.mulDiv(TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply);
+        amount = collateralTotalSupply > TEA_MAX_SUPPLY
+            ? FullMath.mulDiv(TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply)
+            : collateralIn;
     }
 
     function _setBalance(address owner, uint256 vaultId, uint256 balance) private {
