@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-// Interfaces
-import {IVaultExternal} from "./interfaces/IVaultExternal.sol";
-
 // Libraries
 import {Fees} from "./libraries/Fees.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 
 // Contracts
+import {Vault} from "./Vault.sol";
 import {Owned} from "./Owned.sol";
 
 /**
@@ -51,8 +49,7 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = IVaultExternal(msg.sender)
-            .latestTokenParams();
+        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = Vault(msg.sender).latestTokenParams();
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();

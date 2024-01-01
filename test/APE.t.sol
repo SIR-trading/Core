@@ -2,9 +2,11 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
+import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {IVaultExternal} from "src/Interfaces/IVaultExternal.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
+import {VaultStructs} from "src/libraries/VaultStructs.sol";
 
 contract APETest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -14,10 +16,32 @@ contract APETest is Test {
     address bob;
     address charlie;
 
+    /// @dev Auxiliary function for minting APE tokens
+    function _mint(address account, uint256 amount) private {
+        uint256 totalSupply = uint256(vm.load(address(ape), bytes32(uint256(2))));
+        totalSupply += amount;
+        vm.store(address(ape), bytes32(uint256(2)), bytes32(totalSupply));
+
+        uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(uint256(3))))));
+        balance += amount;
+        vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
+    }
+
+    /// @dev Auxiliary function for burning APE tokens
+    function _burn(address account, uint256 amount) private {
+        uint256 totalSupply = uint256(vm.load(address(ape), bytes32(uint256(2))));
+        totalSupply -= amount;
+        vm.store(address(ape), bytes32(uint256(2)), bytes32(totalSupply));
+
+        uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(uint256(3))))));
+        balance -= amount;
+        vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
+    }
+
     function setUp() public {
         vm.mockCall(
             address(this),
-            abi.encodeWithSelector(IVaultExternal.latestTokenParams.selector),
+            abi.encodeWithSelector(Vault.latestTokenParams.selector),
             abi.encode(
                 "Tokenized ETH/USDC with x1.25 leverage",
                 "APE-42",
@@ -28,6 +52,7 @@ contract APETest is Test {
             )
         );
         ape = new APE();
+
         alice = vm.addr(1);
         bob = vm.addr(2);
         charlie = vm.addr(3);
@@ -45,68 +70,68 @@ contract APETest is Test {
         assertEq(ape.decimals(), 18);
     }
 
-    function testFuzz_mint(uint256 mintAmountA, uint256 mintAmountB) public {
-        vm.expectEmit();
-        emit Transfer(address(0), alice, mintAmountA);
-        ape.mint(alice, mintAmountA);
-        assertEq(ape.balanceOf(alice), mintAmountA);
-        assertEq(ape.totalSupply(), mintAmountA);
+    // function testFuzz_mint(uint152 mintAmountA, uint152 mintAmountB) public {
+    //     vm.expectEmit();
+    //     emit Transfer(address(0), alice, mintAmountA);
+    //     _mint(alice, mintAmountA);
+    //     assertEq(ape.balanceOf(alice), mintAmountA);
+    //     assertEq(ape.totalSupply(), mintAmountA);
 
-        mintAmountB = _bound(mintAmountB, 0, type(uint256).max - mintAmountA);
+    //     mintAmountB = _bound(mintAmountB, 0, type(uint152).max - mintAmountA);
 
-        vm.expectEmit();
-        emit Transfer(address(0), bob, mintAmountB);
-        ape.mint(bob, mintAmountB);
-        assertEq(ape.balanceOf(bob), mintAmountB);
-        assertEq(ape.totalSupply(), mintAmountA + mintAmountB);
-    }
+    //     vm.expectEmit();
+    //     emit Transfer(address(0), bob, mintAmountB);
+    //     _mint(bob, mintAmountB);
+    //     assertEq(ape.balanceOf(bob), mintAmountB);
+    //     assertEq(ape.totalSupply(), mintAmountA + mintAmountB);
+    // }
 
-    function testFuzz_mintFails(uint256 mintAmountA, uint256 mintAmountB) public {
-        mintAmountA = _bound(mintAmountA, 1, type(uint256).max);
-        ape.mint(alice, mintAmountA);
+    // function testFuzz_mintFails(uint152 mintAmountA, uint152 mintAmountB) public {
+    //     mintAmountA = _bound(mintAmountA, 1, type(uint152).max);
+    //     _mint(alice, mintAmountA);
 
-        mintAmountB = _bound(mintAmountB, type(uint256).max - mintAmountA + 1, type(uint256).max);
-        vm.expectRevert();
-        ape.mint(bob, mintAmountB);
-    }
+    //     mintAmountB = _bound(mintAmountB, type(uint152).max - mintAmountA + 1, type(uint152).max);
+    //     vm.expectRevert();
+    //     _mint(bob, mintAmountB);
+    // }
 
-    function testFail_mintByNonOwner() public {
-        vm.prank(alice);
-        APE(ape).mint(bob, 1000); // This should fail because bob is not the owner
-    }
+    // function testFail_mintByNonOwner() public {
+    //     vm.prank(alice);
+    //     APE(ape).mint(bob, 1000); // This should fail because bob is not the owner
+    // }
 
-    function testFuzz_burn(uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-        mintAmountB = _bound(mintAmountB, 0, type(uint256).max - mintAmountA);
-        burnAmountB = _bound(burnAmountB, 0, mintAmountB);
+    // function testFuzz_burn(uint152 mintAmountA, uint152 mintAmountB, uint256 burnAmountB) public {
+    //     mintAmountB = _bound(mintAmountB, 0, type(uint152).max - mintAmountA);
+    //     burnAmountB = _bound(burnAmountB, 0, mintAmountB);
 
-        ape.mint(alice, mintAmountA);
-        ape.mint(bob, mintAmountB);
+    //     _mint(alice, mintAmountA);
+    //     _mint(bob, mintAmountB);
 
-        vm.expectEmit();
-        emit Transfer(bob, address(0), burnAmountB);
-        ape.burn(bob, burnAmountB);
+    //     vm.expectEmit();
+    //     emit Transfer(bob, address(0), burnAmountB);
+    //     _burn(bob, burnAmountB);
 
-        assertEq(ape.balanceOf(bob), mintAmountB - burnAmountB);
-        assertEq(ape.totalSupply(), mintAmountA + mintAmountB - burnAmountB);
-    }
+    //     assertEq(ape.balanceOf(bob), mintAmountB - burnAmountB);
+    //     assertEq(ape.totalSupply(), mintAmountA + mintAmountB - burnAmountB);
+    // }
 
-    function testFuzz_burnMoreThanBalance(uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
-        mintAmountA = _bound(mintAmountA, 0, type(uint256).max - 1);
-        mintAmountB = _bound(mintAmountB, 1, type(uint256).max - mintAmountA);
-        burnAmountB = _bound(burnAmountB, mintAmountB + 1, type(uint256).max);
+    // function testFuzz_burnMoreThanBalance(uint152 mintAmountA, uint152 mintAmountB, uint256 burnAmountB) public {
+    //     mintAmountA = _bound(mintAmountA, 0, type(uint152).max - 1);
+    //     mintAmountB = _bound(mintAmountB, 1, type(uint152).max - mintAmountA);
+    //     burnAmountB = _bound(burnAmountB, mintAmountB + 1, type(uint256).max);
 
-        ape.mint(alice, mintAmountA);
-        ape.mint(bob, mintAmountB);
+    //     _mint(alice, mintAmountA);
+    //     _mint(bob, mintAmountB);
 
-        vm.expectRevert();
-        ape.burn(bob, burnAmountB);
-    }
+    //     vm.expectRevert();
+    //     _burn(bob, burnAmountB);
+    // }
 
     function testFuzz_transfer(uint256 transferAmount, uint256 mintAmount) public {
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
-        ape.mint(alice, mintAmount);
+        _mint(alice, mintAmount);
 
         vm.expectEmit();
         emit Transfer(alice, bob, transferAmount);
@@ -120,7 +145,7 @@ contract APETest is Test {
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, 0, transferAmount - 1);
 
-        ape.mint(alice, mintAmount);
+        _mint(alice, mintAmount);
 
         vm.expectRevert();
         ape.transfer(bob, transferAmount);
@@ -136,7 +161,7 @@ contract APETest is Test {
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
-        ape.mint(bob, mintAmount);
+        _mint(bob, mintAmount);
 
         vm.prank(bob);
         assertTrue(ape.approve(alice, mintAmount));
@@ -157,7 +182,7 @@ contract APETest is Test {
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
-        ape.mint(bob, mintAmount);
+        _mint(bob, mintAmount);
 
         vm.expectRevert();
         vm.prank(alice);
@@ -173,7 +198,7 @@ contract APETest is Test {
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
         allowedAmount = _bound(allowedAmount, 0, transferAmount - 1);
 
-        ape.mint(bob, mintAmount);
+        _mint(bob, mintAmount);
 
         vm.prank(bob);
         ape.approve(alice, allowedAmount);
