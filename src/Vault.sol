@@ -397,9 +397,21 @@ contract Vault is TEA, VaultEvents {
         address to
     ) external onlySystemControl returns (uint256[] memory amounts) {
         amounts = new uint256[](tokens.length);
+        bool success;
+        bytes memory data;
         for (uint256 i = 0; i < tokens.length; i++) {
-            amounts[i] = IERC20(tokens[i]).balanceOf(address(this));
-            if (amounts[i] > 0) TransferHelper.safeTransfer(tokens[i], to, amounts[i]);
+            // We use the low-level call because we want to continue with the next token if balanceOf reverts
+            (success, data) = tokens[i].call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+            if (success && data.length >= 32) {
+                amounts[i] = abi.decode(data, (uint256));
+                if (amounts[i] > 0) {
+                    (success, data) = tokens[i].call(abi.encodeWithSelector(IERC20.transfer.selector, to, amounts[i]));
+                    // If the transfer failed, set the amount of transfered tokens back to 0
+                    if (!(success && (data.length == 0 || abi.decode(data, (bool))))) {
+                        amounts[i] = 0;
+                    }
+                }
+            }
         }
     }
 }
