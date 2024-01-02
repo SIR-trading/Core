@@ -12,18 +12,36 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
 contract SystemControl is Ownable {
-    event SIRIssuanceStarted(uint40 tsIssuanceStart);
-    event EmergencyStop(bool indexed);
+    uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
+
+    /** Flow chart of the system 4 possible states:
+
+        +---------------+      +---------------+       +---------------+      +---------------+
+        |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
+        +---------------+      +---------------+       +---------------+      +---------------+
+     */
+    enum SystemStatus {
+        Unstoppable, // System is running normally, trustless and permissionless. SIR issuance is started.
+        TrainingWheels, // Betta period before Unstoppable status, deposits can be frozen by switching to Emergency status
+        Emergency, // Deposits are frozen, and system can be Shutdown if it does not revert to TrainingWheels before SHUTDOWN_WITHDRAWAL_DELAY seconds
+        Shutdown // No deposits, withdrawals, only SystemControl can withdraw funds. Once here it cannot change status.
+    }
+
+    event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint8 lpFee);
-    event BetaIsOver();
+    event TreasuryFeesWithdrawn(
+        uint40 indexed vaultId,
+        address indexed collateralToken,
+        uint256 amount,
+        uint256 amountSIR
+    );
+    event FundsWithdrawn(address indexed token, uint256 amount);
 
-    error SIRIssuanceIsOn();
     error FeeCannotBeZero();
-    error Minting(bool on);
-    error BetaPeriodIsOver();
+    error WrongStatus();
+    error ShutdownWithdrawalDelayNotPassed();
     error ArraysLengthMismatch();
-    error ContributorsExceedsMaxIssuance();
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
@@ -32,7 +50,11 @@ contract SystemControl is Ownable {
 
     uint256 private _sumTaxesToTreasury;
 
-    bool public betaPeriod = true;
+    SystemStatus public systemStatus = SystemStatus.TrainingWheels;
+    uint40 public tsStatusChanged; // Timestamp when the status last changed
+
+    uint16 private _oldBaseFee;
+    uint8 private _oldLpFee;
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
@@ -44,83 +66,116 @@ contract SystemControl is Ownable {
      */
     bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    modifier betaIsOn() {
-        if (!betaPeriod) revert BetaPeriodIsOver();
-        _;
-    }
-
     constructor(address systemState, address sir) {
         VAULT = Vault(systemState);
         SIR_TOKEN = SIR(sir);
     }
 
     /*///////////////////////////////////////////////////////////////
-                            ADMIN FUNCTIONS
+                        STATE TRANSITIONING FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    /** @notice As soon as the protocol is redeemed safe and stable,
-        @notice ownership will be revoked and SIR will be completely immutable
+    /** @notice THIS ACTION IS IRREVERSIBLE
+        @notice As soon as the protocol is redeemed safe and stable, ownership will be revoked and SIR will be completely immutable
      */
+    function exitBeta() external onlyOwner {
+        if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+        tsStatusChanged = uint40(block.timestamp);
 
-    function exitBeta() external onlyOwner betaIsOn {
-        (, , , bool emergencyStop, ) = VAULT.systemParams();
-        if (emergencyStop) revert Minting(false); // Make sure minting is on
-
-        betaPeriod = false;
-
-        emit BetaIsOver();
+        emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Unstoppable);
     }
 
-    /// @notice Issuance may start after the beta period is over
-    function startIssuanceOfSIR(uint40 tsIssuanceStart_) external onlyOwner {
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
+    function haultMinting() external onlyOwner {
+        if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+        tsStatusChanged = uint40(block.timestamp);
 
-        if (tsIssuanceStart != 0) revert SIRIssuanceIsOn();
+        // Retrieve parameters
+        (, uint16 baseFee, uint8 lpFee, , ) = VAULT.systemParams();
 
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart_, baseFee, lpFee, emergencyStop, cumTax));
+        // Store fee parameters for later
+        _oldBaseFee = baseFee;
+        _oldLpFee = lpFee;
 
-        emit SIRIssuanceStarted(tsIssuanceStart_);
+        // Set fees to 0 for emergency withdrawals
+        VAULT.updateSystemState(0, 0, true);
+
+        emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
 
-    function setBaseFee(uint16 baseFee_) external onlyOwner betaIsOn {
+    function resumeMinting() external onlyOwner {
+        if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
+        tsStatusChanged = uint40(block.timestamp);
+
+        // Restore fees
+        VAULT.updateSystemState(_oldBaseFee, _oldLpFee, false);
+
+        emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
+    }
+
+    /** @notice THIS ACTION IS IRREVERSIBLE
+        @notice Shutdown the system and allow the owner to withdraw all funds
+        @notice This function can only be called after SHUTDOWN_WITHDRAWAL_DELAY seconds have passed since the system entered Emergency status.
+     */
+    function shutdownSystem() external onlyOwner {
+        if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
+
+        // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
+        if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownWithdrawalDelayNotPassed();
+        tsStatusChanged = uint40(block.timestamp);
+
+        emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.Shutdown);
+    }
+
+    /*///////////////////////////////////////////////////////////////
+                        WITHDRAWAL FUNCTIONS
+    ///////////////////////////////////////////////////////////////*/
+
+    function withdrawTreasuryFeesAndSIR(uint40 vaultId, address to) external onlyOwner {
+        if (systemStatus != SystemStatus.TrainingWheels || systemStatus != SystemStatus.Unstoppable)
+            revert WrongStatus();
+
+        (address collateralToken, uint256 amount, uint256 amountSIR) = VAULT.withdrawTreasuryFeesAndSIR(vaultId, to);
+
+        emit TreasuryFeesWithdrawn(vaultId, collateralToken, amount, amountSIR);
+    }
+
+    /// @notice Save the remaining funds that have not been withdrawn from the vaults
+    function saveFunds(address[] calldata tokens, address to) external onlyOwner {
+        if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
+
+        uint256[] memory amounts = VAULT.withdrawToSaveSystem(tokens, to);
+
+        for (uint256 i = 0; i < tokens.length; ++i) {
+            emit FundsWithdrawn(tokens[i], amounts[i]);
+        }
+    }
+
+    /*///////////////////////////////////////////////////////////////
+                    PARAMETER CONFIGURATION FUNCTIONS
+    ///////////////////////////////////////////////////////////////*/
+
+    /** @notice Fees can only be set when the system is in TrainingWheels status
+     */
+    function setBaseFee(uint16 baseFee_) external onlyOwner {
+        if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
+        (, , uint8 lpFee, , ) = VAULT.systemParams();
 
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee_, lpFee, emergencyStop, cumTax));
+        VAULT.updateSystemState(baseFee_, lpFee, false);
 
-        emit NewBaseFee(baseFee);
+        emit NewBaseFee(baseFee_);
     }
 
-    function setLPFee(uint8 lpFee_) external onlyOwner betaIsOn {
+    function setLPFee(uint8 lpFee_) external onlyOwner {
+        if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
+        (, uint16 baseFee, , , ) = VAULT.systemParams();
 
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee_, emergencyStop, cumTax));
+        VAULT.updateSystemState(baseFee, lpFee_, false);
 
-        emit NewLPFee(lpFee);
-    }
-
-    function haultMinting() external onlyOwner betaIsOn {
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
-
-        if (emergencyStop) revert Minting(false);
-
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, true, cumTax));
-
-        emit EmergencyStop(true);
-    }
-
-    /// @notice We should be allowed to resume the operations of the protocol even if the best is over.
-    function resumeMinting() external onlyOwner {
-        (uint40 tsIssuanceStart, uint16 baseFee, uint8 lpFee, bool emergencyStop, uint16 cumTax) = VAULT.systemParams();
-
-        if (!emergencyStop) revert Minting(true);
-
-        VAULT.updateSystemState(VaultStructs.SystemParameters(tsIssuanceStart, baseFee, lpFee, false, cumTax));
-
-        emit EmergencyStop(false);
+        emit NewLPFee(lpFee_);
     }
 
     function updateVaultsIssuances(
@@ -156,16 +211,13 @@ contract SystemControl is Ownable {
     function updateContributorsIssuances(
         address[] calldata contributors,
         uint72[] calldata contributorIssuances
-    ) external onlyOwner betaIsOn {
+    ) external onlyOwner {
+        if (systemStatus == SystemStatus.Unstoppable) revert WrongStatus();
+
         uint256 lenContributors = contributors.length;
         if (contributorIssuances.length != lenContributors) revert ArraysLengthMismatch();
 
         // Update parameters
-        if (SIR_TOKEN.changeContributorsIssuances(contributors, contributorIssuances))
-            revert ContributorsExceedsMaxIssuance();
-    }
-
-    function widhtdrawTreasuryFeesAndSIR(uint40 vaultId, address to) external onlyOwner {
-        VAULT.widhtdrawTreasuryFeesAndSIR(vaultId, to);
+        SIR_TOKEN.changeContributorsIssuances(contributors, contributorIssuances);
     }
 }

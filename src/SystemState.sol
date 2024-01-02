@@ -216,10 +216,8 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
             We may be tempted to skip updating the vault's issuance if the vault's issuance has not changed (i.e. totalSupply has not changed),
             like in the case of a Transfer of TEA. However, this could result in rounding errors causing SIR issuance to be larger than expected.
          */
-        if (vaultIssuanceParams[vaultId].tsLastUpdate != block.timestamp) {
-            vaultIssuanceParams[vaultId].cumSIRPerTEAx96 = cumSIRPerTEAx96;
-            vaultIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
-        }
+        vaultIssuanceParams[vaultId].cumSIRPerTEAx96 = cumSIRPerTEAx96;
+        vaultIssuanceParams[vaultId].tsLastUpdate = uint40(block.timestamp);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -227,7 +225,15 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
     ////////////////////////////////////////////////////////////////*/
 
     /// @dev All checks and balances to be done at system control
-    function updateSystemState(VaultStructs.SystemParameters calldata systemParams_) external onlySystemControl {
+    function updateSystemState(uint16 baseFee, uint8 lpFee, bool mintingStopped) external onlySystemControl {
+        VaultStructs.SystemParameters memory systemParams_ = systemParams;
+        systemParams_ = VaultStructs.SystemParameters({
+            tsIssuanceStart: systemParams_.tsIssuanceStart,
+            baseFee: baseFee,
+            lpFee: lpFee,
+            mintingStopped: mintingStopped,
+            cumTax: systemParams_.cumTax
+        });
         systemParams = systemParams_;
     }
 

@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {ISIR} from "./interfaces/ISIR.sol";
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
@@ -111,7 +112,7 @@ contract Vault is TEA, VaultEvents {
     ) external returns (uint256 amount) {
         unchecked {
             VaultStructs.SystemParameters memory systemParams_ = systemParams;
-            require(!systemParams_.emergencyStop);
+            require(!systemParams_.mintingStopped);
 
             // Until SIR is running, only LPers are allowed to mint (deposit collateral)
             if (isAPE) require(systemParams_.tsIssuanceStart > 0);
@@ -370,7 +371,10 @@ contract Vault is TEA, VaultEvents {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function widhtdrawTreasuryFeesAndSIR(uint40 vaultId, address to) external onlySystemControl {
+    function withdrawTreasuryFeesAndSIR(
+        uint40 vaultId,
+        address to
+    ) external onlySystemControl returns (address, uint256, uint256) {
         VaultStructs.Parameters memory params = paramsById[vaultId];
 
         uint256 treasury = state[params.debtToken][params.collateralToken][params.leverageTier].treasury;
@@ -379,6 +383,23 @@ contract Vault is TEA, VaultEvents {
         if (treasury > 0) TransferHelper.safeTransfer(params.collateralToken, to, treasury);
 
         // Also transfer SIR
-        ISIR(sir).treasuryMint(vaultId, to);
+        uint256 amountSIR = ISIR(sir).treasuryMint(vaultId, to);
+
+        return (params.collateralToken, treasury, amountSIR);
+    }
+
+    /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack
+        @notice during the beta period. To execute it, the system must be in Shutdown status
+        @notice which can only be activate after SHUTDOWN_WITHDRAWAL_DELAY seconds have passed since Emergency status was activated.
+     */
+    function withdrawToSaveSystem(
+        address[] calldata tokens,
+        address to
+    ) external onlySystemControl returns (uint256[] memory amounts) {
+        amounts = new uint256[](tokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            amounts[i] = IERC20(tokens[i]).balanceOf(address(this));
+            if (amounts[i] > 0) TransferHelper.safeTransfer(tokens[i], to, amounts[i]);
+        }
     }
 }

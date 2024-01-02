@@ -9,6 +9,8 @@ import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
 contract SIR is ERC20, SystemControlAccess, SystemConstants {
+    error ContributorsExceedsMaxIssuance();
+
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
@@ -17,7 +19,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
 
     SystemState private immutable _VAULT;
 
-    uint72 public aggIssuanceContributors; // aggIssuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
+    uint72 public issuanceContributors; // issuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
 
     address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
@@ -83,11 +85,11 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function contributorMint() external {
+    function contributorMint() external returns (uint104) {
         // Get contributor issuance parameters
         ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
 
-        // Mint if any unclaimedRewards
+        // Mint if there are any unclaimed rewards
         require(contributorParams.unclaimedRewards > 0);
         _mint(msg.sender, contributorParams.unclaimedRewards);
 
@@ -96,39 +98,46 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
 
         // Update state
         _contributorsIssuances[msg.sender] = contributorParams;
+
+        return contributorParams.unclaimedRewards;
     }
 
-    function lPerMint(uint256 vaultId) external {
+    function lPerMint(uint256 vaultId) external returns (uint104 rewards) {
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = _VAULT.claimSIR(vaultId, msg.sender);
+        rewards = _VAULT.claimSIR(vaultId, msg.sender);
 
-        // Mint if any unclaimedRewards
-        require(unclaimedRewards > 0);
-        _mint(msg.sender, unclaimedRewards);
+        // Mint if there are any unclaimed rewards
+        require(rewards > 0);
+        _mint(msg.sender, rewards);
     }
 
     /** @notice Mint the SIR earnt by the protocol owned liquidity
      */
-    function treasuryMint(uint256 vaultId, address to) external {
+    function treasuryMint(uint256 vaultId, address to) external returns (uint104 rewards) {
         require(msg.sender == address(_VAULT));
 
         // Get LPer issuance parameters
-        uint104 unclaimedRewards = _VAULT.claimSIR(vaultId, address(_VAULT));
+        rewards = _VAULT.claimSIR(vaultId, address(_VAULT));
 
-        // Mint if any unclaimedRewards
-        if (unclaimedRewards > 0) _mint(to, unclaimedRewards);
+        // Mint if there are any unclaimed rewards but do not revert
+        if (rewards > 0) _mint(to, rewards);
     }
 
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /** @notice Change the issuance of some contributors
+        @dev This function is only callable by the SystemControl contract
+        @param contributors_ The addresses of the contributors
+        @param contributorIssuances_ The new issuance of each contributor
+     */
     function changeContributorsIssuances(
         address[] calldata contributors_,
         uint72[] calldata contributorIssuances_
-    ) external onlySystemControl returns (bool) {
-        uint256 aggIssuanceToAdd;
-        uint256 aggIssuanceToRemove;
+    ) external onlySystemControl {
+        uint256 issuanceIncrease;
+        uint256 issuanceDecrease;
         uint256 lenContributors = contributors_.length;
         for (uint256 i = 0; i < lenContributors; i++) {
             // Get contributor issuance parameters
@@ -136,8 +145,8 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
 
             // Updated aggregated issuance
             unchecked {
-                aggIssuanceToAdd += contributorIssuances_[i]; // Cannot overflow unless we have at least 2^(256-72) contributors...
-                aggIssuanceToRemove += contributorParams.issuance;
+                issuanceIncrease += contributorIssuances_[i]; // Cannot overflow unless we have at least 2^(256-72) contributors...
+                issuanceDecrease += contributorParams.issuance;
             }
 
             // Update issuance
@@ -146,49 +155,10 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
             // Update state
             _contributorsIssuances[contributors_[i]] = contributorParams;
         }
-        uint256 aggIssuanceContributors_ = aggIssuanceContributors + aggIssuanceToAdd - aggIssuanceToRemove;
+        uint256 issuanceContributors_ = issuanceContributors + issuanceIncrease - issuanceDecrease;
 
-        aggIssuanceContributors = uint72(aggIssuanceContributors_);
-        if (aggIssuanceContributors_ > ISSUANCE - ISSUANCE_FIRST_3_YEARS) return false;
-        return true;
+        if (issuanceContributors_ > ISSUANCE - ISSUANCE_FIRST_3_YEARS) revert ContributorsExceedsMaxIssuance();
+
+        issuanceContributors = uint72(issuanceContributors_);
     }
-
-    // function changeContributorsIssuances(
-    //     address[] calldata prevContributors,
-    //     address[] calldata nextContributors,
-    //     uint72[] calldata issuances,
-    //     bool allowAnyTotalIssuance
-    // ) external onlySystemControl returns (bytes32) {
-    //     // Stop issuance of previous contributors
-    //     for (uint256 i = 0; i < prevContributors.length; i++) {
-    //         ContributorIssuanceParams memory contributorParams = getContributorIssuance(prevContributors[i]);
-    //         contributorParams.issuance = 0;
-    //         _contributorsIssuances[prevContributors[i]] = contributorParams;
-    //     }
-
-    //     // Set next issuances
-    //     uint72 issuanceAllContributors = 0;
-    //     for (uint256 i = 0; i < nextContributors.length; i++) {
-    //         _contributorsIssuances[nextContributors[i]].issuance = issuances[i];
-    //         _contributorsIssuances[nextContributors[i]].tsLastUpdate = uint40(block.timestamp);
-
-    //         issuanceAllContributors += issuances[i]; // Check total issuance does not change
-    //     }
-
-    //     if (allowAnyTotalIssuance) {
-    //         // Recalibrate vaults' issuances
-    //         systemParams.issuanceTotalVaults = ISSUANCE - issuanceAllContributors;
-    //     } else {
-    //         require(
-    //             ISSUANCE == issuanceAllContributors + systemParams.issuanceTotalVaults,
-    //             "Total issuance must not change"
-    //         );
-    //     }
-
-    //     return keccak256(abi.encodePacked(nextContributors));
-    // }
-
-    /*////////////////////////////////////////////////////////////////
-                            PRIVATE FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
 }

@@ -5,5 +5,5 @@ pragma solidity ^0.8.0;
 interface ISIR {
     function lPerMint(uint256 vaultId, address to) external;
 
-    function treasuryMint(uint256 vaultId, address to) external;
+    function treasuryMint(uint256 vaultId, address to) external returns (uint104 unclaimedRewards);
 }
