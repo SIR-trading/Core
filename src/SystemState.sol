@@ -44,14 +44,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
     mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
-    VaultStructs.SystemParameters public systemParams =
-        VaultStructs.SystemParameters({
-            tsIssuanceStart: 0,
-            baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
-            lpFee: 50,
-            emergencyStop: false, // Emergency stop is off
-            cumTax: 0
-        });
+    VaultStructs.SystemParameters public systemParams;
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
@@ -65,6 +58,15 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
 
     constructor(address systemControl, address sir_) SystemControlAccess(systemControl) {
         sir = sir_;
+
+        // SIR is issued as soon as the protocol is deployed
+        systemParams = VaultStructs.SystemParameters({
+            tsIssuanceStart: uint40(block.timestamp),
+            baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
+            lpFee: 50, // Test 0.5% LP fee
+            mintingStopped: false,
+            cumTax: 0
+        });
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -96,17 +98,14 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
 
             // Do nothing if no new SIR has been issued, or it has already been updated
             if (
-                systemParams_.tsIssuanceStart != 0 &&
                 vaultIssuanceParams_.tax != 0 &&
                 vaultIssuanceParams_.tsLastUpdate != uint40(block.timestamp) &&
                 totalSupply_ != 0
             ) {
                 assert(vaultIssuanceParams_.tax <= systemParams_.cumTax);
 
-                // Find starting time to compute cumulative SIR per unit of TEA
-                uint40 tsStart = systemParams_.tsIssuanceStart > vaultIssuanceParams_.tsLastUpdate
-                    ? systemParams_.tsIssuanceStart
-                    : vaultIssuanceParams_.tsLastUpdate;
+                // Starting time for the issuance in this vault
+                uint40 tsStart = vaultIssuanceParams_.tsLastUpdate;
 
                 // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
                 uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
@@ -191,10 +190,7 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint256 totalSupply_,
         LPersBalances memory lpersBalances
     ) internal returns (uint80 unclaimedRewards0) {
-        // If issuance has not started, return
-        if (systemParams_.tsIssuanceStart == 0) return 0;
-
-        // Retrieve updated vault issuance parameters
+        // Retrieve cumulative SIR per unit of TEA
         uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, totalSupply_);
 
         // Retrieve updated LPer0 issuance parameters
