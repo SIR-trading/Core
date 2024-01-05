@@ -402,7 +402,7 @@ contract Vault is TEA, VaultEvents {
         for (uint256 i = 0; i < tokens.length; i++) {
             // We use the low-level call because we want to continue with the next token if balanceOf reverts
             (success, data) = tokens[i].call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
-            if (success && data.length >= 32) {
+            if (success && data.length == 32) {
                 amounts[i] = abi.decode(data, (uint256));
                 if (amounts[i] > 0) {
                     (success, data) = tokens[i].call(abi.encodeWithSelector(IERC20.transfer.selector, to, amounts[i]));

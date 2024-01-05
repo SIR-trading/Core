@@ -9,6 +9,7 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 // Contracts
 import {Vault} from "./Vault.sol";
 import {Owned} from "./Owned.sol";
+import "forge-std/Test.sol";
 
 /**
  * @dev Modified from Solmate's ERC20.sol
@@ -209,6 +210,9 @@ contract APE is Owned {
         emit Transfer(address(0), to, amount);
 
         newReserves = reserves; // Important because memory is not persistent across external calls
+
+        console.log("totalSupply:", totalSupply);
+        console.log("2^256-1", type(uint256).max);
     }
 
     function burn(

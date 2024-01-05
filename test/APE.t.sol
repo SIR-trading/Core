@@ -7,6 +7,7 @@ import {APE} from "src/APE.sol";
 import {IVaultExternal} from "src/Interfaces/IVaultExternal.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {FullMath} from "src/libraries/FullMath.sol";
 
 contract APETest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -151,32 +152,122 @@ contract APETest is Test {
         ape.transferFrom(bob, alice, transferAmount);
     }
 
-    function testFuzz_mint(
-        uint16 baseFee,
-        uint8 tax,
-        uint152 collateralDepositedA,
-        uint152 collateralDepositedB
-    ) public {
+    /** @dev Test minting APE tokens when the APE token supply is 0
+     */
+    function testFuzz_mint1stTime(uint152 collateralDeposited, uint152 apesReserveInitial) public {
+        // Valt.sol ensures collateralDeposited + apesReserveInitial < 2^152
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max - apesReserveInitial));
+
+        // // Vault.sol enforces at least 1 unit of collateral to the APE reserve
+        vm.assume(collateralDeposited + apesReserveInitial >= 1);
+
         VaultStructs.Reserves memory reserves;
+        reserves.apesReserve = apesReserveInitial;
 
         vm.expectEmit();
-        emit Transfer(address(0), alice, collateralDepositedA);
-        // address to,
-        // uint16 baseFee,
-        // uint8 tax,
-        // VaultStructs.Reserves memory reserves,
-        // uint152 collateralDeposited
-        ape.mint(alice, baseFee, tax, mintAmountA);
-        assertEq(ape.balanceOf(alice), mintAmountA);
-        assertEq(ape.totalSupply(), mintAmountA);
+        emit Transfer(address(0), alice, collateralDeposited + apesReserveInitial);
+        (VaultStructs.Reserves memory newReserves, uint152 polFee, uint256 amount) = ape.mint(
+            alice,
+            0,
+            0,
+            reserves,
+            collateralDeposited
+        );
+        assertEq(amount, collateralDeposited + apesReserveInitial);
+        assertEq(ape.balanceOf(alice), collateralDeposited + apesReserveInitial);
+        assertEq(ape.totalSupply(), collateralDeposited + apesReserveInitial);
+        assertEq(polFee, 0);
+        assertEq(newReserves.apesReserve, reserves.apesReserve + collateralDeposited);
+    }
 
-        mintAmountB = _bound(mintAmountB, 0, type(uint152).max - mintAmountA);
+    /** @dev Test minting APE tokens with an existing supply of APE tokens
+     */
+    function testFuzz_mint(uint152 collateralDeposited, uint152 apesReserveInitial, uint256 totalSupplyInitial) public {
+        // Valt.sol ensures collateralDeposited + apesReserveInitial < 2^152
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max - apesReserveInitial));
+
+        // Vault.sol always allocated at least 1 unit of collateral to the APE reserve
+        vm.assume(apesReserveInitial >= 1);
+
+        // We assume some1 has minted before
+        vm.assume(totalSupplyInitial > 0);
+
+        // Calculate the amount of APE tokens that should be minted
+        if (apesReserveInitial < totalSupplyInitial)
+            collateralDeposited = uint152(
+                _bound(
+                    collateralDeposited,
+                    0,
+                    FullMath.mulDiv(type(uint152).max, apesReserveInitial, totalSupplyInitial)
+                )
+            );
+        uint256 amountExpected = FullMath.mulDiv(totalSupplyInitial, collateralDeposited, apesReserveInitial);
+        vm.assume(amountExpected <= type(uint256).max - totalSupplyInitial);
+
+        VaultStructs.Reserves memory reserves;
+        reserves.apesReserve = apesReserveInitial;
+
+        // Pretend some APE has already been minted
+        _mint(alice, totalSupplyInitial);
 
         vm.expectEmit();
-        emit Transfer(address(0), bob, mintAmountB);
-        ape.mint(bob, mintAmountB);
-        assertEq(ape.balanceOf(bob), mintAmountB);
-        assertEq(ape.totalSupply(), mintAmountA + mintAmountB);
+        emit Transfer(address(0), bob, amountExpected);
+        (VaultStructs.Reserves memory newReserves, uint152 polFee, uint256 amount) = ape.mint(
+            bob,
+            0,
+            0,
+            reserves,
+            collateralDeposited
+        );
+
+        assertEq(amount, amountExpected, "Amount is not correct");
+        assertEq(ape.balanceOf(bob), amountExpected, "Alice balance is not correct");
+        assertEq(ape.totalSupply(), totalSupplyInitial + amountExpected, "Total supply is not correct");
+        assertEq(polFee, 0, "Pol fee is not correct");
+        assertEq(newReserves.apesReserve, reserves.apesReserve + collateralDeposited, "New reserves are not correct");
+    }
+
+    /** @dev Test minting APE tokens with an existing supply of APE tokens, but it fails because
+        @dev the supply of APE tokens exceeds 2^256-1
+     */
+    function testFuzz_mintExceedMaxSupply(
+        uint152 collateralDeposited,
+        uint152 apesReserveInitial,
+        uint256 totalSupplyInitial
+    ) public {
+        // Valt.sol ensures collateralDeposited + apesReserveInitial < 2^152
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max - apesReserveInitial));
+
+        // Vault.sol always allocated at least 1 unit of collateral to the APE reserve
+        vm.assume(apesReserveInitial >= 1);
+
+        // We assume some1 has minted before
+        vm.assume(totalSupplyInitial > 0);
+
+        // We assume deposited collateral is non-zero
+        vm.assume(collateralDeposited > 0);
+
+        // Condition for exceeding max supply
+        totalSupplyInitial = _bound(
+            totalSupplyInitial,
+            FullMath.mulDivRoundingUp(type(uint256).max, apesReserveInitial, apesReserveInitial + collateralDeposited),
+            type(uint256).max
+        );
+
+        VaultStructs.Reserves memory reserves;
+        reserves.apesReserve = apesReserveInitial;
+
+        // Pretend some APE has already been minted
+        _mint(alice, totalSupplyInitial);
+
+        vm.expectRevert();
+        ape.mint(bob, 0, 0, reserves, collateralDeposited);
+    }
+
+    function testFail_mintByNonOwner() public {
+        VaultStructs.Reserves memory reserves;
+        vm.prank(alice);
+        ape.mint(bob, 0, 0, reserves, 10); // This should fail because bob is not the owner
     }
 
     // function testFuzz_mintFails(uint152 mintAmountA, uint152 mintAmountB) public {
@@ -186,11 +277,6 @@ contract APETest is Test {
     //     mintAmountB = _bound(mintAmountB, type(uint152).max - mintAmountA + 1, type(uint152).max);
     //     vm.expectRevert();
     //     _mint(bob, mintAmountB);
-    // }
-
-    // function testFail_mintByNonOwner() public {
-    //     vm.prank(alice);
-    //     APE(ape).mint(bob, 1000); // This should fail because bob is not the owner
     // }
 
     // function testFuzz_burn(uint152 mintAmountA, uint152 mintAmountB, uint256 burnAmountB) public {
@@ -220,3 +306,5 @@ contract APETest is Test {
     //     _burn(bob, burnAmountB);
     // }
 }
+
+// INVARIANT TESTING HERE
