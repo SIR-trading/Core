@@ -206,7 +206,7 @@ contract APE is Owned {
             balanceOf[to] += amount;
             reserves.apesReserve += collateralIn;
         }
-        totalSupply = supplyAPE + amount; // Unchcecked math to ensure totalSupply never overflows
+        totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
         emit Transfer(address(0), to, amount);
 
         newReserves = reserves; // Important because memory is not persistent across external calls

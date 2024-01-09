@@ -270,41 +270,97 @@ contract APETest is Test {
         ape.mint(bob, 0, 0, reserves, 10); // This should fail because bob is not the owner
     }
 
-    // function testFuzz_mintFails(uint152 mintAmountA, uint152 mintAmountB) public {
-    //     mintAmountA = _bound(mintAmountA, 1, type(uint152).max);
-    //     _mint(alice, mintAmountA);
+    function testFuzz_burn(
+        uint256 amountBalance,
+        uint256 amountBurnt,
+        uint152 apesReserveInitial,
+        uint256 totalSupplyInitial
+    ) public {
+        // We assume some1 has minted before
+        vm.assume(totalSupplyInitial > 0);
 
-    //     mintAmountB = _bound(mintAmountB, type(uint152).max - mintAmountA + 1, type(uint152).max);
-    //     vm.expectRevert();
-    //     _mint(bob, mintAmountB);
-    // }
+        // Balance must be smaller than total supply
+        amountBalance = _bound(amountBalance, 0, totalSupplyInitial);
 
-    // function testFuzz_burn(uint152 mintAmountA, uint152 mintAmountB, uint256 burnAmountB) public {
-    //     mintAmountB = _bound(mintAmountB, 0, type(uint152).max - mintAmountA);
-    //     burnAmountB = _bound(burnAmountB, 0, mintAmountB);
+        // Cannot burn more than total supply
+        amountBurnt = _bound(amountBurnt, 0, amountBalance);
 
-    //     _mint(alice, mintAmountA);
-    //     _mint(bob, mintAmountB);
+        // Mint balances
+        _mint(alice, amountBalance);
+        _mint(bob, totalSupplyInitial - amountBalance);
 
-    //     vm.expectEmit();
-    //     emit Transfer(bob, address(0), burnAmountB);
-    //     _burn(bob, burnAmountB);
+        VaultStructs.Reserves memory reserves;
+        reserves.apesReserve = apesReserveInitial;
 
-    //     assertEq(ape.balanceOf(bob), mintAmountB - burnAmountB);
-    //     assertEq(ape.totalSupply(), mintAmountA + mintAmountB - burnAmountB);
-    // }
+        vm.expectEmit();
+        emit Transfer(alice, address(0), amountBurnt);
+        (VaultStructs.Reserves memory newReserves, uint152 polFee, uint152 collateralWidthdrawn) = ape.burn(
+            alice,
+            0,
+            0,
+            reserves,
+            amountBurnt
+        );
 
-    // function testFuzz_burnMoreThanBalance(uint152 mintAmountA, uint152 mintAmountB, uint256 burnAmountB) public {
-    //     mintAmountA = _bound(mintAmountA, 0, type(uint152).max - 1);
-    //     mintAmountB = _bound(mintAmountB, 1, type(uint152).max - mintAmountA);
-    //     burnAmountB = _bound(burnAmountB, mintAmountB + 1, type(uint256).max);
+        uint256 collateralWidthdrawnExpected = FullMath.mulDiv(apesReserveInitial, amountBurnt, totalSupplyInitial);
 
-    //     _mint(alice, mintAmountA);
-    //     _mint(bob, mintAmountB);
+        assertEq(collateralWidthdrawn, collateralWidthdrawnExpected, "Collateral withdrawn is not correct");
+        assertEq(ape.balanceOf(alice), amountBalance - amountBurnt, "Alice balance is not correct");
+        assertEq(ape.totalSupply(), totalSupplyInitial - amountBurnt, "Total supply is not correct");
+        assertEq(polFee, 0, "Pol fee is not correct");
+        assertEq(newReserves.apesReserve, reserves.apesReserve - collateralWidthdrawn, "New reserves are not correct");
+    }
 
-    //     vm.expectRevert();
-    //     _burn(bob, burnAmountB);
-    // }
+    function testFuzz_burnMoreThanBalance(
+        uint256 amountBalance,
+        uint256 amountBurnt,
+        uint152 apesReserveInitial,
+        uint256 totalSupplyInitial
+    ) public {
+        // We assume some1 has minted before
+        vm.assume(totalSupplyInitial > 0 && totalSupplyInitial < type(uint256).max);
+
+        // Balance must be smaller than total supply
+        amountBalance = _bound(amountBalance, 0, totalSupplyInitial);
+
+        // Cannot burn more than total supply
+        amountBurnt = _bound(amountBurnt, amountBalance + 1, type(uint256).max);
+
+        // Mint balances
+        _mint(alice, amountBalance);
+        _mint(bob, totalSupplyInitial - amountBalance);
+
+        VaultStructs.Reserves memory reserves;
+        reserves.apesReserve = apesReserveInitial;
+
+        vm.expectRevert();
+        ape.burn(alice, 0, 0, reserves, amountBurnt);
+    }
+
+    function testFuzz_failsCuzSupplyIsZero(
+        uint256 amountBalance,
+        uint256 amountBurnt,
+        uint256 totalSupplyInitial
+    ) public {
+        // We assume some1 has minted before
+        vm.assume(totalSupplyInitial > 0 && totalSupplyInitial < type(uint256).max);
+
+        // Balance must be smaller than total supply
+        amountBalance = _bound(amountBalance, 0, totalSupplyInitial);
+
+        // Cannot burn more than total supply
+        amountBurnt = _bound(amountBurnt, amountBalance + 1, type(uint256).max);
+
+        // Mint balances
+        _mint(alice, amountBalance);
+        _mint(bob, totalSupplyInitial - amountBalance);
+
+        VaultStructs.Reserves memory reserves;
+        reserves.apesReserve = 0;
+
+        vm.expectRevert();
+        ape.burn(alice, 0, 0, reserves, amountBurnt);
+    }
 }
 
 // INVARIANT TESTING HERE
