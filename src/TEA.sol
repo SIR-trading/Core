@@ -245,7 +245,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
 
             // Mint TEA
             amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design lpReserve can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, collateralIn)
+                ? _amountFirstMint(collateral, collateralIn + reserves.lpReserve)
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralIn, reserves.lpReserve);
             if (to != address(this)) _balanceOf[to][vaultId] = balanceTo + amount;
             else totalSupplyAndBalanceVault_.balanceVault += uint128(amount);

@@ -8,6 +8,7 @@ import {IVaultExternal} from "src/Interfaces/IVaultExternal.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
+import {Strings} from "openzeppelin/utils/Strings.sol";
 
 contract APETest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -363,4 +364,163 @@ contract APETest is Test {
     }
 }
 
-// INVARIANT TESTING HERE
+///////////////////////////////////////////////
+//// I N V A R I A N T //// T E S T I N G ////
+/////////////////////////////////////////////
+
+contract APEHandler is Test {
+    VaultStructs.Reserves public reserves;
+    APE public ape;
+    uint256 public totalCollateralDeposited;
+
+    constructor() {
+        // This mocked parameters do not matter, they are just so that they function does not fail.
+        vm.mockCall(
+            address(this),
+            abi.encodeWithSelector(Vault.latestTokenParams.selector),
+            abi.encode(
+                "Name does not matter",
+                "Token symbol does not matter",
+                uint8(18),
+                address(0),
+                address(0),
+                int8(0)
+            )
+        );
+        ape = new APE();
+    }
+
+    // Limit test to 5 accounts
+    function _idToAddr(uint id) private pure returns (address) {
+        id = _bound(id, 1, 5);
+        return vm.addr(id);
+    }
+
+    function _changeReserves(uint152 newApesReserve) private {
+        uint152 totalCollateral = reserves.apesReserve + reserves.treasury + reserves.lpReserve;
+        if (totalCollateral == 0) return;
+
+        // Treasury is left untouched and at least 1 unit of collateral must be in the LP reserve and APE reserve
+        newApesReserve = uint152(_bound(newApesReserve, 1, totalCollateral - reserves.treasury - 1));
+
+        reserves.apesReserve = newApesReserve;
+        reserves.lpReserve = totalCollateral - reserves.treasury - reserves.apesReserve;
+    }
+
+    function transfer(uint256 fromId, uint256 toId, uint256 amount, uint152 finalApesReserve) external {
+        address from = _idToAddr(fromId);
+        address to = _idToAddr(toId);
+
+        // To avoid underflow
+        uint256 preBalance = ape.balanceOf(from);
+        amount = _bound(amount, 0, preBalance);
+
+        vm.prank(from);
+        ape.transfer(to, amount);
+
+        _changeReserves(finalApesReserve);
+    }
+
+    function mint(
+        uint256 toId,
+        uint16 baseFee,
+        uint8 tax,
+        uint152 collateralDeposited,
+        uint152 finalApesReserve
+    ) external {
+        baseFee = uint16(_bound(baseFee, 1, type(uint16).max)); // Cannot be 0
+
+        // To avoid overflow of totalCollateral
+        uint152 totalCollateral = reserves.apesReserve + reserves.treasury + reserves.lpReserve;
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max - totalCollateral));
+
+        uint256 totalSupply = ape.totalSupply();
+        uint256 amountMax = type(uint256).max - totalSupply;
+        if (totalSupply > FullMath.mulDivRoundingUp(reserves.apesReserve, amountMax, type(uint256).max)) {
+            // Ensure max supply of APE (2^256-1) is not exceeded
+            collateralDeposited = uint152(
+                _bound(collateralDeposited, 0, FullMath.mulDiv(reserves.apesReserve, amountMax, totalSupply))
+            );
+        } else if (totalSupply == 0) {
+            if (collateralDeposited < 2) return;
+            collateralDeposited = uint152(_bound(collateralDeposited, 2, collateralDeposited));
+        }
+
+        // Update totalCollateralDeposited
+        totalCollateralDeposited += collateralDeposited;
+
+        address to = _idToAddr(toId);
+        uint152 polFee;
+        uint256 amount;
+        (reserves, polFee, amount) = ape.mint(to, baseFee, tax, reserves, collateralDeposited);
+        reserves.lpReserve += polFee;
+
+        _changeReserves(finalApesReserve);
+    }
+
+    function burn(uint256 fromId, uint16 baseFee, uint8 tax, uint256 amount, uint152 finalApesReserve) external {
+        baseFee = uint16(_bound(baseFee, 1, type(uint16).max)); // Cannot be 0
+
+        // To avoid underflow
+        address from = _idToAddr(fromId);
+        uint256 preBalance = ape.balanceOf(from);
+        amount = _bound(amount, 0, preBalance);
+
+        uint256 totalSupply = ape.totalSupply();
+        if (reserves.apesReserve == 0 && totalSupply == 0) return;
+
+        // Make sure at least 2 units of collateral are in the LP reserve + APE reserve
+        if (reserves.lpReserve < 2) {
+            uint152 collateralWidthdrawnMax = reserves.apesReserve + reserves.lpReserve - 2;
+            uint256 amountMax = FullMath.mulDiv(totalSupply, collateralWidthdrawnMax, reserves.apesReserve);
+            amount = _bound(amount, 0, amountMax);
+        }
+
+        uint152 polFee;
+        uint152 collateralWidthdrawn;
+        (reserves, polFee, collateralWidthdrawn) = ape.burn(from, baseFee, tax, reserves, amount);
+        reserves.lpReserve += polFee;
+
+        // Update totalCollateralDeposited
+        totalCollateralDeposited -= collateralWidthdrawn;
+
+        _changeReserves(finalApesReserve);
+    }
+}
+
+contract APEInvariantTest is Test {
+    APEHandler apeHandler;
+    APE ape;
+    uint152 treasuryPrevious;
+    bool firstMint = false;
+
+    function setUp() public {
+        apeHandler = new APEHandler();
+        ape = APE(apeHandler.ape());
+
+        targetContract(address(apeHandler));
+    }
+
+    function invariant_collateralCheck() public {
+        uint256 totalCollateralDeposited = apeHandler.totalCollateralDeposited();
+        (uint152 treasury, uint152 apesReserve, uint152 lpReserve) = apeHandler.reserves();
+        uint256 totalCollateral = treasury + apesReserve + lpReserve;
+
+        assertEq(totalCollateralDeposited, totalCollateral);
+    }
+
+    function invariant_treasuryAlwaysIncreases() public {
+        (uint152 treasury, , ) = apeHandler.reserves();
+
+        assertGe(treasury, treasuryPrevious);
+
+        treasuryPrevious = treasury;
+    }
+
+    function invariant_supplyNeverGoesBackToZero() public {
+        uint256 totalSupply = ape.totalSupply();
+        if (!firstMint) {
+            if (totalSupply > 0) firstMint = true;
+        } else assertGt(totalSupply, 0);
+    }
+}

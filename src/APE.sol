@@ -191,6 +191,10 @@ contract APE is Owned {
             leverageTier,
             tax
         );
+        // console.log("collateralIn", collateralIn);
+        // console.log("treasuryFee", treasuryFee);
+        // console.log("lpersFee", lpersFee);
+        // console.log("polFee", polFee);
 
         unchecked {
             // Diverge some of the deposited collateral to the Treasury
@@ -210,9 +214,6 @@ contract APE is Owned {
         emit Transfer(address(0), to, amount);
 
         newReserves = reserves; // Important because memory is not persistent across external calls
-
-        console.log("totalSupply:", totalSupply);
-        console.log("2^256-1", type(uint256).max);
     }
 
     function burn(
