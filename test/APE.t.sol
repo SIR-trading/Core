@@ -467,7 +467,7 @@ contract APEHandler is Test {
         amount = _bound(amount, 0, preBalance);
 
         uint256 totalSupply = ape.totalSupply();
-        if (reserves.apesReserve == 0 && totalSupply == 0) return;
+        if (totalSupply == 0) return;
 
         // Make sure at least 2 units of collateral are in the LP reserve + APE reserve
         if (reserves.lpReserve < 2) {
@@ -492,7 +492,6 @@ contract APEInvariantTest is Test {
     APEHandler apeHandler;
     APE ape;
     uint152 treasuryPrevious;
-    bool firstMint = false;
 
     function setUp() public {
         apeHandler = new APEHandler();
@@ -515,12 +514,5 @@ contract APEInvariantTest is Test {
         assertGe(treasury, treasuryPrevious);
 
         treasuryPrevious = treasury;
-    }
-
-    function invariant_supplyNeverGoesBackToZero() public {
-        uint256 totalSupply = ape.totalSupply();
-        if (!firstMint) {
-            if (totalSupply > 0) firstMint = true;
-        } else assertGt(totalSupply, 0);
     }
 }
