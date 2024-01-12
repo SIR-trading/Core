@@ -390,7 +390,7 @@ contract Vault is TEA, VaultEvents {
 
     /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack
         @notice during the beta period. To execute it, the system must be in Shutdown status
-        @notice which can only be activate after SHUTDOWN_WITHDRAWAL_DELAY seconds have passed since Emergency status was activated.
+        @notice which can only be activate after SHUTDOWN_WITHDRAWAL_DELAY since Emergency status was activated.
      */
     function withdrawToSaveSystem(
         address[] calldata tokens,

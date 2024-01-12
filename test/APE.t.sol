@@ -369,9 +369,16 @@ contract APETest is Test {
 /////////////////////////////////////////////
 
 contract APEHandler is Test {
+    uint256 public totalSupplyOld;
+    uint152 public apesReserveOld;
+    uint152 public treasuryOld;
+
     VaultStructs.Reserves public reserves;
     APE public ape;
     uint256 public totalCollateralDeposited;
+
+    bool public changeReserves;
+    bool public trueIfMintFalseIfBurn;
 
     constructor() {
         // This mocked parameters do not matter, they are just so that they function does not fail.
@@ -397,6 +404,9 @@ contract APEHandler is Test {
     }
 
     function _changeReserves(uint152 newApesReserve) private {
+        changeReserves = !changeReserves;
+        if (changeReserves) return;
+
         uint152 totalCollateral = reserves.apesReserve + reserves.treasury + reserves.lpReserve;
         if (totalCollateral == 0) return;
 
@@ -414,6 +424,10 @@ contract APEHandler is Test {
         // To avoid underflow
         uint256 preBalance = ape.balanceOf(from);
         amount = _bound(amount, 0, preBalance);
+
+        totalSupplyOld = ape.totalSupply();
+        treasuryOld = reserves.treasury;
+        apesReserveOld = reserves.apesReserve;
 
         vm.prank(from);
         ape.transfer(to, amount);
@@ -434,14 +448,16 @@ contract APEHandler is Test {
         uint152 totalCollateral = reserves.apesReserve + reserves.treasury + reserves.lpReserve;
         collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max - totalCollateral));
 
-        uint256 totalSupply = ape.totalSupply();
-        uint256 amountMax = type(uint256).max - totalSupply;
-        if (totalSupply > FullMath.mulDivRoundingUp(reserves.apesReserve, amountMax, type(uint256).max)) {
+        totalSupplyOld = ape.totalSupply();
+        treasuryOld = reserves.treasury;
+        apesReserveOld = reserves.apesReserve;
+        uint256 amountMax = type(uint256).max - totalSupplyOld;
+        if (totalSupplyOld > FullMath.mulDivRoundingUp(reserves.apesReserve, amountMax, type(uint256).max)) {
             // Ensure max supply of APE (2^256-1) is not exceeded
             collateralDeposited = uint152(
-                _bound(collateralDeposited, 0, FullMath.mulDiv(reserves.apesReserve, amountMax, totalSupply))
+                _bound(collateralDeposited, 0, FullMath.mulDiv(reserves.apesReserve, amountMax, totalSupplyOld))
             );
-        } else if (totalSupply == 0) {
+        } else if (totalSupplyOld == 0) {
             if (collateralDeposited < 2) return;
             collateralDeposited = uint152(_bound(collateralDeposited, 2, collateralDeposited));
         }
@@ -456,6 +472,7 @@ contract APEHandler is Test {
         reserves.lpReserve += polFee;
 
         _changeReserves(finalApesReserve);
+        trueIfMintFalseIfBurn = true;
     }
 
     function burn(uint256 fromId, uint16 baseFee, uint8 tax, uint256 amount, uint152 finalApesReserve) external {
@@ -466,13 +483,15 @@ contract APEHandler is Test {
         uint256 preBalance = ape.balanceOf(from);
         amount = _bound(amount, 0, preBalance);
 
-        uint256 totalSupply = ape.totalSupply();
-        if (totalSupply == 0) return;
+        totalSupplyOld = ape.totalSupply();
+        treasuryOld = reserves.treasury;
+        apesReserveOld = reserves.apesReserve;
+        if (totalSupplyOld == 0) return;
 
         // Make sure at least 2 units of collateral are in the LP reserve + APE reserve
         if (reserves.lpReserve < 2) {
             uint152 collateralWidthdrawnMax = reserves.apesReserve + reserves.lpReserve - 2;
-            uint256 amountMax = FullMath.mulDiv(totalSupply, collateralWidthdrawnMax, reserves.apesReserve);
+            uint256 amountMax = FullMath.mulDiv(totalSupplyOld, collateralWidthdrawnMax, reserves.apesReserve);
             amount = _bound(amount, 0, amountMax);
         }
 
@@ -485,19 +504,25 @@ contract APEHandler is Test {
         totalCollateralDeposited -= collateralWidthdrawn;
 
         _changeReserves(finalApesReserve);
+        trueIfMintFalseIfBurn = false;
     }
 }
 
 contract APEInvariantTest is Test {
     APEHandler apeHandler;
     APE ape;
-    uint152 treasuryPrevious;
 
     function setUp() public {
         apeHandler = new APEHandler();
         ape = APE(apeHandler.ape());
 
         targetContract(address(apeHandler));
+
+        bytes4[] memory selectors = new bytes4[](3);
+        selectors[0] = apeHandler.transfer.selector;
+        selectors[1] = apeHandler.mint.selector;
+        selectors[2] = apeHandler.burn.selector;
+        targetSelector(FuzzSelector({addr: address(apeHandler), selectors: selectors}));
     }
 
     function invariant_collateralCheck() public {
@@ -510,9 +535,32 @@ contract APEInvariantTest is Test {
 
     function invariant_treasuryAlwaysIncreases() public {
         (uint152 treasury, , ) = apeHandler.reserves();
+        uint152 treasuryOld = apeHandler.treasuryOld();
 
-        assertGe(treasury, treasuryPrevious);
+        assertGe(treasury, treasuryOld);
+    }
 
-        treasuryPrevious = treasury;
+    function invariant_ratioReservesAreProportionalToSupply() public {
+        bool changeReserves = apeHandler.changeReserves();
+        if (!changeReserves) return;
+
+        uint256 totalSupplyOld = apeHandler.totalSupplyOld();
+        if (totalSupplyOld > 0) {
+            uint256 totalSupply = ape.totalSupply();
+
+            (, uint152 apesReserve, ) = apeHandler.reserves();
+            uint152 apesReserveOld = apeHandler.apesReserveOld();
+
+            bool trueIfMintFalseIfBurn = apeHandler.trueIfMintFalseIfBurn();
+            if (trueIfMintFalseIfBurn) {
+                uint256 totalSupplyExpected = FullMath.mulDiv(apesReserve, totalSupplyOld, apesReserveOld);
+                assertLe(totalSupply, totalSupplyExpected);
+                assertGe(totalSupply, totalSupplyExpected - 1);
+            } else {
+                uint152 apesReserveExpected = uint152(FullMath.mulDiv(totalSupply, apesReserveOld, totalSupplyOld));
+                assertGe(apesReserve, apesReserveExpected);
+                assertLe(apesReserve, apesReserveExpected + 1);
+            }
+        }
     }
 }

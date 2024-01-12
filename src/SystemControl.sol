@@ -15,7 +15,6 @@ contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
     /** Flow chart of the system 4 possible states:
-
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
         +---------------+      +---------------+       +---------------+      +---------------+
@@ -24,7 +23,7 @@ contract SystemControl is Ownable {
         Unstoppable, // System is running normally, trustless and permissionless. SIR issuance is started.
         TrainingWheels, // Betta period before Unstoppable status, deposits can be frozen by switching to Emergency status
         Emergency, // Deposits are frozen, and system can be Shutdown if it does not revert to TrainingWheels before SHUTDOWN_WITHDRAWAL_DELAY seconds
-        Shutdown // No deposits, withdrawals, only SystemControl can withdraw funds. Once here it cannot change status.
+        Shutdown // No deposits, SystemControl can withdraw all funds. Once here it cannot change status.
     }
 
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
