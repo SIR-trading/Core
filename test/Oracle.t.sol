@@ -1134,10 +1134,6 @@ contract UniswapHandler is Test {
             if (minTick < TickMath.MIN_TICK) minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             maxTick = ((tick + 2 * tickSpac) / tickSpac) * tickSpac;
             if (maxTick > TickMath.MAX_TICK) maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
-            // console.log("Tick, Min Tick, Max Tick");
-            // console.logInt(tick);
-            // console.logInt(minTick);
-            // console.logInt(maxTick);
         }
 
         // Compute amounts
@@ -1346,6 +1342,20 @@ contract OracleInvariantTest is Test, Oracle {
 
         targetContract(address(uniswapHandler));
         targetContract(address(_oracleHandler));
+
+        bytes4[] memory selectors = new bytes4[](6);
+        selectors[0] = uniswapHandler.increaseCardinality.selector;
+        selectors[1] = uniswapHandler.enableFeeTier.selector;
+        selectors[2] = uniswapHandler.instantiatePool.selector;
+        selectors[3] = uniswapHandler.addLiquidity.selector;
+        selectors[4] = uniswapHandler.rmvLiquidity.selector;
+        selectors[5] = uniswapHandler.swap.selector;
+        targetSelector(FuzzSelector({addr: address(uniswapHandler), selectors: selectors}));
+
+        selectors = new bytes4[](2);
+        selectors[0] = _oracleHandler.newUniswapFeeTier.selector;
+        selectors[1] = _oracleHandler.updateOracleState.selector;
+        targetSelector(FuzzSelector({addr: address(_oracleHandler), selectors: selectors}));
     }
 
     function skip(uint40 timeSkip) external {
