@@ -44,6 +44,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
     mapping(address => mapping(uint256 => uint256)) private _balanceOf;
     /** Because of the protocol owned liquidity (POL) is updated on every mint/burn of TEA/APE, we packed both values,
         totalSupply and POL balance, into a single uint256 to save gas on SLOADs.
+        Fortunately, the max supply of TEA fits in 128 bits, so we can use the other 128 bits for POL.
      */
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) private _totalSupplyAndBalanceVault;
 
@@ -108,11 +109,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
         // Update SIR issuances
-        LPersBalances memory lpersBalances;
-        {
-            // To avoid stack too deep errors
-            lpersBalances = LPersBalances(from, _balanceOf[from][vaultId], to, balanceOf(to, vaultId));
-        }
+        LPersBalances memory lpersBalances = LPersBalances(from, _balanceOf[from][vaultId], to, balanceOf(to, vaultId));
         updateLPerIssuanceParams(
             false,
             vaultId,
@@ -153,11 +150,12 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             uint256 amount = amounts[i];
 
             // Update SIR issuances
-            LPersBalances memory lpersBalances;
-            {
-                // To avoid stack too deep errors
-                lpersBalances = LPersBalances(from, _balanceOf[from][vaultId], to, balanceOf(to, vaultId));
-            }
+            LPersBalances memory lpersBalances = LPersBalances(
+                from,
+                _balanceOf[from][vaultId],
+                to,
+                balanceOf(to, vaultId)
+            );
             updateLPerIssuanceParams(
                 false,
                 vaultId,
@@ -210,16 +208,12 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                 : _balanceOf[to][vaultId];
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances;
-            {
-                // To avoid stack too deep errors
-                lpersBalances = LPersBalances(
-                    to,
-                    balanceTo,
-                    to == address(this) ? address(0) : address(this), // We only need to update 1 address when it's POL only mint
-                    totalSupplyAndBalanceVault_.balanceVault
-                );
-            }
+            LPersBalances memory lpersBalances = LPersBalances(
+                to,
+                balanceTo,
+                to == address(this) ? address(0) : address(this), // We only need to update 1 address when it's POL only mint
+                totalSupplyAndBalanceVault_.balanceVault
+            );
             updateLPerIssuanceParams(
                 false,
                 vaultId,
@@ -282,16 +276,12 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             uint256 balanceFrom = _balanceOf[from][vaultId];
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances;
-            {
-                // To avoid stack too deep errors
-                lpersBalances = LPersBalances(
-                    from,
-                    balanceFrom,
-                    address(this),
-                    totalSupplyAndBalanceVault_.balanceVault
-                );
-            }
+            LPersBalances memory lpersBalances = LPersBalances(
+                from,
+                balanceFrom,
+                address(this),
+                totalSupplyAndBalanceVault_.balanceVault
+            );
             updateLPerIssuanceParams(
                 false,
                 vaultId,

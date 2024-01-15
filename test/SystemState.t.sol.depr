@@ -16,28 +16,116 @@ library ErrorComputation {
     }
 }
 
-contract SystemStateInstance is SystemState {
+contract NakedVault is SystemState, SystemConstants {
     uint40 constant VAULT_ID = 42;
+
+    uint128 totalSupply;
+    uint128 balanceVault;
+    mapping(address => uint256) balances;
 
     constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
 
-    function updateLPerIssuanceParams(address lper0, address lper1) external returns (uint104 unclaimedRewards) {
-        return updateLPerIssuanceParams(false, VAULT_ID, lper0, lper1);
+    /** SystemState's most important function is
+            updateLPerIssuanceParams
+        which is called when tansfering/minting/burning TEA.
+        It only cares about the current balances and the total supply of TEA,
+        plus some system parameters.
+     */
+
+    /// @dev Mints TEA for POL only
+    function mintPol(uint256 amountPol) external {
+        // Get balances
+        LPersBalances memory lpersBalances = LPersBalances(address(this), balanceVault, address(0), 0);
+
+        // Update SIR issuance
+        updateLPerIssuanceParams(
+            false,
+            VAULT_ID,
+            systemParams,
+            vaultIssuanceParams[VAULT_ID],
+            totalSupply,
+            lpersBalances
+        );
+
+        // Mint TEA
+        unchecked {
+            balanceVault += uint128(amountPol);
+            require(totalSupply + amountPol <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            totalSupply += uint128(amountPol);
+        }
     }
 
-    function mint(address to, uint256 amount) external {
-        mint(to, VAULT_ID, amount);
+    /// @dev Mints TEA to the given address and for POL
+    function mint(address to, uint256 amount, uint256 amountPol) external {
+        // Get balances
+        LPersBalances memory lpersBalances = LPersBalances(
+            to,
+            balances[to],
+            address(this), // We also update balance of vault
+            balanceVault
+        );
+
+        // Update SIR issuance
+        updateLPerIssuanceParams(
+            false,
+            VAULT_ID,
+            systemParams,
+            vaultIssuanceParams[VAULT_ID],
+            totalSupply,
+            lpersBalances
+        );
+
+        // Mint TEA
+        unchecked {
+            balances[to] += amount;
+            require(totalSupply + amount <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            totalSupply += uint128(amount);
+
+            balanceVault += uint128(amountPol);
+            require(totalSupply + amountPol <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            totalSupply += uint128(amountPol);
+        }
     }
 
-    function burn(address from, uint256 amount) external {
-        burn(from, VAULT_ID, amount);
+    /// @dev Burns TEA to the given address and means TEA for POL
+    function burn(address from, uint256 amount, uint256 amountPol) external {
+        // Get balances
+        LPersBalances memory lpersBalances = LPersBalances(
+            from,
+            balances[from],
+            address(this), // We also update balance of vault
+            balanceVault
+        );
+
+        // Update SIR issuance
+        updateLPerIssuanceParams(
+            false,
+            VAULT_ID,
+            systemParams,
+            vaultIssuanceParams[VAULT_ID],
+            totalSupply,
+            lpersBalances
+        );
+
+        // Burn TEA
+        balances[from] -= amount;
+        unchecked {
+            totalSupply -= uint128(amount);
+        }
+
+        // Mint TEA for POL
+        unchecked {
+            balanceVault += uint128(amountPol);
+            require(totalSupply + amountPol <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            totalSupply += uint128(amountPol);
+        }
     }
 }
 
 contract SystemStateTest is Test, SystemConstants {
     uint40 constant VAULT_ID = 42;
     uint40 constant MAX_TS = 599 * 365 days; // See SystemState.sol comments for explanation
-    SystemStateInstance systemState;
+    NakedVault systemState;
 
     address systemControl;
     address sir;
@@ -56,7 +144,7 @@ contract SystemStateTest is Test, SystemConstants {
         alice = vm.addr(4);
         bob = vm.addr(5);
 
-        systemState = new SystemStateInstance(systemControl, sir, vaultExternal);
+        systemState = new NakedVault(systemControl, sir, vaultExternal);
     }
 
     function testFuzz_mintBeforeStart(uint8 tax, uint256 teaAmount) public {
@@ -465,7 +553,7 @@ contract SystemStateHandler is Test, SystemConstants {
     uint256 private _numUpdatesCumSIRPerTEA;
     mapping(uint256 idUser => uint256) private _numUpdatesCumSIRPerTEAForUser;
 
-    SystemStateInstance private _systemState;
+    NakedVault private _systemState;
 
     modifier advanceTime(uint24 timeSkip) {
         currentTimeBefore = currentTime;
@@ -495,7 +583,7 @@ contract SystemStateHandler is Test, SystemConstants {
         // We DO need the system control to start the emission of SIR.
         // We DO need the SIR address to be able to claim SIR.
         // We do NOT vault external in this test.
-        _systemState = new SystemStateInstance(address(this), address(this), address(0));
+        _systemState = new NakedVault(address(this), address(this), address(0));
 
         // Start issuance
         _systemState.updateSystemState(

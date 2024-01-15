@@ -11,6 +11,7 @@ import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 
 // Contracts
 import {Addresses} from "./libraries/Addresses.sol";
+import "forge-std/Test.sol";
 
 /**
  *     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
@@ -319,6 +320,7 @@ contract Oracle {
         uint256 score;
         UniswapOracleData memory oracleData;
         UniswapOracleData memory bestOracleData;
+        // console.log("----CONTRACT intermediate scores----");
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
@@ -341,6 +343,9 @@ contract Oracle {
                 uint256 scoreTemp = oracleData.period == 0
                     ? 1
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
+                // if (oracleData.period != 0)
+                // console.log("liquidity:", oracleData.avLiquidity, "| period:", oracleData.period);
+                // console.log("CONTRACT tempScore is ", scoreTemp, " for fee ", uniswapFeeTiers[i].fee);
 
                 // Update best score
                 if (scoreTemp > score) {
@@ -363,6 +368,7 @@ contract Oracle {
         // Update oracle state
         state[tokenA][tokenB] = oracleState;
 
+        // console.log("Oracle chose fee tier", oracleState.uniswapFeeTier.fee, "with a score of", score);
         emit OracleInitialized(
             tokenA,
             tokenB,
@@ -719,6 +725,7 @@ contract Oracle {
         UniswapFeeTier memory uniswapFeeTier
     ) private pure returns (uint256) {
         // The score is rounded up to ensure it is always >1 if aggOrAvLiquidity>0
+        // console.log((((aggOrAvLiquidity * uniswapFeeTier.fee) << 72) - 1) / uint24(uniswapFeeTier.tickSpacing) + 1);
         return (((aggOrAvLiquidity * uniswapFeeTier.fee) << 72) - 1) / uint24(uniswapFeeTier.tickSpacing) + 1;
     }
 

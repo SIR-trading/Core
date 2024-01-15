@@ -254,44 +254,72 @@ contract OracleInitializeTest is Test, Oracle {
 
         // Deploy fee tiers in random order
         UniswapPoolAddress.PoolKey memory poolKey;
-        uint8[9] memory order = _shuffle1To9(seed);
         uint256[9] memory timeInc;
-        for (uint256 i = 0; i < 9; i++) {
-            uint j = order[i];
+        {
+            uint8[9] memory order = _shuffle1To9(seed);
+            for (uint256 i = 0; i < 9; i++) {
+                uint j = order[i];
 
-            if (liquidity[j] == 0 && period[j] == 0) {
-                _preparePoolNoInitialization(uniswapFeeTiers[j].fee);
-            } else {
-                (liquidity[j], poolKey) = _preparePool(uniswapFeeTiers[j].fee, liquidity[j], uint32(period[j]));
-                if (liquidity[j] == 0) liquidity[j] = 1;
-            }
+                if (liquidity[j] == 0 && period[j] == 0) {
+                    _preparePoolNoInitialization(uniswapFeeTiers[j].fee);
+                } else {
+                    (liquidity[j], poolKey) = _preparePool(uniswapFeeTiers[j].fee, liquidity[j], uint32(period[j]));
+                    if (liquidity[j] == 0) liquidity[j] = 1;
+                }
 
-            for (j = 0; j <= i; j++) {
-                timeInc[order[j]] += period[order[i]];
+                for (j = 0; j <= i; j++) {
+                    timeInc[order[j]] += period[order[i]];
+                }
             }
         }
 
         // Score fee tiers
         uint256 bestScore;
+        bool unreliableWinner; // Liquidity estimates from Uniswap manager vary by 3 units
         uint256 iBest;
         UniswapPoolAddress.PoolKey memory bestPoolKey;
-        for (uint256 i = 0; i < 9; i++) {
-            period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
+        {
+            uint256 errorTolerance;
+            // console.log("------TEST intermediate scores------");
+            for (uint256 i = 0; i < 9; i++) {
+                period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
 
-            uint256 aggLiquidity = liquidity[i] * period[i];
-            uint256 tempScore = aggLiquidity == 0
-                ? 0
-                : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) / uint24(uniswapFeeTiers[i].tickSpacing) + 1;
+                // console.log("liquidity:", liquidity[i], "| period:", period[i]);
+                uint256 tempScore;
+                {
+                    uint256 aggLiquidity = liquidity[i] * period[i];
+                    tempScore = aggLiquidity == 0
+                        ? 0
+                        : (((aggLiquidity * uniswapFeeTiers[i].fee) << 72) - 1) /
+                            uint24(uniswapFeeTiers[i].tickSpacing) +
+                            1;
+                    if (aggLiquidity != 0) {
+                        console.log(tempScore);
+                    }
+                }
 
-            if (tempScore >= bestScore) {
-                iBest = i;
-                bestScore = tempScore;
-                bestPoolKey = poolKey;
+                if (tempScore > bestScore) {
+                    iBest = i;
+                    bestPoolKey = poolKey;
+                    errorTolerance =
+                        ((uint256(3) * period[i] * uniswapFeeTiers[i].fee) << 72) /
+                        uint24(uniswapFeeTiers[i].tickSpacing);
+
+                    if (tempScore - bestScore <= errorTolerance) unreliableWinner = true;
+                    else unreliableWinner = false;
+
+                    bestScore = tempScore;
+                } else if (bestScore != 0 && bestScore - tempScore <= errorTolerance) {
+                    unreliableWinner = true;
+                }
             }
         }
 
-        // Check the correct fee tier is selected
-        if (bestScore == 0) {
+        // Check the event that shows the liquidity and other parameters
+        if (unreliableWinner) {
+            // console.log("WARNING: The winner is unreliable");
+            return;
+        } else if (bestScore == 0) {
             vm.expectRevert();
         } else {
             vm.expectEmit(true, true, true, false, address(_oracle));
