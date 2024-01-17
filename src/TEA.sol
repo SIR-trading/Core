@@ -57,7 +57,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function totalSupply(uint256 vaultId) external view returns (uint256) {
+    function totalSupply(uint256 vaultId) public view override returns (uint256) {
         return _totalSupplyAndBalanceVault[vaultId].totalSupply;
     }
 
@@ -66,7 +66,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
         return VaultExternal.teaURI(paramsById, vaultId, totalSupply_);
     }
 
-    function balanceOf(address owner, uint256 vaultId) public view returns (uint256) {
+    function balanceOf(address owner, uint256 vaultId) public view override returns (uint256) {
         return owner == address(this) ? _totalSupplyAndBalanceVault[vaultId].balanceVault : _balanceOf[owner][vaultId];
     }
 
@@ -381,92 +381,12 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                         SYSTEM STATE VIRTUAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function claimSIR(uint256 vaultId, address lper) external override returns (uint80) {
-        require(msg.sender == sir);
-
-        LPersBalances memory lpersBalances;
-        {
-            // To avoid stack too deep errors
-            lpersBalances = LPersBalances(lper, balanceOf(lper, vaultId), address(0), 0);
-        }
-
-        return
-            updateLPerIssuanceParams(
-                true,
-                vaultId,
-                systemParams,
-                vaultIssuanceParams[vaultId],
-                _totalSupplyAndBalanceVault[vaultId].totalSupply,
-                lpersBalances
-            );
-    }
-
-    function unclaimedRewards(uint256 vaultId, address lper) external view override returns (uint80) {
-        return
-            unclaimedRewards(
-                vaultId,
-                lper,
-                balanceOf(lper, vaultId),
-                cumulativeSIRPerTEA(
-                    systemParams,
-                    vaultIssuanceParams[vaultId],
-                    _totalSupplyAndBalanceVault[vaultId].totalSupply
-                )
-            );
-    }
-
-    function cumulativeSIRPerTEA(uint256 vaultId) external view override returns (uint176 cumSIRPerTEAx96) {
+    function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumSIRPerTEAx96) {
         return
             cumulativeSIRPerTEA(
                 systemParams,
                 vaultIssuanceParams[vaultId],
                 _totalSupplyAndBalanceVault[vaultId].totalSupply
             );
-    }
-
-    function updateVaults(
-        uint40[] calldata oldVaults,
-        uint40[] calldata newVaults,
-        uint8[] calldata newTaxes,
-        uint16 cumTax
-    ) external override onlySystemControl {
-        VaultStructs.SystemParameters memory systemParams_ = systemParams;
-
-        // Stop old issuances
-        for (uint256 i = 0; i < oldVaults.length; ++i) {
-            // Retrieve the vault's current cumulative SIR per unit of TEA
-            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(
-                systemParams_,
-                vaultIssuanceParams[oldVaults[i]],
-                _totalSupplyAndBalanceVault[oldVaults[i]].totalSupply
-            );
-
-            // Update vault issuance parameters
-            vaultIssuanceParams[oldVaults[i]] = VaultStructs.VaultIssuanceParams({
-                tax: 0, // Nul tax, and consequently nul SIR issuance
-                tsLastUpdate: uint40(block.timestamp),
-                cumSIRPerTEAx96: cumSIRPerTEAx96
-            });
-        }
-
-        // Start new issuances
-        for (uint256 i = 0; i < newVaults.length; ++i) {
-            // Retrieve the vault's current cumulative SIR per unit of TEA
-            uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(
-                systemParams_,
-                vaultIssuanceParams[newVaults[i]],
-                _totalSupplyAndBalanceVault[newVaults[i]].totalSupply
-            );
-
-            // Update vault issuance parameters
-            vaultIssuanceParams[newVaults[i]] = VaultStructs.VaultIssuanceParams({
-                tax: newTaxes[i],
-                tsLastUpdate: uint40(block.timestamp),
-                cumSIRPerTEAx96: cumSIRPerTEAx96
-            });
-        }
-
-        // Update cumulative taxes
-        systemParams.cumTax = cumTax;
     }
 }

@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./SystemConstants.sol";
+import "forge-std/Test.sol";
 
 abstract contract SystemState is SystemControlAccess, SystemConstants {
     /** Choice of types for 'cumSIRPerTEAx96' and 'unclaimedRewards'
@@ -169,15 +170,29 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         }
     }
 
-    function cumulativeSIRPerTEA(uint256 vaultId) external view virtual returns (uint176 cumSIRPerTEAx96);
-
-    function unclaimedRewards(uint256 vaultId, address lper) external view virtual returns (uint80);
+    function unclaimedRewards(uint256 vaultId, address lper) external view returns (uint80) {
+        return unclaimedRewards(vaultId, lper, balanceOf(lper, vaultId), cumulativeSIRPerTEA(vaultId));
+    }
 
     /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function claimSIR(uint256 vaultId, address lper) external virtual returns (uint80);
+    function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
+        require(msg.sender == sir);
+
+        LPersBalances memory lpersBalances = LPersBalances(lper, balanceOf(lper, vaultId), address(0), 0);
+
+        return
+            updateLPerIssuanceParams(
+                true,
+                vaultId,
+                systemParams,
+                vaultIssuanceParams[vaultId],
+                totalSupply(vaultId),
+                lpersBalances
+            );
+    }
 
     /**
      * @dev To be called BEFORE transfering/minting/burning TEA
@@ -242,5 +257,46 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
         uint40[] calldata newVaults,
         uint8[] calldata newTaxes,
         uint16 cumTax
-    ) external virtual;
+    ) external onlySystemControl {
+        uint176 cumSIRPerTEAx96;
+
+        // Stop old issuances
+        for (uint256 i = 0; i < oldVaults.length; ++i) {
+            // Retrieve the vault's current cumulative SIR per unit of TEA
+            cumSIRPerTEAx96 = cumulativeSIRPerTEA(oldVaults[i]);
+
+            // Update vault issuance parameters
+            vaultIssuanceParams[oldVaults[i]] = VaultStructs.VaultIssuanceParams({
+                tax: 0, // Nul tax, and consequently nul SIR issuance
+                tsLastUpdate: uint40(block.timestamp),
+                cumSIRPerTEAx96: cumSIRPerTEAx96
+            });
+        }
+
+        // Start new issuances
+        for (uint256 i = 0; i < newVaults.length; ++i) {
+            // Retrieve the vault's current cumulative SIR per unit of TEA
+            cumSIRPerTEAx96 = cumulativeSIRPerTEA(newVaults[i]);
+
+            // Update vault issuance parameters
+            vaultIssuanceParams[newVaults[i]] = VaultStructs.VaultIssuanceParams({
+                tax: newTaxes[i],
+                tsLastUpdate: uint40(block.timestamp),
+                cumSIRPerTEAx96: cumSIRPerTEAx96
+            });
+        }
+
+        // Update cumulative taxes
+        systemParams.cumTax = cumTax;
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                        FUNCTION TO BE IMPLEMENTED BY TEA
+    ////////////////////////////////////////////////////////////////*/
+
+    function cumulativeSIRPerTEA(uint256 vaultId) public view virtual returns (uint176 cumSIRPerTEAx96);
+
+    function balanceOf(address owner, uint256 vaultId) public view virtual returns (uint256);
+
+    function totalSupply(uint256 vaultId) public view virtual returns (uint256);
 }
