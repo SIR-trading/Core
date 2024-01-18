@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {SystemState} from "src/SystemState.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {SystemConstants} from "src/SystemConstants.sol";
+import {FullMath} from "src/libraries/FullMath.sol";
 
 library ErrorComputation {
     function maxErrorBalanceSIR(uint256 balance, uint256 numUpdatesCumSIRPerTea) internal pure returns (uint256) {
@@ -107,6 +108,8 @@ contract SystemStateWrapper is SystemState {
 
     /// @dev Burns TEA to the given address and means TEA for POL
     function burn(address from, uint256 amount, uint256 amountPol) external {
+        assert(amount >= amountPol);
+
         // Get _balances
         LPersBalances memory lpersBalances = LPersBalances(
             from,
@@ -208,7 +211,8 @@ contract SystemStateTest is Test, SystemConstants {
 
             // Mint some TEA
             vm.warp(tsMint);
-            systemState.mint(alice, teaAmount, teaAmountPOL);
+            if (teaAmount > 0) systemState.mint(alice, teaAmount, teaAmountPOL);
+            else systemState.mintPol(teaAmountPOL);
         } else {
             if (checkFirst3Years) {
                 tsCheckRewards = uint40(_bound(tsCheckRewards, tsUpdateTax, tsStart + THREE_YEARS));
@@ -224,7 +228,8 @@ contract SystemStateTest is Test, SystemConstants {
 
             // Mint some TEA
             vm.warp(tsMint);
-            systemState.mint(alice, teaAmount, teaAmountPOL);
+            if (teaAmount > 0) systemState.mint(alice, teaAmount, teaAmountPOL);
+            else systemState.mintPol(teaAmountPOL);
 
             // Activate tax
             vm.warp(tsUpdateTax);
@@ -296,8 +301,9 @@ contract SystemStateTest is Test, SystemConstants {
         tsUpdateTax = uint40(_bound(tsUpdateTax, tsStart, tsStart + THREE_YEARS));
         tsMint = uint40(_bound(tsMint, tsStart, tsStart + THREE_YEARS));
 
-        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 0, TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, TEA_MAX_SUPPLY - teaAmount);
+        vm.assume(teaAmount + teaAmountPOL > 0);
 
         (uint256 duration, , uint176 cumSIRPerTEAx96) = _updateTaxMintAndCheckRewards(
             tsUpdateTax,
@@ -345,8 +351,9 @@ contract SystemStateTest is Test, SystemConstants {
         tsUpdateTax = uint40(_bound(tsUpdateTax, tsStart + THREE_YEARS, MAX_TS));
         tsMint = uint40(_bound(tsMint, tsStart + THREE_YEARS, MAX_TS));
 
-        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 0, TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, TEA_MAX_SUPPLY - teaAmount);
+        vm.assume(teaAmount + teaAmountPOL > 0);
 
         (, uint256 duration, uint176 cumSIRPerTEAx96) = _updateTaxMintAndCheckRewards(
             tsUpdateTax,
@@ -383,7 +390,7 @@ contract SystemStateTest is Test, SystemConstants {
         }
     }
 
-    function testFuzz_mintBefore3YearsAndCheckAfter3Years(
+    function testFuzz_mint(
         uint40 tsUpdateTax,
         uint40 tsMint,
         uint40 tsCheckRewards,
@@ -394,8 +401,9 @@ contract SystemStateTest is Test, SystemConstants {
         tsUpdateTax = uint40(_bound(tsUpdateTax, tsStart, tsStart + THREE_YEARS));
         tsMint = uint40(_bound(tsMint, tsStart, tsStart + THREE_YEARS));
 
-        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 0, TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, TEA_MAX_SUPPLY - teaAmount);
+        vm.assume(teaAmount + teaAmountPOL > 0);
 
         (
             uint256 durationBefore3Years,
@@ -435,155 +443,242 @@ contract SystemStateTest is Test, SystemConstants {
         }
     }
 
-    //     function testFuzz_mintTwoUsers(uint256 teaAmount) public {
-    //         uint8 tax = type(uint8).max;
-    //         teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY / 2);
+    function testFuzz_mintTwoUsersSequentially(uint256 teaAmount, uint256 teaAmountPOL, uint256 teaAmountPOL2) public {
+        teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        teaAmountPOL = _bound(teaAmountPOL, 0, (TEA_MAX_SUPPLY - teaAmount) / 2);
+        teaAmountPOL2 = _bound(teaAmountPOL2, 0, teaAmount);
+        vm.assume(teaAmount + 2 * teaAmountPOL + teaAmountPOL2 <= TEA_MAX_SUPPLY);
 
-    //         // Set start of issuance
-    //         vm.prank(systemControl);
-    //         systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
+        // Activate tax
+        vm.warp(tsStart);
+        _activateTax();
 
-    //         // Activate 1 vault
-    //         vm.prank(systemControl);
-    //         uint40[] memory oldVaults = new uint40[](0);
-    //         uint40[] memory newVaults = new uint40[](1);
-    //         newVaults[0] = VAULT_ID;
-    //         uint8[] memory newTaxes = new uint8[](1);
-    //         newTaxes[0] = tax;
-    //         systemState.updateVaults(oldVaults, newVaults, newTaxes, tax);
+        // Mint TEA for Alice
+        systemState.mint(alice, teaAmount, teaAmountPOL);
 
-    //         // Mint some TEA
-    //         console.log("TEA amount: ", teaAmount);
-    //         systemState.mint(alice, teaAmount);
-    //         systemState.mint(bob, teaAmount);
+        // Burn TEA from Alice
+        vm.warp(tsStart + 2 * THREE_YEARS);
+        systemState.burn(alice, teaAmount, teaAmountPOL2);
 
-    //         vm.warp(1 + 2 * THREE_YEARS);
+        // Mint TEA for Bob
+        systemState.mint(bob, teaAmount, teaAmountPOL);
 
-    //         uint104 unclaimedSIRAlice = systemState.unclaimedRewards(VAULT_ID, alice);
-    //         uint104 unclaimedSIRBob = systemState.unclaimedRewards(VAULT_ID, alice);
+        vm.warp(1 + 4 * THREE_YEARS);
 
-    //         uint256 unclaimedSIRTheoretical = ((uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * THREE_YEARS) / 2;
-    //         console.log("unclaimedSIRTheoretical", unclaimedSIRTheoretical);
-    //         assertLe(unclaimedSIRAlice, unclaimedSIRTheoretical, "Alice unclaimed SIR is wrong");
-    //         assertGe(
-    //             unclaimedSIRAlice,
-    //             unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2), // Passing 3 years causes two updates in cumSIRPerTEAx96
-    //             "Alice unclaimed SIR is wrong"
-    //         );
+        // Check rewards for Alice
+        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint256 unclaimedSIRTheoretical = (teaAmount * (ISSUANCE_FIRST_3_YEARS + ISSUANCE) * THREE_YEARS) /
+            (teaAmount + teaAmountPOL);
+        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
+        else {
+            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2));
+        }
 
-    //         assertLe(unclaimedSIRBob, unclaimedSIRTheoretical, "Alice unclaimed SIR is wrong");
-    //         assertGe(
-    //             unclaimedSIRBob,
-    //             unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2), // Passing 3 years causes two updates in cumSIRPerTEAx96
-    //             "Bob unclaimed SIR is wrong"
-    //         );
-    //     }
+        // Check rewards for Bob
+        unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, bob);
+        unclaimedSIRTheoretical =
+            (teaAmount * ISSUANCE * 2 * THREE_YEARS) /
+            (teaAmount + 2 * teaAmountPOL + teaAmountPOL2);
+        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
+        else {
+            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 3));
+        }
 
-    //     function testFuzz_mintTwoUsersSequentially(uint256 teaAmount) public {
-    //         uint8 tax = type(uint8).max;
-    //         teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        // Check rewards for POL
+        unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
+        unclaimedSIRTheoretical =
+            (teaAmountPOL * (ISSUANCE_FIRST_3_YEARS + ISSUANCE) * THREE_YEARS) /
+            (teaAmount + teaAmountPOL) +
+            ((2 * teaAmountPOL + teaAmountPOL2) * ISSUANCE * 2 * THREE_YEARS) /
+            (teaAmount + 2 * teaAmountPOL + teaAmountPOL2);
+        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
+        else {
+            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
+            assertGe(
+                unclaimedSIR,
+                unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(2 * teaAmountPOL + teaAmountPOL2, 3)
+            );
+        }
+    }
 
-    //         // Set start of issuance
-    //         vm.prank(systemControl);
-    //         systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
+    function testFuzz_burn(
+        uint40 tsMint,
+        uint40 tsBurn,
+        uint40 tsCheckRewards,
+        uint256 teaAmount,
+        uint256 teaAmountPOL,
+        uint256 teaAmountPOL2
+    ) public {
+        // Adjust timestamps
+        tsMint = uint40(_bound(tsMint, tsStart, MAX_TS));
+        tsBurn = uint40(_bound(tsBurn, tsMint, MAX_TS));
+        tsCheckRewards = uint40(_bound(tsCheckRewards, tsBurn, MAX_TS));
 
-    //         // Activate 1 vault
-    //         vm.prank(systemControl);
-    //         uint40[] memory oldVaults = new uint40[](0);
-    //         uint40[] memory newVaults = new uint40[](1);
-    //         newVaults[0] = VAULT_ID;
-    //         uint8[] memory newTaxes = new uint8[](1);
-    //         newTaxes[0] = tax;
-    //         systemState.updateVaults(oldVaults, newVaults, newTaxes, tax);
+        // Adjust amounts
+        teaAmount = _bound(teaAmount, 0, TEA_MAX_SUPPLY);
+        teaAmountPOL = _bound(teaAmountPOL, 0, TEA_MAX_SUPPLY - teaAmount);
+        teaAmountPOL2 = _bound(teaAmountPOL2, 0, teaAmount);
+        vm.assume(teaAmount + teaAmountPOL > 0);
+        vm.assume(teaAmountPOL + teaAmountPOL2 > 0);
 
-    //         // Mint some TEA
-    //         systemState.mint(alice, teaAmount);
+        // Activate tax
+        _activateTax();
 
-    //         vm.warp(1 + THREE_YEARS);
-    //         systemState.burn(alice, teaAmount);
-    //         systemState.mint(bob, teaAmount);
+        // Mint some TEA
+        vm.warp(tsMint);
+        if (teaAmount > 0) systemState.mint(alice, teaAmount, teaAmountPOL);
+        else systemState.mintPol(teaAmountPOL);
 
-    //         vm.warp(1 + 2 * THREE_YEARS);
-    //         uint104 unclaimedSIRAlice = systemState.unclaimedRewards(VAULT_ID, alice);
-    //         uint104 unclaimedSIRBob = systemState.unclaimedRewards(VAULT_ID, bob);
+        // Burn some TEA
+        vm.warp(tsBurn);
+        systemState.burn(alice, teaAmount, teaAmountPOL2);
 
-    //         uint256 unclaimedSIRAliceTheoretical = uint256(ISSUANCE_FIRST_3_YEARS) * THREE_YEARS;
-    //         assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical, "Alice unclaimed SIR is wrong");
-    //         assertGe(
-    //             unclaimedSIRAlice,
-    //             unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1),
-    //             "Alice unclaimed SIR is wrong"
-    //         );
+        // Get cumulative SIR per TEA
+        vm.warp(tsCheckRewards);
+        uint176 cumSIRPerTEAx96 = systemState.cumulativeSIRPerTEA(VAULT_ID);
 
-    //         uint256 unclaimedSIRBobTheoretical = uint256(ISSUANCE) * THREE_YEARS;
-    //         assertLe(unclaimedSIRBob, unclaimedSIRBobTheoretical, "Bob unclaimed SIR is wrong");
-    //         assertGe(
-    //             unclaimedSIRBob,
-    //             unclaimedSIRBobTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1),
-    //             "Bob unclaimed SIR is wrong"
-    //         );
-    //     }
+        uint256 durationBefore3Years;
+        uint256 durationAfter3Years;
+        if (tsMint < tsStart + THREE_YEARS && tsBurn < tsStart + THREE_YEARS) {
+            durationBefore3Years = tsBurn - tsMint;
+        } else if (tsMint >= tsStart + THREE_YEARS) {
+            durationAfter3Years = tsBurn - tsMint;
+        } else {
+            durationBefore3Years = tsStart + THREE_YEARS - tsMint;
+            durationAfter3Years = tsBurn - (tsStart + THREE_YEARS);
+        }
 
-    //     function testFuzz_claimSIR(uint256 teaAmount) public {
-    //         uint8 tax = type(uint8).max;
-    //         teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
+        uint256 durationOnlyPolBefore3Years;
+        uint256 durationOnlyPolAfter3Years;
+        if (tsBurn < tsStart + THREE_YEARS && tsCheckRewards < tsStart + THREE_YEARS) {
+            durationOnlyPolBefore3Years = tsCheckRewards - tsBurn;
+        } else if (tsBurn >= tsStart + THREE_YEARS) {
+            durationOnlyPolAfter3Years = tsCheckRewards - tsBurn;
+        } else {
+            durationOnlyPolBefore3Years = tsStart + THREE_YEARS - tsBurn;
+            durationOnlyPolAfter3Years = tsCheckRewards - (tsStart + THREE_YEARS);
+        }
 
-    //         // Set start of issuance
-    //         vm.prank(systemControl);
-    //         systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
+        // Check cumulative SIR per TEA
+        assertApproxEqAbs(
+            cumSIRPerTEAx96,
+            ((ISSUANCE_FIRST_3_YEARS * durationBefore3Years + ISSUANCE * durationAfter3Years) << 96) /
+                (teaAmount + teaAmountPOL) +
+                ((ISSUANCE_FIRST_3_YEARS * durationOnlyPolBefore3Years + ISSUANCE * durationOnlyPolAfter3Years) << 96) /
+                (teaAmountPOL + teaAmountPOL2),
+            ErrorComputation.maxErrorCumSIRPerTEA(3)
+        );
 
-    //         // Activate 1 vault
-    //         vm.prank(systemControl);
-    //         uint40[] memory oldVaults = new uint40[](0);
-    //         uint40[] memory newVaults = new uint40[](1);
-    //         newVaults[0] = VAULT_ID;
-    //         uint8[] memory newTaxes = new uint8[](1);
-    //         newTaxes[0] = tax;
-    //         systemState.updateVaults(oldVaults, newVaults, newTaxes, tax);
+        // Check rewards for Alice
+        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint256 unclaimedSIRTheoretical = ((ISSUANCE_FIRST_3_YEARS *
+            durationBefore3Years +
+            ISSUANCE *
+            durationAfter3Years) * teaAmount) / (teaAmount + teaAmountPOL);
+        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
+        else {
+            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 3));
+        }
 
-    //         // Mint some TEA
-    //         systemState.mint(alice, teaAmount);
+        // Check rewards for POL
+        unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
+        unclaimedSIRTheoretical =
+            ((ISSUANCE_FIRST_3_YEARS * durationBefore3Years + ISSUANCE * durationAfter3Years) * teaAmountPOL) /
+            (teaAmount + teaAmountPOL) +
+            ISSUANCE_FIRST_3_YEARS *
+            durationOnlyPolBefore3Years +
+            ISSUANCE *
+            durationOnlyPolAfter3Years;
+        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
+        else {
+            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
+            assertGe(
+                unclaimedSIR,
+                unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountPOL + teaAmountPOL2, 3) - 1
+            );
+        }
+    }
 
-    //         // Reset rewards
-    //         vm.warp(1 + 2 * THREE_YEARS);
-    //         vm.prank(sir);
-    //         uint104 unclaimedSIRAlice = systemState.claimSIR(VAULT_ID, alice);
+    function testFuzz_claimSIR(uint40 tsMint, uint40 tsCheckRewards, uint256 teaAmount, uint256 teaAmountPOL) public {
+        // Adjust timestamps
+        tsMint = uint40(_bound(tsMint, tsStart, MAX_TS));
+        tsCheckRewards = uint40(_bound(tsCheckRewards, tsMint, MAX_TS));
 
-    //         uint unclaimedSIRAliceTheoretical = (uint256(ISSUANCE_FIRST_3_YEARS) + uint256(ISSUANCE)) * THREE_YEARS;
-    //         assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical);
-    //         assertGe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2));
+        // Adjust amounts
+        teaAmount = _bound(teaAmount, 0, TEA_MAX_SUPPLY);
+        teaAmountPOL = _bound(teaAmountPOL, 0, TEA_MAX_SUPPLY - teaAmount);
+        vm.assume(teaAmount + teaAmountPOL > 0);
 
-    //         assertEq(systemState.unclaimedRewards(VAULT_ID, alice), 0);
-    //     }
+        // Activate tax
+        _activateTax();
 
-    //     function testFuzz_claimSIRFailsCuzNotSir(address addr) public {
-    //         vm.assume(addr != sir);
+        // Mint some TEA
+        vm.warp(tsMint);
+        systemState.mint(alice, teaAmount, teaAmountPOL);
 
-    //         uint8 tax = type(uint8).max;
-    //         uint256 teaAmount = TEA_MAX_SUPPLY;
+        // Reset rewards
+        vm.warp(tsCheckRewards);
+        vm.prank(sir);
+        uint104 unclaimedSIRAlice = systemState.claimSIR(VAULT_ID, alice);
 
-    //         // Set start of issuance
-    //         vm.prank(systemControl);
-    //         systemState.updateSystemState(VaultStructs.SystemParameters(1, 0, 0, false, 0));
+        uint256 durationBefore3Years;
+        uint256 durationAfter3Years;
+        if (tsMint < tsStart + THREE_YEARS && tsCheckRewards < tsStart + THREE_YEARS) {
+            durationBefore3Years = tsCheckRewards - tsMint;
+        } else if (tsMint >= tsStart + THREE_YEARS) {
+            durationAfter3Years = tsCheckRewards - tsMint;
+        } else {
+            durationBefore3Years = tsStart + THREE_YEARS - tsMint;
+            durationAfter3Years = tsCheckRewards - (tsStart + THREE_YEARS);
+        }
 
-    //         // Activate 1 vault
-    //         vm.prank(systemControl);
-    //         uint40[] memory oldVaults = new uint40[](0);
-    //         uint40[] memory newVaults = new uint40[](1);
-    //         newVaults[0] = VAULT_ID;
-    //         uint8[] memory newTaxes = new uint8[](1);
-    //         newTaxes[0] = tax;
-    //         systemState.updateVaults(oldVaults, newVaults, newTaxes, tax);
+        uint256 unclaimedSIRAliceTheoretical = ((durationBefore3Years *
+            ISSUANCE_FIRST_3_YEARS +
+            durationAfter3Years *
+            ISSUANCE) * teaAmount) / (teaAmount + teaAmountPOL);
 
-    //         // Mint some TEA
-    //         systemState.mint(alice, teaAmount);
+        if (unclaimedSIRAliceTheoretical == 0) assertEq(unclaimedSIRAlice, 0);
+        else {
+            assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical);
+            assertGe(
+                unclaimedSIRAlice,
+                unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2)
+            );
+        }
 
-    //         // Reset rewards
-    //         vm.warp(1 + 2 * THREE_YEARS);
-    //         vm.prank(addr);
-    //         vm.expectRevert();
-    //         systemState.claimSIR(VAULT_ID, alice);
-    //     }
+        assertEq(systemState.unclaimedRewards(VAULT_ID, alice), 0);
+    }
+
+    function testFuzz_claimSIRFailsCuzNotSir(
+        uint40 tsMint,
+        uint40 tsCheckRewards,
+        uint256 teaAmount,
+        uint256 teaAmountPOL
+    ) public {
+        // Adjust timestamps
+        tsMint = uint40(_bound(tsMint, tsStart, MAX_TS));
+        tsCheckRewards = uint40(_bound(tsCheckRewards, tsMint, MAX_TS));
+
+        // Adjust amounts
+        teaAmount = _bound(teaAmount, 0, TEA_MAX_SUPPLY);
+        teaAmountPOL = _bound(teaAmountPOL, 0, TEA_MAX_SUPPLY - teaAmount);
+        vm.assume(teaAmount + teaAmountPOL > 0);
+
+        // Activate tax
+        _activateTax();
+
+        // Mint some TEA
+        vm.warp(tsMint);
+        systemState.mint(alice, teaAmount, teaAmountPOL);
+
+        // Reset rewards
+        vm.warp(tsCheckRewards);
+        vm.expectRevert();
+        systemState.claimSIR(VAULT_ID, alice);
+    }
 
     //     function testFuzz_transferAll(uint256 teaAmount) public {
     //         teaAmount = _bound(teaAmount, 1, TEA_MAX_SUPPLY);
