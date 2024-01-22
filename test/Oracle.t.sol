@@ -1104,7 +1104,7 @@ contract UniswapHandler is Test {
     function enableFeeTier(uint24 timeSkip, uint24 fee, int24 tickSpacingUint) external {
         _oracleInvariantTest.skip(timeSkip);
 
-        fee = uint24(_bound(fee, 0, 1000000 - 1));
+        fee = uint24(_bound(fee, 1, 1000000 - 1));
         if (_uniswapFactory.feeAmountTickSpacing(fee) != 0) return; // already enabled
 
         int24 tickSpacing = int24(_bound(tickSpacingUint, 1, 16384 - 1));

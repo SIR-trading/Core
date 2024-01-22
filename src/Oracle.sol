@@ -380,6 +380,8 @@ contract Oracle {
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
     function newUniswapFeeTier(uint24 fee) external {
+        require(fee > 0);
+
         // Get all fee tiers
         UniswapFeeTier[] memory uniswapFeeTiers = getUniswapFeeTiers();
 
