@@ -35,7 +35,7 @@ library VaultStructs {
         uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
         uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
         bool mintingStopped; // If true, no minting of TEA/APE
-        /** Aggregated taxes for all vaults. Choice of uint32 type.
+        /** Aggregated taxes for all vaults. Choice of uint16 type.
             For vault i, (tax_i / type(uint8).max)*10% is charged, where tax_i is of type uint8.
             They must satisfy the condition
                 Σ_i (tax_i / type(uint8).max)^2 ≤ 0.1^2
