@@ -843,245 +843,258 @@ contract SystemStateTest is Test, SystemConstants {
     }
 }
 
-// ///////////////////////////////////////////////
-// //// I N V A R I A N T //// T E S T I N G ////
-// /////////////////////////////////////////////
+///////////////////////////////////////////////
+//// I N V A R I A N T //// T E S T I N G ////
+/////////////////////////////////////////////
 
-// contract SystemStateHandler is Test, SystemConstants {
-//     uint40 public startTime;
-//     uint40 public currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
-//     uint40 public currentTimeBefore;
+contract SystemStateHandler is Test, SystemConstants {
+    uint40 public startTime;
+    uint40 public currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
+    uint40 public currentTimeBefore;
 
-//     uint40 constant VAULT_ID = 42;
-//     uint public totalClaimedSIR;
-//     uint public _totalSIRMaxError;
-//     uint40 public totalTimeWithoutIssuanceFirst3Years;
-//     uint40 public totalTimeWithoutIssuanceAfter3Years;
+    uint40 constant VAULT_ID = 42;
+    uint256 public totalClaimedSIR;
+    uint256 private _totalSIRMaxError;
+    uint40 public totalTimeWithoutIssuanceFirst3Years;
+    uint40 public totalTimeWithoutIssuanceAfter3Years;
 
-//     uint256 private _numUpdatesCumSIRPerTEA;
-//     mapping(uint256 idUser => uint256) private _numUpdatesCumSIRPerTEAForUser;
+    uint256 private _numUpdatesCumSIRPerTEA;
+    mapping(address user => uint256) private _numUpdatesCumSIRPerTEAForUser;
 
-//     SystemStateWrapper private _systemState;
+    SystemStateWrapper private _systemState;
 
-//     modifier advanceTime(uint24 timeSkip) {
-//         currentTimeBefore = currentTime;
-//         vm.warp(currentTime);
-//         if (_systemState.totalSupply(VAULT_ID) == 0) {
-//             if (currentTime < startTime + THREE_YEARS) {
-//                 if (currentTime + timeSkip <= startTime + THREE_YEARS) {
-//                     totalTimeWithoutIssuanceFirst3Years += timeSkip;
-//                 } else {
-//                     totalTimeWithoutIssuanceFirst3Years += startTime + THREE_YEARS - currentTime;
-//                     totalTimeWithoutIssuanceAfter3Years += currentTime + timeSkip - (startTime + THREE_YEARS);
-//                 }
-//             } else {
-//                 totalTimeWithoutIssuanceAfter3Years += timeSkip;
-//             }
-//         }
-//         currentTime += timeSkip;
-//         vm.warp(currentTime);
-//         _;
-//     }
+    modifier advanceTime(uint24 timeSkip) {
+        currentTimeBefore = currentTime;
+        vm.warp(currentTime);
+        if (_systemState.totalSupply(VAULT_ID) == 0) {
+            if (currentTime < startTime + THREE_YEARS) {
+                if (currentTime + timeSkip <= startTime + THREE_YEARS) {
+                    totalTimeWithoutIssuanceFirst3Years += timeSkip;
+                } else {
+                    totalTimeWithoutIssuanceFirst3Years += startTime + THREE_YEARS - currentTime;
+                    totalTimeWithoutIssuanceAfter3Years += currentTime + timeSkip - (startTime + THREE_YEARS);
+                }
+            } else {
+                totalTimeWithoutIssuanceAfter3Years += timeSkip;
+            }
+        }
+        currentTime += timeSkip;
+        vm.warp(currentTime);
+        _;
+    }
 
-//     constructor(uint40 currentTime_) {
-//         startTime = currentTime_;
-//         currentTime = currentTime_;
-//         vm.warp(currentTime_);
+    constructor(uint40 currentTime_) {
+        startTime = currentTime_;
+        currentTime = currentTime_;
+        vm.warp(currentTime_);
 
-//         // We DO need the system control to start the emission of SIR.
-//         // We DO need the SIR address to be able to claim SIR.
-//         // We do NOT vault external in this test.
-//         _systemState = new SystemStateWrapper(address(this), address(this), address(0));
+        // We DO need the system control to start the emission of SIR.
+        // We DO need the SIR address to be able to claim SIR.
+        _systemState = new SystemStateWrapper(address(this), address(this));
 
-//         // Start issuance
-//         _systemState.updateSystemState(
-//             VaultStructs.SystemParameters(currentTime, uint16(0), uint8(0), false, uint16(0))
-//         );
+        // Activate one vault (VERY IMPORTANT to do it after updateSystemState)
+        uint40[] memory newVaults = new uint40[](1);
+        newVaults[0] = VAULT_ID;
+        uint8[] memory newTaxes = new uint8[](1);
+        newTaxes[0] = 69;
+        _systemState.updateVaults(new uint40[](0), newVaults, newTaxes, 69);
+    }
 
-//         // Activate one vault (VERY IMPORTANT to do it after updateSystemState)
-//         uint40[] memory newVaults = new uint40[](1);
-//         newVaults[0] = VAULT_ID;
-//         uint8[] memory newTaxes = new uint8[](1);
-//         newTaxes[0] = 1;
-//         _systemState.updateVaults(new uint40[](0), newVaults, newTaxes, 1);
-//     }
+    function _idToAddr(uint id) private pure returns (address) {
+        id = _bound(id, 1, 5);
+        return vm.addr(id);
+    }
 
-//     function _idToAddr(uint id) private pure returns (address) {
-//         id = _bound(id, 1, 5);
-//         return vm.addr(id);
-//     }
+    function _updateCumSIRPerTEA() private {
+        bool crossThreeYears = currentTimeBefore <= startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        if (crossThreeYears) _numUpdatesCumSIRPerTEA += 2;
+        else _numUpdatesCumSIRPerTEA++;
+    }
 
-//     function _updateCumSIRPerTEA() private {
-//         bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
-//         if (crossThreeYears) _numUpdatesCumSIRPerTEA += 2;
-//         else _numUpdatesCumSIRPerTEA++;
-//     }
+    function transfer(uint256 from, uint256 to, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
+        address fromAddr = _idToAddr(from);
+        address toAddr = _idToAddr(to);
+        uint256 preBalance = _systemState.balanceOf(fromAddr, VAULT_ID);
+        amount = _bound(amount, 0, preBalance);
 
-//     function transfer(uint256 from, uint256 to, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
-//         address fromAddr = _idToAddr(from);
-//         address toAddr = _idToAddr(to);
-//         uint256 preBalance = _systemState.balanceOf(fromAddr, VAULT_ID);
-//         amount = _bound(amount, 0, preBalance);
+        vm.prank(fromAddr);
+        _systemState.transfer(fromAddr, toAddr, amount);
 
-//         vm.prank(fromAddr);
-//         _systemState.safeTransferFrom(fromAddr, toAddr, VAULT_ID, amount, "");
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
-//         // Vault's cumulative SIR per TEA is updated
-//         _updateCumSIRPerTEA();
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[fromAddr];
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[toAddr];
+        uint256 toBalance = _systemState.balanceOf(toAddr, VAULT_ID);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(toBalance, numUpdates);
 
-//         // Update _totalSIRMaxError
-//         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[from];
-//         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
-//         numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[to];
-//         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        // Update indexes
+        _numUpdatesCumSIRPerTEAForUser[fromAddr] = _numUpdatesCumSIRPerTEA;
+        _numUpdatesCumSIRPerTEAForUser[toAddr] = _numUpdatesCumSIRPerTEA;
+    }
 
-//         // Update indexes
-//         _numUpdatesCumSIRPerTEAForUser[from] = _numUpdatesCumSIRPerTEA;
-//         _numUpdatesCumSIRPerTEAForUser[to] = _numUpdatesCumSIRPerTEA;
-//     }
+    function mint(uint256 user, uint256 amount, uint256 amountPOL, uint24 timeSkip) external advanceTime(timeSkip) {
+        address addr = _idToAddr(user);
 
-//     function mint(uint256 user, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
-//         address addr = _idToAddr(user);
+        uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
+        uint256 vaultPreBalance = _systemState.balanceOf(address(_systemState), VAULT_ID);
 
-//         uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
+        uint256 totalSupply = _systemState.totalSupply(VAULT_ID);
+        amount = _bound(amount, 0, TEA_MAX_SUPPLY - totalSupply);
+        amountPOL = _bound(amountPOL, 0, TEA_MAX_SUPPLY - totalSupply - amount);
 
-//         uint256 totalSupply = _systemState.totalSupply(VAULT_ID);
-//         amount = _bound(amount, 0, TEA_MAX_SUPPLY - totalSupply);
+        _systemState.mint(addr, amount, amountPOL);
 
-//         _systemState.mint(addr, amount);
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
-//         // Vault's cumulative SIR per TEA is updated
-//         _updateCumSIRPerTEA();
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[addr];
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[address(_systemState)];
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(vaultPreBalance, numUpdates);
 
-//         // Update _totalSIRMaxError
-//         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user];
-//         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        // Update index
+        _numUpdatesCumSIRPerTEAForUser[addr] = _numUpdatesCumSIRPerTEA;
+        _numUpdatesCumSIRPerTEAForUser[address(_systemState)] = _numUpdatesCumSIRPerTEA;
+    }
 
-//         // Update index
-//         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
-//     }
+    function burn(uint256 user, uint256 amount, uint256 amountPOL, uint24 timeSkip) external advanceTime(timeSkip) {
+        address addr = _idToAddr(user);
+        uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
+        amount = _bound(amount, 0, preBalance);
+        uint256 vaultPreBalance = _systemState.balanceOf(address(_systemState), VAULT_ID);
+        amountPOL = _bound(amountPOL, 0, amount);
 
-//     function burn(uint256 user, uint256 amount, uint24 timeSkip) external advanceTime(timeSkip) {
-//         address addr = _idToAddr(user);
-//         uint256 preBalance = _systemState.balanceOf(addr, VAULT_ID);
-//         amount = _bound(amount, 0, preBalance);
+        _systemState.burn(addr, amount, amountPOL);
 
-//         _systemState.burn(addr, amount);
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
-//         // Vault's cumulative SIR per TEA is updated
-//         _updateCumSIRPerTEA();
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[addr];
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[address(_systemState)];
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(vaultPreBalance, numUpdates);
 
-//         // Update _totalSIRMaxError
-//         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user];
-//         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        // Update index
+        _numUpdatesCumSIRPerTEAForUser[addr] = _numUpdatesCumSIRPerTEA;
+        _numUpdatesCumSIRPerTEAForUser[address(_systemState)] = _numUpdatesCumSIRPerTEA;
+    }
 
-//         // Update index
-//         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
-//     }
+    function claim(uint256 user, uint24 timeSkip) external advanceTime(timeSkip) {
+        address addr = _idToAddr(user);
+        uint256 balance = _systemState.balanceOf(addr, VAULT_ID);
 
-//     function claim(uint256 user, uint24 timeSkip) external advanceTime(timeSkip) {
-//         address addr = _idToAddr(user);
-//         uint256 balance = _systemState.balanceOf(addr, VAULT_ID);
+        uint256 unclaimedSIR = _systemState.claimSIR(VAULT_ID, addr);
+        totalClaimedSIR += unclaimedSIR;
 
-//         uint256 unclaimedSIR = _systemState.claimSIR(VAULT_ID, addr);
-//         totalClaimedSIR += unclaimedSIR;
+        // Vault's cumulative SIR per TEA is updated
+        _updateCumSIRPerTEA();
 
-//         // Vault's cumulative SIR per TEA is updated
-//         _updateCumSIRPerTEA();
+        // Update totalSIRMaxError
+        uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[addr];
+        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
 
-//         // Update _totalSIRMaxError
-//         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[user];
-//         _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
+        // Update index
+        _numUpdatesCumSIRPerTEAForUser[addr] = _numUpdatesCumSIRPerTEA;
+    }
 
-//         // Update index
-//         _numUpdatesCumSIRPerTEAForUser[user] = _numUpdatesCumSIRPerTEA;
-//     }
+    function issuanceFirst3Years() external pure returns (uint256) {
+        return ISSUANCE_FIRST_3_YEARS;
+    }
 
-//     function issuanceFirst3Years() external pure returns (uint256) {
-//         return ISSUANCE_FIRST_3_YEARS;
-//     }
+    function issuanceAfter3Years() external pure returns (uint256) {
+        return ISSUANCE;
+    }
 
-//     function issuanceAfter3Years() external pure returns (uint256) {
-//         return ISSUANCE;
-//     }
+    function totalUnclaimedSIR() external view returns (uint256) {
+        return
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(1)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(2)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(3)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(4)) +
+            _systemState.unclaimedRewards(VAULT_ID, _idToAddr(5)) +
+            _systemState.unclaimedRewards(VAULT_ID, address(_systemState));
+    }
 
-//     function totalUnclaimedSIR() external view returns (uint256) {
-//         return
-//             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(1)) +
-//             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(2)) +
-//             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(3)) +
-//             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(4)) +
-//             _systemState.unclaimedRewards(VAULT_ID, _idToAddr(5));
-//     }
+    function totalSIRMaxError() external view returns (uint256 maxError) {
+        uint256 numUpdates;
+        uint256 balance;
+        maxError = _totalSIRMaxError;
 
-//     function totalSIRMaxError() external view returns (uint256 maxError) {
-//         uint256 numUpdates;
-//         uint256 balance;
-//         maxError = _totalSIRMaxError;
+        // Vault's cumulative SIR per TEA is updated
+        bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
+        uint256 numUpdatesCumSIRPerTEA = crossThreeYears ? _numUpdatesCumSIRPerTEA + 2 : _numUpdatesCumSIRPerTEA + 1;
 
-//         // Vault's cumulative SIR per TEA is updated
-//         bool crossThreeYears = currentTimeBefore < startTime + THREE_YEARS && currentTime > startTime + THREE_YEARS;
-//         uint256 numUpdatesCumSIRPerTEA = crossThreeYears ? _numUpdatesCumSIRPerTEA + 2 : _numUpdatesCumSIRPerTEA + 1;
+        for (uint256 i = 1; i <= 5; i++) {
+            balance = _systemState.balanceOf(_idToAddr(i), VAULT_ID);
+            if (balance > 0) {
+                numUpdates = numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[_idToAddr(i)];
+                maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
+            }
+        }
+        balance = _systemState.balanceOf(address(_systemState), VAULT_ID);
+        numUpdates = numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[address(_systemState)];
+        maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
+    }
+}
 
-//         for (uint256 i = 1; i <= 5; i++) {
-//             balance = _systemState.balanceOf(_idToAddr(i), VAULT_ID);
-//             if (balance > 0) {
-//                 numUpdates = numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[i];
-//                 maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
-//             }
-//         }
-//     }
-// }
+contract SystemStateInvariantTest is Test, SystemConstants {
+    SystemStateHandler private _systemStateHandler;
 
-// contract SystemStateInvariantTest is Test, SystemConstants {
-//     SystemStateHandler private _systemStateHandler;
+    modifier updateTime() {
+        uint40 currentTime = _systemStateHandler.currentTime();
+        vm.warp(currentTime);
+        _;
+    }
 
-//     modifier updateTime() {
-//         uint40 currentTime = _systemStateHandler.currentTime();
-//         vm.warp(currentTime);
-//         _;
-//     }
+    function setUp() public {
+        uint40 startTime = uint40(block.timestamp);
+        if (startTime == 0) startTime = 1;
 
-//     function setUp() public {
-//         uint40 startTime = uint40(block.timestamp);
-//         if (startTime == 0) {
-//             startTime = 1;
-//         }
+        _systemStateHandler = new SystemStateHandler(startTime);
 
-//         _systemStateHandler = new SystemStateHandler(startTime);
+        targetContract(address(_systemStateHandler));
 
-//         targetContract(address(_systemStateHandler));
-//     }
+        bytes4[] memory selectors = new bytes4[](4);
+        selectors[0] = _systemStateHandler.transfer.selector;
+        selectors[1] = _systemStateHandler.mint.selector;
+        selectors[2] = _systemStateHandler.burn.selector;
+        selectors[3] = _systemStateHandler.claim.selector;
+        targetSelector(FuzzSelector({addr: address(_systemStateHandler), selectors: selectors}));
+    }
 
-//     function invariant_cumulativeSIR() public updateTime {
-//         uint256 totalSIR;
-//         uint40 startTime = _systemStateHandler.startTime();
-//         uint40 currentTime = _systemStateHandler.currentTime();
-//         vm.warp(currentTime);
+    function invariant_cumulativeSIR() public updateTime {
+        uint256 totalSIR;
+        uint40 startTime = _systemStateHandler.startTime();
+        uint40 currentTime = _systemStateHandler.currentTime();
+        vm.warp(currentTime);
 
-//         if (currentTime < startTime + THREE_YEARS) {
-//             totalSIR =
-//                 _systemStateHandler.issuanceFirst3Years() *
-//                 (currentTime - startTime - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years());
-//         } else {
-//             totalSIR =
-//                 _systemStateHandler.issuanceFirst3Years() *
-//                 (THREE_YEARS - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years()) +
-//                 _systemStateHandler.issuanceAfter3Years() *
-//                 (currentTime - startTime - THREE_YEARS - _systemStateHandler.totalTimeWithoutIssuanceAfter3Years());
-//         }
+        if (currentTime < startTime + THREE_YEARS) {
+            totalSIR =
+                _systemStateHandler.issuanceFirst3Years() *
+                (currentTime - startTime - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years());
+        } else {
+            totalSIR =
+                _systemStateHandler.issuanceFirst3Years() *
+                (THREE_YEARS - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years()) +
+                _systemStateHandler.issuanceAfter3Years() *
+                (currentTime - startTime - THREE_YEARS - _systemStateHandler.totalTimeWithoutIssuanceAfter3Years());
+        }
 
-//         assertLe(
-//             _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR(),
-//             totalSIR,
-//             "Total SIR is too high"
-//         );
+        uint256 claimedSIR = _systemStateHandler.totalClaimedSIR();
+        uint256 unclaimedSIR = _systemStateHandler.totalUnclaimedSIR();
 
-//         uint256 totalSIRMaxError = _systemStateHandler.totalSIRMaxError();
-//         assertGe(
-//             _systemStateHandler.totalClaimedSIR() + _systemStateHandler.totalUnclaimedSIR(),
-//             totalSIR > totalSIRMaxError ? totalSIR - totalSIRMaxError : 0,
-//             "Total SIR is too low"
-//         );
-//     }
-// }
+        assertLe(claimedSIR + unclaimedSIR, totalSIR, "Total SIR is too high");
+
+        uint256 totalSIRMaxError = _systemStateHandler.totalSIRMaxError();
+        assertGe(
+            claimedSIR + unclaimedSIR,
+            totalSIR > totalSIRMaxError ? totalSIR - totalSIRMaxError : 0,
+            "Total SIR is too low"
+        );
+    }
+}
