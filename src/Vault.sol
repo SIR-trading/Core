@@ -11,7 +11,6 @@ import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
-import {VaultEvents} from "./interfaces/VaultEvents.sol";
 
 // Contracts
 import {APE} from "./APE.sol";
@@ -20,10 +19,8 @@ import {TEA} from "./TEA.sol";
 
 import "forge-std/console.sol";
 
-contract Vault is TEA, VaultEvents {
+contract Vault is TEA {
     error VaultDoesNotExist();
-    error VaultAlreadyInitialized();
-    error LeverageTierOutOfRange();
 
     Oracle private immutable _ORACLE;
 
@@ -41,39 +38,18 @@ contract Vault is TEA, VaultEvents {
         paramsById.push(VaultStructs.Parameters(address(0), address(0), 0));
     }
 
-    /**
-        Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
-        If I require initialization, the vaultId can be chosen sequentially,
-        and stored in the state by squeezing out some bytes from the other state variables.
-        Potentially we can have custom list of salts to allow for 7ea and a9e addresses.
+    /** @notice Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
      */
     function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
-        if (leverageTier > 2 || leverageTier < -3) revert LeverageTierOutOfRange();
-
-        /**
-         * 1. This will initialize the _ORACLE for this pair of tokens if it has not been initialized before.
-         * 2. It also will revert if there are no pools with liquidity, which implicitly solves the case where the user
-         *    tries to instantiate an invalid pair of tokens like address(0)
-         */
-        _ORACLE.initialize(debtToken, collateralToken);
-
-        // Check the vault has not been initialized previously
-        VaultStructs.State storage state_ = state[debtToken][collateralToken][leverageTier];
-        if (state_.vaultId != 0) revert VaultAlreadyInitialized();
-
-        // Deploy APE token, and initialize it
-        uint256 vaultId = VaultExternal.deployAPE(
+        VaultExternal.deployAPE(
+            _ORACLE,
+            state[debtToken][collateralToken][leverageTier],
             paramsById,
             _transientTokenParameters,
             debtToken,
             collateralToken,
             leverageTier
         );
-
-        // Save vaultId
-        state_.vaultId = uint40(vaultId);
-
-        emit VaultInitialized(debtToken, collateralToken, leverageTier, vaultId);
     }
 
     function latestTokenParams()

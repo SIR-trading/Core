@@ -1099,7 +1099,6 @@ contract SystemStateInvariantTest is Test, SystemConstants {
     function invariant_vaultTeaBalance() public {
         SystemStateWrapper systemState = SystemStateWrapper(_systemStateHandler.systemState());
         uint256 vaultBalance = systemState.balanceOf(address(systemState), _systemStateHandler.VAULT_ID());
-        console.log("diff", vaultBalance - _systemStateHandler.vaultBalanceOld());
         assertGe(vaultBalance, _systemStateHandler.vaultBalanceOld());
     }
 }

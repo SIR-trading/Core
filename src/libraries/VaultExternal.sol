@@ -12,18 +12,43 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 
 // Contracts
 import {APE} from "../APE.sol";
+import {Oracle} from "../Oracle.sol";
 
 library VaultExternal {
+    error VaultAlreadyInitialized();
+    error LeverageTierOutOfRange();
+
+    event VaultInitialized(
+        address indexed debtToken,
+        address indexed collateralToken,
+        int8 indexed leverageTier,
+        uint256 vaultId
+    );
+
     // Deploy APE token
     function deployAPE(
+        Oracle oracle,
+        VaultStructs.State storage state,
         VaultStructs.Parameters[] storage paramsById,
-        VaultStructs.TokenParameters storage _transientTokenParameters,
+        VaultStructs.TokenParameters storage transientTokenParameters,
         address debtToken,
         address collateralToken,
         int8 leverageTier
-    ) external returns (uint256 vaultId) {
+    ) external {
+        if (leverageTier > 2 || leverageTier < -3) revert LeverageTierOutOfRange();
+
+        /**
+         * 1. This will initialize the _ORACLE for this pair of tokens if it has not been initialized before.
+         * 2. It also will revert if there are no pools with liquidity, which implicitly solves the case where the user
+         *    tries to instantiate an invalid pair of tokens like address(0)
+         */
+        oracle.initialize(debtToken, collateralToken);
+
+        // Check the vault has not been initialized previously
+        if (state.vaultId != 0) revert VaultAlreadyInitialized();
+
         // Next vault ID
-        vaultId = paramsById.length;
+        uint256 vaultId = paramsById.length;
         require(vaultId <= type(uint40).max); // It has to fit in a uint40
 
         // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
@@ -33,12 +58,17 @@ library VaultExternal {
          * Set the parameters that will be read during the instantiation of the tokens.
          * This pattern is used to avoid passing arguments to the constructor explicitly.
          */
-        _transientTokenParameters.name = _generateName(debtToken, collateralToken, leverageTier);
-        _transientTokenParameters.symbol = string.concat("APE-", Strings.toString(vaultId));
-        _transientTokenParameters.decimals = IERC20(collateralToken).decimals();
+        transientTokenParameters.name = _generateName(debtToken, collateralToken, leverageTier);
+        transientTokenParameters.symbol = string.concat("APE-", Strings.toString(vaultId));
+        transientTokenParameters.decimals = IERC20(collateralToken).decimals();
 
         // Deploy APE
         new APE{salt: bytes32(vaultId)}();
+
+        // Save vaultId
+        state.vaultId = uint40(vaultId);
+
+        emit VaultInitialized(debtToken, collateralToken, leverageTier, vaultId);
     }
 
     function teaURI(
