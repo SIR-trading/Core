@@ -189,25 +189,35 @@ contract VaultExternalTest is Test {
         );
     }
 
-    function test_teaURI() public {
-        paramsById[6] = VaultStructs.Parameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 1);
+    function testFuzz_teaURI(uint vaultId_, int8 leverageTier_, uint256 totalSupply_) public {
+        vaultId_ = _bound(vaultId_, 1, VAULT_ID - 1);
+        leverageTier_ = int8(_bound(leverageTier_, -3, 2)); // Only accepted values in the system
 
-        string memory uri = VaultExternal.teaURI(paramsById, 6, 42 * 10 ** 18);
-        console.log(uri);
+        paramsById[vaultId_] = VaultStructs.Parameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier_);
 
-        // The goal here is to parse the values of the JSON data uri for testing
+        string memory uriStr = VaultExternal.teaURI(paramsById, vaultId_, totalSupply_);
+        // console.log("uriStr:", uriStr);
+
+        // Parse the values of the JSON data uri using JS. Some fancy code to deal with big numbers.
         string[] memory inputs = new string[](3);
         inputs[0] = "node";
         inputs[1] = "-e";
         inputs[2] = string.concat(
             "console.log(JSON.stringify(JSON.parse(decodeURIComponent('",
-            uri,
-            "').replace(/^data:application\\/json;charset=UTF-8,/,''))));"
+            uriStr,
+            '\').replace(/^data:application\\/json;charset=UTF-8,/,"").replace(/(?<=:\\s*)(\\d{16,})(?=[,}])/g, "\\"$1\\""))));'
         );
 
         string memory output = string(vm.ffi(inputs));
-        console.log(output);
 
-        assertEq(string(vm.parseJson(output, "$.symbol")), "TEA-6");
+        assertEq(vm.parseJsonString(output, "$.name"), string.concat("LP Token for APE-", vm.toString(vaultId_)));
+        assertEq(vm.parseJsonString(output, "$.symbol"), string.concat("TEA-", vm.toString(vaultId_)));
+        assertEq(vm.parseJsonUint(output, "$.decimals"), 18);
+        assertEq(vm.parseJsonUint(output, "$.chain_id"), 1);
+        assertEq(vm.parseJsonUint(output, "$.vault_id"), vaultId_);
+        assertEq(vm.parseJsonString(output, "$.debt_token"), Strings.toHexString(Addresses.ADDR_USDC));
+        assertEq(vm.parseJsonString(output, "$.collateral_token"), Strings.toHexString(Addresses.ADDR_WETH));
+        assertEq(vm.parseJsonInt(output, "$.leverage_tier"), leverageTier_);
+        assertEq(vm.parseJsonUint(output, "$.total_supply"), totalSupply_);
     }
 }
