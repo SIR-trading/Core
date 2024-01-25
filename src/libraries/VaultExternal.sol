@@ -208,7 +208,7 @@ library VaultExternal {
                          * We use the fact that lr = 1+2^-leverageTier
                          * lpReserve is rounded up
                          */
-                        int256 tickPriceDiffX42 = state_.tickPriceX42 - state_.tickPriceSatX42;
+                        int256 tickPriceDiffX42 = int256(state_.tickPriceX42) - state_.tickPriceSatX42;
 
                         if (tickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
                             reserves.lpReserve = 1;

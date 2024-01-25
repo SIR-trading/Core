@@ -5,8 +5,10 @@ import {VaultExternal} from "src/libraries/VaultExternal.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {MockERC20} from "src/test/MockERC20.sol";
 import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
 import {Oracle} from "src/Oracle.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {APE} from "src/APE.sol";
 import "forge-std/Test.sol";
 
@@ -221,33 +223,56 @@ contract VaultExternalTest is Test {
         assertEq(vm.parseJsonInt(output, "$.leverage_tier"), leverageTier_);
         assertEq(vm.parseJsonUint(output, "$.total_supply"), totalSupply_);
     }
+}
 
-    function testFuzz_getReserves(
-        bool isMint,
-        bool isAPE,
+contract VaultExternalGetReserves is Test {
+    MockERC20 private _collateralToken;
+    address alice;
+
+    function setUp() public {
+        _collateralToken = new MockERC20("Collateral token", "TKN", 18);
+        alice = vm.addr(1);
+    }
+
+    function testFuzz_getReservesMintAPENoReserves(
+        uint40 vaultId,
+        int8 leverageTier,
+        uint152 collateralDeposited,
+        uint256 totalSupplyCollateral,
         int64 tickPriceX42,
-        uint152 totalReserves,
         int64 tickPriceSatX42,
-        uint40 vaultId_,
-        uint152 treasury,
-        int8 leverageTier
+        uint40 timeStampPrice
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint256).max - totalSupplyCollateral));
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max));
+
+        // Mint tokens
+        _collateralToken.mint(alice, totalSupplyCollateral);
+        _collateralToken.mint(address(this), collateralDeposited);
 
         VaultStructs.State memory state_ = VaultStructs.State(
             tickPriceX42,
+            timeStampPrice,
             0,
-            totalReserves,
             tickPriceSatX42,
-            vaultId_,
-            treasury
+            vaultId,
+            0
         );
-        console.logInt(tickPriceX42);
-        console.logInt(tickPriceSatX42);
-        console.log("totalReserves", totalReserves);
-        console.log("treasury", treasury);
 
-        getReserves(isMint, isAPE, state_, Addresses.ADDR_WETH, leverageTier);
+        (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited_) = getReserves(
+            true,
+            true,
+            state_,
+            address(_collateralToken),
+            leverageTier
+        );
+
+        assertEq(reserves.treasury, 0);
+        assertEq(reserves.apesReserve, 0);
+        assertEq(reserves.lpReserve, 0);
+        assertTrue(address(ape) != address(0));
+        assertEq(collateralDeposited_, collateralDeposited);
     }
 
     function getReserves(
@@ -284,19 +309,21 @@ contract VaultExternalTest is Test {
                          * We use the fact that l = 1+2^leverageTier
                          * apesReserve is rounded up
                          */
-                        (bool ovrFlw, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
-                            leverageTier > 0
-                                ? (state_.tickPriceSatX42 - state_.tickPriceX42) << absLeverageTier
-                                : (state_.tickPriceSatX42 - state_.tickPriceX42) >> absLeverageTier
-                        );
+                        int256 poweredTickPriceDiffX42 = leverageTier > 0
+                            ? (int256(state_.tickPriceSatX42) - state_.tickPriceX42) << absLeverageTier
+                            : (int256(state_.tickPriceSatX42) - state_.tickPriceX42) >> absLeverageTier;
 
-                        if (ovrFlw) {
+                        if (poweredTickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
                             reserves.apesReserve = 1;
                         } else {
                             /** Rounds up apesReserve, rounds down lpReserve.
-                            Cannot ovrFlw.
-                            64 bits because getRatioAtTick returns a Q64.64 number.
-                         */
+                                Cannot overflow.
+                                64 bits because getRatioAtTick returns a Q64.64 number.
+                            */
+                            uint256 poweredPriceRatio = TickMathPrecision.getRatioAtTick(
+                                int64(poweredTickPriceDiffX42)
+                            );
+
                             reserves.apesReserve = uint152(
                                 _divRoundUp(
                                     uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
@@ -317,19 +344,17 @@ contract VaultExternalTest is Test {
                          * We use the fact that lr = 1+2^-leverageTier
                          * lpReserve is rounded up
                          */
-                        console.log("here");
-                        (bool ovrFlw, uint256 priceRatio) = TickMathPrecision.getRatioAtTick(
-                            state_.tickPriceX42 - state_.tickPriceSatX42
-                        );
-                        console.log("ovrFlw", ovrFlw, "priceRatio", priceRatio);
+                        int256 tickPriceDiffX42 = int256(state_.tickPriceX42) - state_.tickPriceSatX42;
 
-                        if (ovrFlw) {
+                        if (tickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
                             reserves.lpReserve = 1;
                         } else {
                             /** Rounds up lpReserve, rounds down apesReserve.
-                            Cannot ovrFlw.
-                            64 bits because getRatioAtTick returns a Q64.64 number.
-                         */
+                                Cannot overflow.
+                                64 bits because getRatioAtTick returns a Q64.64 number.
+                            */
+                            uint256 priceRatio = TickMathPrecision.getRatioAtTick(int64(tickPriceDiffX42));
+
                             reserves.lpReserve = uint152(
                                 _divRoundUp(
                                     uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
