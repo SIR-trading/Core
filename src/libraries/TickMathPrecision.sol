@@ -2,19 +2,18 @@
 pragma solidity ^0.8.0;
 
 import "./FullMath.sol";
+import {SystemConstants} from "./SystemConstants.sol";
 
 /// @notice Modified from Uniswap v3 TickMath
 /// @notice Math library for computing log_1.0001(x/y) and 1.0001^z where x and y are uint and z is Q21.42
 library TickMathPrecision {
     // I NEED TO HANDLE OF/UF ON BOTH FUNCTIONS!!!
 
-    int64 internal constant MAX_TICK_X42 = 1951133415219145403; // log_1.0001((2^128-1(/2^64))*2^42
-
     /// @return Boolean that is true if the result OF, and the result in Q63.64
-    function getRatioAtTick(int64 tickX42) internal pure returns (bool, uint128) {
-        assert(tickX42 >= 0);
+    function getRatioAtTick(int64 tickX42) internal pure returns (uint128) {
+        assert(tickX42 >= 0 && tickX42 <= SystemConstants.MAX_TICK_X42);
 
-        if (tickX42 > MAX_TICK_X42) return (true, 0);
+        // if (tickX42 > SystemConstants.MAX_TICK_X42) return (true, 0);
 
         uint256 ratioX64 = tickX42 & 0x1 != 0 ? 0x100000000000001A3 : 0x10000000000000000;
         if (tickX42 & 0x2 != 0) ratioX64 = (ratioX64 * 0x10000000000000346) >> 64; // 42th bit after the comma
@@ -77,12 +76,12 @@ library TickMathPrecision {
         if (tickX42 & 0x400000000000000 != 0) ratioX64 = (ratioX64 * 0x2BD893D0B2DF7C97884) >> 64;
         if (tickX42 & 0x800000000000000 != 0) ratioX64 = (ratioX64 * 0x78278E1E19E448CF8B95D) >> 64;
         if (tickX42 & 0x1000000000000000 != 0) ratioX64 = (ratioX64 * 0x38651B58D457501416FEADE319) >> 64; // 19th bit before the comma
-        // Bits 20 and 21st do not need to be checked because tickX42 <= MAX_TICK_X42
+        // Bits 20 and 21st do not need to be checked because tickX42 <= SystemConstants.MAX_TICK_X42
         // if (tickX42 & 0x2000000000000000 != 0) ratioX64 = (ratioX64 * 0xC6C63E573E99B8B10F5961AE4CACB1F9927) >> 64;
         // if (tickX42 & 0x4000000000000000 != 0)
         //     ratioX64 = (ratioX64 * 0x9A5741F372F8FF89A6E21EE87E9D34BB06995021F74FC62066806D) >> 64; // 21st bit before the comma (1st bit after the comma)
 
-        return (false, uint128(ratioX64));
+        return uint128(ratioX64);
     }
 
     /// @return tickX42 Q21.42 (+1 bit for sign)

@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 contract TickMathPrecisionTest is Test {
     using ABDKMathQuad for bytes16;
@@ -15,11 +16,9 @@ contract TickMathPrecisionTest is Test {
     }
 
     function testFuzz_getRatioAtTick(uint64 tickX42Uint) public {
-        int64 tickX42 = int64(int256(_bound(tickX42Uint, 0, uint64(TickMathPrecision.MAX_TICK_X42))));
+        int64 tickX42 = int64(int256(_bound(tickX42Uint, 0, uint64(SystemConstants.MAX_TICK_X42))));
 
-        (bool OF, uint128 ratioX64) = TickMathPrecision.getRatioAtTick(tickX42);
-
-        assertTrue(!OF);
+        uint128 ratioX64 = TickMathPrecision.getRatioAtTick(tickX42);
 
         /** 1.0001^tickX42 = 2^(tickX42 * log_2(1.0001))
             computed using the ABDKMath64x64 library
@@ -37,12 +36,10 @@ contract TickMathPrecisionTest is Test {
     }
 
     function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public {
-        tickX42ActiveBit = uint8(_bound(tickX42ActiveBit, 0, 60)); // Because 2^60 < MAX_TICK_X42 and 2^61 > MAX_TICK_X42
+        tickX42ActiveBit = uint8(_bound(tickX42ActiveBit, 0, 60)); // Because 2^60 < SystemConstants.MAX_TICK_X42 and 2^61 > SystemConstants.MAX_TICK_X42
         int64 tickX42 = int64(int256(1 << tickX42ActiveBit));
 
-        (bool OF, uint128 ratioX64) = TickMathPrecision.getRatioAtTick(tickX42);
-
-        assertTrue(!OF);
+        uint128 ratioX64 = TickMathPrecision.getRatioAtTick(tickX42);
 
         /** 1.0001^tickX42 = 2^(tickX42 * log_2(1.0001))
             computed using the ABDKMath64x64 library
@@ -60,12 +57,11 @@ contract TickMathPrecisionTest is Test {
 
     function testFuzz_getRatioAtTickOverflows(uint64 tickX42Uint) public {
         int64 tickX42 = int64(
-            int256(_bound(tickX42Uint, uint64(TickMathPrecision.MAX_TICK_X42) + 1, uint64(type(int64).max)))
+            int256(_bound(tickX42Uint, uint64(SystemConstants.MAX_TICK_X42) + 1, uint64(type(int64).max)))
         );
 
-        (bool OF, ) = TickMathPrecision.getRatioAtTick(tickX42);
-
-        assertTrue(OF);
+        vm.expectRevert();
+        TickMathPrecision.getRatioAtTick(tickX42);
     }
 
     function testFuzz_getTickAtRatio(uint256 num, uint256 den) public {

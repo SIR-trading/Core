@@ -9,6 +9,7 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {Fees} from "./libraries/Fees.sol";
+import {SystemConstants} from "./libraries/SystemConstants.sol";
 
 // Contracts
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -243,7 +244,10 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralIn, reserves.lpReserve);
             if (to != address(this)) _balanceOf[to][vaultId] = balanceTo + amount;
             else totalSupplyAndBalanceVault_.balanceVault += uint128(amount);
-            require(totalSupplyAndBalanceVault_.totalSupply + amount <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            require(
+                totalSupplyAndBalanceVault_.totalSupply + amount <= SystemConstants.TEA_MAX_SUPPLY,
+                "Max supply exceeded"
+            );
             totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
             reserves.lpReserve += collateralIn;
             emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
@@ -313,7 +317,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             );
 
             // Update total supply and vault balance
-            require(totalSupplyAndBalanceVault_.totalSupply <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            require(totalSupplyAndBalanceVault_.totalSupply <= SystemConstants.TEA_MAX_SUPPLY, "Max supply exceeded");
             _totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
         }
     }
@@ -327,8 +331,8 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
      */
     function _amountFirstMint(address collateral, uint152 collateralIn) private view returns (uint256 amount) {
         uint256 collateralTotalSupply = IERC20(collateral).totalSupply();
-        amount = collateralTotalSupply > TEA_MAX_SUPPLY
-            ? FullMath.mulDiv(TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply)
+        amount = collateralTotalSupply > SystemConstants.TEA_MAX_SUPPLY
+            ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply)
             : collateralIn;
     }
 
@@ -369,7 +373,10 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             amountPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design lpReserve can never be 0 unless it is the first mint ever
                 ? _amountFirstMint(collateral, polFee + reserves.lpReserve) // Any ownless LP reserve is minted as POL too
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, polFee, reserves.lpReserve);
-            require(amountPOL + totalSupplyAndBalanceVault_.totalSupply <= TEA_MAX_SUPPLY, "Max supply exceeded");
+            require(
+                amountPOL + totalSupplyAndBalanceVault_.totalSupply <= SystemConstants.TEA_MAX_SUPPLY,
+                "Max supply exceeded"
+            );
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountPOL);
             totalSupplyAndBalanceVault_.totalSupply += uint128(amountPOL);
             reserves.lpReserve += polFee;

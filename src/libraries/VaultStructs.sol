@@ -63,8 +63,4 @@ library VaultStructs {
         uint40 vaultId; // Allows creation of 1 trillion vaults approx
         uint152 treasury; // If the uint192 is close to overflow, the Treasury can withdraw the fees to unlock the pool
     }
-
-    // UNISWAP V2 USES ONLY 112 BITS FOR THE RESERVES!!!
-    // 64 + 32 + 104 + 56
-    // If vaultId was not stored, I could use 1 slot only!
 }

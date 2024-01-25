@@ -4,11 +4,11 @@ pragma solidity ^0.8.0;
 // Contracts
 import {SystemState} from "./SystemState.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
-import {SystemConstants} from "./SystemConstants.sol";
+import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 
 // Contracts
-contract SIR is ERC20, SystemControlAccess, SystemConstants {
+contract SIR is ERC20, SystemControlAccess {
     error ContributorsExceedsMaxIssuance();
 
     struct ContributorIssuanceParams {
@@ -27,7 +27,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
     constructor(
         address systemState,
         address systemControl
-    ) ERC20("Synthetics Implemented Right", "SIR", SIR_DECIMALS) SystemControlAccess(systemControl) {
+    ) ERC20("Synthetics Implemented Right", "SIR", SystemConstants.SIR_DECIMALS) SystemControlAccess(systemControl) {
         _VAULT = SystemState(systemState);
     }
 
@@ -40,7 +40,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
         (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
 
         if (tsIssuanceStart == 0) return 0;
-        return ISSUANCE * (block.timestamp - tsIssuanceStart);
+        return SystemConstants.ISSUANCE * (block.timestamp - tsIssuanceStart);
     }
 
     function getContributorIssuance(
@@ -59,7 +59,7 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
             contributorParams = _contributorsIssuances[contributor];
 
             // Last date of unclaimedRewards
-            uint40 tsIssuanceEnd = tsIssuanceStart + THREE_YEARS;
+            uint40 tsIssuanceEnd = tsIssuanceStart + SystemConstants.THREE_YEARS;
 
             // If issuance is over and unclaimedRewards have already been updated
             if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
@@ -157,7 +157,8 @@ contract SIR is ERC20, SystemControlAccess, SystemConstants {
         }
         uint256 issuanceContributors_ = issuanceContributors + issuanceIncrease - issuanceDecrease;
 
-        if (issuanceContributors_ > ISSUANCE - ISSUANCE_FIRST_3_YEARS) revert ContributorsExceedsMaxIssuance();
+        if (issuanceContributors_ > SystemConstants.ISSUANCE - SystemConstants.ISSUANCE_FIRST_3_YEARS)
+            revert ContributorsExceedsMaxIssuance();
 
         issuanceContributors = uint72(issuanceContributors_);
     }

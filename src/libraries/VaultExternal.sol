@@ -2,13 +2,13 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {VaultStructs} from "./VaultStructs.sol";
 
 // Libraries
 import {TickMathPrecision} from "./TickMathPrecision.sol";
 import {SaltedAddress} from "./SaltedAddress.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
+import {SystemConstants} from "./SystemConstants.sol";
 
 // Contracts
 import {APE} from "../APE.sol";
@@ -60,7 +60,7 @@ library VaultExternal {
          */
         transientTokenParameters.name = _generateName(debtToken, collateralToken, leverageTier);
         transientTokenParameters.symbol = string.concat("APE-", Strings.toString(vaultId));
-        transientTokenParameters.decimals = IERC20(collateralToken).decimals();
+        transientTokenParameters.decimals = APE(collateralToken).decimals();
 
         // Deploy APE
         new APE{salt: bytes32(vaultId)}();
@@ -87,7 +87,7 @@ library VaultExternal {
                 "%22%2C%22symbol%22%3A%22TEA-",
                 vaultIdStr,
                 "%22%2C%22decimals%22%3A",
-                Strings.toString(IERC20(params.collateralToken).decimals()),
+                Strings.toString(APE(params.collateralToken).decimals()),
                 "%2C%22chain_id%22%3A1%2C%22vault_id%22%3A",
                 vaultIdStr,
                 "%2C%22debt_token%22%3A%22",
@@ -129,9 +129,9 @@ library VaultExternal {
             string(
                 abi.encodePacked(
                     "Tokenized ",
-                    IERC20(addrCollateralToken).symbol(),
+                    APE(addrCollateralToken).symbol(),
                     "/",
-                    IERC20(addrDebtToken).symbol(),
+                    APE(addrDebtToken).symbol(),
                     " with x",
                     leverageStr,
                     " leverage"
@@ -173,19 +173,21 @@ library VaultExternal {
                          * We use the fact that l = 1+2^leverageTier
                          * apesReserve is rounded up
                          */
-                        (bool ovrFlw, uint256 poweredPriceRatio) = TickMathPrecision.getRatioAtTick(
-                            leverageTier > 0
-                                ? (state_.tickPriceSatX42 - state_.tickPriceX42) << absLeverageTier
-                                : (state_.tickPriceSatX42 - state_.tickPriceX42) >> absLeverageTier
-                        );
+                        int256 poweredTickPriceDiffX42 = leverageTier > 0
+                            ? (int256(state_.tickPriceSatX42) - state_.tickPriceX42) << absLeverageTier
+                            : (int256(state_.tickPriceSatX42) - state_.tickPriceX42) >> absLeverageTier;
 
-                        if (ovrFlw) {
+                        if (poweredTickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
                             reserves.apesReserve = 1;
                         } else {
                             /** Rounds up apesReserve, rounds down lpReserve.
-                            Cannot ovrFlw.
-                            64 bits because getRatioAtTick returns a Q64.64 number.
-                         */
+                                Cannot overflow.
+                                64 bits because getRatioAtTick returns a Q64.64 number.
+                            */
+                            uint256 poweredPriceRatio = TickMathPrecision.getRatioAtTick(
+                                int64(poweredTickPriceDiffX42)
+                            );
+
                             reserves.apesReserve = uint152(
                                 _divRoundUp(
                                     uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
@@ -206,17 +208,17 @@ library VaultExternal {
                          * We use the fact that lr = 1+2^-leverageTier
                          * lpReserve is rounded up
                          */
-                        (bool ovrFlw, uint256 priceRatio) = TickMathPrecision.getRatioAtTick(
-                            state_.tickPriceX42 - state_.tickPriceSatX42
-                        );
+                        int256 tickPriceDiffX42 = state_.tickPriceX42 - state_.tickPriceSatX42;
 
-                        if (ovrFlw) {
+                        if (tickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
                             reserves.lpReserve = 1;
                         } else {
                             /** Rounds up lpReserve, rounds down apesReserve.
-                            Cannot ovrFlw.
-                            64 bits because getRatioAtTick returns a Q64.64 number.
-                         */
+                                Cannot overflow.
+                                64 bits because getRatioAtTick returns a Q64.64 number.
+                            */
+                            uint256 priceRatio = TickMathPrecision.getRatioAtTick(int64(tickPriceDiffX42));
+
                             reserves.lpReserve = uint152(
                                 _divRoundUp(
                                     uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
@@ -234,7 +236,7 @@ library VaultExternal {
 
             if (isMint) {
                 // Get deposited collateral
-                uint256 balance = IERC20(collateralToken).balanceOf(address(this));
+                uint256 balance = APE(collateralToken).balanceOf(address(this));
 
                 require(balance <= type(uint152).max); // Ensure total collateral still fits in a uint152
 

@@ -4,10 +4,10 @@ pragma solidity ^0.8.0;
 // Contracts
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
-import {SystemConstants} from "./SystemConstants.sol";
+import {SystemConstants} from "./libraries/SystemConstants.sol";
 import "forge-std/Test.sol";
 
-abstract contract SystemState is SystemControlAccess, SystemConstants {
+abstract contract SystemState is SystemControlAccess {
     /** Choice of types for 'cumSIRPerTEAx96' and 'unclaimedRewards'
 
         unclaimedRewards ~ uint80
@@ -109,9 +109,9 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
                 uint40 tsStart = vaultIssuanceParams_.tsLastUpdate;
 
                 // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
-                uint40 ts3Years = systemParams_.tsIssuanceStart + THREE_YEARS;
+                uint40 ts3Years = systemParams_.tsIssuanceStart + SystemConstants.THREE_YEARS;
                 if (tsStart < ts3Years) {
-                    uint256 issuance = (uint256(ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
+                    uint256 issuance = (uint256(SystemConstants.ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
                         systemParams_.cumTax;
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumSIRPerTEAx96 += uint176(
@@ -122,7 +122,8 @@ abstract contract SystemState is SystemControlAccess, SystemConstants {
 
                 // Aggregate SIR issued after the first 3 years
                 if (uint40(block.timestamp) > ts3Years) {
-                    uint256 issuance = (uint256(ISSUANCE) * vaultIssuanceParams_.tax) / systemParams_.cumTax;
+                    uint256 issuance = (uint256(SystemConstants.ISSUANCE) * vaultIssuanceParams_.tax) /
+                        systemParams_.cumTax;
                     cumSIRPerTEAx96 += uint176(
                         (((issuance * (block.timestamp - (tsStart > ts3Years ? tsStart : ts3Years))) << 96) /
                             totalSupply_)
