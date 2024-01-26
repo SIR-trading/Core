@@ -154,6 +154,8 @@ library VaultExternal {
 
             // Reserve is empty only in the 1st mint
             if (state_.totalReserves != 0) {
+                assert(state_.totalReserves >= 2);
+
                 if (state_.tickPriceSatX42 == type(int64).min) {
                     // type(int64).min represents -∞ => lpReserve = 0
                     reserves.apesReserve = state_.totalReserves - 1;

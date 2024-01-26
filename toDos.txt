@@ -8,3 +8,7 @@ Minimize # hot SLOADs
 # Periphery
 - Add quoting functions
 - Add getReserves function
+
+# Core
+- Do not distribute SIR to POL. Easy to hack without extra gas in the current implementation because totalSupply and vaultBalance share the same slot.
+- Code Staker which is allowed to withdraw fees. Staker inherits SIR?
