@@ -409,6 +409,36 @@ contract VaultExternalGetReserves is Test {
         assertEq(collateralDeposited_, isMint ? collateralDeposited : 0);
     }
 
+    function testFuzz_getReservesTooLargeDeposit(
+        bool isAPE,
+        int8 leverageTier,
+        uint256 collateralDeposited,
+        uint256 totalSupplyCollateral,
+        VaultStructs.State memory state_
+    ) public {
+        leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
+
+        state_.totalReserves = uint152(_bound(state_.totalReserves, 2, type(uint152).max)); // Min totalReserves is always 2 (or 0 if no minted has occured)
+        state_.treasury = uint152(_bound(state_.treasury, 0, type(uint152).max - state_.totalReserves));
+        totalSupplyCollateral = _bound(
+            totalSupplyCollateral,
+            state_.totalReserves + state_.treasury,
+            type(uint256).max - type(uint152).max + state_.totalReserves + state_.treasury - 1
+        );
+        collateralDeposited = _bound(
+            collateralDeposited,
+            type(uint152).max - state_.totalReserves - state_.treasury + 1,
+            type(uint256).max - totalSupplyCollateral
+        );
+
+        // Mint tokens
+        _collateralToken.mint(alice, totalSupplyCollateral - state_.totalReserves - state_.treasury);
+        _collateralToken.mint(address(this), state_.totalReserves + state_.treasury + collateralDeposited);
+
+        vm.expectRevert();
+        VaultExternal.getReserves(true, isAPE, state_, address(_collateralToken), leverageTier);
+    }
+
     function _getReservesWithFloatingPoint(
         int8 leverageTier,
         VaultStructs.State memory state_
