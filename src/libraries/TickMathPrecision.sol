@@ -9,7 +9,7 @@ import {SystemConstants} from "./SystemConstants.sol";
 library TickMathPrecision {
     // I NEED TO HANDLE OF/UF ON BOTH FUNCTIONS!!!
 
-    /// @return Boolean that is true if the result OF, and the result in Q63.64
+    /// @return uint128 in Q63.64
     function getRatioAtTick(int64 tickX42) internal pure returns (uint128) {
         assert(tickX42 >= 0 && tickX42 <= SystemConstants.MAX_TICK_X42);
 

@@ -11,4 +11,4 @@ Minimize # hot SLOADs
 
 # Core
 - Do not distribute SIR to POL. Easy to hack without extra gas in the current implementation because totalSupply and vaultBalance share the same slot.
-- Code Staker which is allowed to withdraw fees. Staker inherits SIR?
+- Code Staker which is allowed to withdraw fees. Staker inherits SIR? Stakers do not get SIR from POL.

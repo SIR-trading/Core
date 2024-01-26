@@ -186,14 +186,14 @@ library VaultExternal {
                                 Cannot overflow.
                                 64 bits because getRatioAtTick returns a Q64.64 number.
                             */
-                            uint256 poweredPriceRatio = TickMathPrecision.getRatioAtTick(
+                            uint256 poweredPriceRatioX64 = TickMathPrecision.getRatioAtTick(
                                 int64(poweredTickPriceDiffX42)
                             );
 
                             reserves.apesReserve = uint152(
                                 _divRoundUp(
                                     uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
-                                    poweredPriceRatio + (poweredPriceRatio << absLeverageTier)
+                                    poweredPriceRatioX64 + (poweredPriceRatioX64 << absLeverageTier)
                                 )
                             );
 
@@ -219,12 +219,12 @@ library VaultExternal {
                                 Cannot overflow.
                                 64 bits because getRatioAtTick returns a Q64.64 number.
                             */
-                            uint256 priceRatio = TickMathPrecision.getRatioAtTick(int64(tickPriceDiffX42));
+                            uint256 priceRatioX64 = TickMathPrecision.getRatioAtTick(int64(tickPriceDiffX42));
 
                             reserves.lpReserve = uint152(
                                 _divRoundUp(
-                                    uint256(state_.totalReserves) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
-                                    priceRatio + (priceRatio << absLeverageTier)
+                                    uint256(state_.totalReserves) << (leverageTier < 0 ? 64 : 64 + absLeverageTier),
+                                    priceRatioX64 + (priceRatioX64 << absLeverageTier)
                                 )
                             );
 
