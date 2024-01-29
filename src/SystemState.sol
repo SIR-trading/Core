@@ -218,7 +218,8 @@ abstract contract SystemState is SystemControlAccess {
             sirIsCaller ? 0 : unclaimedRewards0
         );
 
-        if (lpersBalances.lper1 != address(0)) {
+        // Protocol owned liquidity (POL) in the vault does not receive SIR rewards
+        if (lpersBalances.lper1 != address(this)) {
             /** Transfer/mint of TEA
                 Must update the 2nd user's issuance parameters too
              */

@@ -216,7 +216,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             uint152 collateralIn;
             if (to != address(this)) {
                 // Update SIR issuance if it is not POL
-                LPersBalances memory lpersBalances = LPersBalances(to, balanceTo, address(0), 0);
+                LPersBalances memory lpersBalances = LPersBalances(to, balanceTo, address(this), 0);
                 updateLPerIssuanceParams(
                     false,
                     vaultId,
@@ -280,7 +280,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             uint256 balanceFrom = _balanceOf[from][vaultId];
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances = LPersBalances(from, balanceFrom, address(0), 0);
+            LPersBalances memory lpersBalances = LPersBalances(from, balanceFrom, address(this), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
