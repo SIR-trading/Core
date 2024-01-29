@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {VaultStructs} from "./VaultStructs.sol";
-import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {TickMathPrecision} from "./TickMathPrecision.sol";

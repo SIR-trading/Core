@@ -250,16 +250,16 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.State memory state_
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
-        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint256).max - totalSupplyCollateral));
-        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max));
+
+        state_.totalReserves = 0;
+        state_.treasury = uint152(_bound(state_.treasury, 0, type(uint152).max));
+        collateralDeposited = uint152(_bound(collateralDeposited, 0, type(uint152).max - state_.treasury));
+
+        totalSupplyCollateral = _bound(totalSupplyCollateral, state_.treasury, type(uint256).max - collateralDeposited);
 
         // Mint tokens
-        _collateralToken.mint(alice, totalSupplyCollateral);
-        _collateralToken.mint(address(this), collateralDeposited);
-
-        // No reserves
-        state_.totalReserves = 0;
-        state_.treasury = 0;
+        _collateralToken.mint(alice, totalSupplyCollateral - state_.treasury);
+        _collateralToken.mint(address(this), state_.treasury + collateralDeposited);
 
         (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited_) = VaultExternal.getReserves(
             isMint,
@@ -269,7 +269,7 @@ contract VaultExternalGetReserves is Test {
             leverageTier
         );
 
-        assertEq(reserves.treasury, 0);
+        assertEq(reserves.treasury, state_.treasury);
         assertEq(reserves.apesReserve, 0);
         assertEq(reserves.lpReserve, 0);
         assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
