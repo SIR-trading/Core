@@ -347,10 +347,7 @@ contract Vault is TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function withdrawTreasuryFeesAndSIR(
-        uint40 vaultId,
-        address to
-    ) external onlySystemControl returns (address, uint256, uint256) {
+    function withdrawFees(uint40 vaultId, address to) external onlySystemControl returns (address, uint256) {
         VaultStructs.Parameters memory params = paramsById[vaultId];
 
         uint256 treasury = state[params.debtToken][params.collateralToken][params.leverageTier].treasury;
@@ -358,10 +355,7 @@ contract Vault is TEA {
 
         if (treasury > 0) TransferHelper.safeTransfer(params.collateralToken, to, treasury);
 
-        // Also transfer SIR
-        uint256 amountSIR = ISIR(sir).treasuryMint(vaultId, to);
-
-        return (params.collateralToken, treasury, amountSIR);
+        return (params.collateralToken, treasury);
     }
 
     /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack

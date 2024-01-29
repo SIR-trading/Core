@@ -29,12 +29,7 @@ contract SystemControl is Ownable {
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint8 lpFee);
-    event TreasuryFeesWithdrawn(
-        uint40 indexed vaultId,
-        address indexed collateralToken,
-        uint256 amount,
-        uint256 amountSIR
-    );
+    event TreasuryFeesWithdrawn(uint40 indexed vaultId, address indexed collateralToken, uint256 amount);
     event FundsWithdrawn(address indexed token, uint256 amount);
 
     error FeeCannotBeZero();
@@ -129,13 +124,13 @@ contract SystemControl is Ownable {
                         WITHDRAWAL FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    function withdrawTreasuryFeesAndSIR(uint40 vaultId, address to) external onlyOwner {
+    function withdrawFees(uint40 vaultId, address to) external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels || systemStatus != SystemStatus.Unstoppable)
             revert WrongStatus();
 
-        (address collateralToken, uint256 amount, uint256 amountSIR) = VAULT.withdrawTreasuryFeesAndSIR(vaultId, to);
+        (address collateralToken, uint256 amount) = VAULT.withdrawFees(vaultId, to);
 
-        emit TreasuryFeesWithdrawn(vaultId, collateralToken, amount, amountSIR);
+        emit TreasuryFeesWithdrawn(vaultId, collateralToken, amount);
     }
 
     /// @notice Save the remaining funds that have not been withdrawn from the vaults

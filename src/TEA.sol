@@ -58,8 +58,13 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function totalSupply(uint256 vaultId) public view override returns (uint256) {
+    function totalSupply(uint256 vaultId) external view returns (uint256) {
         return _totalSupplyAndBalanceVault[vaultId].totalSupply;
+    }
+
+    function supplyExcludeVault(uint256 vaultId) internal view override returns (uint256) {
+        TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = _totalSupplyAndBalanceVault[vaultId];
+        return totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault;
     }
 
     function uri(uint256 vaultId) external view returns (string memory) {
@@ -116,7 +121,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             vaultId,
             systemParams,
             vaultIssuanceParams[vaultId],
-            _totalSupplyAndBalanceVault[vaultId].totalSupply,
+            supplyExcludeVault(vaultId),
             lpersBalances
         );
 
@@ -162,7 +167,7 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                 vaultId,
                 systemParams,
                 vaultIssuanceParams[vaultId],
-                _totalSupplyAndBalanceVault[vaultId].totalSupply,
+                supplyExcludeVault(vaultId),
                 lpersBalances
             );
 
@@ -208,24 +213,19 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
                 ? totalSupplyAndBalanceVault_.balanceVault
                 : _balanceOf[to][vaultId];
 
-            // Update SIR issuance
-            LPersBalances memory lpersBalances = LPersBalances(
-                to,
-                balanceTo,
-                to == address(this) ? address(0) : address(this), // We only need to update 1 address when it's POL only mint
-                totalSupplyAndBalanceVault_.balanceVault
-            );
-            updateLPerIssuanceParams(
-                false,
-                vaultId,
-                systemParams_,
-                vaultIssuanceParams_,
-                totalSupplyAndBalanceVault_.totalSupply,
-                lpersBalances
-            );
-
             uint152 collateralIn;
             if (to != address(this)) {
+                // Update SIR issuance if it is not POL
+                LPersBalances memory lpersBalances = LPersBalances(to, balanceTo, address(0), 0);
+                updateLPerIssuanceParams(
+                    false,
+                    vaultId,
+                    systemParams_,
+                    vaultIssuanceParams_,
+                    totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
+                    lpersBalances
+                );
+
                 // Substract fees and distribute them across treasury, LPers and POL
                 collateralIn = _distributeFees(
                     collateral,
@@ -280,18 +280,13 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
             uint256 balanceFrom = _balanceOf[from][vaultId];
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances = LPersBalances(
-                from,
-                balanceFrom,
-                address(this),
-                totalSupplyAndBalanceVault_.balanceVault
-            );
+            LPersBalances memory lpersBalances = LPersBalances(from, balanceFrom, address(0), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
                 systemParams_,
                 vaultIssuanceParams_,
-                totalSupplyAndBalanceVault_.totalSupply,
+                totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
                 lpersBalances
             );
 
@@ -389,11 +384,6 @@ abstract contract TEA is SystemState, ERC1155TokenReceiver {
     ////////////////////////////////////////////////////////////////*/
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumSIRPerTEAx96) {
-        return
-            cumulativeSIRPerTEA(
-                systemParams,
-                vaultIssuanceParams[vaultId],
-                _totalSupplyAndBalanceVault[vaultId].totalSupply
-            );
+        return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
     }
 }

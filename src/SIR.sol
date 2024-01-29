@@ -111,18 +111,6 @@ contract SIR is ERC20, SystemControlAccess {
         _mint(msg.sender, rewards);
     }
 
-    /** @notice Mint the SIR earnt by the protocol owned liquidity
-     */
-    function treasuryMint(uint256 vaultId, address to) external returns (uint104 rewards) {
-        require(msg.sender == address(_VAULT));
-
-        // Get LPer issuance parameters
-        rewards = _VAULT.claimSIR(vaultId, address(_VAULT));
-
-        // Mint if there are any unclaimed rewards but do not revert
-        if (rewards > 0) _mint(to, rewards);
-    }
-
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/

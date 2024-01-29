@@ -91,7 +91,7 @@ abstract contract SystemState is SystemControlAccess {
     function cumulativeSIRPerTEA(
         VaultStructs.SystemParameters memory systemParams_,
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        uint256 totalSupply_
+        uint256 supplyExcludeVault_
     ) internal view returns (uint176 cumSIRPerTEAx96) {
         unchecked {
             // Get the vault issuance parameters
@@ -101,7 +101,7 @@ abstract contract SystemState is SystemControlAccess {
             if (
                 vaultIssuanceParams_.tax != 0 &&
                 vaultIssuanceParams_.tsLastUpdate != uint40(block.timestamp) &&
-                totalSupply_ != 0
+                supplyExcludeVault_ != 0
             ) {
                 assert(vaultIssuanceParams_.tax <= systemParams_.cumTax);
 
@@ -116,7 +116,7 @@ abstract contract SystemState is SystemControlAccess {
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumSIRPerTEAx96 += uint176(
                         ((issuance * ((block.timestamp > ts3Years ? ts3Years : block.timestamp) - tsStart)) << 96) /
-                            totalSupply_
+                            supplyExcludeVault_
                     );
                 }
 
@@ -126,7 +126,7 @@ abstract contract SystemState is SystemControlAccess {
                         systemParams_.cumTax;
                     cumSIRPerTEAx96 += uint176(
                         (((issuance * (block.timestamp - (tsStart > ts3Years ? tsStart : ts3Years))) << 96) /
-                            totalSupply_)
+                            supplyExcludeVault_)
                     );
                 }
             }
@@ -190,7 +190,7 @@ abstract contract SystemState is SystemControlAccess {
                 vaultId,
                 systemParams,
                 vaultIssuanceParams[vaultId],
-                totalSupply(vaultId),
+                supplyExcludeVault(vaultId),
                 lpersBalances
             );
     }
@@ -203,11 +203,11 @@ abstract contract SystemState is SystemControlAccess {
         uint256 vaultId,
         VaultStructs.SystemParameters memory systemParams_,
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        uint256 totalSupply_,
+        uint256 supplyExcludeVault_,
         LPersBalances memory lpersBalances
     ) internal returns (uint80 unclaimedRewards0) {
         // Retrieve cumulative SIR per unit of TEA
-        uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, totalSupply_);
+        uint176 cumSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, supplyExcludeVault_);
 
         // Retrieve updated LPer0 issuance parameters
         unclaimedRewards0 = unclaimedRewards(vaultId, lpersBalances.lper0, lpersBalances.balance0, cumSIRPerTEAx96);
@@ -299,5 +299,5 @@ abstract contract SystemState is SystemControlAccess {
 
     function balanceOf(address owner, uint256 vaultId) public view virtual returns (uint256);
 
-    function totalSupply(uint256 vaultId) public view virtual returns (uint256);
+    function supplyExcludeVault(uint256 vaultId) internal view virtual returns (uint256);
 }
