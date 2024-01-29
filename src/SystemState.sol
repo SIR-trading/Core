@@ -158,6 +158,8 @@ abstract contract SystemState is SystemControlAccess {
         uint176 cumSIRPerTEAx96
     ) internal view returns (uint80) {
         unchecked {
+            if (lper == address(this)) return 0;
+
             // Get the lper issuance parameters
             LPerIssuanceParams memory lperIssuanceParams_ = _lpersIssuances[vaultId][lper];
 

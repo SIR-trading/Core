@@ -17,6 +17,8 @@ library ErrorComputation {
     }
 }
 
+/////// TEST DONATE AND MINTPOL!!!
+
 contract SystemStateWrapper is SystemState {
     uint40 constant VAULT_ID = 42;
 
@@ -42,7 +44,7 @@ contract SystemStateWrapper is SystemState {
             VAULT_ID,
             systemParams,
             vaultIssuanceParams[VAULT_ID],
-            _totalSupply,
+            supplyExcludeVault(VAULT_ID),
             lpersBalances
         );
 
@@ -51,10 +53,9 @@ contract SystemStateWrapper is SystemState {
         _balances[to] += amount;
     }
 
-    /// @dev Mints TEA for POL only
-    function mintPol(uint256 amountPol) external {
+    function donate(address from, uint256 amount) external {
         // Get _balances
-        LPersBalances memory lpersBalances = LPersBalances(address(this), _balanceVault, address(0), 0);
+        LPersBalances memory lpersBalances = LPersBalances(from, _balances[from], address(this), _balanceVault);
 
         // Update SIR issuance
         updateLPerIssuanceParams(
@@ -62,10 +63,17 @@ contract SystemStateWrapper is SystemState {
             VAULT_ID,
             systemParams,
             vaultIssuanceParams[VAULT_ID],
-            _totalSupply,
+            supplyExcludeVault(VAULT_ID),
             lpersBalances
         );
 
+        // Transfer TEA
+        _balances[from] -= amount;
+        _balanceVault += uint128(amount);
+    }
+
+    /// @dev Mints TEA for POL only
+    function mintPol(uint256 amountPol) external {
         // Mint TEA
         unchecked {
             _balanceVault += uint128(amountPol);
@@ -77,12 +85,7 @@ contract SystemStateWrapper is SystemState {
     /// @dev Mints TEA to the given address and for POL
     function mint(address to, uint256 amount, uint256 amountPol) external {
         // Get _balances
-        LPersBalances memory lpersBalances = LPersBalances(
-            to,
-            _balances[to],
-            address(this), // We also update balance of vault
-            _balanceVault
-        );
+        LPersBalances memory lpersBalances = LPersBalances(to, _balances[to], address(this), _balanceVault);
 
         // Update SIR issuance
         updateLPerIssuanceParams(
@@ -90,7 +93,7 @@ contract SystemStateWrapper is SystemState {
             VAULT_ID,
             systemParams,
             vaultIssuanceParams[VAULT_ID],
-            _totalSupply,
+            supplyExcludeVault(VAULT_ID),
             lpersBalances
         );
 
@@ -108,8 +111,6 @@ contract SystemStateWrapper is SystemState {
 
     /// @dev Burns TEA to the given address and means TEA for POL
     function burn(address from, uint256 amount, uint256 amountPol) external {
-        assert(amount >= amountPol);
-
         // Get _balances
         LPersBalances memory lpersBalances = LPersBalances(
             from,
@@ -124,7 +125,7 @@ contract SystemStateWrapper is SystemState {
             VAULT_ID,
             systemParams,
             vaultIssuanceParams[VAULT_ID],
-            _totalSupply,
+            supplyExcludeVault(VAULT_ID),
             lpersBalances
         );
 
@@ -148,14 +149,21 @@ contract SystemStateWrapper is SystemState {
         return owner == address(this) ? _balanceVault : _balances[owner];
     }
 
-    function totalSupply(uint256 vaultId) public view override returns (uint256) {
+    function totalSupply(uint256 vaultId) public view returns (uint256) {
         assert(vaultId == VAULT_ID);
 
         return _totalSupply;
     }
 
+    function supplyExcludeVault(uint256 vaultId) internal view override returns (uint256) {
+        assert(vaultId == VAULT_ID);
+
+        return _totalSupply - _balanceVault;
+    }
+
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176) {
-        if (vaultId == VAULT_ID) return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], _totalSupply);
+        if (vaultId == VAULT_ID)
+            return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(VAULT_ID));
         return type(uint176).max / uint176(vaultId); // To make it somewhat arbitrary
     }
 }
@@ -300,9 +308,8 @@ contract SystemStateTest is Test {
         tsUpdateTax = uint40(_bound(tsUpdateTax, tsStart, tsStart + SystemConstants.THREE_YEARS));
         tsMint = uint40(_bound(tsMint, tsStart, tsStart + SystemConstants.THREE_YEARS));
 
-        teaAmount = _bound(teaAmount, 0, SystemConstants.TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - teaAmount);
-        vm.assume(teaAmount + teaAmountPOL > 0);
 
         (uint256 duration, , uint176 cumSIRPerTEAx96) = _updateTaxMintAndCheckRewards(
             tsUpdateTax,
@@ -316,30 +323,22 @@ contract SystemStateTest is Test {
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS * duration) << 96) / (teaAmount + teaAmountPOL),
+            ((SystemConstants.ISSUANCE_FIRST_3_YEARS * duration) << 96) / teaAmount,
             ErrorComputation.maxErrorCumSIRPerTEA(1)
         );
 
         // Check rewards for Alice
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = (SystemConstants.ISSUANCE_FIRST_3_YEARS * duration * teaAmount) /
-            (teaAmount + teaAmountPOL);
+        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS * duration;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
             assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1));
         }
 
-        // Check rewards for POL
+        // Check no rewards for POL
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
-        unclaimedSIRTheoretical =
-            (SystemConstants.ISSUANCE_FIRST_3_YEARS * duration * teaAmountPOL) /
-            (teaAmount + teaAmountPOL);
-        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
-        else {
-            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountPOL, 1));
-        }
+        assertEq(unclaimedSIR, 0);
     }
 
     function testFuzz_mintAfterFirst3Years(
@@ -353,9 +352,8 @@ contract SystemStateTest is Test {
         tsUpdateTax = uint40(_bound(tsUpdateTax, tsStart + SystemConstants.THREE_YEARS, MAX_TS));
         tsMint = uint40(_bound(tsMint, tsStart + SystemConstants.THREE_YEARS, MAX_TS));
 
-        teaAmount = _bound(teaAmount, 0, SystemConstants.TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - teaAmount);
-        vm.assume(teaAmount + teaAmountPOL > 0);
 
         (, uint256 duration, uint176 cumSIRPerTEAx96) = _updateTaxMintAndCheckRewards(
             tsUpdateTax,
@@ -369,14 +367,13 @@ contract SystemStateTest is Test {
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
-            ((SystemConstants.ISSUANCE * duration) << 96) / (teaAmount + teaAmountPOL),
+            ((SystemConstants.ISSUANCE * duration) << 96) / teaAmount,
             ErrorComputation.maxErrorCumSIRPerTEA(1)
         );
 
         // Check rewards for Alice
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = (SystemConstants.ISSUANCE * duration * teaAmount) /
-            (teaAmount + teaAmountPOL);
+        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE * duration;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
@@ -385,12 +382,7 @@ contract SystemStateTest is Test {
 
         // Check rewards for POL
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
-        unclaimedSIRTheoretical = (SystemConstants.ISSUANCE * duration * teaAmountPOL) / (teaAmount + teaAmountPOL);
-        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
-        else {
-            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountPOL, 1));
-        }
+        assertEq(unclaimedSIR, 0);
     }
 
     function testFuzz_mint(
@@ -404,9 +396,8 @@ contract SystemStateTest is Test {
         tsUpdateTax = uint40(_bound(tsUpdateTax, tsStart, tsStart + SystemConstants.THREE_YEARS));
         tsMint = uint40(_bound(tsMint, tsStart, tsStart + SystemConstants.THREE_YEARS));
 
-        teaAmount = _bound(teaAmount, 0, SystemConstants.TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - teaAmount);
-        vm.assume(teaAmount + teaAmountPOL > 0);
 
         (
             uint256 durationBefore3Years,
@@ -420,16 +411,16 @@ contract SystemStateTest is Test {
             ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
                 durationBefore3Years +
                 SystemConstants.ISSUANCE *
-                durationAfter3Years) << 96) / (teaAmount + teaAmountPOL),
+                durationAfter3Years) << 96) / teaAmount,
             ErrorComputation.maxErrorCumSIRPerTEA(2)
         );
 
         // Check rewards for Alice
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
             durationBefore3Years +
             SystemConstants.ISSUANCE *
-            durationAfter3Years) * teaAmount) / (teaAmount + teaAmountPOL);
+            durationAfter3Years;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
@@ -438,17 +429,7 @@ contract SystemStateTest is Test {
 
         // Check rewards for POL
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
-        unclaimedSIRTheoretical =
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
-                durationBefore3Years +
-                SystemConstants.ISSUANCE *
-                durationAfter3Years) * teaAmountPOL) /
-            (teaAmount + teaAmountPOL);
-        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
-        else {
-            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountPOL, 2));
-        }
+        assertEq(unclaimedSIR, 0);
     }
 
     function testFuzz_mintTwoUsersSequentially(uint256 teaAmount, uint256 teaAmountPOL, uint256 teaAmountPOL2) public {
@@ -475,9 +456,8 @@ contract SystemStateTest is Test {
 
         // Check rewards for Alice
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = (teaAmount *
-            (SystemConstants.ISSUANCE_FIRST_3_YEARS + SystemConstants.ISSUANCE) *
-            SystemConstants.THREE_YEARS) / (teaAmount + teaAmountPOL);
+        uint256 unclaimedSIRTheoretical = uint256(SystemConstants.ISSUANCE_FIRST_3_YEARS + SystemConstants.ISSUANCE) *
+            SystemConstants.THREE_YEARS;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
@@ -486,9 +466,7 @@ contract SystemStateTest is Test {
 
         // Check rewards for Bob
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, bob);
-        unclaimedSIRTheoretical =
-            (teaAmount * SystemConstants.ISSUANCE * 2 * SystemConstants.THREE_YEARS) /
-            (teaAmount + 2 * teaAmountPOL + teaAmountPOL2);
+        unclaimedSIRTheoretical = uint256(2) * SystemConstants.ISSUANCE * SystemConstants.THREE_YEARS;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
@@ -497,24 +475,10 @@ contract SystemStateTest is Test {
 
         // Check rewards for POL
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
-        unclaimedSIRTheoretical =
-            (teaAmountPOL *
-                (SystemConstants.ISSUANCE_FIRST_3_YEARS + SystemConstants.ISSUANCE) *
-                SystemConstants.THREE_YEARS) /
-            (teaAmount + teaAmountPOL) +
-            ((2 * teaAmountPOL + teaAmountPOL2) * SystemConstants.ISSUANCE * 2 * SystemConstants.THREE_YEARS) /
-            (teaAmount + 2 * teaAmountPOL + teaAmountPOL2);
-        if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
-        else {
-            assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(
-                unclaimedSIR,
-                unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(2 * teaAmountPOL + teaAmountPOL2, 3)
-            );
-        }
+        assertEq(unclaimedSIR, 0);
     }
 
-    function testFuzz_burn(
+    function testFuzz_burnAll(
         uint40 tsMint,
         uint40 tsBurn,
         uint40 tsCheckRewards,
@@ -528,10 +492,9 @@ contract SystemStateTest is Test {
         tsCheckRewards = uint40(_bound(tsCheckRewards, tsBurn, MAX_TS));
 
         // Adjust amounts
-        teaAmount = _bound(teaAmount, 0, SystemConstants.TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - teaAmount);
         teaAmountPOL2 = _bound(teaAmountPOL2, 0, teaAmount);
-        vm.assume(teaAmount + teaAmountPOL > 0);
         vm.assume(teaAmountPOL + teaAmountPOL2 > 0);
 
         // Activate tax
@@ -539,8 +502,7 @@ contract SystemStateTest is Test {
 
         // Mint some TEA
         vm.warp(tsMint);
-        if (teaAmount > 0) systemState.mint(alice, teaAmount, teaAmountPOL);
-        else systemState.mintPol(teaAmountPOL);
+        systemState.mint(alice, teaAmount, teaAmountPOL);
 
         // Burn some TEA
         vm.warp(tsBurn);
@@ -550,50 +512,44 @@ contract SystemStateTest is Test {
         vm.warp(tsCheckRewards);
         uint176 cumSIRPerTEAx96 = systemState.cumulativeSIRPerTEA(VAULT_ID);
 
-        uint256 durationBefore3Years;
-        uint256 durationAfter3Years;
+        uint256 durationBeforeBurnBefore3Years;
+        uint256 durationBeforeBurnAfter3Years;
         if (tsMint < tsStart + SystemConstants.THREE_YEARS && tsBurn < tsStart + SystemConstants.THREE_YEARS) {
-            durationBefore3Years = tsBurn - tsMint;
+            durationBeforeBurnBefore3Years = tsBurn - tsMint;
         } else if (tsMint >= tsStart + SystemConstants.THREE_YEARS) {
-            durationAfter3Years = tsBurn - tsMint;
+            durationBeforeBurnAfter3Years = tsBurn - tsMint;
         } else {
-            durationBefore3Years = tsStart + SystemConstants.THREE_YEARS - tsMint;
-            durationAfter3Years = tsBurn - (tsStart + SystemConstants.THREE_YEARS);
+            durationBeforeBurnBefore3Years = tsStart + SystemConstants.THREE_YEARS - tsMint;
+            durationBeforeBurnAfter3Years = tsBurn - (tsStart + SystemConstants.THREE_YEARS);
         }
 
-        uint256 durationOnlyPolBefore3Years;
-        uint256 durationOnlyPolAfter3Years;
+        uint256 durationAfterBurnBefore3Years;
+        uint256 durationAfterBurnAfter3Years;
         if (tsBurn < tsStart + SystemConstants.THREE_YEARS && tsCheckRewards < tsStart + SystemConstants.THREE_YEARS) {
-            durationOnlyPolBefore3Years = tsCheckRewards - tsBurn;
+            durationAfterBurnBefore3Years = tsCheckRewards - tsBurn;
         } else if (tsBurn >= tsStart + SystemConstants.THREE_YEARS) {
-            durationOnlyPolAfter3Years = tsCheckRewards - tsBurn;
+            durationAfterBurnAfter3Years = tsCheckRewards - tsBurn;
         } else {
-            durationOnlyPolBefore3Years = tsStart + SystemConstants.THREE_YEARS - tsBurn;
-            durationOnlyPolAfter3Years = tsCheckRewards - (tsStart + SystemConstants.THREE_YEARS);
+            durationAfterBurnBefore3Years = tsStart + SystemConstants.THREE_YEARS - tsBurn;
+            durationAfterBurnAfter3Years = tsCheckRewards - (tsStart + SystemConstants.THREE_YEARS);
         }
 
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
             ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
-                durationBefore3Years +
+                durationBeforeBurnBefore3Years +
                 SystemConstants.ISSUANCE *
-                durationAfter3Years) << 96) /
-                (teaAmount + teaAmountPOL) +
-                ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
-                    durationOnlyPolBefore3Years +
-                    SystemConstants.ISSUANCE *
-                    durationOnlyPolAfter3Years) << 96) /
-                (teaAmountPOL + teaAmountPOL2),
+                durationBeforeBurnAfter3Years) << 96) / teaAmount,
             ErrorComputation.maxErrorCumSIRPerTEA(3)
         );
 
         // Check rewards for Alice
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
-            durationBefore3Years +
+        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            durationBeforeBurnBefore3Years +
             SystemConstants.ISSUANCE *
-            durationAfter3Years) * teaAmount) / (teaAmount + teaAmountPOL);
+            durationBeforeBurnAfter3Years;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
@@ -602,24 +558,107 @@ contract SystemStateTest is Test {
 
         // Check rewards for POL
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
-        unclaimedSIRTheoretical =
+        assertEq(unclaimedSIR, 0);
+    }
+
+    function testFuzz_burnSome(
+        uint40 tsMint,
+        uint40 tsBurn,
+        uint40 tsCheckRewards,
+        uint256 teaAmount,
+        uint256 teaAmountToBurn,
+        uint256 teaAmountPOL,
+        uint256 teaAmountPOL2
+    ) public {
+        // Adjust timestamps
+        tsMint = uint40(_bound(tsMint, tsStart, MAX_TS));
+        tsBurn = uint40(_bound(tsBurn, tsMint, MAX_TS));
+        tsCheckRewards = uint40(_bound(tsCheckRewards, tsBurn, MAX_TS));
+
+        // Adjust amounts
+        teaAmount = _bound(teaAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
+        teaAmountToBurn = _bound(teaAmountToBurn, 0, teaAmount - 1);
+        teaAmountPOL = _bound(teaAmountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - teaAmount);
+        teaAmountPOL2 = _bound(
+            teaAmountPOL2,
+            0,
+            SystemConstants.TEA_MAX_SUPPLY - teaAmount + teaAmountToBurn - teaAmountPOL
+        );
+        vm.assume(teaAmountPOL + teaAmountPOL2 > 0);
+
+        // Activate tax
+        _activateTax();
+
+        // Mint some TEA
+        vm.warp(tsMint);
+        systemState.mint(alice, teaAmount, teaAmountPOL);
+
+        // Burn some TEA
+        vm.warp(tsBurn);
+        systemState.burn(alice, teaAmountToBurn, teaAmountPOL2);
+
+        // Get cumulative SIR per TEA
+        vm.warp(tsCheckRewards);
+        uint176 cumSIRPerTEAx96 = systemState.cumulativeSIRPerTEA(VAULT_ID);
+
+        uint256 durationBeforeBurnBefore3Years;
+        uint256 durationBeforeBurnAfter3Years;
+        if (tsMint < tsStart + SystemConstants.THREE_YEARS && tsBurn < tsStart + SystemConstants.THREE_YEARS) {
+            durationBeforeBurnBefore3Years = tsBurn - tsMint;
+        } else if (tsMint >= tsStart + SystemConstants.THREE_YEARS) {
+            durationBeforeBurnAfter3Years = tsBurn - tsMint;
+        } else {
+            durationBeforeBurnBefore3Years = tsStart + SystemConstants.THREE_YEARS - tsMint;
+            durationBeforeBurnAfter3Years = tsBurn - (tsStart + SystemConstants.THREE_YEARS);
+        }
+
+        uint256 durationAfterBurnBefore3Years;
+        uint256 durationAfterBurnAfter3Years;
+        if (tsBurn < tsStart + SystemConstants.THREE_YEARS && tsCheckRewards < tsStart + SystemConstants.THREE_YEARS) {
+            durationAfterBurnBefore3Years = tsCheckRewards - tsBurn;
+        } else if (tsBurn >= tsStart + SystemConstants.THREE_YEARS) {
+            durationAfterBurnAfter3Years = tsCheckRewards - tsBurn;
+        } else {
+            durationAfterBurnBefore3Years = tsStart + SystemConstants.THREE_YEARS - tsBurn;
+            durationAfterBurnAfter3Years = tsCheckRewards - (tsStart + SystemConstants.THREE_YEARS);
+        }
+
+        // Check cumulative SIR per TEA
+        assertApproxEqAbs(
+            cumSIRPerTEAx96,
             ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
-                durationBefore3Years +
+                durationBeforeBurnBefore3Years +
                 SystemConstants.ISSUANCE *
-                durationAfter3Years) * teaAmountPOL) /
-            (teaAmount + teaAmountPOL) +
-            SystemConstants.ISSUANCE_FIRST_3_YEARS *
-            durationOnlyPolBefore3Years +
+                durationBeforeBurnAfter3Years) << 96) /
+                teaAmount +
+                ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+                    durationAfterBurnBefore3Years +
+                    SystemConstants.ISSUANCE *
+                    durationAfterBurnAfter3Years) << 96) /
+                (teaAmount - teaAmountToBurn),
+            ErrorComputation.maxErrorCumSIRPerTEA(3)
+        );
+
+        // Check rewards for Alice
+        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            (durationBeforeBurnBefore3Years + durationAfterBurnBefore3Years) +
             SystemConstants.ISSUANCE *
-            durationOnlyPolAfter3Years;
+            (durationBeforeBurnAfter3Years + durationAfterBurnAfter3Years);
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
             assertGe(
                 unclaimedSIR,
-                unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountPOL + teaAmountPOL2, 3) - 1
+                unclaimedSIRTheoretical -
+                    ErrorComputation.maxErrorBalanceSIR(teaAmount, 2) -
+                    ErrorComputation.maxErrorBalanceSIR(teaAmount - teaAmountToBurn, 2)
             );
         }
+
+        // Check rewards for POL
+        unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, address(systemState));
+        assertEq(unclaimedSIR, 0);
     }
 
     function testFuzz_transfer(
@@ -685,27 +724,31 @@ contract SystemStateTest is Test {
             ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
                 (durationAliceBefore3Years + durationBobBefore3Years) +
                 SystemConstants.ISSUANCE *
-                (durationAliceAfter3Years + durationBobAfter3Years)) << 96) / (teaAmountMint + teaAmountPOL),
+                (durationAliceAfter3Years + durationBobAfter3Years)) << 96) / teaAmountMint,
             ErrorComputation.maxErrorCumSIRPerTEA(3)
         );
 
         // Check rewards for Alice
         uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+        uint256 unclaimedSIRTheoretical = (SystemConstants.ISSUANCE_FIRST_3_YEARS *
             durationAliceBefore3Years +
             SystemConstants.ISSUANCE *
-            durationAliceAfter3Years) * teaAmountMint) /
-            (teaAmountMint + teaAmountPOL) +
+            durationAliceAfter3Years) +
             ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
                 durationBobBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationBobAfter3Years) * (teaAmountMint - teaAmountTransfer)) /
-            (teaAmountMint + teaAmountPOL);
+            teaAmountMint;
 
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountMint, 3));
+            assertGe(
+                unclaimedSIR,
+                unclaimedSIRTheoretical -
+                    ErrorComputation.maxErrorBalanceSIR(teaAmountMint, 2) -
+                    ErrorComputation.maxErrorBalanceSIR(teaAmountMint - teaAmountTransfer, 2)
+            );
         }
 
         // Check rewards for Bob
@@ -715,7 +758,7 @@ contract SystemStateTest is Test {
                 durationBobBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationBobAfter3Years) * teaAmountTransfer) /
-            (teaAmountMint + teaAmountPOL);
+            teaAmountMint;
 
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
@@ -730,7 +773,7 @@ contract SystemStateTest is Test {
         tsCheckRewards = uint40(_bound(tsCheckRewards, tsMint, MAX_TS));
 
         // Adjust amounts
-        teaAmount = _bound(teaAmount, 0, SystemConstants.TEA_MAX_SUPPLY);
+        teaAmount = _bound(teaAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
         teaAmountPOL = _bound(teaAmountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - teaAmount);
         vm.assume(teaAmount + teaAmountPOL > 0);
 
@@ -757,10 +800,10 @@ contract SystemStateTest is Test {
             durationAfter3Years = tsCheckRewards - (tsStart + SystemConstants.THREE_YEARS);
         }
 
-        uint256 unclaimedSIRAliceTheoretical = ((durationBefore3Years *
+        uint256 unclaimedSIRAliceTheoretical = (durationBefore3Years *
             SystemConstants.ISSUANCE_FIRST_3_YEARS +
             durationAfter3Years *
-            SystemConstants.ISSUANCE) * teaAmount) / (teaAmount + teaAmountPOL);
+            SystemConstants.ISSUANCE);
 
         if (unclaimedSIRAliceTheoretical == 0) assertEq(unclaimedSIRAlice, 0);
         else {
@@ -1051,8 +1094,7 @@ contract SystemStateHandler is Test {
             systemState.unclaimedRewards(VAULT_ID, _idToAddr(2)) +
             systemState.unclaimedRewards(VAULT_ID, _idToAddr(3)) +
             systemState.unclaimedRewards(VAULT_ID, _idToAddr(4)) +
-            systemState.unclaimedRewards(VAULT_ID, _idToAddr(5)) +
-            systemState.unclaimedRewards(VAULT_ID, address(systemState));
+            systemState.unclaimedRewards(VAULT_ID, _idToAddr(5));
     }
 
     function totalSIRMaxError() external view returns (uint256 maxError) {
@@ -1072,9 +1114,6 @@ contract SystemStateHandler is Test {
                 maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
             }
         }
-        balance = systemState.balanceOf(address(systemState), VAULT_ID);
-        numUpdates = numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[address(systemState)];
-        maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
     }
 }
 
