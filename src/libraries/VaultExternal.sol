@@ -148,6 +148,8 @@ library VaultExternal {
         int64 tickPriceX42
     ) external view returns (VaultStructs.Reserves memory reserves, APE ape) {
         unchecked {
+            reserves.tickPriceX42 = tickPriceX42;
+
             // Derive APE address if needed
             if (isAPE) ape = APE(SaltedAddress.getAddress(address(this), state.vaultId));
 

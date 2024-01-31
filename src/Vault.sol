@@ -109,16 +109,14 @@ contract Vault is TEA {
             uint144 collateralDeposited = uint144(balance - collateralReserve.total);
 
             // Get price from oracle
-            int64 tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
+            VaultStructs.Reserves memory reserves;
+            APE ape;
+            {
+                int64 tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
 
-            // Compute reserves from states
-            (VaultStructs.Reserves memory reserves, APE ape) = VaultExternal.getReserves(
-                isAPE,
-                state,
-                collateralToken,
-                leverageTier,
-                tickPriceX42
-            );
+                // Compute reserves from states
+                (reserves, ape) = VaultExternal.getReserves(isAPE, state, collateralToken, leverageTier, tickPriceX42);
+            }
 
             uint256 collectedFee;
             {
@@ -159,7 +157,7 @@ contract Vault is TEA {
             }
 
             // Update states from new reserves
-            _updateState(state, reserves, leverageTier, tickPriceX42);
+            _updateState(state, reserves, leverageTier);
             states[debtToken][collateralToken][leverageTier] = state;
 
             // Update collateral params
@@ -201,16 +199,14 @@ contract Vault is TEA {
         VaultStructs.CollateralReserve memory collateralReserve = collateralReserves[collateralToken];
 
         // Get price from oracle
-        int64 tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
+        VaultStructs.Reserves memory reserves;
+        APE ape;
+        {
+            int64 tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
 
-        // Compute reserves from states
-        (VaultStructs.Reserves memory reserves, APE ape) = VaultExternal.getReserves(
-            isAPE,
-            state,
-            collateralToken,
-            leverageTier,
-            tickPriceX42
-        );
+            // Compute reserves from states
+            (reserves, ape) = VaultExternal.getReserves(isAPE, state, collateralToken, leverageTier, tickPriceX42);
+        }
 
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[state.vaultId];
@@ -242,7 +238,7 @@ contract Vault is TEA {
         }
 
         // Update states from new reserves
-        _updateState(state, reserves, leverageTier, tickPriceX42);
+        _updateState(state, reserves, leverageTier);
         states[debtToken][collateralToken][leverageTier] = state;
 
         // Update collateral params
@@ -290,8 +286,7 @@ contract Vault is TEA {
     function _updateState(
         VaultStructs.State memory state,
         VaultStructs.Reserves memory reserves,
-        int8 leverageTier,
-        int64 tickPriceX42
+        int8 leverageTier
     ) private {
         unchecked {
             state.reserve = reserves.reserveApes + reserves.reserveLPers;
@@ -343,7 +338,7 @@ contract Vault is TEA {
                     );
 
                     // Compute saturation price
-                    int256 temptickPriceSatX42 = tickPriceX42 +
+                    int256 temptickPriceSatX42 = reserves.tickPriceX42 +
                         (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier);
 
                     // Check if overflow
@@ -360,7 +355,7 @@ contract Vault is TEA {
                     );
 
                     // Compute saturation price
-                    int256 temptickPriceSatX42 = tickPriceX42 - tickRatioX42;
+                    int256 temptickPriceSatX42 = reserves.tickPriceX42 - tickRatioX42;
 
                     // Check if underflow
                     if (temptickPriceSatX42 < type(int64).min) state.tickPriceSatX42 = type(int64).min;
@@ -374,11 +369,11 @@ contract Vault is TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(address token) external returns (uint256 collectedFees_) {
+    function withdrawFees(address token) external returns (uint112 collectedFees) {
         require(msg.sender == sir);
 
         VaultStructs.CollateralReserve memory collateralReserve = collateralReserves[token];
-        uint112 collectedFees = collateralReserve.collectedFees;
+        collectedFees = collateralReserve.collectedFees;
         collateralReserves[token] = VaultStructs.CollateralReserve({
             collectedFees: 0,
             total: collateralReserve.total - collectedFees

@@ -54,6 +54,7 @@ library VaultStructs {
     struct Reserves {
         uint144 reserveApes;
         uint144 reserveLPers;
+        int64 tickPriceX42;
     }
 
     /** Data needed for recoverying the amount of collateral owned by the apes and LPers in a vault
