@@ -20,7 +20,7 @@ library ErrorComputation {
 /////// TEST DONATE AND MINTPOL!!!
 
 contract SystemStateWrapper is SystemState {
-    uint40 constant VAULT_ID = 42;
+    uint48 constant VAULT_ID = 42;
 
     uint128 private _totalSupply;
     uint128 private _balanceVault;
@@ -169,7 +169,7 @@ contract SystemStateWrapper is SystemState {
 }
 
 contract SystemStateTest is Test {
-    uint40 constant VAULT_ID = 42;
+    uint48 constant VAULT_ID = 42;
     uint40 constant MAX_TS = 599 * 365 days; // See SystemState.sol comments for explanation
     SystemStateWrapper systemState;
 
@@ -183,8 +183,8 @@ contract SystemStateTest is Test {
 
     function _activateTax() private {
         vm.prank(systemControl);
-        uint40[] memory oldVaults = new uint40[](0);
-        uint40[] memory newVaults = new uint40[](1);
+        uint48[] memory oldVaults = new uint48[](0);
+        uint48[] memory newVaults = new uint48[](1);
         newVaults[0] = VAULT_ID;
         uint8[] memory newTaxes = new uint8[](1);
         newTaxes[0] = 1;
@@ -328,7 +328,7 @@ contract SystemStateTest is Test {
         );
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS * duration;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
@@ -372,7 +372,7 @@ contract SystemStateTest is Test {
         );
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE * duration;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
@@ -416,7 +416,7 @@ contract SystemStateTest is Test {
         );
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
             durationBefore3Years +
             SystemConstants.ISSUANCE *
@@ -455,7 +455,7 @@ contract SystemStateTest is Test {
         vm.warp(1 + 4 * SystemConstants.THREE_YEARS);
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = uint256(SystemConstants.ISSUANCE_FIRST_3_YEARS + SystemConstants.ISSUANCE) *
             SystemConstants.THREE_YEARS;
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
@@ -545,7 +545,7 @@ contract SystemStateTest is Test {
         );
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
             durationBeforeBurnBefore3Years +
             SystemConstants.ISSUANCE *
@@ -640,7 +640,7 @@ contract SystemStateTest is Test {
         );
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
             (durationBeforeBurnBefore3Years + durationAfterBurnBefore3Years) +
             SystemConstants.ISSUANCE *
@@ -729,7 +729,7 @@ contract SystemStateTest is Test {
         );
 
         // Check rewards for Alice
-        uint104 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
+        uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
         uint256 unclaimedSIRTheoretical = (SystemConstants.ISSUANCE_FIRST_3_YEARS *
             durationAliceBefore3Years +
             SystemConstants.ISSUANCE *
@@ -787,7 +787,7 @@ contract SystemStateTest is Test {
         // Reset rewards
         vm.warp(tsCheckRewards);
         vm.prank(sir);
-        uint104 unclaimedSIRAlice = systemState.claimSIR(VAULT_ID, alice);
+        uint144 unclaimedSIRAlice = systemState.claimSIR(VAULT_ID, alice);
 
         uint256 durationBefore3Years;
         uint256 durationAfter3Years;
@@ -853,11 +853,11 @@ contract SystemStateTest is Test {
         systemState.updateSystemState(baseFee, lpFee, mintingStopped);
 
         // Update vaults
-        uint40[] memory oldVaults = new uint40[](0);
-        uint40[] memory newVaults = new uint40[](numVaults); // Max # of vaults
+        uint48[] memory oldVaults = new uint48[](0);
+        uint48[] memory newVaults = new uint48[](numVaults); // Max # of vaults
         uint8[] memory newTaxes = new uint8[](numVaults);
         for (uint256 i = 0; i < numVaults; i++) {
-            newVaults[i] = uint40(i + 1);
+            newVaults[i] = uint48(i + 1);
             newTaxes[i] = 1;
         }
         vm.prank(systemControl);
@@ -874,7 +874,7 @@ contract SystemStateTest is Test {
         assertEq(cumTax_, numVaults);
 
         // Update vaults to only 1 with max tax
-        uint40[] memory veryNewVaults = new uint40[](1); // Max # of vaults
+        uint48[] memory veryNewVaults = new uint48[](1); // Max # of vaults
         uint8[] memory veryNewTaxes = new uint8[](1);
         veryNewVaults[0] = 1;
         veryNewTaxes[0] = type(uint8).max;
@@ -901,11 +901,11 @@ contract SystemStateTest is Test {
         numVaults = uint16(_bound(numVaults, 0, uint16(type(uint8).max) ** 2));
 
         // Update vaults
-        uint40[] memory oldVaults = new uint40[](0);
-        uint40[] memory newVaults = new uint40[](numVaults); // Max # of vaults
+        uint48[] memory oldVaults = new uint48[](0);
+        uint48[] memory newVaults = new uint48[](numVaults); // Max # of vaults
         uint8[] memory newTaxes = new uint8[](numVaults);
         for (uint256 i = 0; i < numVaults; i++) {
-            newVaults[i] = uint40(i + 1);
+            newVaults[i] = uint48(i + 1);
             newTaxes[i] = 1;
         }
         vm.expectRevert();
@@ -970,11 +970,11 @@ contract SystemStateHandler is Test {
         systemState = new SystemStateWrapper(address(this), address(this));
 
         // Activate one vault (VERY IMPORTANT to do it after updateSystemState)
-        uint40[] memory newVaults = new uint40[](1);
+        uint48[] memory newVaults = new uint48[](1);
         newVaults[0] = VAULT_ID;
         uint8[] memory newTaxes = new uint8[](1);
         newTaxes[0] = 69;
-        systemState.updateVaults(new uint40[](0), newVaults, newTaxes, 69);
+        systemState.updateVaults(new uint48[](0), newVaults, newTaxes, 69);
     }
 
     function _idToAddr(uint id) private pure returns (address) {

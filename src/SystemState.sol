@@ -257,8 +257,8 @@ abstract contract SystemState is SystemControlAccess {
     }
 
     function updateVaults(
-        uint40[] calldata oldVaults,
-        uint40[] calldata newVaults,
+        uint48[] calldata oldVaults,
+        uint48[] calldata newVaults,
         uint8[] calldata newTaxes,
         uint16 cumTax
     ) external onlySystemControl {

@@ -73,7 +73,7 @@ contract VaultTest is Test, VaultEvents {
         emit VaultInitialized(debtToken, collateralToken, leverageTier, 1);
         vault.initialize(debtToken, collateralToken, leverageTier);
 
-        (, , , , uint40 vaultId, ) = vault.state(debtToken, collateralToken, leverageTier);
+        (, , , , uint48 vaultId, ) = vault.state(debtToken, collateralToken, leverageTier);
         assertEq(vaultId, 1);
     }
 
@@ -132,7 +132,7 @@ contract VaultTest is Test, VaultEvents {
     //     vault.initialize(debtToken, collateralToken, validLeverageTier);
     //     uint256 amountMinted = vault.mint(true, debtToken, collateralToken, validLeverageTier);
     //     // Burn a portion of the minted APE
-    //     uint152 amountBurned = vault.burn(true, debtToken, collateralToken, validLeverageTier, amountMinted / 2);
+    //     uint144 amountBurned = vault.burn(true, debtToken, collateralToken, validLeverageTier, amountMinted / 2);
     //     assertTrue(amountBurned > 0);
     //     // Additional checks for reserve updates can be added here
     // }

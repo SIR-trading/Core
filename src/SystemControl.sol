@@ -29,7 +29,7 @@ contract SystemControl is Ownable {
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint8 lpFee);
-    event TreasuryFeesWithdrawn(uint40 indexed vaultId, address indexed collateralToken, uint256 amount);
+    event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
     event FundsWithdrawn(address indexed token, uint256 amount);
 
     error FeeCannotBeZero();
@@ -124,15 +124,6 @@ contract SystemControl is Ownable {
                         WITHDRAWAL FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(uint40 vaultId, address to) external onlyOwner {
-        if (systemStatus != SystemStatus.TrainingWheels || systemStatus != SystemStatus.Unstoppable)
-            revert WrongStatus();
-
-        (address collateralToken, uint256 amount) = VAULT.withdrawFees(vaultId, to);
-
-        emit TreasuryFeesWithdrawn(vaultId, collateralToken, amount);
-    }
-
     /// @notice Save the remaining funds that have not been withdrawn from the vaults
     function saveFunds(address[] calldata tokens, address to) external onlyOwner {
         if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
@@ -173,8 +164,8 @@ contract SystemControl is Ownable {
     }
 
     function updateVaultsIssuances(
-        uint40[] calldata oldVaults,
-        uint40[] calldata newVaults,
+        uint48[] calldata oldVaults,
+        uint48[] calldata newVaults,
         uint8[] calldata newTaxes
     ) public onlyOwner {
         uint256 lenNewVaults = newVaults.length;

@@ -20,12 +20,6 @@ library VaultStructs {
         uint8 decimals;
     }
 
-    struct Reserves {
-        uint152 treasury;
-        uint152 apesReserve;
-        uint152 lpReserve;
-    }
-
     struct SystemParameters {
         // Timestamp when issuance (re)started. 0 => issuance has not started yet
         uint40 tsIssuanceStart;
@@ -47,20 +41,30 @@ library VaultStructs {
         uint16 cumTax;
     }
 
-    /** Data tightly packed into 2 words to save gas.
-        tickPriceX42 & timeStampPrice are not really needed here because they can be obtained by calling the oracle,
-        but it saves gas if the call has already been made in the same block because they take no extra slots.
+    /** collectedFees: Sum of fees collected for a specific type of collateral
+        reservesTotal: Sum of 'reserve' for all vaults for a specific type of collateral
+     */
+    struct CollateralReserve {
+        uint112 collectedFees; // 112 bits for fees because we expect them to be emptied by the stakers on a regular basis
+        uint144 total; // TOTAL amount of collateral stored by all vaults (including fees)
+    }
+
+    /** Collateral owned by the apes and LPers in a vault
+     */
+    struct Reserves {
+        uint144 reserveApes;
+        uint144 reserveLPers;
+    }
+
+    /** Data needed for recoverying the amount of collateral owned by the apes and LPers in a vault
      */
     struct State {
-        int64 tickPriceX42; // Last stored price from the oracle. Q21.42
-        uint40 timeStampPrice; // Timestamp of the last stored price
-        uint152 totalReserves; // totalReserves =  apesReserve + lpReserve
+        uint144 reserve; // reserve =  reserveApes + reserveLPers
         /** Price at the border of the power and saturation zone.
             Q21.42 - Fixed point number with 42 bits of precision after the comma.
             type(int64).max and type(int64).min are used to represent +∞ and -∞ respectively.
          */
-        int64 tickPriceSatX42;
-        uint40 vaultId; // Allows creation of 1 trillion vaults approx
-        uint152 treasury; // If the uint192 is close to overflow, the Treasury can withdraw the fees to unlock the pool
+        int64 tickPriceSatX42; // Saturation price in Q21.42 fixed point
+        uint48 vaultId; // Allows the creation of approximately 281 trillion vaults
     }
 }

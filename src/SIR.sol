@@ -14,7 +14,7 @@ contract SIR is ERC20, SystemControlAccess {
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
-        uint104 unclaimedRewards; // SIR owed to the contributor
+        uint144 unclaimedRewards; // SIR owed to the contributor
     }
 
     SystemState private immutable _VAULT;
@@ -71,7 +71,7 @@ contract SIR is ERC20, SystemControlAccess {
             bool unclaimedRewardsNeverUpdated = tsIssuanceStart > contributorParams.tsLastUpdate;
 
             // Update contributorParams
-            contributorParams.unclaimedRewards += uint104(
+            contributorParams.unclaimedRewards += uint144(
                 uint256(
                     (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
                         (unclaimedRewardsNeverUpdated ? tsIssuanceStart : contributorParams.tsLastUpdate)
@@ -85,7 +85,7 @@ contract SIR is ERC20, SystemControlAccess {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function contributorMint() external returns (uint104) {
+    function contributorMint() external returns (uint144) {
         // Get contributor issuance parameters
         ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
 
@@ -102,7 +102,7 @@ contract SIR is ERC20, SystemControlAccess {
         return contributorParams.unclaimedRewards;
     }
 
-    function lPerMint(uint256 vaultId) external returns (uint104 rewards) {
+    function lPerMint(uint256 vaultId) external returns (uint144 rewards) {
         // Get LPer issuance parameters
         rewards = _VAULT.claimSIR(vaultId, msg.sender);
 
