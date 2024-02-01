@@ -70,21 +70,14 @@ contract Vault is TEA {
             VaultStructs.SystemParameters memory systemParams_ = systemParams;
             require(!systemParams_.mintingStopped);
 
-            // Get states
-            VaultStructs.TokenState memory tokenState = tokenStates[vaultParams.collateralToken];
-            VaultStructs.VaultState memory vaultState = vaultStates[vaultParams.debtToken][vaultParams.collateralToken][
-                vaultParams.leverageTier
-            ];
-
-            // Compute reserves
-            (VaultStructs.Reserves memory reserves, APE ape, uint144 collateralDeposited) = VaultExternal.getReserves(
-                true,
-                isAPE,
-                tokenState,
-                vaultState,
-                _ORACLE,
-                vaultParams
-            );
+            // Get reserves
+            (
+                VaultStructs.TokenState memory tokenState,
+                VaultStructs.VaultState memory vaultState,
+                VaultStructs.Reserves memory reserves,
+                APE ape,
+                uint144 collateralDeposited
+            ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
 
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             uint256 collectedFee;
@@ -123,30 +116,11 @@ contract Vault is TEA {
             }
 
             // Update vaultStates from new reserves
-            _updateState(vaultState, reserves, vaultParams);
+            _updateVaultState(vaultState, reserves, vaultParams);
 
             // Update collateral params
-            _updateGlobalState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
+            _updateTokenState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
         }
-    }
-
-    function _updateGlobalState(
-        bool isMint,
-        VaultStructs.TokenState memory tokenState,
-        uint256 collectedFee,
-        address collateralToken,
-        uint144 collateralDepositedOrWithdrawn
-    ) private {
-        uint256 collectedFeeNew = tokenState.collectedFees + collectedFee;
-        require(collectedFeeNew < type(uint112).max); // Ensure it fits in a uint112
-        tokenState = VaultStructs.TokenState({
-            collectedFees: uint112(collectedFeeNew),
-            total: isMint
-                ? tokenState.total + collateralDepositedOrWithdrawn
-                : tokenState.total - collateralDepositedOrWithdrawn
-        });
-
-        tokenStates[collateralToken] = tokenState;
     }
 
     /** @notice Function for burning APE or TEA
@@ -158,21 +132,14 @@ contract Vault is TEA {
     ) external returns (uint144 collateralWidthdrawn) {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
 
-        // Get states
-        VaultStructs.TokenState memory tokenState = tokenStates[vaultParams.collateralToken];
-        VaultStructs.VaultState memory vaultState = vaultStates[vaultParams.debtToken][vaultParams.collateralToken][
-            vaultParams.leverageTier
-        ];
+        // Get reserves
+        (
+            VaultStructs.TokenState memory tokenState,
+            VaultStructs.VaultState memory vaultState,
+            VaultStructs.Reserves memory reserves,
+            APE ape,
 
-        // Compute reserves
-        (VaultStructs.Reserves memory reserves, APE ape, ) = VaultExternal.getReserves(
-            false,
-            isAPE,
-            tokenState,
-            vaultState,
-            _ORACLE,
-            vaultParams
-        );
+        ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
 
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         uint256 collectedFee;
@@ -211,10 +178,10 @@ contract Vault is TEA {
         }
 
         // Update vaultStates from new reserves
-        _updateState(vaultState, reserves, vaultParams);
+        _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update collateral params
-        _updateGlobalState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWidthdrawn);
+        _updateTokenState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWidthdrawn);
 
         // Send collateral
         TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, collateralWidthdrawn);
@@ -231,12 +198,7 @@ contract Vault is TEA {
     function getReserves(
         VaultStructs.VaultParameters calldata vaultParams
     ) external view returns (VaultStructs.Reserves memory) {
-        return
-            VaultExternal.getReservesReadOnly(
-                vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
-                _ORACLE,
-                vaultParams
-            );
+        return VaultExternal.getReservesReadOnly(vaultStates, _ORACLE, vaultParams);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -250,7 +212,7 @@ contract Vault is TEA {
      *     (R,  ∞  ) ⇔ (0,L)
      *     (R,  0  ) ⇔ (A,0)
      */
-    function _updateState(
+    function _updateVaultState(
         VaultStructs.VaultState memory vaultState,
         VaultStructs.Reserves memory reserves,
         VaultStructs.VaultParameters calldata vaultParams
@@ -342,6 +304,25 @@ contract Vault is TEA {
 
             vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         }
+    }
+
+    function _updateTokenState(
+        bool isMint,
+        VaultStructs.TokenState memory tokenState,
+        uint256 collectedFee,
+        address collateralToken,
+        uint144 collateralDepositedOrWithdrawn
+    ) private {
+        uint256 collectedFeeNew = tokenState.collectedFees + collectedFee;
+        require(collectedFeeNew < type(uint112).max); // Ensure it fits in a uint112
+        tokenState = VaultStructs.TokenState({
+            collectedFees: uint112(collectedFeeNew),
+            total: isMint
+                ? tokenState.total + collateralDepositedOrWithdrawn
+                : tokenState.total - collateralDepositedOrWithdrawn
+        });
+
+        tokenStates[collateralToken] = tokenState;
     }
 
     /*////////////////////////////////////////////////////////////////

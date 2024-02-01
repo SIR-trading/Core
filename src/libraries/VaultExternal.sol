@@ -131,25 +131,43 @@ library VaultExternal {
     }
 
     function getReservesReadOnly(
-        VaultStructs.VaultState memory vaultState,
+        mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
+            storage vaultStates,
         Oracle oracle,
         VaultStructs.VaultParameters calldata vaultParams
     ) external view returns (VaultStructs.Reserves memory reserves) {
         // Get price
         reserves.tickPriceX42 = oracle.getPrice(vaultParams.collateralToken, vaultParams.debtToken);
 
-        _getReserves(vaultState, reserves, vaultParams.leverageTier);
+        _getReserves(
+            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
+            reserves,
+            vaultParams.leverageTier
+        );
     }
 
     function getReserves(
         bool isMint,
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
-        VaultStructs.VaultState memory vaultState,
+        mapping(address collateral => VaultStructs.TokenState) storage tokenStates,
+        mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
+            storage vaultStates,
         Oracle oracle,
         VaultStructs.VaultParameters calldata vaultParams
-    ) external returns (VaultStructs.Reserves memory reserves, APE ape, uint144 collateralDeposited) {
+    )
+        external
+        returns (
+            VaultStructs.TokenState memory tokenState,
+            VaultStructs.VaultState memory vaultState,
+            VaultStructs.Reserves memory reserves,
+            APE ape,
+            uint144 collateralDeposited
+        )
+    {
         unchecked {
+            tokenState = tokenStates[vaultParams.collateralToken];
+            vaultState = vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
+
             // Get price and update oracle state if needed
             reserves.tickPriceX42 = oracle.updateOracleState(vaultParams.collateralToken, vaultParams.debtToken);
 
