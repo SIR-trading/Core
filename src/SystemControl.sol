@@ -14,7 +14,7 @@ import {Ownable} from "openzeppelin/access/Ownable.sol";
 contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
-    /** Flow chart of the system 4 possible states:
+    /** Flow chart of the system 4 possible vaultStates:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
         +---------------+      +---------------+       +---------------+      +---------------+

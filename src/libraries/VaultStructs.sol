@@ -8,7 +8,7 @@ library VaultStructs {
         uint176 cumSIRPerTEAx96; // Q104.96, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
-    struct Parameters {
+    struct VaultParameters {
         address debtToken;
         address collateralToken;
         int8 leverageTier;
@@ -44,7 +44,7 @@ library VaultStructs {
     /** collectedFees: Sum of fees collected for a specific type of collateral
         reservesTotal: Sum of 'reserve' for all vaults for a specific type of collateral
      */
-    struct CollateralReserve {
+    struct TokenState {
         uint112 collectedFees; // 112 bits for fees because we expect them to be emptied by the stakers on a regular basis
         uint144 total; // TOTAL amount of collateral stored by all vaults (including fees)
     }
@@ -59,7 +59,7 @@ library VaultStructs {
 
     /** Data needed for recoverying the amount of collateral owned by the apes and LPers in a vault
      */
-    struct State {
+    struct VaultState {
         uint144 reserve; // reserve =  reserveApes + reserveLPers
         /** Price at the border of the power and saturation zone.
             Q21.42 - Fixed point number with 42 bits of precision after the comma.

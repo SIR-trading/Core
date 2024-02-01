@@ -29,8 +29,8 @@ contract VaultExternalTest is Test {
 
     VaultStructs.Parameters[] paramsById;
 
-    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
-        public state; // Do not use vaultId 0
+    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
+        public vaultState; // Do not use vaultId 0
     VaultStructs.TokenParameters transientTokenParameters;
     uint48 constant VAULT_ID = 9;
     uint48 vaultId;
@@ -81,7 +81,7 @@ contract VaultExternalTest is Test {
         emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
         VaultExternal.deployAPE(
             oracle,
-            state[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
             transientTokenParameters,
             Addresses.ADDR_USDC,
@@ -110,7 +110,7 @@ contract VaultExternalTest is Test {
         vm.expectRevert(abi.encodeWithSelector(NoFeeTiers.selector));
         VaultExternal.deployAPE(
             oracle,
-            state[debtToken][collateralToken][leverageTier],
+            vaultState[debtToken][collateralToken][leverageTier],
             paramsById,
             transientTokenParameters,
             debtToken,
@@ -125,7 +125,7 @@ contract VaultExternalTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeverageTierOutOfRange.selector));
         VaultExternal.deployAPE(
             oracle,
-            state[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
             transientTokenParameters,
             Addresses.ADDR_USDC,
@@ -141,7 +141,7 @@ contract VaultExternalTest is Test {
             emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
             VaultExternal.deployAPE(
                 oracle,
-                state[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+                vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
                 paramsById,
                 transientTokenParameters,
                 Addresses.ADDR_USDC,
@@ -173,7 +173,7 @@ contract VaultExternalTest is Test {
         vm.expectRevert(abi.encodeWithSelector(LeverageTierOutOfRange.selector));
         VaultExternal.deployAPE(
             oracle,
-            state[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
             transientTokenParameters,
             Addresses.ADDR_USDC,
@@ -185,7 +185,7 @@ contract VaultExternalTest is Test {
         vm.expectRevert(abi.encodeWithSelector(VaultAlreadyInitialized.selector));
         VaultExternal.deployAPE(
             oracle,
-            state[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
             transientTokenParameters,
             Addresses.ADDR_USDC,
@@ -247,7 +247,7 @@ contract VaultExternalGetReserves is Test {
         int8 leverageTier,
         uint144 collateralDeposited,
         uint256 totalSupplyCollateral,
-        VaultStructs.State memory state_,
+        VaultStructs.VaultState memory state_,
         int64 tickPriceX42
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
@@ -282,7 +282,7 @@ contract VaultExternalGetReserves is Test {
         int8 leverageTier,
         uint144 collateralDeposited,
         uint256 totalSupplyCollateral,
-        VaultStructs.State memory state_,
+        VaultStructs.VaultState memory state_,
         int64 tickPriceX42
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
@@ -320,7 +320,7 @@ contract VaultExternalGetReserves is Test {
         int8 leverageTier,
         uint144 collateralDeposited,
         uint256 totalSupplyCollateral,
-        VaultStructs.State memory state_
+        VaultStructs.VaultState memory state_
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
 
@@ -356,7 +356,7 @@ contract VaultExternalGetReserves is Test {
         int8 leverageTier,
         uint144 collateralDeposited,
         uint256 totalSupplyCollateral,
-        VaultStructs.State memory state_,
+        VaultStructs.VaultState memory state_,
         int64 tickPriceX42
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
@@ -394,7 +394,7 @@ contract VaultExternalGetReserves is Test {
         int8 leverageTier,
         uint256 collateralDeposited,
         uint256 totalSupplyCollateral,
-        VaultStructs.State memory state_
+        VaultStructs.VaultState memory state_
     ) public {
         leverageTier = int8(_bound(leverageTier, -3, 2)); // Only accepted values in the system
 
@@ -420,7 +420,7 @@ contract VaultExternalGetReserves is Test {
 
     function _getReservesWithFloatingPoint(
         int8 leverageTier,
-        VaultStructs.State memory state_
+        VaultStructs.VaultState memory state_
     ) private view returns (uint144 reserveApes, uint144 reserveLPers) {
         bytes16 tickPriceFP = ABDKMathQuad.fromInt(state_.tickPriceX42).div(ABDKMathQuad.fromUInt(2 ** 42));
         bytes16 tickPriceSatFP = ABDKMathQuad.fromInt(state_.tickPriceSatX42).div(ABDKMathQuad.fromUInt(2 ** 42));

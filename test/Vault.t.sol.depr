@@ -73,7 +73,7 @@ contract VaultTest is Test, VaultEvents {
         emit VaultInitialized(debtToken, collateralToken, leverageTier, 1);
         vault.initialize(debtToken, collateralToken, leverageTier);
 
-        (, , , , uint48 vaultId, ) = vault.state(debtToken, collateralToken, leverageTier);
+        (, , , , uint48 vaultId, ) = vault.vaultState(debtToken, collateralToken, leverageTier);
         assertEq(vaultId, 1);
     }
 
@@ -118,7 +118,7 @@ contract VaultTest is Test, VaultEvents {
     // }
 
     // function testMintBeforeSIRStart() public {
-    //     // Assuming SIR start is controlled by a state variable or similar mechanism
+    //     // Assuming SIR start is controlled by a vaultState variable or similar mechanism
     //     vm.prank(systemControl);
     //     vault.initialize(debtToken, collateralToken, validLeverageTier);
     //     // Ensure SIR has not started

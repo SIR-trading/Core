@@ -96,7 +96,7 @@ contract SIR is ERC20, SystemControlAccess {
         // Reset unclaimedRewards
         contributorParams.unclaimedRewards = 0;
 
-        // Update state
+        // Update vaultState
         _contributorsIssuances[msg.sender] = contributorParams;
 
         return contributorParams.unclaimedRewards;
@@ -140,7 +140,7 @@ contract SIR is ERC20, SystemControlAccess {
             // Update issuance
             contributorParams.issuance = contributorIssuances_[i];
 
-            // Update state
+            // Update vaultState
             _contributorsIssuances[contributors_[i]] = contributorParams;
         }
         uint256 issuanceContributors_ = issuanceContributors + issuanceIncrease - issuanceDecrease;

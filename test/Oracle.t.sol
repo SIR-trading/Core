@@ -1394,7 +1394,10 @@ contract OracleInvariantTest is Test, Oracle {
     function invariant_priceMaxDivergence() public {
         vm.warp(_currentTime);
 
-        (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.state(address(_tokenA), address(_tokenB));
+        (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.vaultState(
+            address(_tokenA),
+            address(_tokenB)
+        );
         int64 tickPriceX42_B = _oracle.getPrice(address(_tokenA), address(_tokenB));
 
         uint256 tickPriceDiff = tickPriceX42_A > tickPriceX42_B

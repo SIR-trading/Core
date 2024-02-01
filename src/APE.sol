@@ -50,7 +50,15 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = Vault(msg.sender).latestTokenParams();
+        (VaultStructs.TokenParameters memory tokenParams, VaultStructs.VaultParameters memory vaultParams) = Vault(
+            msg.sender
+        ).latestTokenParams();
+        name = tokenParams.name;
+        symbol = tokenParams.symbol;
+        decimals = tokenParams.decimals;
+        debtToken = vaultParams.debtToken;
+        collateralToken = vaultParams.collateralToken;
+        leverageTier = vaultParams.leverageTier;
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();

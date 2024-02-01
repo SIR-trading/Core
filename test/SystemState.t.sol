@@ -848,7 +848,7 @@ contract SystemStateTest is Test {
     function testFuzz_updateSystem(uint16 baseFee, uint8 lpFee, bool mintingStopped, uint16 numVaults) public {
         numVaults = uint16(_bound(numVaults, 0, uint16(type(uint8).max) ** 2));
 
-        // Update system state
+        // Update system vaultState
         vm.prank(systemControl);
         systemState.updateSystemState(baseFee, lpFee, mintingStopped);
 
@@ -863,7 +863,7 @@ contract SystemStateTest is Test {
         vm.prank(systemControl);
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
-        // Check system state
+        // Check system vaultState
         (uint40 tsIssuanceStart_, uint16 baseFee_, uint8 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState
             .systemParams();
 
@@ -881,7 +881,7 @@ contract SystemStateTest is Test {
         vm.prank(systemControl);
         systemState.updateVaults(newVaults, veryNewVaults, veryNewTaxes, type(uint8).max);
 
-        // Check system state
+        // Check system vaultState
         (tsIssuanceStart_, baseFee_, lpFee_, mintingStopped_, cumTax_) = systemState.systemParams();
 
         assertEq(tsIssuanceStart_, tsStart);
@@ -892,7 +892,7 @@ contract SystemStateTest is Test {
     }
 
     function testFuzz_updateSystemStateNotSystemControl(uint16 baseFee, uint8 lpFee, bool mintingStopped) public {
-        // Update system state
+        // Update system vaultState
         vm.expectRevert();
         systemState.updateSystemState(baseFee, lpFee, mintingStopped);
     }

@@ -132,7 +132,7 @@ contract TEATest is Test, SystemConstants {
         vm.prank(alice);
         tea.safeTransferFrom(bob, charlie, vaultId, transferAmount, "");
 
-        // Asserting the post-transfer state
+        // Asserting the post-transfer vaultState
         assertEq(tea.balanceOf(alice, vaultId), 0);
         assertEq(tea.balanceOf(bob, vaultId), mintAmount - transferAmount);
         assertEq(tea.balanceOf(charlie, vaultId), transferAmount);
@@ -258,7 +258,7 @@ contract TEATest is Test, SystemConstants {
         vm.prank(alice);
         tea.safeTransferFrom(bob, address(this), vaultId, transferAmount, "");
 
-        // Asserting the post-transfer state
+        // Asserting the post-transfer vaultState
         assertEq(tea.balanceOf(alice, vaultId), 0);
         assertEq(tea.balanceOf(bob, vaultId), mintAmount - transferAmount);
         assertEq(tea.balanceOf(address(this), vaultId), transferAmount);
