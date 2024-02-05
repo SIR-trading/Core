@@ -20,6 +20,8 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA {
+    error NoFeesToWithdraw();
+
     Oracle private immutable _ORACLE;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
@@ -329,14 +331,16 @@ contract Vault is TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(address token) external returns (uint112 collectedFees) {
+    function withdrawFees(address token) external {
         require(msg.sender == sir);
 
         VaultStructs.TokenState memory tokenState = tokenStates[token];
-        collectedFees = tokenState.collectedFees;
+        uint112 collectedFees = tokenState.collectedFees;
+        if (collectedFees == 0) revert NoFeesToWithdraw();
+
         tokenStates[token] = VaultStructs.TokenState({collectedFees: 0, total: tokenState.total - collectedFees});
 
-        if (collectedFees > 0) TransferHelper.safeTransfer(token, msg.sender, collectedFees);
+        TransferHelper.safeTransfer(token, msg.sender, collectedFees);
     }
 
     /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack

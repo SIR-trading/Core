@@ -19,4 +19,9 @@ library SystemConstants {
     address internal constant ADDR_UNISWAPV3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
 
     int64 internal constant MAX_TICK_X42 = 1951133415219145403; // log_1.0001((2^128-1(/2^64))*2^42
+
+    // Approximately 10 days. We did not choose 10 days precisely to avoid auctions always ending on the same day and time of the week.
+    uint256 internal constant AUCTION_COOLDOWN = 247 hours;
+
+    uint256 internal constant AUCTION_DURATION = 24 hours;
 }

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {SystemState} from "./SystemState.sol";
+import {Vault} from "./Vault.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
@@ -17,7 +17,7 @@ contract SIR is ERC20, SystemControlAccess {
         uint144 unclaimedRewards; // SIR owed to the contributor
     }
 
-    SystemState private immutable _VAULT;
+    Vault internal immutable VAULT;
 
     uint72 public issuanceContributors; // issuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
 
@@ -25,10 +25,10 @@ contract SIR is ERC20, SystemControlAccess {
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
     constructor(
-        address systemState,
+        address vault,
         address systemControl
     ) ERC20("Synthetics Implemented Right", "SIR", SystemConstants.SIR_DECIMALS) SystemControlAccess(systemControl) {
-        _VAULT = SystemState(systemState);
+        VAULT = Vault(vault);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -37,7 +37,7 @@ contract SIR is ERC20, SystemControlAccess {
 
     /// @notice Not all tokens may be in circulation. This function outputs the total supply if ALL tokens where in circulation.
     function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
+        (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
 
         if (tsIssuanceStart == 0) return 0;
         return SystemConstants.ISSUANCE * (block.timestamp - tsIssuanceStart);
@@ -47,7 +47,7 @@ contract SIR is ERC20, SystemControlAccess {
         address contributor
     ) public view returns (ContributorIssuanceParams memory contributorParams) {
         unchecked {
-            (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
+            (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
 
             // Update timestamp
             contributorParams.tsLastUpdate = uint40(block.timestamp);
@@ -104,7 +104,7 @@ contract SIR is ERC20, SystemControlAccess {
 
     function lPerMint(uint256 vaultId) external returns (uint144 rewards) {
         // Get LPer issuance parameters
-        rewards = _VAULT.claimSIR(vaultId, msg.sender);
+        rewards = VAULT.claimSIR(vaultId, msg.sender);
 
         // Mint if there are any unclaimed rewards
         require(rewards > 0);
