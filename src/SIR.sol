@@ -15,6 +15,7 @@ contract SIR is ERC20, SystemControlAccess {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
         uint144 unclaimedRewards; // SIR owed to the contributor
+        // WHY IS THIS uint144 AND NOT uint80????????
     }
 
     Vault internal immutable VAULT;
@@ -27,7 +28,7 @@ contract SIR is ERC20, SystemControlAccess {
     constructor(
         address vault,
         address systemControl
-    ) ERC20("Synthetics Implemented Right", "SIR", SystemConstants.SIR_DECIMALS) SystemControlAccess(systemControl) {
+    ) ERC20("Sustainable Investing Returns", "SIR", SystemConstants.SIR_DECIMALS) SystemControlAccess(systemControl) {
         VAULT = Vault(vault);
     }
 

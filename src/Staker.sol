@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import {SystemConstants} from "./libraries/SystemConstants.sol";
+import {Addresses} from "./libraries/Addresses.sol";
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 
@@ -20,16 +21,11 @@ contract Staker is SIR {
     error TokensAlreadyClaimed();
     error AuctionIsNotOver();
 
-    uint80 public stakeTotal; // Total amount of SIR staked
-    uint176 public cumETHPerSIRx80; // Q96.80, cumulative token per unit of SIR
-    mapping(address => StakerInfo) public stakersInfo; // Staker info (cumETHPerSIRx80, stake, unclaimedETH)
-
-    mapping(address => AuctionByToken) public auctions;
-
-    struct StakerInfo {
+    // WHAT IF THE REWARD TOKEN IS SIR?!?!
+    struct Params {
         uint80 stake; // Amount of SIR staked
         uint176 cumETHPerSIRx80;
-        uint96 unclaimedETH; // Amount of ETH owed to the staker
+        uint96 unclaimedWETH; // Amount of ETH owed to the staker
     }
 
     struct AuctionByToken {
@@ -41,6 +37,18 @@ contract Staker is SIR {
         bool winnerPaid; // Whether the winner has been paid
     }
 
+    ERC20 private constant _WETH = ERC20(Addresses.ADDR_WETH);
+
+    Params public poolParams; // Pool info (cumETHPerSIRx80, stake, unclaimedWETH)
+    // OPTIMIZE READ/ONLY
+
+    // uint80 public stakeTotal; // Total amount of SIR staked
+    // uint176 public cumETHPerSIRx80; // Q96.80, cumulative token per unit of SIR
+    // uint96 public unclaimedWETH; // Total amount of unclaimed ETH
+    mapping(address => Params) public stakersParams; // Staker info (cumETHPerSIRx80, stake, unclaimedWETH)
+
+    mapping(address => AuctionByToken) public auctions;
+
     constructor(address vault, address systemControl) SIR(vault, systemControl) {}
 
     /*////////////////////////////////////////////////////////////////
@@ -49,34 +57,35 @@ contract Staker is SIR {
 
     function unstake(uint80 amount) external {
         // Get current unclaimed rewards
-        (uint256 rewards_, StakerInfo memory stakerInfo, uint176 cumETHPerSIRx80_) = _rewards(msg.sender);
+        (uint256 rewards_, Params memory stakerParams, uint176 cumETHPerSIRx80_) = _rewards(msg.sender);
         if (rewards_ > type(uint96).max) revert UnclaimedRewardsOverflow();
 
         // Update staker info
-        stakersInfo[msg.sender] = StakerInfo(uint80(stakerInfo.stake - amount), cumETHPerSIRx80_, uint96(rewards_));
+        stakersParams[msg.sender] = Params(uint80(stakerParams.stake - amount), cumETHPerSIRx80_, uint96(rewards_));
 
         // Update total stake
         unchecked {
             stakeTotal -= amount; // Cannot underflow because stakeTotal >= stake >= amount
         }
 
-        // Transfer SIR to the staker
+        // DO NOT TRANSFER, JUST CHANGE THE balanceOf variable for the staker and the StakerParams here!!
         transfer(msg.sender, amount);
     }
 
     function stake() external {
         unchecked {
             // Check increase in SIR stake
+            // NO NEED FOR USE TO CALL SIR TRANSFER BECAUSE THIS FUNCTION HAS ACCESS TO ALL SIR VARIABLES!!
             uint256 stakeTotalReal = balanceOf[address(this)];
             uint256 deposit = stakeTotalReal - stakeTotal;
 
             // Get current unclaimed rewards
-            (uint256 rewards_, StakerInfo memory stakerInfo, uint176 cumETHPerSIRx80_) = _rewards(msg.sender);
+            (uint256 rewards_, Params memory stakerParams, uint176 cumETHPerSIRx80_) = _rewards(msg.sender);
             if (rewards_ > type(uint96).max) revert UnclaimedRewardsOverflow();
 
             // Update staker info
-            stakersInfo[msg.sender] = StakerInfo(
-                uint80(stakerInfo.stake + deposit),
+            stakersParams[msg.sender] = Params(
+                uint80(stakerParams.stake + deposit),
                 cumETHPerSIRx80_,
                 uint96(rewards_)
             );
@@ -88,10 +97,10 @@ contract Staker is SIR {
 
     function claim() external {
         unchecked {
-            (uint256 rewards_, StakerInfo memory stakerInfo, ) = _rewards(msg.sender);
-            stakersInfo[msg.sender] = StakerInfo(stakerInfo.stake, cumETHPerSIRx80, 0);
+            (uint256 rewards_, Params memory stakerParams, ) = _rewards(msg.sender);
+            stakersParams[msg.sender] = Params(stakerParams.stake, cumETHPerSIRx80, 0);
 
-            payable(address(msg.sender)).transfer(rewards_);
+            _WETH.transfer(msg.sender, rewards_);
         }
     }
 
@@ -99,15 +108,15 @@ contract Staker is SIR {
         (rewards_, , ) = _rewards(staker);
     }
 
-    function _rewards(address staker) private view returns (uint256, StakerInfo memory, uint176) {
+    function _rewards(address staker) private view returns (uint256, Params memory, uint176) {
         unchecked {
-            StakerInfo memory stakerInfo = stakersInfo[staker];
+            Params memory stakerParams = stakersParams[staker];
             uint176 cumETHPerSIRx80_ = cumETHPerSIRx80;
 
             return (
-                stakerInfo.unclaimedETH +
-                    ((uint256(cumETHPerSIRx80_ - stakerInfo.cumETHPerSIRx80) * stakerInfo.stake) >> 80),
-                stakerInfo,
+                stakerParams.unclaimedWETH +
+                    ((uint256(cumETHPerSIRx80_ - stakerParams.cumETHPerSIRx80) * stakerParams.stake) >> 80),
+                stakerParams,
                 cumETHPerSIRx80_
             );
         }
@@ -136,27 +145,37 @@ contract Staker is SIR {
     //     TransferHelper.safeTransferFrom(token, msg.sender, address(this), amount);
     // }
 
-    // DO NOT START AUCTION IF IT IS WETH, JUST DISTRIBUTE IT!!!
     function collectFeesAndStartAuction(address token) external {
-        AuctionByToken memory auction = auctions[token];
+        // WETH is the dividend paying token, so we do not start an auction for it.
+        if (token != Addresses.ADDR_WETH) {
+            AuctionByToken memory auction = auctions[token];
 
-        if (block.timestamp < auction.startTime + SystemConstants.AUCTION_COOLDOWN) revert NewAuctionCannotStartYet();
+            if (block.timestamp < auction.startTime + SystemConstants.AUCTION_COOLDOWN)
+                revert NewAuctionCannotStartYet();
 
-        // Start a new auction
-        auctions[token] = AuctionByToken({
-            bestBid: 0,
-            bestBidder: address(0),
-            startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
-            winnerPaid: false
-        });
+            // Start a new auction
+            auctions[token] = AuctionByToken({
+                bestBid: 0,
+                bestBidder: address(0),
+                startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
+                winnerPaid: false
+            });
 
-        /** Pay the previous bidder if he has not been paid yet.
+            /** Pay the previous bidder if he has not been paid yet.
             We considered the bidder paid regardless of the success of the transfer.
          */
-        _claimTokens(token, auction);
+            _claimTokens(token, auction);
+        }
 
         // Retrieve fees from the vault. Reverts if no fees are available.
         VAULT.withdrawFees(token);
+    }
+
+    function _distributeDividends(uint256 amount) private {
+        uint256 dividends = _WETH.balanceOf(address(this));
+
+        // Update cumETHPerSIRx80
+        cumETHPerSIRx80 += uint176((dividends << 80) / stakeTotal);
     }
 
     function claimTokens(address token) external {
