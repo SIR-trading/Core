@@ -21,7 +21,7 @@ library SystemConstants {
     int64 internal constant MAX_TICK_X42 = 1951133415219145403; // log_1.0001((2^128-1(/2^64))*2^42
 
     // Approximately 10 days. We did not choose 10 days precisely to avoid auctions always ending on the same day and time of the week.
-    uint256 internal constant AUCTION_COOLDOWN = 247 hours;
+    uint40 internal constant AUCTION_COOLDOWN = 247 hours; // 247h & 240h have no common factors
 
-    uint256 internal constant AUCTION_DURATION = 24 hours;
+    uint40 internal constant AUCTION_DURATION = 24 hours;
 }

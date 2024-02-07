@@ -5,18 +5,19 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
 
 /** @notice Solmate mod
-    @dev SIR supply is designed to fit in a 80-bit unsigned integer.
-    @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
-    @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current supply. 
+    @dev SIR balance is designed to fit in a 80-bit unsigned integer.
+    @dev ETH balance is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
+    @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current balance. 
  */
-abstract contract ERC20 {
-    error UnclaimedRewardsOverflow();
+contract ERC20Staker {
     error NewAuctionCannotStartYet();
     error TokensAlreadyClaimed();
     error AuctionIsNotOver();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
+    event Staked(address indexed staker, uint256 amount);
+    event Unstaked(address indexed staker, uint256 amount);
 
     Vault internal immutable VAULT;
 
@@ -24,39 +25,36 @@ abstract contract ERC20 {
     string public symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
-    struct ParamsSection1 {
+    struct StakingParams {
         uint80 stake; // Amount of staked SIR
         uint176 cumETHPerSIRx80; // Cumulative ETH per SIR * 2^80
     }
 
-    struct ParamsSection2 {
-        uint80 balance; // Amount of transferable SIR
+    struct Balance {
+        uint80 balanceOfSIR; // Amount of transferable SIR
         uint96 unclaimedWETH; // Amount of WETH owed to the staker(s)
     }
 
-    struct Params {
-        ParamsSection1 section1;
-        ParamsSection2 section2;
-    }
-
-    // struct Params {
-    //     uint80 stake; // Amount of staked SIR
-    //     uint176 cumETHPerSIRx80; // Cumulative ETH per SIR * 2^80
-    //     uint80 balance; // Amount of transferable SIR
-    //     uint96 unclaimedWETH; // Amount of WETH owed to the staker(s)
+    // struct WinningBidder {
+    //     uint96 bid; // Amount of ETH bidded
+    //     address addr; // Address of the bidder
     // }
 
-    struct AuctionByToken {
-        uint96 bestBid;
-        address bestBidder;
+    struct Auction {
+        uint96 bid; // Amount of ETH bidded
+        address bidder; // Address of the bidder
         uint40 startTime; // Auction start time
         bool winnerPaid; // Whether the winner has been paid
     }
 
-    Params internal params;
+    StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
+    Balance internal supply; // Total unstaked SIR and WETH owed to the stakers
 
-    mapping(address => AuctionByToken) public auctions;
-    mapping(address => Params) internal usersParams;
+    mapping(address token => Auction) public auctions;
+    // mapping(address token => WinningBidder) public winningBidders;
+    mapping(address user => Balance) public balances;
+    mapping(address user => StakingParams) internal stakersParams;
+
     mapping(address => mapping(address => uint256)) public allowance;
 
     uint256 internal immutable INITIAL_CHAIN_ID;
@@ -77,23 +75,25 @@ abstract contract ERC20 {
 
     // Return transferable SIR
     function balanceOf(address account) external view returns (uint256) {
-        return usersParams[account].balance;
+        return balances[account].balanceOfSIR;
     }
 
+    // Return staked SIR
     function totalBalanceOf(address account) external view returns (uint256) {
-        Params memory accountParams = usersParams[account];
-        return accountParams.stake + accountParams.balance;
+        return stakersParams[account].stake + balances[account].balanceOfSIR;
     }
 
-    function circulatingSupply() external view returns (uint256) {
-        return params.balance;
+    // Return total staked SIR
+    function stakedSupply() external view returns (uint256) {
+        return stakingParams.stake;
     }
 
+    // Return staked SIR + transferable SIR
     function totalSupply() external view returns (uint256) {
-        Params memory params_ = params;
-        return params_.stake + params_.balance;
+        return stakingParams.stake + supply.balanceOfSIR;
     }
 
+    // Return all SIR if all tokens were in circulation
     function maxTotalSupply() external view returns (uint256) {
         (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
 
@@ -114,37 +114,34 @@ abstract contract ERC20 {
     }
 
     function transfer(address to, uint256 amount) public returns (bool) {
-        require(amount <= type(uint80).max);
-        usersParams[msg.sender].balance -= uint80(amount);
-
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint80 value.
         unchecked {
-            usersParams[to].balance += uint80(amount);
+            uint80 balance = balances[msg.sender].balanceOfSIR;
+            require(amount <= balance);
+            balances[msg.sender].balanceOfSIR = balance - uint80(amount);
+
+            balances[to].balanceOfSIR += uint80(amount);
+
+            emit Transfer(msg.sender, to, amount);
+
+            return true;
         }
-
-        emit Transfer(msg.sender, to, amount);
-
-        return true;
     }
 
     function transferFrom(address from, address to, uint256 amount) public returns (bool) {
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
-
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
 
-        require(amount <= type(uint80).max);
-        usersParams[from].balance -= uint80(amount);
-
-        // Cannot overflow because the sum of all user
-        // balances can't exceed the max uint80 value.
         unchecked {
-            usersParams[to].balance += uint80(amount);
+            uint80 balance = balances[from].balanceOfSIR;
+            require(amount <= balance);
+            balances[from].balanceOfSIR = balance - uint80(amount);
+
+            balances[to].balanceOfSIR += uint80(amount);
+
+            emit Transfer(from, to, amount);
+
+            return true;
         }
-
-        emit Transfer(from, to, amount);
-
-        return true;
     }
 
     function permit(
@@ -210,15 +207,13 @@ abstract contract ERC20 {
             );
     }
 
-    function _mint(address to, uint256 amount) internal {
-        assert(params.balance + params.stake + amount <= type(uint80).max);
-
+    function _mint(address to, uint80 amount) internal {
         unchecked {
-            params.balance += uint80(amount);
-            usersParams[to].balance += uint80(amount);
-        }
+            supply.balanceOfSIR += uint80(amount);
+            balances[to].balanceOfSIR += uint80(amount);
 
-        emit Transfer(address(0), to, amount);
+            emit Transfer(address(0), to, amount);
+        }
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -226,65 +221,90 @@ abstract contract ERC20 {
     ////////////////////////////////////////////////////////////////*/
 
     function unstake(uint80 amount) external {
-        // Get current unclaimed rewards
-        (uint256 rewards_, Params memory userParams, uint176 cumETHPerSIRx80_) = _rewards(msg.sender);
-        if (rewards_ > type(uint96).max) revert UnclaimedRewardsOverflow();
+        Balance memory balance = balances[msg.sender];
+        StakingParams memory stakingParams_ = stakingParams;
+        StakingParams memory stakerParams = stakersParams[msg.sender];
 
-        // Update staker info
-        usersParams[msg.sender] = Params(uint80(userParams.stake - amount), cumETHPerSIRx80_, uint96(rewards_));
+        uint80 newStake = stakerParams.stake - amount;
 
-        // Update total stake
         unchecked {
-            stakeTotal -= amount; // Cannot underflow because stakeTotal >= stake >= amount
-        }
-
-        // DO NOT TRANSFER, JUST CHANGE THE balanceOf variable for the staker and the StakerParams here!!
-        transfer(msg.sender, amount);
-    }
-
-    function stake() external {
-        unchecked {
-            // Check increase in SIR stake
-            // NO NEED FOR USE TO CALL SIR TRANSFER BECAUSE THIS FUNCTION HAS ACCESS TO ALL SIR VARIABLES!!
-            uint256 stakeTotalReal = balanceOf[address(this)];
-            uint256 deposit = stakeTotalReal - stakeTotal;
-
-            // Get current unclaimed rewards
-            (uint256 rewards_, Params memory userParams, uint176 cumETHPerSIRx80_) = _rewards(msg.sender);
-            if (rewards_ > type(uint96).max) revert UnclaimedRewardsOverflow();
+            // Update balance
+            balances[msg.sender] = Balance(
+                balance.balanceOfSIR + amount,
+                _dividends(balance, stakingParams_, stakerParams)
+            );
 
             // Update staker info
-            usersParams[msg.sender] = Params(uint80(userParams.stake + deposit), cumETHPerSIRx80_, uint96(rewards_));
+            stakersParams[msg.sender] = StakingParams(newStake, stakingParams_.cumETHPerSIRx80);
+
+            // Update supply
+            supply.balanceOfSIR += amount;
 
             // Update total stake
-            stakeTotal = uint80(stakeTotalReal);
+            stakingParams.stake = stakingParams_.stake - amount;
+
+            emit Unstaked(msg.sender, amount);
+        }
+    }
+
+    function stake(uint80 amount) external {
+        Balance memory balance = balances[msg.sender];
+        StakingParams memory stakingParams_ = stakingParams;
+        StakingParams memory stakerParams = stakersParams[msg.sender];
+
+        uint80 newBalanceOfSIR = balance.balanceOfSIR - amount;
+
+        unchecked {
+            // Update balance
+            balances[msg.sender] = Balance(newBalanceOfSIR, _dividends(balance, stakingParams_, stakerParams));
+
+            // Update staker info
+            stakersParams[msg.sender] = StakingParams(stakerParams.stake + amount, stakingParams_.cumETHPerSIRx80);
+
+            // Update supply
+            supply.balanceOfSIR -= amount;
+
+            // Update total stake
+            stakingParams.stake = stakingParams_.stake + amount;
+
+            emit Staked(msg.sender, amount);
         }
     }
 
     function claim() external {
         unchecked {
-            (uint256 rewards_, Params memory userParams, ) = _rewards(msg.sender);
-            usersParams[msg.sender] = Params(userParams.stake, cumETHPerSIRx80, 0);
+            StakingParams memory stakingParams_ = stakingParams;
+            uint96 dividends_ = _dividends(balances[msg.sender], stakingParams_, stakersParams[msg.sender]);
 
-            _WETH.transfer(msg.sender, rewards_);
+            // Null the unclaimed dividends
+            balances[msg.sender].unclaimedWETH = 0;
+
+            // Update staker info
+            stakersParams[msg.sender].cumETHPerSIRx80 = stakingParams_.cumETHPerSIRx80;
+
+            // Update ETH supply in the contract
+            supply.unclaimedWETH -= dividends_;
+
+            // WETH is immutable so we can use the low-level call
+            Addresses.ADDR_WETH.call(abi.encodeWithSignature("transfer(address,uint256)", msg.sender, dividends_));
         }
     }
 
-    function rewards(address staker) public view returns (uint256 rewards_) {
-        (rewards_, , ) = _rewards(staker);
+    function dividends(address staker) public view returns (uint96) {
+        return _dividends(balances[staker], stakingParams, stakersParams[staker]);
     }
 
-    function _rewards(address staker) private view returns (uint256, Params memory, uint176) {
+    function _dividends(
+        Balance memory balance,
+        StakingParams memory stakingParams_,
+        StakingParams memory stakerParams
+    ) private pure returns (uint96) {
         unchecked {
-            Params memory userParams = usersParams[staker];
-            uint176 cumETHPerSIRx80_ = cumETHPerSIRx80;
-
-            return (
-                userParams.unclaimedWETH +
-                    ((uint256(cumETHPerSIRx80_ - userParams.cumETHPerSIRx80) * userParams.stake) >> 80),
-                userParams,
-                cumETHPerSIRx80_
-            );
+            return
+                balance.unclaimedWETH +
+                uint96( // Safe to cast to uint96 because supply.unclaimedWETH is uint96
+                    (uint256(stakingParams_.cumETHPerSIRx80 - stakerParams.cumETHPerSIRx80) * stakerParams.stake) >> 80
+                );
         }
     }
 
@@ -292,17 +312,19 @@ abstract contract ERC20 {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    // WHAT IF STAKE IS 0??????????????
+
     // function bid(address token) external {
-    //     AuctionByToken memory auction = auctions[token];
+    //     Auction memory auction = auctions[token];
 
     //     if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
 
-    //     if (amount <= auction.bestBid) revert BidTooLow();
+    //     if (amount <= auction.bid) revert BidTooLow();
 
     //     // Update auction
-    //     auctions[token] = AuctionByToken({
-    //         bestBid: amount,
-    //         bestBidder: msg.sender,
+    //     auctions[token] = Auction({
+    //         bid: amount,
+    //         addr: msg.sender,
     //         startTime: auction.startTime,
     //         winnerPaid: false
     //     });
@@ -314,53 +336,76 @@ abstract contract ERC20 {
     function collectFeesAndStartAuction(address token) external {
         // WETH is the dividend paying token, so we do not start an auction for it.
         if (token != Addresses.ADDR_WETH) {
-            AuctionByToken memory auction = auctions[token];
+            Auction memory auction = auctions[token];
 
             if (block.timestamp < auction.startTime + SystemConstants.AUCTION_COOLDOWN)
                 revert NewAuctionCannotStartYet();
 
             // Start a new auction
-            auctions[token] = AuctionByToken({
-                bestBid: 0,
-                bestBidder: address(0),
+            auctions[token] = Auction({
+                bid: 0,
+                addr: address(0),
                 startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
                 winnerPaid: false
             });
 
-            /** Pay the previous bidder if he has not been paid yet.
-            We considered the bidder paid regardless of the success of the transfer.
-         */
-            _claimTokens(token, auction);
+            // We pay the previous winner if it has not been paid yet
+            _payAuctionWinner(token, auction);
+
+            // Distribute dividends even if paying the previous winner fails
+            _distributeDividends();
         }
 
         // Retrieve fees from the vault. Reverts if no fees are available.
         VAULT.withdrawFees(token);
     }
 
-    function _distributeDividends(uint256 amount) private {
-        uint256 dividends = _WETH.balanceOf(address(this));
-
-        // Update cumETHPerSIRx80
-        cumETHPerSIRx80 += uint176((dividends << 80) / stakeTotal);
-    }
-
-    function claimTokens(address token) external {
-        AuctionByToken memory auction = auctions[token];
+    /// @notice It reverts if the transfer fails and the dividends (WETH) is not distributed, allowing the bidder to try again.
+    function payAuctionWinner(address token) external {
+        Auction memory auction = auctions[token];
         if (block.timestamp < auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsNotOver();
 
         // Update auction
         auctions[token].winnerPaid = true;
 
-        if (!_claimTokens(token, auction)) revert TokensAlreadyClaimed();
+        if (!_payAuctionWinner(token, auction)) revert TokensAlreadyClaimed();
+
+        // Distribute dividends
+        _distributeDividends();
     }
 
-    // UPDATE CUMETHPERSIRX80!!!
-    function _claimTokens(address token, AuctionByToken memory auction) private returns (bool success) {
+    function _distributeDividends() private {
+        unchecked {
+            // Get the total amount of WETH in the contract
+            uint256 newUnclaimedWETH = Addresses.ADDR_WETH.call(
+                abi.encodeWithSignature("balanceOf(address)", address(this))
+            );
+
+            // Any excess WETH in the contracdt will also be distributed.
+            uint256 dividends = newUnclaimedWETH - supply.unclaimedWETH;
+            if (dividends == 0) return;
+
+            // Update cumETHPerSIRx80
+            StakingParams memory stakingParams_ = stakingParams;
+            stakingParams.cumETHPerSIRx80 =
+                stakingParams_.cumETHPerSIRx80 +
+                uint176((dividends << 80) / stakingParams_.stake);
+
+            // Update supply
+            supply.unclaimedWETH = uint96(newUnclaimedWETH);
+        }
+    }
+
+    /// @dev This function must never revert, instead it returns false.
+    function _payAuctionWinner(address token, Auction memory auction) private returns (bool success) {
         // Bidder already paid
         if (auction.winnerPaid) return false;
 
         // Only pay if there is a non-0 bid.
-        if (auction.bestBid == 0) return false;
+        if (auction.bid == 0) return false;
+
+        // Wrap ETH (bid) to WETH (dividends)
+        Addresses.ADDR_WETH.call{value: auction.bid}(abi.encodeWithSignature("deposit()"));
 
         /** Obtain reward amount
             Low-level call to avoid revert if the ERC20 token has some problems.
@@ -378,7 +423,7 @@ abstract contract ERC20 {
         /** Pay the winner if prize > 0
             Low-level call to avoid revert if the ERC20 token has some problems.
          */
-        (success, data) = token.call(abi.encodeWithSelector(ERC20.transfer.selector, auction.bestBidder, prize));
+        (success, data) = token.call(abi.encodeWithSelector(ERC20.transfer.selector, auction.addr, prize));
 
         /** By the ERC20 standard, the transfer may go through without reverting (success == true),
             but if it returns a boolean that is false, the transfer actually failed.
