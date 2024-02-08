@@ -35,13 +35,7 @@ contract ERC20Staker {
         uint96 unclaimedWETH; // Amount of WETH owed to the staker(s)
     }
 
-    // struct WinningBidder {
-    //     uint96 bid; // Amount of ETH bidded
-    //     address addr; // Address of the bidder
-    // }
-
     struct Auction {
-        uint96 bid; // Amount of ETH bidded
         address bidder; // Address of the bidder
         uint40 startTime; // Auction start time
         bool winnerPaid; // Whether the winner has been paid
@@ -313,25 +307,26 @@ contract ERC20Staker {
     ////////////////////////////////////////////////////////////////*/
 
     // WHAT IF STAKE IS 0??????????????
+    // WHAT IF TRANSFER REVERTS?????
 
-    // function bid(address token) external {
-    //     Auction memory auction = auctions[token];
+    function bid(address token) external payable {
+        Auction memory auction = auctions[token];
 
-    //     if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
+        if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
 
-    //     if (amount <= auction.bid) revert BidTooLow();
+        // If the bidder is the current winner, we just top up the bid
+        if (msg.sender == auction.bidder) return;
 
-    //     // Update auction
-    //     auctions[token] = Auction({
-    //         bid: amount,
-    //         addr: msg.sender,
-    //         startTime: auction.startTime,
-    //         winnerPaid: false
-    //     });
+        // If the bidder is not the current winner, we check if the bid is higher
+        uint256 prevBid = address(this).balance - msg.value;
+        if (msg.value <= prevBid) revert BidTooLow();
 
-    //     // Transfer the bid to the contract
-    //     TransferHelper.safeTransferFrom(token, msg.sender, address(this), amount);
-    // }
+        // Update bidder
+        auctions[token].bidder = msg.sender;
+
+        // Transfer the previous bid to the contract
+        auction.bidder.transfer(prevBid);
+    }
 
     function collectFeesAndStartAuction(address token) external {
         // WETH is the dividend paying token, so we do not start an auction for it.
@@ -343,7 +338,6 @@ contract ERC20Staker {
 
             // Start a new auction
             auctions[token] = Auction({
-                bid: 0,
                 addr: address(0),
                 startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
                 winnerPaid: false
@@ -351,13 +345,13 @@ contract ERC20Staker {
 
             // We pay the previous winner if it has not been paid yet
             _payAuctionWinner(token, auction);
-
-            // Distribute dividends even if paying the previous winner fails
-            _distributeDividends();
         }
 
         // Retrieve fees from the vault. Reverts if no fees are available.
         VAULT.withdrawFees(token);
+
+        // Distribute dividends even if paying the previous winner fails
+        _distributeDividends();
     }
 
     /// @notice It reverts if the transfer fails and the dividends (WETH) is not distributed, allowing the bidder to try again.
@@ -383,7 +377,7 @@ contract ERC20Staker {
 
             // Any excess WETH in the contracdt will also be distributed.
             uint256 dividends = newUnclaimedWETH - supply.unclaimedWETH;
-            if (dividends == 0) return;
+            require(dividends > 0);
 
             // Update cumETHPerSIRx80
             StakingParams memory stakingParams_ = stakingParams;
@@ -402,10 +396,10 @@ contract ERC20Staker {
         if (auction.winnerPaid) return false;
 
         // Only pay if there is a non-0 bid.
-        if (auction.bid == 0) return false;
+        if (address(this).balance == 0) return false;
 
         // Wrap ETH (bid) to WETH (dividends)
-        Addresses.ADDR_WETH.call{value: auction.bid}(abi.encodeWithSignature("deposit()"));
+        Addresses.ADDR_WETH.call{value: address(this).balance}(abi.encodeWithSignature("deposit()"));
 
         /** Obtain reward amount
             Low-level call to avoid revert if the ERC20 token has some problems.
