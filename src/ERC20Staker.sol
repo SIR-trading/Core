@@ -24,7 +24,7 @@ contract ERC20Staker {
     event Staked(address indexed staker, uint256 amount);
     event Unstaked(address indexed staker, uint256 amount);
 
-    WETH private immutable _WETH = WETH(Addresses.ADDR_WETH);
+    WETH private immutable _WETH = WETH(payable(Addresses.ADDR_WETH));
     Vault internal immutable VAULT;
 
     string public name = "Sustainable Investing Returns";
@@ -49,13 +49,12 @@ contract ERC20Staker {
     }
 
     StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
-    Balance internal supply; // Total unstaked SIR and WETH owed to the stakers
-    uint96 internal totalBids; // Total amount of WETH in the contract
+    Balance private _supply; // Total unstaked SIR and WETH owed to the stakers
+    uint96 internal totalBids; // Total amount of WETH deposited by the bidders
 
     mapping(address token => Auction) public auctions;
-    // mapping(address token => WinningBidder) public winningBidders;
-    mapping(address user => Balance) public balances;
-    mapping(address user => StakingParams) internal stakersParams;
+    mapping(address user => Balance) internal balances;
+    mapping(address user => StakingParams) public stakersParams;
 
     mapping(address => mapping(address => uint256)) public allowance;
 
@@ -80,22 +79,22 @@ contract ERC20Staker {
         return balances[account].balanceOfSIR;
     }
 
-    // Return staked SIR
+    // Return staked SIR + transferable SIR
     function totalBalanceOf(address account) external view returns (uint256) {
         return stakersParams[account].stake + balances[account].balanceOfSIR;
     }
 
-    // Return total staked SIR
-    function stakedSupply() external view returns (uint256) {
-        return stakingParams.stake;
+    // Return transferable SIR
+    function supply() external view returns (uint256) {
+        return _supply.balanceOfSIR;
     }
 
     // Return staked SIR + transferable SIR
     function totalSupply() external view returns (uint256) {
-        return stakingParams.stake + supply.balanceOfSIR;
+        return stakingParams.stake + _supply.balanceOfSIR;
     }
 
-    // Return all SIR if all tokens were in circulation
+    // Return supply if all tokens were in circulation (unminted from LPers and contributors, staked, and unstaked)
     function maxTotalSupply() external view returns (uint256) {
         (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
 
@@ -211,7 +210,7 @@ contract ERC20Staker {
 
     function _mint(address to, uint80 amount) internal {
         unchecked {
-            supply.balanceOfSIR += uint80(amount);
+            _supply.balanceOfSIR += uint80(amount);
             balances[to].balanceOfSIR += uint80(amount);
 
             emit Transfer(address(0), to, amount);
@@ -236,8 +235,8 @@ contract ERC20Staker {
             // Update staker info
             stakersParams[msg.sender] = StakingParams(stakerParams.stake + amount, stakingParams_.cumETHPerSIRx80);
 
-            // Update supply
-            supply.balanceOfSIR -= amount;
+            // Update _supply
+            _supply.balanceOfSIR -= amount;
 
             // Update total stake
             stakingParams.stake = stakingParams_.stake + amount;
@@ -263,8 +262,8 @@ contract ERC20Staker {
             // Update staker info
             stakersParams[msg.sender] = StakingParams(newStake, stakingParams_.cumETHPerSIRx80);
 
-            // Update supply
-            supply.balanceOfSIR += amount;
+            // Update _supply
+            _supply.balanceOfSIR += amount;
 
             // Update total stake
             stakingParams.stake = stakingParams_.stake - amount;
@@ -284,8 +283,8 @@ contract ERC20Staker {
             // Update staker info
             stakersParams[msg.sender].cumETHPerSIRx80 = stakingParams_.cumETHPerSIRx80;
 
-            // Update ETH supply in the contract
-            supply.unclaimedETH -= dividends_;
+            // Update ETH _supply in the contract
+            _supply.unclaimedETH -= dividends_;
 
             // Transfer dividends
             payable(msg.sender).transfer(dividends_);
@@ -303,13 +302,14 @@ contract ERC20Staker {
         Balance memory balance,
         StakingParams memory stakingParams_,
         StakingParams memory stakerParams
-    ) private pure returns (uint96) {
+    ) private pure returns (uint96 dividends_) {
         unchecked {
-            return
-                balance.unclaimedETH +
-                uint96( // Safe to cast to uint96 because supply.unclaimedETH is uint96
+            dividends_ = balance.unclaimedETH;
+            if (stakerParams.stake > 0) {
+                dividends_ += uint96( // Safe to cast to uint96 because _supply.unclaimedETH is uint96
                     (uint256(stakingParams_.cumETHPerSIRx80 - stakerParams.cumETHPerSIRx80) * stakerParams.stake) >> 80
                 );
+            }
         }
     }
 
@@ -317,11 +317,6 @@ contract ERC20Staker {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // WHAT IF STAKE IS 0??????????????
-    // WHAT IF TRANSFER REVERTS?????
-
-    // TAKE INTO CONSIDERATION THERE ARE MANY AUCTIONS BIDDING!
-    // I NEED TO TRACK TOTAL OF ALL BIDS
     function bid(address token) external payable {
         Auction memory auction = auctions[token];
 
@@ -371,7 +366,7 @@ contract ERC20Staker {
             _payAuctionWinner(token, auction);
         }
 
-        // Retrieve fees from the vault. Reverts if no fees are available.
+        // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
         VAULT.withdrawFees(token);
 
         // Distribute dividends from the previous auction even if paying the previous winner fails
@@ -394,11 +389,11 @@ contract ERC20Staker {
 
     function _distributeDividends() private {
         unchecked {
-            // Any excess WETH in the contract will also be distributed.
+            // Any excess WETH in the contract will be distributed.
             uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids;
 
-            // Any excess ETH dropped by mistake in the contract
-            uint96 unclaimedETH = supply.unclaimedETH;
+            // Any excess ETH from when stake was 0
+            uint96 unclaimedETH = _supply.unclaimedETH;
             uint256 excessETH = address(this).balance - unclaimedETH;
 
             // Compute dividends
@@ -408,14 +403,16 @@ contract ERC20Staker {
             // Unwrap WETH dividends to ETH
             _WETH.withdraw(excessWETH);
 
-            // Update cumETHPerSIRx80
             StakingParams memory stakingParams_ = stakingParams;
-            stakingParams.cumETHPerSIRx80 =
-                stakingParams_.cumETHPerSIRx80 +
-                uint176((dividends_ << 80) / stakingParams_.stake);
+            if (stakingParams_.stake > 0) {
+                // Update cumETHPerSIRx80
+                stakingParams.cumETHPerSIRx80 =
+                    stakingParams_.cumETHPerSIRx80 +
+                    uint176((dividends_ << 80) / stakingParams_.stake);
 
-            // Update supply
-            supply.unclaimedETH = unclaimedETH + uint96(dividends_);
+                // Update _supply
+                _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
+            }
         }
     }
 

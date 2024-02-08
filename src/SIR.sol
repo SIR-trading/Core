@@ -5,44 +5,28 @@ pragma solidity ^0.8.0;
 import {Vault} from "./Vault.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
+import {ERC20Staker} from "./ERC20Staker.sol";
 
 // Contracts
-contract SIR is ERC20, SystemControlAccess {
+contract SIR is ERC20Staker, SystemControlAccess {
     error ContributorsExceedsMaxIssuance();
 
     struct ContributorIssuanceParams {
         uint72 issuance; // [SIR/s]
         uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
-        uint144 unclaimedRewards; // SIR owed to the contributor
-        // WHY IS THIS uint144 AND NOT uint80????????
+        uint80 unclaimedRewards; // SIR owed to the contributor
     }
-
-    Vault internal immutable VAULT;
 
     uint72 public issuanceContributors; // issuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
 
     address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
-    constructor(
-        address vault,
-        address systemControl
-    ) ERC20("Sustainable Investing Returns", "SIR", SystemConstants.SIR_DECIMALS) SystemControlAccess(systemControl) {
-        VAULT = Vault(vault);
-    }
+    constructor(address vault, address systemControl) ERC20Staker(vault) SystemControlAccess(systemControl) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-
-    /// @notice Not all tokens may be in circulation. This function outputs the total supply if ALL tokens where in circulation.
-    function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
-
-        if (tsIssuanceStart == 0) return 0;
-        return SystemConstants.ISSUANCE * (block.timestamp - tsIssuanceStart);
-    }
 
     function getContributorIssuance(
         address contributor
@@ -72,7 +56,7 @@ contract SIR is ERC20, SystemControlAccess {
             bool unclaimedRewardsNeverUpdated = tsIssuanceStart > contributorParams.tsLastUpdate;
 
             // Update contributorParams
-            contributorParams.unclaimedRewards += uint144(
+            contributorParams.unclaimedRewards += uint80(
                 uint256(
                     (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
                         (unclaimedRewardsNeverUpdated ? tsIssuanceStart : contributorParams.tsLastUpdate)
@@ -86,7 +70,7 @@ contract SIR is ERC20, SystemControlAccess {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function contributorMint() external returns (uint144) {
+    function contributorMint() external returns (uint80) {
         // Get contributor issuance parameters
         ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
 
@@ -103,7 +87,7 @@ contract SIR is ERC20, SystemControlAccess {
         return contributorParams.unclaimedRewards;
     }
 
-    function lPerMint(uint256 vaultId) external returns (uint144 rewards) {
+    function lPerMint(uint256 vaultId) external returns (uint80 rewards) {
         // Get LPer issuance parameters
         rewards = VAULT.claimSIR(vaultId, msg.sender);
 

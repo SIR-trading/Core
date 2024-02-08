@@ -20,8 +20,6 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA {
-    error NoFeesToWithdraw();
-
     Oracle private immutable _ORACLE;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
@@ -336,7 +334,7 @@ contract Vault is TEA {
 
         VaultStructs.TokenState memory tokenState = tokenStates[token];
         uint112 collectedFees = tokenState.collectedFees;
-        if (collectedFees == 0) revert NoFeesToWithdraw();
+        if (collectedFees == 0) return;
 
         tokenStates[token] = VaultStructs.TokenState({collectedFees: 0, total: tokenState.total - collectedFees});
 
