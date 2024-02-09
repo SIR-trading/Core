@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Addresses} from "./libraries/Addresses.sol";
 import {Vault} from "./Vault.sol";
-import {WETH} from "solmate/tokens/WETH.sol";
+import {IWETH9} from "./interfaces/IWETH9.sol";
 
 /** @notice Solmate mod
     @dev SIR balance is designed to fit in a 80-bit unsigned integer.
@@ -24,10 +24,10 @@ contract ERC20Staker {
     event Staked(address indexed staker, uint256 amount);
     event Unstaked(address indexed staker, uint256 amount);
 
-    WETH private immutable _WETH = WETH(payable(Addresses.ADDR_WETH));
+    IWETH9 private immutable _WETH = IWETH9(payable(Addresses.ADDR_WETH));
     Vault internal immutable VAULT;
 
-    string public name = "Sustainable Investing Returns";
+    string public name = "Supercharged Investment Returns";
     string public symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
@@ -38,7 +38,7 @@ contract ERC20Staker {
 
     struct Balance {
         uint80 balanceOfSIR; // Amount of transferable SIR
-        uint96 unclaimedETH; // Amount of WETH owed to the staker(s)
+        uint96 unclaimedETH; // Amount of ETH owed to the staker(s)
     }
 
     struct Auction {
@@ -49,7 +49,7 @@ contract ERC20Staker {
     }
 
     StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
-    Balance private _supply; // Total unstaked SIR and WETH owed to the stakers
+    Balance private _supply; // Total unstaked SIR and ETH owed to the stakers
     uint96 internal totalBids; // Total amount of WETH deposited by the bidders
 
     mapping(address token => Auction) public auctions;
@@ -288,9 +288,6 @@ contract ERC20Staker {
 
             // Transfer dividends
             payable(msg.sender).transfer(dividends_);
-
-            // // WETH is immutable and we know it won't revert
-            // Addresses.ADDR_WETH.call(abi.encodeWithSignature("transfer(address,uint256)", msg.sender, dividends_));
         }
     }
 

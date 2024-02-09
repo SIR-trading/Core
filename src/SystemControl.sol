@@ -58,7 +58,7 @@ contract SystemControl is Ownable {
 
         The default value is the hash of an empty array.
      */
-    bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+    bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     constructor(address systemState, address sir) {
         VAULT = Vault(systemState);
@@ -172,7 +172,7 @@ contract SystemControl is Ownable {
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
 
         // Check the array of old vaults is correct
-        if (_hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
+        if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
 
         // Aggregate taxes and squared taxes
         uint16 cumTax;
@@ -190,7 +190,7 @@ contract SystemControl is Ownable {
         VAULT.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
 
         // Update hash of active vaults
-        _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
+        hashActiveVaults == keccak256(abi.encodePacked(newVaults));
     }
 
     function updateContributorsIssuances(
