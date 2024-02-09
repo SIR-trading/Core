@@ -39,8 +39,9 @@ contract SystemControl is Ownable {
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
-    Vault public immutable VAULT;
-    SIR public immutable SIR_TOKEN;
+    Vault public vault;
+    SIR public sir;
+    bool private _initialized = false;
 
     uint256 private _sumTaxesToTreasury;
 
@@ -60,9 +61,13 @@ contract SystemControl is Ownable {
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor(address systemState, address sir) {
-        VAULT = Vault(systemState);
-        SIR_TOKEN = SIR(sir);
+    function initialize(address vault_, address sir_) external {
+        require(!_initialized);
+
+        vault = Vault(vault_);
+        sir = SIR(sir_);
+
+        _initialized = true;
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -84,14 +89,15 @@ contract SystemControl is Ownable {
         tsStatusChanged = uint40(block.timestamp);
 
         // Retrieve parameters
-        (, uint16 baseFee, uint8 lpFee, , ) = VAULT.systemParams();
+        Vault vault_ = vault;
+        (, uint16 baseFee, uint8 lpFee, , ) = vault_.systemParams();
 
         // Store fee parameters for later
         _oldBaseFee = baseFee;
         _oldLpFee = lpFee;
 
         // Set fees to 0 for emergency withdrawals
-        VAULT.updateSystemState(0, 0, true);
+        vault_.updateSystemState(0, 0, true);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
@@ -101,7 +107,7 @@ contract SystemControl is Ownable {
         tsStatusChanged = uint40(block.timestamp);
 
         // Restore fees
-        VAULT.updateSystemState(_oldBaseFee, _oldLpFee, false);
+        vault.updateSystemState(_oldBaseFee, _oldLpFee, false);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
     }
@@ -128,7 +134,7 @@ contract SystemControl is Ownable {
     function saveFunds(address[] calldata tokens, address to) external onlyOwner {
         if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
 
-        uint256[] memory amounts = VAULT.withdrawToSaveSystem(tokens, to);
+        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         for (uint256 i = 0; i < tokens.length; ++i) {
             emit FundsWithdrawn(tokens[i], amounts[i]);
@@ -145,9 +151,10 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        (, , uint8 lpFee, , ) = VAULT.systemParams();
+        Vault vault_ = vault;
+        (, , uint8 lpFee, , ) = vault_.systemParams();
 
-        VAULT.updateSystemState(baseFee_, lpFee, false);
+        vault_.updateSystemState(baseFee_, lpFee, false);
 
         emit NewBaseFee(baseFee_);
     }
@@ -156,9 +163,10 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        (, uint16 baseFee, , , ) = VAULT.systemParams();
+        Vault vault_ = vault;
+        (, uint16 baseFee, , , ) = vault_.systemParams();
 
-        VAULT.updateSystemState(baseFee, lpFee_, false);
+        vault_.updateSystemState(baseFee, lpFee_, false);
 
         emit NewLPFee(lpFee_);
     }
@@ -187,7 +195,7 @@ contract SystemControl is Ownable {
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
-        VAULT.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
+        vault.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
 
         // Update hash of active vaults
         hashActiveVaults == keccak256(abi.encodePacked(newVaults));
@@ -203,6 +211,6 @@ contract SystemControl is Ownable {
         if (contributorIssuances.length != lenContributors) revert ArraysLengthMismatch();
 
         // Update parameters
-        SIR_TOKEN.changeContributorsIssuances(contributors, contributorIssuances);
+        sir.changeContributorsIssuances(contributors, contributorIssuances);
     }
 }

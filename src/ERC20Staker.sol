@@ -25,7 +25,7 @@ contract ERC20Staker {
     event Unstaked(address indexed staker, uint256 amount);
 
     IWETH9 private immutable _WETH = IWETH9(payable(Addresses.ADDR_WETH));
-    Vault internal immutable VAULT;
+    Vault internal vault;
 
     string public name = "Supercharged Investment Returns";
     string public symbol = "SIR";
@@ -51,6 +51,7 @@ contract ERC20Staker {
     StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
     Balance private _supply; // Total unstaked SIR and ETH owed to the stakers
     uint96 internal totalBids; // Total amount of WETH deposited by the bidders
+    bool private _initialized;
 
     mapping(address token => Auction) public auctions;
     mapping(address user => Balance) internal balances;
@@ -63,11 +64,17 @@ contract ERC20Staker {
 
     mapping(address => uint256) public nonces;
 
-    constructor(address vault) {
-        VAULT = Vault(vault);
-
+    constructor() {
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
+    }
+
+    function initialize(address vault_) external {
+        require(!_initialized);
+
+        vault = Vault(vault_);
+
+        _initialized = true;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -96,7 +103,7 @@ contract ERC20Staker {
 
     // Return supply if all tokens were in circulation (unminted from LPers and contributors, staked, and unstaked)
     function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
+        (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
         if (tsIssuanceStart == 0) return 0;
         return SystemConstants.ISSUANCE * (block.timestamp - tsIssuanceStart);
@@ -364,7 +371,7 @@ contract ERC20Staker {
         }
 
         // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-        VAULT.withdrawFees(token);
+        vault.withdrawFees(token);
 
         // Distribute dividends from the previous auction even if paying the previous winner fails
         _distributeDividends();

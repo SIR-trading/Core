@@ -22,7 +22,7 @@ contract SIR is ERC20Staker, SystemControlAccess {
     address[] public contributors;
     mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
 
-    constructor(address vault, address systemControl) ERC20Staker(vault) SystemControlAccess(systemControl) {}
+    constructor(address systemControl) SystemControlAccess(systemControl) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
@@ -32,7 +32,7 @@ contract SIR is ERC20Staker, SystemControlAccess {
         address contributor
     ) public view returns (ContributorIssuanceParams memory contributorParams) {
         unchecked {
-            (uint40 tsIssuanceStart, , , , ) = VAULT.systemParams();
+            (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
             // Update timestamp
             contributorParams.tsLastUpdate = uint40(block.timestamp);
@@ -89,7 +89,7 @@ contract SIR is ERC20Staker, SystemControlAccess {
 
     function lPerMint(uint256 vaultId) external returns (uint80 rewards) {
         // Get LPer issuance parameters
-        rewards = VAULT.claimSIR(vaultId, msg.sender);
+        rewards = vault.claimSIR(vaultId, msg.sender);
 
         // Mint if there are any unclaimed rewards
         require(rewards > 0);
