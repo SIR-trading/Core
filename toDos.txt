@@ -14,3 +14,10 @@ Minimize # hot SLOADs
 - Do not distribute SIR to POL. Easy to hack without extra gas in the current implementation because totalSupply and vaultBalance share the same slot.
 - Remove SIR withdrawal functions since there is no SIR to collect.
 - Code Staker which is allowed to withdraw fees. Staker inherits SIR? Stakers do not get SIR from POL.
+- Consider adding more leverage tiers by rerunning tests
+
+# Marketing
+- Airdrops? https://twitter.com/sassal0x/status/1756839032070508746
+  Airdrop tokens to ETH stakers (in particular, home stakers)
+  Allocate up to 1% of the token supply to @ProtocolGuild
+ 
