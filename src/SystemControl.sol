@@ -39,6 +39,7 @@ contract SystemControl is Ownable {
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
+    address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
     Vault public vault;
     SIR public sir;
     bool private _initialized = false;
@@ -61,8 +62,12 @@ contract SystemControl is Ownable {
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
+    constructor() {
+        deployer = msg.sender;
+    }
+
     function initialize(address vault_, address sir_) external {
-        require(!_initialized);
+        require(!_initialized && msg.sender == deployer);
 
         vault = Vault(vault_);
         sir = SIR(sir_);

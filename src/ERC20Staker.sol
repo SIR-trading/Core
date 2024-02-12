@@ -24,6 +24,7 @@ contract ERC20Staker {
     event Staked(address indexed staker, uint256 amount);
     event Unstaked(address indexed staker, uint256 amount);
 
+    address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
     IWETH9 private immutable _WETH = IWETH9(payable(Addresses.ADDR_WETH));
     Vault internal vault;
 
@@ -65,12 +66,14 @@ contract ERC20Staker {
     mapping(address => uint256) public nonces;
 
     constructor() {
+        deployer = msg.sender;
+
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
     }
 
     function initialize(address vault_) external {
-        require(!_initialized);
+        require(!_initialized && msg.sender == deployer);
 
         vault = Vault(vault_);
 
