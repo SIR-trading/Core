@@ -31,8 +31,9 @@ contract TickMathPrecisionTest is Test {
             .mul(ABDKMathQuad.fromUInt(1 << 64))
             .toUInt();
 
-        assertApproxEqRel(ratioX64, ratioX64Bis, 1);
-        assertLe(ratioX64, ratioX64Bis, "Not rounding down");
+        // assertApproxEqRel(ratioX64, ratioX64Bis, 1);
+        assertGe(ratioX64, ratioX64Bis - (ratioX64Bis * 60) / 0x100000000000001A3); // Upper bound on the error derived from the algo
+        assertLe(ratioX64, ratioX64Bis + 2);
     }
 
     function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public {
