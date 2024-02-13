@@ -40,19 +40,27 @@ contract APETest is Test {
         vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
     }
 
+    function latestTokenParams()
+        external
+        pure
+        returns (
+            VaultStructs.TokenParameters memory tokenParameters,
+            VaultStructs.VaultParameters memory vaultParameters
+        )
+    {
+        tokenParameters = VaultStructs.TokenParameters({
+            name: "Tokenized ETH/USDC with x1.25 leverage",
+            symbol: "APE-42",
+            decimals: 18
+        });
+        vaultParameters = VaultStructs.VaultParameters({
+            debtToken: Addresses.ADDR_USDC,
+            collateralToken: Addresses.ADDR_WETH,
+            leverageTier: -2
+        });
+    }
+
     function setUp() public {
-        vm.mockCall(
-            address(this),
-            abi.encodeWithSelector(Vault.latestTokenParams.selector),
-            abi.encode(
-                "Tokenized ETH/USDC with x1.25 leverage",
-                "APE-42",
-                uint8(18),
-                Addresses.ADDR_USDC,
-                Addresses.ADDR_WETH,
-                int8(-2)
-            )
-        );
         ape = new APE();
 
         alice = vm.addr(1);
@@ -371,33 +379,44 @@ contract APETest is Test {
 /////////////////////////////////////////////
 
 contract APEHandler is Test {
-    uint256 public totalSupplyOld;
-    uint144 public apesReserveOld;
-    uint256 public collectedFeesOld;
-
-    VaultStructs.Reserves public reserves;
     uint256 public collectedFees;
-    APE public ape;
+    uint256 public collectedFeesOld;
     uint256 public totalCollateralDeposited;
 
-    bool public changeReserves;
-    bool public trueIfMintFalseIfBurn;
+    // We simulate two APE tokens
+    bool[2] public changeReserves;
 
-    constructor() {
-        // This mocked parameters do not matter, they are just so that they function does not fail.
-        vm.mockCall(
-            address(this),
-            abi.encodeWithSelector(Vault.latestTokenParams.selector),
-            abi.encode(
-                "Name does not matter",
-                "Token symbol does not matter",
-                uint8(18),
-                address(0),
-                address(0),
-                int8(0)
-            )
-        );
-        ape = new APE();
+    uint256[2] public totalSupplyOld;
+    uint144[2] public apesReserveOld;
+
+    VaultStructs.Reserves[2] public reserves;
+    APE[2] public ape;
+
+    bool[2] public trueIfMintFalseIfBurn;
+
+    function latestTokenParams()
+        external
+        pure
+        returns (
+            VaultStructs.TokenParameters memory tokenParameters,
+            VaultStructs.VaultParameters memory vaultParameters
+        )
+    {
+        tokenParameters = VaultStructs.TokenParameters({
+            name: "Tokenized ETH/USDC with x1.25 leverage",
+            symbol: "APE-42",
+            decimals: 18
+        });
+        vaultParameters = VaultStructs.VaultParameters({
+            debtToken: Addresses.ADDR_USDC,
+            collateralToken: Addresses.ADDR_WETH,
+            leverageTier: -2
+        });
+    }
+
+    function setUp() public {
+        ape[0] = new APE();
+        ape[1] = new APE();
     }
 
     // Limit test to 5 accounts
@@ -406,36 +425,37 @@ contract APEHandler is Test {
         return vm.addr(id);
     }
 
-    function _changeReserves(uint144 newApesReserve) private {
-        changeReserves = !changeReserves;
-        if (changeReserves) return;
+    function _changeReserves(uint144 newApesReserve, uint8 rndAPE) private {
+        changeReserves[rndAPE] = !changeReserves[rndAPE];
+        if (changeReserves[rndAPE]) return;
 
-        uint144 totalCollateral = reserves.reserveApes + reserves.reserveLPers;
+        uint144 totalCollateral = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers;
         if (totalCollateral == 0) return;
 
         // At least 1 unit of collateral must be in the LP reserve and APE reserve
         newApesReserve = uint144(_bound(newApesReserve, 1, totalCollateral - 1));
 
-        reserves.reserveApes = newApesReserve;
-        reserves.reserveLPers = totalCollateral - reserves.reserveApes;
+        reserves[rndAPE].reserveApes = newApesReserve;
+        reserves[rndAPE].reserveLPers = totalCollateral - reserves[rndAPE].reserveApes;
     }
 
-    function transfer(uint256 fromId, uint256 toId, uint256 amount, uint144 finalApesReserve) external {
+    function transfer(uint256 fromId, uint256 toId, uint256 amount, uint144 finalApesReserve, uint8 rndAPE) external {
+        rndAPE = uint8(_bound(rndAPE, 0, 1));
         address from = _idToAddr(fromId);
         address to = _idToAddr(toId);
 
         // To avoid underflow
-        uint256 preBalance = ape.balanceOf(from);
+        uint256 preBalance = ape[rndAPE].balanceOf(from);
         amount = _bound(amount, 0, preBalance);
 
-        totalSupplyOld = ape.totalSupply();
+        totalSupplyOld[rndAPE] = ape[rndAPE].totalSupply();
         collectedFeesOld = collectedFees;
-        apesReserveOld = reserves.reserveApes;
+        apesReserveOld[rndAPE] = reserves[rndAPE].reserveApes;
 
         vm.prank(from);
-        ape.transfer(to, amount);
+        ape[rndAPE].transfer(to, amount);
 
-        _changeReserves(finalApesReserve);
+        _changeReserves(finalApesReserve, rndAPE);
     }
 
     function mint(
@@ -443,24 +463,33 @@ contract APEHandler is Test {
         uint16 baseFee,
         uint8 tax,
         uint144 collateralDeposited,
-        uint144 finalApesReserve
+        uint144 finalApesReserve,
+        uint8 rndAPE
     ) external {
+        rndAPE = uint8(_bound(rndAPE, 0, 1));
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max)); // Cannot be 0
 
         // To avoid overflow of totalCollateral
-        uint144 totalCollateral = reserves.reserveApes + reserves.reserveLPers;
+        uint144 totalCollateral = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers;
         collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - totalCollateral));
 
-        totalSupplyOld = ape.totalSupply();
+        totalSupplyOld[rndAPE] = ape[rndAPE].totalSupply();
         collectedFeesOld = collectedFees;
-        apesReserveOld = reserves.reserveApes;
-        uint256 amountMax = type(uint256).max - totalSupplyOld;
-        if (totalSupplyOld > FullMath.mulDivRoundingUp(reserves.reserveApes, amountMax, type(uint256).max)) {
+        apesReserveOld[rndAPE] = reserves[rndAPE].reserveApes;
+        uint256 amountMax = type(uint256).max - totalSupplyOld[rndAPE];
+        if (
+            totalSupplyOld[rndAPE] >
+            FullMath.mulDivRoundingUp(reserves[rndAPE].reserveApes, amountMax, type(uint256).max)
+        ) {
             // Ensure max supply of APE (2^256-1) is not exceeded
             collateralDeposited = uint144(
-                _bound(collateralDeposited, 0, FullMath.mulDiv(reserves.reserveApes, amountMax, totalSupplyOld))
+                _bound(
+                    collateralDeposited,
+                    0,
+                    FullMath.mulDiv(reserves[rndAPE].reserveApes, amountMax, totalSupplyOld[rndAPE])
+                )
             );
-        } else if (totalSupplyOld == 0) {
+        } else if (totalSupplyOld[rndAPE] == 0) {
             if (collateralDeposited < 2) return;
             collateralDeposited = uint144(_bound(collateralDeposited, 2, collateralDeposited));
         }
@@ -472,56 +501,82 @@ contract APEHandler is Test {
         uint144 collectedFee;
         uint144 polFee;
         uint256 amount;
-        (reserves, collectedFee, polFee, amount) = ape.mint(to, baseFee, tax, reserves, collateralDeposited);
+        (reserves[rndAPE], collectedFee, polFee, amount) = ape[rndAPE].mint(
+            to,
+            baseFee,
+            tax,
+            reserves[rndAPE],
+            collateralDeposited
+        );
         collectedFees += collectedFee;
-        reserves.reserveLPers += polFee;
+        reserves[rndAPE].reserveLPers += polFee;
 
-        _changeReserves(finalApesReserve);
-        trueIfMintFalseIfBurn = true;
+        _changeReserves(finalApesReserve, rndAPE);
+        trueIfMintFalseIfBurn[rndAPE] = true;
     }
 
-    function burn(uint256 fromId, uint16 baseFee, uint8 tax, uint256 amount, uint144 finalApesReserve) external {
+    function burn(
+        uint256 fromId,
+        uint16 baseFee,
+        uint8 tax,
+        uint256 amount,
+        uint144 finalApesReserve,
+        uint8 rndAPE
+    ) external {
+        rndAPE = uint8(_bound(rndAPE, 0, 1));
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max)); // Cannot be 0
 
         // To avoid underflow
         address from = _idToAddr(fromId);
-        uint256 preBalance = ape.balanceOf(from);
+        uint256 preBalance = ape[rndAPE].balanceOf(from);
         amount = _bound(amount, 0, preBalance);
 
-        totalSupplyOld = ape.totalSupply();
+        totalSupplyOld[rndAPE] = ape[rndAPE].totalSupply();
         collectedFeesOld = collectedFees;
-        apesReserveOld = reserves.reserveApes;
-        if (totalSupplyOld == 0) return;
+        apesReserveOld[rndAPE] = reserves[rndAPE].reserveApes;
+        if (totalSupplyOld[rndAPE] == 0) return;
 
         // Make sure at least 2 units of collateral are in the LP reserve + APE reserve
-        if (reserves.reserveLPers < 2) {
-            uint144 collateralWidthdrawnMax = reserves.reserveApes + reserves.reserveLPers - 2;
-            uint256 amountMax = FullMath.mulDiv(totalSupplyOld, collateralWidthdrawnMax, reserves.reserveApes);
+        if (reserves[rndAPE].reserveLPers < 2) {
+            uint144 collateralWidthdrawnMax = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers - 2;
+            uint256 amountMax = FullMath.mulDiv(
+                totalSupplyOld[rndAPE],
+                collateralWidthdrawnMax,
+                reserves[rndAPE].reserveApes
+            );
             amount = _bound(amount, 0, amountMax);
         }
 
         uint144 collectedFee;
         uint144 polFee;
         uint144 collateralWidthdrawn;
-        (reserves, collectedFee, polFee, collateralWidthdrawn) = ape.burn(from, baseFee, tax, reserves, amount);
+        (reserves[rndAPE], collectedFee, polFee, collateralWidthdrawn) = ape[rndAPE].burn(
+            from,
+            baseFee,
+            tax,
+            reserves[rndAPE],
+            amount
+        );
         collectedFees += collectedFee;
-        reserves.reserveLPers += polFee;
+        reserves[rndAPE].reserveLPers += polFee;
 
         // Update totalCollateralDeposited
         totalCollateralDeposited -= collateralWidthdrawn;
 
-        _changeReserves(finalApesReserve);
-        trueIfMintFalseIfBurn = false;
+        _changeReserves(finalApesReserve, rndAPE);
+        trueIfMintFalseIfBurn[rndAPE] = false;
     }
 }
 
 contract APEInvariantTest is Test {
     APEHandler apeHandler;
-    APE ape;
+    APE[2] ape;
 
     function setUp() public {
         apeHandler = new APEHandler();
-        ape = APE(apeHandler.ape());
+        apeHandler.setUp();
+        ape[0] = APE(apeHandler.ape(0));
+        ape[1] = APE(apeHandler.ape(1));
 
         targetContract(address(apeHandler));
 
@@ -534,8 +589,10 @@ contract APEInvariantTest is Test {
 
     function invariant_collateralCheck() public {
         uint256 totalCollateralDeposited = apeHandler.totalCollateralDeposited();
-        (uint144 reserveApes, uint144 reserveLPers) = apeHandler.reserves();
+        (uint144 reserveApes, uint144 reserveLPers, ) = apeHandler.reserves(0);
         uint256 totalCollateral = apeHandler.collectedFees() + reserveApes + reserveLPers;
+        (reserveApes, reserveLPers, ) = apeHandler.reserves(1);
+        totalCollateral += reserveApes + reserveLPers;
 
         assertEq(totalCollateralDeposited, totalCollateral);
     }
@@ -548,25 +605,47 @@ contract APEInvariantTest is Test {
     }
 
     function invariant_ratioReservesAreProportionalToSupply() public {
-        bool changeReserves = apeHandler.changeReserves();
-        if (!changeReserves) return;
+        bool changeReserves = apeHandler.changeReserves(0);
+        if (changeReserves) {
+            uint256 totalSupplyOld = apeHandler.totalSupplyOld(0);
+            if (totalSupplyOld > 0) {
+                uint256 totalSupply = ape[0].totalSupply();
 
-        uint256 totalSupplyOld = apeHandler.totalSupplyOld();
-        if (totalSupplyOld > 0) {
-            uint256 totalSupply = ape.totalSupply();
+                (uint144 reserveApes, , ) = apeHandler.reserves(0);
+                uint144 apesReserveOld = apeHandler.apesReserveOld(0);
 
-            (uint144 reserveApes, ) = apeHandler.reserves();
-            uint144 apesReserveOld = apeHandler.apesReserveOld();
+                bool trueIfMintFalseIfBurn = apeHandler.trueIfMintFalseIfBurn(0);
+                if (trueIfMintFalseIfBurn) {
+                    uint256 totalSupplyExpected = FullMath.mulDiv(reserveApes, totalSupplyOld, apesReserveOld);
+                    assertLe(totalSupply, totalSupplyExpected);
+                    assertGe(totalSupply, totalSupplyExpected - 1);
+                } else {
+                    uint144 apesReserveExpected = uint144(FullMath.mulDiv(totalSupply, apesReserveOld, totalSupplyOld));
+                    assertGe(reserveApes, apesReserveExpected);
+                    assertLe(reserveApes, apesReserveExpected + 1);
+                }
+            }
+        }
 
-            bool trueIfMintFalseIfBurn = apeHandler.trueIfMintFalseIfBurn();
-            if (trueIfMintFalseIfBurn) {
-                uint256 totalSupplyExpected = FullMath.mulDiv(reserveApes, totalSupplyOld, apesReserveOld);
-                assertLe(totalSupply, totalSupplyExpected);
-                assertGe(totalSupply, totalSupplyExpected - 1);
-            } else {
-                uint144 apesReserveExpected = uint144(FullMath.mulDiv(totalSupply, apesReserveOld, totalSupplyOld));
-                assertGe(reserveApes, apesReserveExpected);
-                assertLe(reserveApes, apesReserveExpected + 1);
+        changeReserves = apeHandler.changeReserves(1);
+        if (changeReserves) {
+            uint256 totalSupplyOld = apeHandler.totalSupplyOld(1);
+            if (totalSupplyOld > 0) {
+                uint256 totalSupply = ape[1].totalSupply();
+
+                (uint144 reserveApes, , ) = apeHandler.reserves(1);
+                uint144 apesReserveOld = apeHandler.apesReserveOld(1);
+
+                bool trueIfMintFalseIfBurn = apeHandler.trueIfMintFalseIfBurn(1);
+                if (trueIfMintFalseIfBurn) {
+                    uint256 totalSupplyExpected = FullMath.mulDiv(reserveApes, totalSupplyOld, apesReserveOld);
+                    assertLe(totalSupply, totalSupplyExpected);
+                    assertGe(totalSupply, totalSupplyExpected - 1);
+                } else {
+                    uint144 apesReserveExpected = uint144(FullMath.mulDiv(totalSupply, apesReserveOld, totalSupplyOld));
+                    assertGe(reserveApes, apesReserveExpected);
+                    assertLe(reserveApes, apesReserveExpected + 1);
+                }
             }
         }
     }

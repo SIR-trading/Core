@@ -53,6 +53,7 @@ contract APE is Owned {
         (VaultStructs.TokenParameters memory tokenParams, VaultStructs.VaultParameters memory vaultParams) = Vault(
             msg.sender
         ).latestTokenParams();
+
         name = tokenParams.name;
         symbol = tokenParams.symbol;
         decimals = tokenParams.decimals;
