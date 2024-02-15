@@ -18,6 +18,7 @@ library VaultExternal {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error VaultDoesNotExist();
+    error DepositTooHigh();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -34,7 +35,10 @@ library VaultExternal {
         VaultStructs.TokenParameters storage transientTokenParameters,
         VaultStructs.VaultParameters calldata vaultParams
     ) external {
-        if (vaultParams.leverageTier > 2 || vaultParams.leverageTier < -3) revert LeverageTierOutOfRange();
+        if (
+            vaultParams.leverageTier > SystemConstants.MAX_LEVERAGE_TIER ||
+            vaultParams.leverageTier < SystemConstants.MIN_LEVERAGE_TIER
+        ) revert LeverageTierOutOfRange();
 
         /**
          * 1. This will initialize the oracle for this pair of tokens if it has not been initialized before.
@@ -179,7 +183,7 @@ library VaultExternal {
             if (isMint) {
                 // Get deposited collateral
                 uint256 balance = APE(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
-                require(balance <= type(uint144).max); // Ensure it fits in a uint144
+                if (balance > type(uint144).max) revert DepositTooHigh(); // Ensure it fits in a uint144
                 collateralDeposited = uint144(balance - tokenState.total);
             }
         }

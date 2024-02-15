@@ -4,11 +4,12 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 contract FeesTest is Test {
     function testFuzz_FeeAPE(uint144 collateralDepositedOrOut, uint16 baseFee, int8 leverageTier, uint8 tax) public {
         // Constraint leverageTier to supported values
-        leverageTier = int8(_bound(leverageTier, -3, 2));
+        leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
         (uint144 collateralInOrWidthdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
             collateralDepositedOrOut,

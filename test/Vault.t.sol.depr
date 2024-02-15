@@ -67,7 +67,7 @@ contract VaultTest is Test, VaultEvents {
 
     function testFuzz_InitializeVault(int8 leverageTier) public {
         // Stay within the allowed range of -3 to 2
-        leverageTier = int8(_bound(leverageTier, -3, 2));
+        leverageTier = int8(_bound(leverageTier, MIN_LEVERAGE_TIER, MAX_LEVERAGE_TIER));
 
         vm.expectEmit();
         emit VaultInitialized(debtToken, collateralToken, leverageTier, 1);

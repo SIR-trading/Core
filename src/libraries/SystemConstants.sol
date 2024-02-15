@@ -24,4 +24,8 @@ library SystemConstants {
     uint40 internal constant AUCTION_COOLDOWN = 247 hours; // 247h & 240h have no common factors
 
     uint40 internal constant AUCTION_DURATION = 24 hours;
+
+    int8 internal constant MAX_LEVERAGE_TIER = 2;
+
+    int8 internal constant MIN_LEVERAGE_TIER = -3;
 }
