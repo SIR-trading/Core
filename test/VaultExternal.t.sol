@@ -224,6 +224,7 @@ contract VaultExternalGetReserves is Test {
     using ABDKMathQuad for bytes16;
 
     error VaultDoesNotExist();
+    error DepositTooLarge();
 
     struct TestParameters {
         uint144 collateralDeposited;
@@ -258,25 +259,18 @@ contract VaultExternalGetReserves is Test {
     ) {
         // Constraint reserve
         vaultState.reserve = uint144(_bound(vaultState.reserve, 0, tokenState.total));
-
-        // // Constraint collateralTotalSupply
-        // collateralTotalSupply = _bound(collateralTotalSupply, tokenState.total, type(uint256).max);
+        vm.assume(vaultState.reserve != 1); // Min reserve is always 2 (or 0 if no minted has occured)
 
         // Constraint collateralDeposited
         testParams.collateralDeposited = uint144(
             _bound(testParams.collateralDeposited, 0, type(uint144).max - tokenState.total)
         );
 
-        // // Constraint leverageTier
-        // vaultParams.leverageTier = int8(
-        //     _bound(vaultParams.leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MIN_LEVERAGE_TIER)
-        // ); // Only accepted values in the system
-
         // Constraint vaultId
         vaultState.vaultId = uint48(_bound(vaultState.vaultId, 1, type(uint48).max));
 
         // Mint tokens
-        _collateralToken.mint(alice, type(uint256).max - tokenState.total - testParams.collateralDeposited);
+        // _collateralToken.mint(alice, type(uint256).max - tokenState.total - testParams.collateralDeposited);
         _collateralToken.mint(address(this), uint256(tokenState.total) + testParams.collateralDeposited);
 
         // Save token state
@@ -340,214 +334,173 @@ contract VaultExternalGetReserves is Test {
         _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
 
         assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
-        // assertTrue(address(ape) != address(0));
 
         assertEq(reserves.reserveApes, 0);
         assertEq(reserves.reserveLPers, 0);
         assertEq(reserves.tickPriceX42, testParams.tickPriceX42);
 
         assertEq(collateralDeposited_, isMint ? testParams.collateralDeposited : 0);
-        // assertEq(collateralDeposited_, testParams.collateralDeposited);
     }
 
-    // function testFuzz_getReservesReserveAllAPE(
-    //     bool isMint,
-    //     bool isAPE,
-    //     int8 leverageTier,
-    //     uint144 collateralDeposited,
-    //     uint256 collateralTotalSupply,
-    //     VaultStructs.VaultState memory vaultState,
-    //     int64 tickPriceX42
-    // ) public {
-    //     vaultParams.leverageTier = int8(_bound(vaultParams.leverageTier,SystemConstants.MIN_LEVERAGE_TIER,SystemConstants.MIN_LEVERAGE_TIER)); // Only accepted values in the system
+    function testFuzz_getReservesAllAPE(
+        bool isMint,
+        bool isAPE,
+        VaultStructs.TokenState memory tokenState,
+        VaultStructs.VaultState memory vaultState,
+        TestParameters memory testParams
+    ) public preprocess(tokenState, vaultState, testParams) {
+        // type(int64).min represents -∞ => reserveLPers is empty
+        vaultState.tickPriceSatX42 = type(int64).min;
+        vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
+        vm.assume(vaultState.reserve > 0);
 
-    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max)); // Min reserve is always 2 (or 0 if no minted has occured)
-    //     collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - vaultState.reserve));
+        (
+            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.VaultState memory vaultState_,
+            VaultStructs.Reserves memory reserves,
+            APE ape,
+            uint144 collateralDeposited_
+        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
 
-    //     collateralTotalSupply = _bound(
-    //         collateralTotalSupply,
-    //         vaultState.reserve,
-    //         type(uint256).max - collateralDeposited
-    //     );
+        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
 
-    //     // Mint tokens
-    //     _collateralToken.mint(alice, collateralTotalSupply - vaultState.reserve);
-    //     _collateralToken.mint(address(this), vaultState.reserve + collateralDeposited);
+        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
-    //     // type(int64).min represents -∞ => reserveLPers is empty
-    //     vaultState.tickPriceSatX42 = type(int64).min;
+        assertEq(reserves.reserveApes, vaultState.reserve - 1);
+        assertEq(reserves.reserveLPers, 1);
+        assertEq(reserves.tickPriceX42, testParams.tickPriceX42);
 
-    //     (VaultStructs.Reserves memory reserves, APE ape, uint144 collateralDeposited_) = VaultExternal.getReserves(
-    //         isMint,
-    //         isAPE,
-    //         vaultState,
-    //         address(_collateralToken),
-    //         vaultParams.leverageTier,
-    //         tickPriceX42
-    //     );
+        assertEq(collateralDeposited_, isMint ? testParams.collateralDeposited : 0);
+    }
 
-    //     assertEq(reserves.reserveApes, vaultState.reserve - 1);
-    //     assertEq(reserves.reserveLPers, 1);
-    //     assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
-    //     assertEq(collateralDeposited_, isMint ? collateralDeposited : 0);
-    // }
+    function testFuzz_getReservesAllTEA(
+        bool isMint,
+        bool isAPE,
+        VaultStructs.TokenState memory tokenState,
+        VaultStructs.VaultState memory vaultState,
+        TestParameters memory testParams
+    ) public preprocess(tokenState, vaultState, testParams) {
+        // type(int64).max represents +∞ => reserveApes is empty
+        vaultState.tickPriceSatX42 = type(int64).max;
+        vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
+        vm.assume(vaultState.reserve > 0);
 
-    // function testFuzz_getReservesReserveAllTEA(
-    //     bool isMint,
-    //     bool isAPE,
-    //     int8 leverageTier,
-    //     uint144 collateralDeposited,
-    //     uint256 collateralTotalSupply,
-    //     VaultStructs.VaultState memory vaultState
-    // ) public {
-    //     vaultParams.leverageTier = int8(_bound(vaultParams.leverageTier,SystemConstants.MIN_LEVERAGE_TIER,SystemConstants.MIN_LEVERAGE_TIER)); // Only accepted values in the system
+        (
+            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.VaultState memory vaultState_,
+            VaultStructs.Reserves memory reserves,
+            APE ape,
+            uint144 collateralDeposited_
+        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
 
-    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max)); // Min reserve is always 2 (or 0 if no minted has occured)
-    //     collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - vaultState.reserve));
+        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
 
-    //     collateralTotalSupply = _bound(
-    //         collateralTotalSupply,
-    //         vaultState.reserve,
-    //         type(uint256).max - collateralDeposited
-    //     );
+        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
-    //     // Mint tokens
-    //     _collateralToken.mint(alice, collateralTotalSupply - vaultState.reserve);
-    //     _collateralToken.mint(address(this), vaultState.reserve + collateralDeposited);
+        assertEq(reserves.reserveApes, 1);
+        assertEq(reserves.reserveLPers, vaultState.reserve - 1);
+        assertEq(reserves.tickPriceX42, testParams.tickPriceX42);
 
-    //     // type(int64).max represents +∞ => reserveApes is empty
-    //     vaultState.tickPriceSatX42 = type(int64).max;
+        assertEq(collateralDeposited_, isMint ? testParams.collateralDeposited : 0);
+    }
 
-    //     (VaultStructs.Reserves memory reserves, APE ape, uint144 collateralDeposited_) = VaultExternal.getReserves(
-    //         isMint,
-    //         isAPE,
-    //         vaultState,
-    //         address(_collateralToken),
-    //         vaultParams.leverageTier
-    //     );
+    function testFuzz_getReserves(
+        bool isMint,
+        bool isAPE,
+        VaultStructs.TokenState memory tokenState,
+        VaultStructs.VaultState memory vaultState,
+        TestParameters memory testParams
+    ) public preprocess(tokenState, vaultState, testParams) {
+        vaultState.tickPriceSatX42 = int64(
+            _bound(vaultState.tickPriceSatX42, type(int64).min + 1, type(int64).max - 1)
+        );
+        vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
+        vm.assume(vaultState.reserve > 0);
 
-    //     assertEq(reserves.reserveApes, 1);
-    //     assertEq(reserves.reserveLPers, vaultState.reserve - 1);
-    //     assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
-    //     assertEq(collateralDeposited_, isMint ? collateralDeposited : 0);
-    // }
+        (
+            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.VaultState memory vaultState_,
+            VaultStructs.Reserves memory reserves,
+            APE ape,
+            uint144 collateralDeposited_
+        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
 
-    // function testFuzz_getReserves(
-    //     bool isMint,
-    //     bool isAPE,
-    //     int8 leverageTier,
-    //     uint144 collateralDeposited,
-    //     uint256 collateralTotalSupply,
-    //     VaultStructs.VaultState memory vaultState,
-    //     int64 tickPriceX42
-    // ) public {
-    //     vaultParams.leverageTier = int8(_bound(vaultParams.leverageTier,SystemConstants.MIN_LEVERAGE_TIER,SystemConstants.MIN_LEVERAGE_TIER)); // Only accepted values in the system
+        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
 
-    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max)); // Min reserve is always 2 (or 0 if no minted has occured)
-    //     collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - vaultState.reserve));
+        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
-    //     collateralTotalSupply = _bound(
-    //         collateralTotalSupply,
-    //         vaultState.reserve,
-    //         type(uint256).max - collateralDeposited
-    //     );
+        {
+            console.logInt(testParams.tickPriceX42);
+            (uint256 reserveApes, uint256 reserveLPers) = _getReservesWithFloatingPoint(
+                vaultState,
+                vaultParams.leverageTier,
+                testParams.tickPriceX42
+            );
 
-    //     vaultState.tickPriceSatX42 = int64(
-    //         _bound(vaultState.tickPriceSatX42, type(int64).min + 1, type(int64).max - 1)
-    //     );
+            assertApproxEqAbs(reserves.reserveApes, reserveApes, 2 + vaultState.reserve / 1e16); // We found this is our accuracy by numerical experimentation
+            assertApproxEqAbs(reserves.reserveLPers, reserveLPers, 2 + vaultState.reserve / 1e16);
+            assertEq(reserves.tickPriceX42, testParams.tickPriceX42);
+        }
 
-    //     // Mint tokens
-    //     _collateralToken.mint(alice, collateralTotalSupply - vaultState.reserve);
-    //     _collateralToken.mint(address(this), vaultState.reserve + collateralDeposited);
+        assertEq(collateralDeposited_, isMint ? testParams.collateralDeposited : 0);
+    }
 
-    //     (VaultStructs.Reserves memory reserves, APE ape, uint144 collateralDeposited_) = VaultExternal.getReserves(
-    //         isMint,
-    //         isAPE,
-    //         vaultState,
-    //         address(_collateralToken),
-    //         vaultParams.leverageTier,
-    //         tickPriceX42
-    //     );
+    function testFuzz_getReservesTooLargeDeposit(
+        bool isAPE,
+        VaultStructs.TokenState memory tokenState,
+        VaultStructs.VaultState memory vaultState,
+        TestParameters memory testParams,
+        uint256 extraDeposit
+    ) public preprocess(tokenState, vaultState, testParams) {
+        // Deposit extra collateral
+        uint256 balanceThis = _collateralToken.balanceOf(address(this));
+        extraDeposit = _bound(extraDeposit, type(uint144).max - balanceThis + 1, type(uint256).max - balanceThis);
+        _collateralToken.mint(address(this), extraDeposit);
 
-    //     (uint256 reserveApes, uint256 reserveLPers) = _getReservesWithFloatingPoint(
-    //         vaultParams.leverageTier,
-    //         vaultState
-    //     );
+        vm.expectRevert(abi.encodeWithSelector(DepositTooLarge.selector));
+        VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+    }
 
-    //     assertApproxEqAbs(reserves.reserveApes, reserveApes, 2 + vaultState.reserve / 1e16); // We found this is our accuracy by numerical experimentation
-    //     assertApproxEqAbs(reserves.reserveLPers, reserveLPers, 2 + vaultState.reserve / 1e16);
-    //     assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
-    //     assertEq(collateralDeposited_, isMint ? collateralDeposited : 0);
-    // }
+    function _getReservesWithFloatingPoint(
+        VaultStructs.VaultState memory vaultState,
+        int8 leverageTier,
+        int64 tickPriceX42
+    ) private view returns (uint144 reserveApes, uint144 reserveLPers) {
+        bytes16 tickPriceFP = ABDKMathQuad.fromInt(tickPriceX42).div(ABDKMathQuad.fromUInt(2 ** 42));
+        bytes16 tickPriceSatFP = ABDKMathQuad.fromInt(vaultState.tickPriceSatX42).div(ABDKMathQuad.fromUInt(2 ** 42));
+        bytes16 totalReservesFP = ABDKMathQuad.fromUInt(vaultState.reserve);
 
-    // function testFuzz_getReservesTooLargeDeposit(
-    //     bool isAPE,
-    //     int8 leverageTier,
-    //     uint256 collateralDeposited,
-    //     uint256 collateralTotalSupply,
-    //     VaultStructs.VaultState memory vaultState
-    // ) public {
-    //     vaultParams.leverageTier = int8(_bound(vaultParams.leverageTier,SystemConstants.MIN_LEVERAGE_TIER,SystemConstants.MIN_LEVERAGE_TIER)); // Only accepted values in the system
+        if (tickPriceX42 < vaultState.tickPriceSatX42) {
+            bytes16 leverageRatioFP = ABDKMathQuad.fromInt(leverageTier).pow_2().add(ABDKMathQuad.fromUInt(1));
 
-    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max)); // Min reserve is always 2 (or 0 if no minted has occured)
-    //     collateralTotalSupply = _bound(
-    //         collateralTotalSupply,
-    //         vaultState.reserve,
-    //         type(uint256).max - type(uint144).max + vaultState.reserve - 1
-    //     );
-    //     collateralDeposited = _bound(
-    //         collateralDeposited,
-    //         type(uint144).max - vaultState.reserve + 1,
-    //         type(uint256).max - collateralTotalSupply
-    //     );
+            reserveApes = uint144(
+                tickPriceFP
+                    .sub(tickPriceSatFP)
+                    .mul(log2Point0001)
+                    .mul(leverageRatioFP.sub(ABDKMathQuad.fromUInt(1)))
+                    .pow_2()
+                    .mul(totalReservesFP)
+                    .div(leverageRatioFP)
+                    .toUInt()
+            );
+            reserveLPers = vaultState.reserve - reserveApes;
+        } else {
+            bytes16 collateralizationRatioFP = ABDKMathQuad.fromInt(-leverageTier).pow_2().add(
+                ABDKMathQuad.fromUInt(1)
+            );
 
-    //     // Mint tokens
-    //     _collateralToken.mint(alice, collateralTotalSupply - vaultState.reserve);
-    //     _collateralToken.mint(address(this), vaultState.reserve + collateralDeposited);
-
-    //     vm.expectRevert();
-    //     VaultExternal.getReserves(true, isAPE, vaultState, address(_collateralToken), vaultParams.leverageTier);
-    // }
-
-    // function _getReservesWithFloatingPoint(
-    //     int8 leverageTier,
-    //     VaultStructs.VaultState memory vaultState
-    // ) private view returns (uint144 reserveApes, uint144 reserveLPers) {
-    //     bytes16 tickPriceFP = ABDKMathQuad.fromInt(vaultState.tickPriceX42).div(ABDKMathQuad.fromUInt(2 ** 42));
-    //     bytes16 tickPriceSatFP = ABDKMathQuad.fromInt(vaultState.tickPriceSatX42).div(ABDKMathQuad.fromUInt(2 ** 42));
-    //     bytes16 totalReservesFP = ABDKMathQuad.fromUInt(vaultState.reserve);
-
-    //     if (vaultState.tickPriceX42 < vaultState.tickPriceSatX42) {
-    //         bytes16 leverageRatioFP = ABDKMathQuad.fromInt(leverageTier).pow_2().add(ABDKMathQuad.fromUInt(1));
-
-    //         reserveApes = uint144(
-    //             tickPriceFP
-    //                 .sub(tickPriceSatFP)
-    //                 .mul(log2Point0001)
-    //                 .mul(leverageRatioFP.sub(ABDKMathQuad.fromUInt(1)))
-    //                 .pow_2()
-    //                 .mul(totalReservesFP)
-    //                 .div(leverageRatioFP)
-    //                 .toUInt()
-    //         );
-    //         reserveLPers = vaultState.reserve - reserveApes;
-    //     } else {
-    //         bytes16 collateralizationRatioFP = ABDKMathQuad.fromInt(-leverageTier).pow_2().add(
-    //             ABDKMathQuad.fromUInt(1)
-    //         );
-
-    //         reserveLPers = uint144(
-    //             tickPriceSatFP
-    //                 .sub(tickPriceFP)
-    //                 .mul(log2Point0001)
-    //                 .pow_2()
-    //                 .mul(totalReservesFP)
-    //                 .div(collateralizationRatioFP)
-    //                 .toUInt()
-    //         );
-    //         reserveApes = vaultState.reserve - reserveLPers;
-    //     }
-    // }
+            reserveLPers = uint144(
+                tickPriceSatFP
+                    .sub(tickPriceFP)
+                    .mul(log2Point0001)
+                    .pow_2()
+                    .mul(totalReservesFP)
+                    .div(collateralizationRatioFP)
+                    .toUInt()
+            );
+            reserveApes = vaultState.reserve - reserveLPers;
+        }
+    }
 }
 
 // function getReserves(

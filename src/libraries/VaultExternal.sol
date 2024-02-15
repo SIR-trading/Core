@@ -18,7 +18,7 @@ library VaultExternal {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error VaultDoesNotExist();
-    error DepositTooHigh();
+    error DepositTooLarge();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -183,7 +183,7 @@ library VaultExternal {
             if (isMint) {
                 // Get deposited collateral
                 uint256 balance = APE(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
-                if (balance > type(uint144).max) revert DepositTooHigh(); // Ensure it fits in a uint144
+                if (balance > type(uint144).max) revert DepositTooLarge(); // Ensure it fits in a uint144
                 collateralDeposited = uint144(balance - tokenState.total);
             }
         }
