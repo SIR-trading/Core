@@ -259,7 +259,7 @@ contract VaultExternalGetReserves is Test {
     ) {
         // Constraint reserve
         vaultState.reserve = uint144(_bound(vaultState.reserve, 0, tokenState.total));
-        vm.assume(vaultState.reserve != 1); // Min reserve is always 2 (or 0 if no minted has occured)
+        vm.assume(vaultState.reserve != 1); // Min reserve is always 2 (or 0 if no mint has occured)
 
         // Constraint collateralDeposited
         testParams.collateralDeposited = uint144(
@@ -443,6 +443,19 @@ contract VaultExternalGetReserves is Test {
         }
 
         assertEq(collateralDeposited_, isMint ? testParams.collateralDeposited : 0);
+    }
+
+    function testFuzz_getReservesVaultDoesNotExist(
+        bool isAPE,
+        VaultStructs.TokenState memory tokenState,
+        VaultStructs.VaultState memory vaultState,
+        TestParameters memory testParams
+    ) public preprocess(tokenState, vaultState, testParams) {
+        vaultState.vaultId = 0;
+        vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
+
+        vm.expectRevert(abi.encodeWithSelector(VaultDoesNotExist.selector));
+        VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, oracle, vaultParams);
     }
 
     function testFuzz_getReservesTooLargeDeposit(
