@@ -82,6 +82,7 @@ library VaultExternal {
         string memory vaultIdStr = Strings.toString(vaultId);
 
         VaultStructs.VaultParameters memory params = paramsById[vaultId];
+        require(vaultId != 0);
 
         return
             string.concat(
