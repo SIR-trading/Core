@@ -20,4 +20,8 @@ Minimize # hot SLOADs
 - Airdrops? https://twitter.com/sassal0x/status/1756839032070508746
   Airdrop tokens to ETH stakers (in particular, home stakers)
   Allocate up to 1% of the token supply to @ProtocolGuild
+
+# Contributors
+- Consider not allowing changes on contributors allocations at mainnet
+- Instead allocate a fix amount of SIR to post mainnet.
  
