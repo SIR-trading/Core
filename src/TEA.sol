@@ -133,8 +133,9 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                 lpersBalances
             );
 
-            balances[from][vaultId] = lpersBalances.balance0 - amount; // POL can never be transfered out
+            require(amount <= lpersBalances.balance0);
             unchecked {
+                balances[from][vaultId] = lpersBalances.balance0 - amount; // POL can never be transfered out
                 _setBalance(to, vaultId, lpersBalances.balance1 + amount);
             }
         }
@@ -179,8 +180,9 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                     lpersBalances
                 );
 
-                balances[from][vaultId] = lpersBalances.balance0 - amount;
+                require(amount <= lpersBalances.balance0);
                 unchecked {
+                    balances[from][vaultId] = lpersBalances.balance0 - amount;
                     _setBalance(to, vaultId, lpersBalances.balance1 + amount);
 
                     // An array can't have a total length

@@ -110,6 +110,7 @@ contract APETest is Test {
         assertEq(ape.allowance(alice, bob), amount);
     }
 
+    // TEST TRANSFERS TO THE SAME PERSON!!
     function testFuzz_transferFrom(uint256 transferAmount, uint256 mintAmount) public {
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
