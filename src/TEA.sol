@@ -17,7 +17,7 @@ import {SystemState} from "./SystemState.sol";
 
 /** @notice Modified from Solmate
  */
-abstract contract TEA is SystemState, ERC1155TokenReceiver {
+contract TEA is SystemState, ERC1155TokenReceiver {
     event TransferSingle(
         address indexed operator,
         address indexed from,
