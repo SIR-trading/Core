@@ -187,115 +187,159 @@ contract TEATest is Test, TEATestConstants {
         assertEq(tea.balanceOf(to, VAULT_ID), to == from ? mintAmount : transferAmount);
     }
 
-    // function testFuzz_safeTransferFromExceedBalance(uint256 transferAmount, uint256 mintAmount) public {
-    //     // Bounds the amounts
-    //     transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //     mintAmount = _bound(mintAmount, 0, transferAmount - 1);
+    function testFuzz_safeTransferFromVaultFails(
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address from = address(tea);
+        address operator = _idToAddress(operatorId);
+        address to = _idToAddress(toId);
 
-    //     // Suppose you have a mint function for TEA, otherwise adapt as necessary
-    //     if (mintAmount > 0) tea.mint(bob, mintAmount);
+        // Bounds the amounts
+        transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
 
-    //     // Bob approves Alice to transfer on his behalf
-    //     vm.prank(bob);
-    //     tea.setApprovalForAll(alice, true);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(from, mintAmount);
 
-    //     // Alice transfers from Bob to herself
-    //     vm.prank(alice);
-    //     vm.expectRevert();
-    //     tea.safeTransferFrom(bob, charlie, VAULT_ID, transferAmount, "");
-    // }
+        // From approves operator to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
 
-    // function testFuzz_safeTransferFromNotAuthorized(uint256 transferAmount, uint256 mintAmount) public {
-    //     // Bounds the amounts
-    //     transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //     mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
+        // Transfer
+        vm.prank(operator);
+        vm.expectRevert();
+        tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
+    }
 
-    //     // Suppose you have a mint function for TEA, otherwise adapt as necessary
-    //     tea.mint(bob, mintAmount);
+    function testFuzz_safeTransferFromExceedBalance(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
 
-    //     // Bob approves Alice to transfer on his behalf
-    //     vm.prank(bob);
-    //     tea.setApprovalForAll(alice, true);
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
 
-    //     // Charlie fails to transfer from Bob
-    //     vm.prank(charlie);
-    //     vm.expectRevert("NOT_AUTHORIZED");
-    //     tea.safeTransferFrom(bob, alice, VAULT_ID, transferAmount, "");
-    // }
+        // Bounds the amounts
+        transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, 0, transferAmount - 1);
 
-    // function testFuzz_safeTransferFromToContract(uint256 transferAmount, uint256 mintAmount) public {
-    //     // Bounds the amounts
-    //     transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //     mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        if (mintAmount > 0) tea.mint(from, mintAmount);
 
-    //     // Suppose you have a mint function for TEA, otherwise adapt as necessary
-    //     tea.mint(bob, mintAmount);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
 
-    //     // Bob approves Alice to transfer on his behalf
-    //     vm.prank(bob);
-    //     tea.setApprovalForAll(alice, true);
+        // Alice transfers from Bob to herself
+        vm.prank(operator);
+        vm.expectRevert();
+        tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
+    }
 
-    //     // Alice fails to transfer from Bob to this contract
-    //     vm.prank(alice);
-    //     vm.expectRevert();
-    //     tea.safeTransferFrom(bob, address(this), VAULT_ID, transferAmount, "");
-    // }
+    function testFuzz_safeTransferFromNotAuthorized(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
 
-    // function testFuzz_safeTransferFromUnsafeRecipient(uint256 transferAmount, uint256 mintAmount) public {
-    //     vm.mockCall(
-    //         address(this),
-    //         abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
-    //         abi.encode(TEAInstance.mint.selector) // Wrong selector
-    //     );
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
 
-    //     // Bounds the amounts
-    //     transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //     mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
+        // To ensure that the operator is not the same as the sender
+        vm.assume(operator != from);
 
-    //     // Suppose you have a mint function for TEA, otherwise adapt as necessary
-    //     tea.mint(bob, mintAmount);
+        // Bounds the amounts
+        transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
 
-    //     // Bob approves Alice to transfer on his behalf
-    //     vm.prank(bob);
-    //     tea.setApprovalForAll(alice, true);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(from, mintAmount);
 
-    //     // Alice fails to transfer from Bob to this contract
-    //     vm.prank(alice);
-    //     vm.expectRevert("UNSAFE_RECIPIENT");
-    //     tea.safeTransferFrom(bob, address(this), VAULT_ID, transferAmount, "");
-    // }
+        // Charlie fails to transfer from Bob
+        vm.prank(operator);
+        vm.expectRevert("NOT_AUTHORIZED");
+        tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
+    }
 
-    // function testFuzz_safeTransferFromSafeRecipient(uint256 transferAmount, uint256 mintAmount) public {
-    //     vm.mockCall(
-    //         address(this),
-    //         abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
-    //         abi.encode(ERC1155TokenReceiver.onERC1155Received.selector)
-    //     );
+    function testFuzz_safeTransferFromUnknownContract(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = address(this);
 
-    //     // Bounds the amounts
-    //     transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //     mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
 
-    //     // Suppose you have a mint function for TEA, otherwise adapt as necessary
-    //     tea.mint(bob, mintAmount);
+        // Bounds the amounts
+        transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
 
-    //     // Bob approves Alice to transfer on his behalf
-    //     vm.prank(bob);
-    //     tea.setApprovalForAll(alice, true);
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(from, mintAmount);
 
-    //     // Expecting the transfer event
-    //     vm.expectEmit();
-    //     emit TransferSingle(alice, bob, address(this), VAULT_ID, transferAmount);
+        // From approves operator to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
 
-    //     // Alice transfers from Bob to this contract
-    //     vm.prank(alice);
-    //     tea.safeTransferFrom(bob, address(this), VAULT_ID, transferAmount, "");
+        // Alice transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert();
+        tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
+    }
 
-    //     // Asserting the post-transfer vaultState
-    //     assertEq(tea.balanceOf(alice, VAULT_ID), 0);
-    //     assertEq(tea.balanceOf(bob, VAULT_ID), mintAmount - transferAmount);
-    //     assertEq(tea.balanceOf(address(this), VAULT_ID), transferAmount);
-    // }
+    function testFuzz_safeTransferFromUnsafeRecipient(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = vm.addr(4);
+
+        vm.mockCall(
+            address(vm.addr(4)),
+            abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
+            abi.encode(TEAInstance.mint.selector) // Wrong selector
+        );
+
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
+
+        // Bounds the amounts
+        transferAmount = _bound(transferAmount, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmount = _bound(mintAmount, transferAmount, SystemConstants.TEA_MAX_SUPPLY);
+
+        // Suppose you have a mint function for TEA, otherwise adapt as necessary
+        tea.mint(from, mintAmount);
+
+        // From approves operator to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
+
+        // Alice transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert("UNSAFE_RECIPIENT");
+        tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
+    }
 
     //     ////////////////////////////////
     //     //// safeBatchTransferFrom ////
