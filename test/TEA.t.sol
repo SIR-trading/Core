@@ -84,6 +84,10 @@ contract TEATest is Test, TEATestConstants {
 
         collateral = new MockERC20("Collateral token", "TKN", DECIMALS);
         tea = new TEAInstance(address(collateral));
+
+        alice = vm.addr(1);
+        bob = vm.addr(2);
+        charlie = vm.addr(3);
     }
 
     function _idToAddress(uint256 id) private view returns (address) {

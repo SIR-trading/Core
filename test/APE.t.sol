@@ -68,6 +68,11 @@ contract APETest is Test {
         charlie = vm.addr(3);
     }
 
+    function _idToAddress(uint256 id) private pure returns (address) {
+        id = _bound(id, 1, 3);
+        return vm.addr(id);
+    }
+
     function test_initialConditions() public {
         assertEq(ape.totalSupply(), 0);
         assertEq(ape.balanceOf(alice), 0);
@@ -80,67 +85,105 @@ contract APETest is Test {
         assertEq(ape.decimals(), 18);
     }
 
-    function testFuzz_transfer(uint256 transferAmount, uint256 mintAmount) public {
-        transferAmount = _bound(transferAmount, 1, type(uint256).max);
-        mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
-
-        _mint(alice, mintAmount);
-
-        vm.expectEmit();
-        emit Transfer(alice, bob, transferAmount);
-        vm.prank(alice);
-        assertTrue(ape.transfer(bob, transferAmount));
-        assertEq(ape.balanceOf(bob), transferAmount);
-        assertEq(ape.balanceOf(alice), mintAmount - transferAmount);
-    }
-
-    function testFuzz_transferMoreThanBalance(uint256 transferAmount, uint256 mintAmount) public {
-        transferAmount = _bound(transferAmount, 1, type(uint256).max);
-        mintAmount = _bound(mintAmount, 0, transferAmount - 1);
-
-        _mint(alice, mintAmount);
-
-        vm.expectRevert();
-        ape.transfer(bob, transferAmount);
-    }
-
     function testFuzz_approve(uint256 amount) public {
         vm.prank(alice);
         assertTrue(ape.approve(bob, amount));
         assertEq(ape.allowance(alice, bob), amount);
     }
 
-    // TEST TRANSFERS TO THE SAME PERSON!!
-    function testFuzz_transferFrom(uint256 transferAmount, uint256 mintAmount) public {
+    function testFuzz_transfer(uint256 fromId, uint256 toId, uint256 transferAmount, uint256 mintAmount) public {
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
+
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
-        _mint(bob, mintAmount);
-
-        vm.prank(bob);
-        assertTrue(ape.approve(alice, mintAmount));
-        assertEq(ape.allowance(bob, alice), mintAmount);
+        _mint(from, mintAmount);
 
         vm.expectEmit();
-        emit Transfer(bob, charlie, transferAmount);
-        vm.prank(alice);
-        assertTrue(ape.transferFrom(bob, charlie, transferAmount));
+        emit Transfer(from, to, transferAmount);
 
-        assertEq(ape.balanceOf(bob), mintAmount - transferAmount);
-        assertEq(ape.allowance(bob, alice), mintAmount == type(uint256).max ? mintAmount : mintAmount - transferAmount);
-        assertEq(ape.balanceOf(alice), 0);
-        assertEq(ape.balanceOf(charlie), transferAmount);
+        vm.prank(from);
+        assertTrue(ape.transfer(to, transferAmount));
+
+        assertEq(ape.balanceOf(from), from == to ? mintAmount : mintAmount - transferAmount);
+        assertEq(ape.balanceOf(to), to == from ? mintAmount : transferAmount);
     }
 
-    function testFuzz_transferFromWithoutApproval(uint256 transferAmount, uint256 mintAmount) public {
+    function testFuzz_transferMoreThanBalance(
+        uint256 fromId,
+        uint256 toId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
+
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, 0, transferAmount - 1);
+
+        _mint(from, mintAmount);
+
+        vm.expectRevert();
+        ape.transfer(to, transferAmount);
+    }
+
+    function testFuzz_transferFrom(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
+
         transferAmount = _bound(transferAmount, 1, type(uint256).max);
         mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
 
-        _mint(bob, mintAmount);
+        _mint(from, mintAmount);
+
+        vm.prank(from);
+        assertTrue(ape.approve(operator, mintAmount));
+        assertEq(ape.allowance(from, operator), mintAmount);
+
+        vm.expectEmit();
+        emit Transfer(from, to, transferAmount);
+
+        vm.prank(operator);
+        assertTrue(ape.transferFrom(from, to, transferAmount));
+
+        assertEq(
+            ape.allowance(from, operator),
+            mintAmount == type(uint256).max ? mintAmount : mintAmount - transferAmount
+        );
+        if (operator != from && operator != to) assertEq(ape.balanceOf(operator), 0); // HERE
+        assertEq(ape.balanceOf(from), from == to ? mintAmount : mintAmount - transferAmount);
+        assertEq(ape.balanceOf(to), from == to ? mintAmount : transferAmount);
+    }
+
+    function testFuzz_transferFromWithoutApproval(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmount,
+        uint256 mintAmount
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
+
+        vm.assume(operator != from);
+
+        transferAmount = _bound(transferAmount, 1, type(uint256).max);
+        mintAmount = _bound(mintAmount, transferAmount, type(uint256).max);
+
+        _mint(from, mintAmount);
 
         vm.expectRevert();
-        vm.prank(alice);
-        ape.transferFrom(bob, alice, transferAmount);
+        vm.prank(operator);
+        ape.transferFrom(from, to, transferAmount);
     }
 
     function testFuzz_transferFromExceedAllowance(

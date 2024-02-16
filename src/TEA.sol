@@ -116,26 +116,22 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         assert(from != address(this));
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
-        if (from != to) {
-            // Update SIR issuances
-            LPersBalances memory lpersBalances = LPersBalances(
-                from,
-                balances[from][vaultId],
-                to,
-                balanceOf(to, vaultId)
-            );
-            updateLPerIssuanceParams(
-                false,
-                vaultId,
-                systemParams,
-                vaultIssuanceParams[vaultId],
-                supplyExcludeVault(vaultId),
-                lpersBalances
-            );
+        // Update SIR issuances
+        LPersBalances memory lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
+        updateLPerIssuanceParams(
+            false,
+            vaultId,
+            systemParams,
+            vaultIssuanceParams[vaultId],
+            supplyExcludeVault(vaultId),
+            lpersBalances
+        );
 
-            require(amount <= lpersBalances.balance0);
+        lpersBalances.balance0 -= amount;
+
+        if (from != to) {
+            balances[from][vaultId] = lpersBalances.balance0; // POL can never be transfered out
             unchecked {
-                balances[from][vaultId] = lpersBalances.balance0 - amount; // POL can never be transfered out
                 _setBalance(to, vaultId, lpersBalances.balance1 + amount);
             }
         }
@@ -163,32 +159,35 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
         require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
 
-        if (from != to) {
-            LPersBalances memory lpersBalances;
-            for (uint256 i = 0; i < vaultIds.length; ) {
-                uint256 vaultId = vaultIds[i];
-                uint256 amount = amounts[i];
+        LPersBalances memory lpersBalances;
+        for (uint256 i = 0; i < vaultIds.length; ) {
+            uint256 vaultId = vaultIds[i];
+            uint256 amount = amounts[i];
 
-                // Update SIR issuances
-                lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
-                updateLPerIssuanceParams(
-                    false,
-                    vaultId,
-                    systemParams,
-                    vaultIssuanceParams[vaultId],
-                    supplyExcludeVault(vaultId),
-                    lpersBalances
-                );
+            // Update SIR issuances
+            lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
+            updateLPerIssuanceParams(
+                false,
+                vaultId,
+                systemParams,
+                vaultIssuanceParams[vaultId],
+                supplyExcludeVault(vaultId),
+                lpersBalances
+            );
 
-                require(amount <= lpersBalances.balance0);
+            lpersBalances.balance0 -= amount;
+
+            if (from != to) {
+                balances[from][vaultId] = lpersBalances.balance0;
                 unchecked {
-                    balances[from][vaultId] = lpersBalances.balance0 - amount;
                     _setBalance(to, vaultId, lpersBalances.balance1 + amount);
-
-                    // An array can't have a total length
-                    // larger than the max uint256 value.
-                    ++i;
                 }
+            }
+
+            unchecked {
+                // An array can't have a total length
+                // larger than the max uint256 value.
+                ++i;
             }
         }
 
