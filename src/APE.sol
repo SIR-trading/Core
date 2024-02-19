@@ -15,6 +15,9 @@ import "forge-std/Test.sol";
  * @dev Modified from Solmate's ERC20.sol
  */
 contract APE is Owned {
+    error PermitDeadlineExpired();
+    error InvalidSigner();
+
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
@@ -122,7 +125,7 @@ contract APE is Owned {
         bytes32 r,
         bytes32 s
     ) external {
-        require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
+        if (deadline < block.timestamp) revert PermitDeadlineExpired();
 
         // Unchecked because the only math done is incrementing
         // the owner's nonce which cannot realistically overflow.
@@ -151,7 +154,7 @@ contract APE is Owned {
                 s
             );
 
-            require(recoveredAddress != address(0) && recoveredAddress == owner, "INVALID_SIGNER");
+            if (recoveredAddress == address(0) || recoveredAddress != owner) revert InvalidSigner();
 
             allowance[recoveredAddress][spender] = value;
         }

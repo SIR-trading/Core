@@ -18,6 +18,8 @@ contract ERC20Staker {
     error AuctionIsOver();
     error BidTooLow();
     error NoDividends();
+    error InvalidSigner();
+    error PermitDeadlineExpired();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -164,7 +166,7 @@ contract ERC20Staker {
         bytes32 r,
         bytes32 s
     ) public {
-        require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
+        if (deadline < block.timestamp) revert PermitDeadlineExpired();
 
         // Unchecked because the only math done is incrementing
         // the owner's nonce which cannot realistically overflow.
@@ -193,7 +195,7 @@ contract ERC20Staker {
                 s
             );
 
-            require(recoveredAddress != address(0) && recoveredAddress == owner, "INVALID_SIGNER");
+            if (recoveredAddress == address(0) || recoveredAddress != owner) revert InvalidSigner();
 
             allowance[recoveredAddress][spender] = value;
         }
