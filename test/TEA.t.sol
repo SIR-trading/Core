@@ -11,7 +11,7 @@ import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 
 contract TEATestConstants {
-    uint256 constant VAULT_ID = 9; // we test with vault 9
+    uint48 constant VAULT_ID = 9; // we test with vault 9
     uint256 constant MAX_VAULT_ID = 15; // 15 vauls instantiated
     int8 constant LEVERAGE_TIER = -3;
 }
@@ -43,15 +43,22 @@ contract TEAInstance is TEA, TEATestConstants {
     }
 
     function mint(address account, uint256 amount) external {
-        assert(totalSupplyAndBalanceVault[VAULT_ID].totalSupply + amount <= SystemConstants.TEA_MAX_SUPPLY);
-        totalSupplyAndBalanceVault[VAULT_ID].totalSupply += uint128(amount);
+        mint(account, VAULT_ID, amount);
+    }
 
-        if (account == address(this)) totalSupplyAndBalanceVault[VAULT_ID].balanceVault += uint128(amount);
-        else balances[account][VAULT_ID] += amount;
+    function mint(address account, uint48 vaultId, uint256 amount) public {
+        assert(totalSupplyAndBalanceVault[vaultId].totalSupply + amount <= SystemConstants.TEA_MAX_SUPPLY);
+        totalSupplyAndBalanceVault[vaultId].totalSupply += uint128(amount);
+
+        if (account == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault += uint128(amount);
+        else balances[account][vaultId] += amount;
     }
 }
 
 contract TEATest is Test, TEATestConstants {
+    error NotAuthorized();
+    error UnsafeRecipient();
+
     event TransferSingle(
         address indexed operator,
         address indexed from,
@@ -271,7 +278,7 @@ contract TEATest is Test, TEATestConstants {
 
         // Charlie fails to transfer from Bob
         vm.prank(operator);
-        vm.expectRevert("NOT_AUTHORIZED");
+        vm.expectRevert(NotAuthorized.selector);
         tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
     }
 
@@ -318,7 +325,7 @@ contract TEATest is Test, TEATestConstants {
         vm.mockCall(
             address(vm.addr(4)),
             abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155Received.selector),
-            abi.encode(TEAInstance.mint.selector) // Wrong selector
+            abi.encode(TEA.safeBatchTransferFrom.selector) // Wrong selector
         );
 
         // Valt liquidity can never be transfered out
@@ -337,190 +344,287 @@ contract TEATest is Test, TEATestConstants {
 
         // Alice transfers from Bob to Charlie
         vm.prank(operator);
-        vm.expectRevert("UNSAFE_RECIPIENT");
+        vm.expectRevert(UnsafeRecipient.selector);
         tea.safeTransferFrom(from, to, VAULT_ID, transferAmount, "");
     }
 
-    //     ////////////////////////////////
-    //     //// safeBatchTransferFrom ////
-    //     //////////////////////////////
+    // TEST SOMEWHERE THAT TOKENS MINTED AS POL DO NOT COUNT TOWARDS SIR REWARDS
 
-    //     function _convertToDynamicArray(uint256 a, uint256 b) private pure returns (uint256[] memory arrOut) {
-    //         arrOut = new uint256[](2);
-    //         arrOut[0] = a;
-    //         arrOut[1] = b;
-    //     }
+    ////////////////////////////////
+    //// safeBatchTransferFrom ////
+    //////////////////////////////
 
-    //     function testFuzz_safeBatchTransferFrom(
-    //         uint256 transferAmountA,
-    //         uint256 transferAmountB,
-    //         uint256 mintAmountA,
-    //         uint256 mintAmountB
-    //     ) public {
-    //         transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob,  mintAmountA);
+    function _convertToDynamicArray(uint256 a, uint256 b) private pure returns (uint256[] memory arrOut) {
+        arrOut = new uint256[](2);
+        arrOut[0] = a;
+        arrOut[1] = b;
+    }
 
-    //         transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob, vaultIdB, mintAmountB);
+    function testFuzz_safeBatchTransferFrom(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint48 vaultIdB
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
 
-    //         // Bob approves Alice to transfer on his behalf
-    //         vm.prank(bob);
-    //         tea.setApprovalForAll(alice, true);
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
 
-    //         // Expecting the batch transfer event
-    //         vm.expectEmit();
-    //         emit TransferBatch(
-    //             alice,
-    //             bob,
-    //             charlie,
-    //             _convertToDynamicArray(VAULT_ID, vaultIdB),
-    //             _convertToDynamicArray(transferAmountA, transferAmountB)
-    //         );
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, mintAmountA);
 
-    //         // Alice batch transfers from Bob to Charlie
-    //         vm.prank(alice);
-    //         tea.safeBatchTransferFrom(
-    //             bob,
-    //             charlie,
-    //             _convertToDynamicArray(VAULT_ID, vaultIdB),
-    //             _convertToDynamicArray(transferAmountA, transferAmountB),
-    //             ""
-    //         );
+        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, vaultIdB, mintAmountB);
 
-    //         assertEq(tea.balanceOf(bob, VAULT_ID), mintAmountA - transferAmountA);
-    //         assertEq(tea.balanceOf(charlie, VAULT_ID), transferAmountA);
-    //         assertEq(tea.balanceOf(bob, vaultIdB), mintAmountB - transferAmountB);
-    //         assertEq(tea.balanceOf(charlie, vaultIdB), transferAmountB);
-    //     }
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
 
-    //     function testFuzz_safeBatchTransferFromNotAuthorized(
-    //         uint256 transferAmountA,
-    //         uint256 transferAmountB,
-    //         uint256 mintAmountA,
-    //         uint256 mintAmountB
-    //     ) public {
-    //         transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob,  mintAmountA);
+        // Expecting the batch transfer event
+        vm.expectEmit();
+        emit TransferBatch(
+            operator,
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB)
+        );
 
-    //         transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob, vaultIdB, mintAmountB);
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(operator);
+        tea.safeBatchTransferFrom(
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
 
-    //         // Bob approves Alice to transfer on his behalf
-    //         vm.prank(bob);
-    //         tea.setApprovalForAll(alice, true);
+        if (operator != from && operator != to) {
+            assertEq(tea.balanceOf(operator, VAULT_ID), 0);
+            assertEq(tea.balanceOf(operator, vaultIdB), 0);
+        }
+        assertEq(tea.balanceOf(from, VAULT_ID), from == to ? mintAmountA : mintAmountA - transferAmountA);
+        assertEq(tea.balanceOf(to, VAULT_ID), to == from ? mintAmountA : transferAmountA);
+        assertEq(tea.balanceOf(from, vaultIdB), from == to ? mintAmountB : mintAmountB - transferAmountB);
+        assertEq(tea.balanceOf(to, vaultIdB), to == from ? mintAmountB : transferAmountB);
+    }
 
-    //         // Charlie fails to batch transfer from Bob
-    //         vm.prank(charlie);
-    //         vm.expectRevert("NOT_AUTHORIZED");
-    //         tea.safeBatchTransferFrom(
-    //             bob,
-    //             alice,
-    //             _convertToDynamicArray(VAULT_ID, vaultIdB),
-    //             _convertToDynamicArray(transferAmountA, transferAmountB),
-    //             ""
-    //         );
-    //     }
+    function testFuzz_safeBatchTransferFromVaultFails(
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint48 vaultIdB
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = address(tea);
+        address to = _idToAddress(toId);
 
-    //     function testFuzz_safeBatchTransferFromExceedBalance(
-    //         uint256 transferAmountA,
-    //         uint256 transferAmountB,
-    //         uint256 mintAmountA,
-    //         uint256 mintAmountB
-    //     ) public {
-    //         transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountA = _bound(mintAmountA, 0, transferAmountA - 1);
-    //         tea.mint(bob,  mintAmountA);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, mintAmountA);
 
-    //         transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountB = _bound(mintAmountB, 0, transferAmountB - 1);
-    //         tea.mint(bob, vaultIdB, mintAmountB);
+        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, vaultIdB, mintAmountB);
 
-    //         // Bob approves Alice to transfer on his behalf
-    //         vm.prank(bob);
-    //         tea.setApprovalForAll(alice, true);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
 
-    //         // Alice tries to batch transfer from Bob but should fail
-    //         vm.prank(alice);
-    //         vm.expectRevert();
-    //         tea.safeBatchTransferFrom(
-    //             bob,
-    //             charlie,
-    //             _convertToDynamicArray(VAULT_ID, vaultIdB),
-    //             _convertToDynamicArray(transferAmountA, transferAmountB),
-    //             ""
-    //         );
-    //     }
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert();
+        tea.safeBatchTransferFrom(
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
 
-    //     function testFuzz_safeBatchTransferFromToContract(
-    //         uint256 transferAmountA,
-    //         uint256 transferAmountB,
-    //         uint256 mintAmountA,
-    //         uint256 mintAmountB
-    //     ) public {
-    //         transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob,  mintAmountA);
+    function testFuzz_safeBatchTransferFromExceedBalance(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint48 vaultIdB
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
 
-    //         transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob, vaultIdB, mintAmountB);
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
 
-    //         // Bob approves Alice to transfer on his behalf
-    //         vm.prank(bob);
-    //         tea.setApprovalForAll(alice, true);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, 0, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, mintAmountA);
 
-    //         // Alice fails to batch transfer from Bob to this contract
-    //         vm.prank(alice);
-    //         vm.expectRevert();
-    //         tea.safeBatchTransferFrom(
-    //             bob,
-    //             address(this),
-    //             _convertToDynamicArray(VAULT_ID, vaultIdB),
-    //             _convertToDynamicArray(transferAmountA, transferAmountB),
-    //             ""
-    //         );
-    //     }
+        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, 0, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, vaultIdB, mintAmountB);
 
-    //     function testFuzz_safeBatchTransferFromUnsafeRecipient(
-    //         uint256 transferAmountA,
-    //         uint256 transferAmountB,
-    //         uint256 mintAmountA,
-    //         uint256 mintAmountB
-    //     ) public {
-    //         vm.mockCall(
-    //             address(this),
-    //             abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155BatchReceived.selector),
-    //             abi.encode(TEAInstance.mint.selector) // Wrong selector
-    //         );
+        // Ensure that 1 transfer amount exceeds the balance
+        vm.assume(mintAmountA < transferAmountA || mintAmountB < transferAmountB);
 
-    //         transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob,  mintAmountA);
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
 
-    //         transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
-    //         tea.mint(bob, vaultIdB, mintAmountB);
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert();
+        tea.safeBatchTransferFrom(
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
 
-    //         // Bob approves Alice to transfer on his behalf
-    //         vm.prank(bob);
-    //         tea.setApprovalForAll(alice, true);
+    function testFuzz_safeBatchTransferFromNotAuthorized(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 toId,
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint48 vaultIdB
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = _idToAddress(toId);
 
-    //         // Alice fails to batch transfer from Bob to an unsafe recipient
-    //         vm.prank(alice);
-    //         vm.expectRevert();
-    //         tea.safeBatchTransferFrom(
-    //             bob,
-    //             address(this),
-    //             _convertToDynamicArray(VAULT_ID, vaultIdB),
-    //             _convertToDynamicArray(transferAmountA, transferAmountB),
-    //             ""
-    //         );
-    //     }
-    // }
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
+
+        // To ensure that the operator is not the same as the sender
+        vm.assume(operator != from);
+
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, mintAmountA);
+
+        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, vaultIdB, mintAmountB);
+
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert(NotAuthorized.selector);
+        tea.safeBatchTransferFrom(
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
+
+    function testFuzz_safeBatchTransferFromUnknownContract(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint48 vaultIdB
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = address(this);
+
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
+
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, mintAmountA);
+
+        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
+
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert();
+        tea.safeBatchTransferFrom(
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
+
+    function testFuzz_safeBatchTransferFromUnsafeRecipient(
+        uint256 fromId,
+        uint256 operatorId,
+        uint256 transferAmountA,
+        uint256 transferAmountB,
+        uint256 mintAmountA,
+        uint256 mintAmountB,
+        uint48 vaultIdB
+    ) public {
+        address operator = _idToAddress(operatorId);
+        address from = _idToAddress(fromId);
+        address to = vm.addr(4);
+
+        vm.mockCall(
+            address(vm.addr(4)),
+            abi.encodeWithSelector(ERC1155TokenReceiver.onERC1155BatchReceived.selector),
+            abi.encode(TEA.safeBatchTransferFrom.selector) // Wrong selector
+        );
+
+        // Valt liquidity can never be transfered out
+        vm.assume(from != address(tea));
+
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, mintAmountA);
+
+        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        tea.mint(from, vaultIdB, mintAmountB);
+
+        // Bob approves Alice to transfer on his behalf
+        vm.prank(from);
+        tea.setApprovalForAll(operator, true);
+
+        // Alice batch transfers from Bob to Charlie
+        vm.prank(operator);
+        vm.expectRevert(UnsafeRecipient.selector);
+        tea.safeBatchTransferFrom(
+            from,
+            to,
+            _convertToDynamicArray(VAULT_ID, vaultIdB),
+            _convertToDynamicArray(transferAmountA, transferAmountB),
+            ""
+        );
+    }
 
     // contract TEATestInternal is Test, TEA(address(0), address(0)) {
     //     address alice;

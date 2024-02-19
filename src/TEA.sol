@@ -19,6 +19,9 @@ import {SystemState} from "./SystemState.sol";
  */
 contract TEA is SystemState, ERC1155TokenReceiver {
     error TEAMaxSupplyExceeded();
+    error NotAuthorized();
+    error LengthMismatch();
+    error UnsafeRecipient();
 
     event TransferSingle(
         address indexed operator,
@@ -82,7 +85,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         address[] calldata owners,
         uint256[] calldata vaultIds
     ) external view returns (uint256[] memory balances_) {
-        require(owners.length == vaultIds.length, "LENGTH_MISMATCH");
+        if (owners.length != vaultIds.length) revert LengthMismatch();
 
         balances_ = new uint256[](owners.length);
 
@@ -114,7 +117,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
     function safeTransferFrom(address from, address to, uint256 vaultId, uint256 amount, bytes calldata data) external {
         assert(from != address(this));
-        require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
+        if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
         // Update SIR issuances
         LPersBalances memory lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
@@ -138,13 +141,12 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
         emit TransferSingle(msg.sender, from, to, vaultId, amount);
 
-        require(
+        if (
             to.code.length == 0
-                ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) ==
-                    ERC1155TokenReceiver.onERC1155Received.selector,
-            "UNSAFE_RECIPIENT"
-        );
+                ? to == address(0)
+                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) !=
+                    ERC1155TokenReceiver.onERC1155Received.selector
+        ) revert UnsafeRecipient();
     }
 
     function safeBatchTransferFrom(
@@ -155,9 +157,8 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         bytes calldata data
     ) external {
         assert(from != address(this));
-        require(vaultIds.length == amounts.length, "LENGTH_MISMATCH");
-
-        require(msg.sender == from || isApprovedForAll[from][msg.sender], "NOT_AUTHORIZED");
+        if (vaultIds.length != amounts.length) revert LengthMismatch();
+        if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
         LPersBalances memory lpersBalances;
         for (uint256 i = 0; i < vaultIds.length; ) {
@@ -193,13 +194,12 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
         emit TransferBatch(msg.sender, from, to, vaultIds, amounts);
 
-        require(
+        if (
             to.code.length == 0
-                ? to != address(0)
-                : ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) ==
-                    ERC1155TokenReceiver.onERC1155BatchReceived.selector,
-            "UNSAFE_RECIPIENT"
-        );
+                ? to == address(0)
+                : ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) !=
+                    ERC1155TokenReceiver.onERC1155BatchReceived.selector
+        ) revert UnsafeRecipient();
     }
 
     /**
@@ -261,13 +261,12 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             // Update total supply and vault balance
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
 
-            require(
+            if (
                 to.code.length == 0
-                    ? to != address(0)
-                    : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") ==
-                        ERC1155TokenReceiver.onERC1155Received.selector,
-                "UNSAFE_RECIPIENT"
-            );
+                    ? to == address(0)
+                    : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") !=
+                        ERC1155TokenReceiver.onERC1155Received.selector
+            ) revert UnsafeRecipient();
         }
     }
 
@@ -300,7 +299,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             uint144 collateralOut = uint144(
                 FullMath.mulDiv(reserves.reserveLPers, amount, totalSupplyAndBalanceVault_.totalSupply)
             ); // Compute amount of collateral
-            require(amount <= balanceFrom, "Insufficient balance");
+            require(amount <= balanceFrom);
             balances[from][vaultId] = balanceFrom - amount; // Checks for underflow
             totalSupplyAndBalanceVault_.totalSupply -= uint128(amount);
             reserves.reserveLPers -= collateralOut;
@@ -370,10 +369,8 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             amountPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
                 ? _amountFirstMint(collateral, polFee + reserves.reserveLPers) // Any ownless LP reserve is minted as POL too
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, polFee, reserves.reserveLPers);
-            require(
-                amountPOL + totalSupplyAndBalanceVault_.totalSupply <= SystemConstants.TEA_MAX_SUPPLY,
-                "Max supply exceeded"
-            );
+            if (amountPOL + totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY)
+                revert TEAMaxSupplyExceeded();
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountPOL);
             totalSupplyAndBalanceVault_.totalSupply += uint128(amountPOL);
             reserves.reserveLPers += polFee;
