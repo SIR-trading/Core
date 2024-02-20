@@ -9,6 +9,8 @@ import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
+import {Fees} from "src/libraries/Fees.sol";
+import {FullMath} from "src/libraries/FullMath.sol";
 
 contract TEATestConstants {
     uint48 constant VAULT_ID = 9; // we test with vault 9
@@ -87,7 +89,7 @@ contract TEATest is Test, TEATestConstants {
     address charlie;
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        // vm.createSelectFork("mainnet", 18128102);
 
         collateral = new MockERC20("Collateral token", "TKN", DECIMALS);
         tea = new TEAInstance(address(collateral));
@@ -626,26 +628,6 @@ contract TEATest is Test, TEATestConstants {
         );
     }
 
-    // contract TEATestInternal is Test, TEA(address(0), address(0)) {
-    //     address alice;
-    //     address bob;
-    //     address charlie;
-
-    //     function setUp() public {
-    //         vm.createSelectFork("mainnet", 18128102);
-
-    //         alice = vm.addr(1);
-    //         bob = vm.addr(2);
-    //         charlie = vm.addr(3);
-    //     }
-
-    //     function updateLPerIssuanceParams(
-    //         bool sirIsCaller,
-    //         uint256 vaultId,
-    //         address lper0,
-    //         address lper1
-    //     ) internal override returns (uint80 unclaimedRewards) {}
-
     //     function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
     //         mintAmountA = _bound(mintAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
 
@@ -703,4 +685,103 @@ contract TEATest is Test, TEATestConstants {
     //         vm.expectRevert();
     //         burn(bob, vaultId, burnAmountB);
     //     }
+}
+
+contract TEATestInternal is TEA, Test {
+    uint48 constant VAULT_ID = 42;
+
+    MockERC20 collateral;
+
+    address alice;
+    address bob;
+    address charlie;
+
+    constructor() TEA(address(0), address(0)) {
+        collateral = new MockERC20("Collateral token", "TKN", 18);
+        alice = address(1);
+        bob = address(2);
+        charlie = address(3);
+    }
+
+    function setUp() public {
+        collateral = new MockERC20("Collateral token", "TKN", 18);
+
+        alice = vm.addr(1);
+        bob = vm.addr(2);
+        charlie = vm.addr(3);
+    }
+
+    function testFuzz_mint1stTime(
+        uint8 lpFee,
+        uint8 tax,
+        uint144 reserveLPers,
+        uint144 collateralDeposited,
+        uint256 collateralTotalSupply
+    ) public {
+        // Bounds the amounts
+        collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralTotalSupply));
+        reserveLPers = uint144(_bound(reserveLPers, 0, collateralTotalSupply - collateralDeposited));
+        reserveLPers = uint144(_bound(reserveLPers, 0, type(uint144).max - collateralDeposited));
+
+        VaultStructs.Reserves memory reserves = VaultStructs.Reserves({
+            reserveApes: 0,
+            reserveLPers: reserveLPers,
+            tickPriceX42: 0
+        });
+
+        // Mint collateral
+        collateral.mint(alice, collateralTotalSupply - collateralDeposited - reserveLPers);
+        collateral.mint(address(this), collateralDeposited + reserveLPers);
+
+        // Mint for the first time
+        (uint256 amount, ) = mint(
+            address(collateral),
+            bob,
+            VAULT_ID,
+            VaultStructs.SystemParameters({
+                tsIssuanceStart: 0,
+                baseFee: 0,
+                lpFee: lpFee,
+                mintingStopped: false,
+                cumTax: 0
+            }),
+            VaultStructs.VaultIssuanceParams({tax: tax, tsLastUpdate: 0, cumSIRPerTEAx96: 0}),
+            reserves,
+            collateralDeposited
+        );
+
+        uint256 amountPol = balanceOf(address(this), VAULT_ID);
+
+        // When minting for the first time, all collateral in excess of collateralIn is minted as POL
+        uint144 collateralIn;
+        uint144 collectedFee;
+        uint144 polBalance;
+        {
+            uint144 lpersFee;
+            uint144 polFee;
+            (collateralIn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(collateralDeposited, lpFee, tax);
+            polBalance = reserveLPers + lpersFee + polFee;
+        }
+
+        assertEq(reserves.reserveLPers, reserveLPers + collateralDeposited - collectedFee, "LP reserve wrong");
+        assertEq(amount, balanceOf(bob, VAULT_ID), "Amount of TEA wrong");
+
+        if (collateralTotalSupply <= SystemConstants.TEA_MAX_SUPPLY) {
+            assertEq(amount, collateralIn);
+            assertEq(amountPol, polBalance);
+        } else {
+            // When the token supply is larger than TEA_MAX_SUPPLY, we scale down the ratio of TEA minted to collateral
+            uint256 amountE = FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply);
+            if (polBalance == 0) assertEq(amount, amountE);
+            else if (collateralIn == 0) assertEq(amount, 0);
+            else {
+                // Bounds for the error
+                assertLe(amount, amountE);
+                uint256 maxErr = uint256(collateralIn - 1) / polBalance + 1;
+                if (maxErr < amountE) assertGe(amount, amountE - maxErr);
+            }
+
+            assertEq(amountPol, FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, polBalance, collateralTotalSupply));
+        }
+    }
 }
