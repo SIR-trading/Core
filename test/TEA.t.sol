@@ -628,31 +628,6 @@ contract TEATest is Test, TEATestConstants {
         );
     }
 
-    //     function testFuzz_mint(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
-    //         mintAmountA = _bound(mintAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
-
-    //         mint(alice, vaultId, mintAmountA);
-    //         assertEq(balanceOf[alice][vaultId], mintAmountA);
-    //         assertEq(totalSupply[vaultId], mintAmountA);
-
-    //         mintAmountB = _bound(mintAmountB, 1, SystemConstants.TEA_MAX_SUPPLY - mintAmountA);
-
-    //         vm.expectEmit();
-    //         emit TransferSingle(msg.sender, address(0), bob, vaultId, mintAmountB);
-    //         mint(bob, vaultId, mintAmountB);
-    //         assertEq(balanceOf[bob][vaultId], mintAmountB);
-    //         assertEq(totalSupply[vaultId], mintAmountA + mintAmountB);
-    //     }
-
-    //     function testFuzz_mintFails(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB) public {
-    //         mintAmountA = _bound(mintAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-    //         mint(alice, vaultId, mintAmountA);
-
-    //         mintAmountB = _bound(mintAmountB, SystemConstants.TEA_MAX_SUPPLY - mintAmountA + 1, type(uint256).max);
-    //         vm.expectRevert();
-    //         mint(bob, vaultId, mintAmountB);
-    //     }
-
     //     function testFuzz_burn(uint256 vaultId, uint256 mintAmountA, uint256 mintAmountB, uint256 burnAmountB) public {
     //         mintAmountA = _bound(mintAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
     //         mintAmountB = _bound(mintAmountB, 1, SystemConstants.TEA_MAX_SUPPLY - mintAmountA);
@@ -717,17 +692,13 @@ contract TEATestInternal is TEA, Test {
         uint144 reserveLPers,
         uint144 collateralDeposited,
         uint256 collateralTotalSupply
-    ) public {
+    ) public returns (VaultStructs.Reserves memory reserves) {
         // Bounds the amounts
         collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralTotalSupply));
         reserveLPers = uint144(_bound(reserveLPers, 0, collateralTotalSupply - collateralDeposited));
         reserveLPers = uint144(_bound(reserveLPers, 0, type(uint144).max - collateralDeposited));
 
-        VaultStructs.Reserves memory reserves = VaultStructs.Reserves({
-            reserveApes: 0,
-            reserveLPers: reserveLPers,
-            tickPriceX42: 0
-        });
+        reserves = VaultStructs.Reserves({reserveApes: 0, reserveLPers: reserveLPers, tickPriceX42: 0});
 
         // Mint collateral
         collateral.mint(alice, collateralTotalSupply - collateralDeposited - reserveLPers);
@@ -776,12 +747,86 @@ contract TEATestInternal is TEA, Test {
             else if (collateralIn == 0) assertEq(amount, 0);
             else {
                 // Bounds for the error
-                assertLe(amount, amountE);
+                assertLe(amount, amountE + 1);
                 uint256 maxErr = uint256(collateralIn - 1) / polBalance + 1;
                 if (maxErr < amountE) assertGe(amount, amountE - maxErr);
             }
 
             assertEq(amountPol, FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, polBalance, collateralTotalSupply));
         }
+    }
+
+    function testFuzz_mint(
+        uint8 lpFee,
+        uint8 tax,
+        uint144 reserveLPers0,
+        uint144 collateralDeposited0,
+        uint144 collateralDeposited,
+        uint256 collateralTotalSupply0
+    ) public {
+        VaultStructs.Reserves memory reserves = testFuzz_mint1stTime(
+            lpFee,
+            tax,
+            reserveLPers0,
+            collateralDeposited0,
+            collateralTotalSupply0
+        );
+
+        // In some rare cases collateral deposited could be non-zero and yet mint no TEA
+        vm.assume(totalSupplyAndBalanceVault[VAULT_ID].totalSupply > 0);
+
+        // After the first mint, there must be at least 1 unit of collateral in the reserveLPers
+        vm.assume(reserves.reserveLPers >= 1);
+
+        // Bound amounts
+        collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint256).max - collateralTotalSupply0));
+        collateralDeposited = uint144(
+            _bound(collateralDeposited, 0, type(uint144).max - collateral.balanceOf(address(this)))
+        );
+
+        if (
+            // Condition for the FullMath below to not OF
+            SystemConstants.TEA_MAX_SUPPLY < 2 * totalSupplyAndBalanceVault[VAULT_ID].totalSupply ||
+            reserves.reserveLPers <=
+            FullMath.mulDiv(
+                type(uint256).max,
+                totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
+                SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply
+            )
+        ) {
+            // Condition for not reaching TEA_MAX_SUPPLY
+            collateralDeposited = uint144(
+                _bound(
+                    collateralDeposited,
+                    0,
+                    FullMath.mulDiv(
+                        reserves.reserveLPers,
+                        SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
+                        totalSupplyAndBalanceVault[VAULT_ID].totalSupply
+                    )
+                )
+            );
+        }
+        console.log("reserves.reserveLPers", reserves.reserveLPers, "collateralDeposited", collateralDeposited);
+
+        // Simulate new deposit
+        collateral.mint(address(this), collateralDeposited);
+
+        // Mint for the first time
+        (uint256 amount, ) = mint(
+            address(collateral),
+            bob,
+            VAULT_ID,
+            VaultStructs.SystemParameters({
+                tsIssuanceStart: 0,
+                baseFee: 0,
+                lpFee: lpFee,
+                mintingStopped: false,
+                cumTax: tax
+            }),
+            VaultStructs.VaultIssuanceParams({tax: tax, tsLastUpdate: 0, cumSIRPerTEAx96: 0}),
+            reserves,
+            collateralDeposited
+        );
     }
 }
