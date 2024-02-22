@@ -6,18 +6,7 @@ import {SystemState} from "src/SystemState.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
-
-library ErrorComputation {
-    function maxErrorBalanceSIR(uint256 balance, uint256 numUpdatesCumSIRPerTea) internal pure returns (uint256) {
-        return ((balance * numUpdatesCumSIRPerTea) >> 96) + 1;
-    }
-
-    function maxErrorCumSIRPerTEA(uint256 numUpdatesCumSIRPerTea) internal pure returns (uint256) {
-        return numUpdatesCumSIRPerTea;
-    }
-}
-
-/////// TEST DONATE AND MINTPOL!!!
+import {ErrorComputation} from "./ErrorComputation.sol";
 
 contract SystemStateWrapper is SystemState {
     uint48 constant VAULT_ID = 42;

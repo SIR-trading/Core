@@ -365,15 +365,12 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             );
 
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            console.log("reserves.reserveLPers", reserves.reserveLPers, "lpersFee", lpersFee);
             reserves.reserveLPers += lpersFee;
-            console.log(totalSupplyAndBalanceVault_.totalSupply, polFee, reserves.reserveLPers);
 
             // Mint some TEA as protocol owned liquidity (POL)
             amountPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
                 ? _amountFirstMint(collateral, polFee + reserves.reserveLPers) // Any ownless LP reserve is minted as POL too
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, polFee, reserves.reserveLPers);
-            console.log("amountPOL:", amountPOL);
             if (amountPOL + totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY)
                 revert TEAMaxSupplyExceeded();
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountPOL);
