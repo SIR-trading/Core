@@ -249,6 +249,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             } else collateralIn = collateralDeposited;
 
             // Mint TEA
+            // console.log(preTotalSupply, collateralIn, reserveLPers);
             amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
                 ? _amountFirstMint(collateral, collateralIn + reserves.reserveLPers)
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralIn, reserves.reserveLPers);
