@@ -12,7 +12,7 @@ library SystemConstants {
     // During the first 3 years, 20% of the emissions are diverged to contributors.
     uint72 internal constant ISSUANCE_FIRST_3_YEARS = (ISSUANCE * 8) / 10;
 
-    uint256 internal constant TEA_MAX_SUPPLY = (uint256(ISSUANCE_FIRST_3_YEARS) << 96) / type(uint16).max; // Must fit in uint128
+    uint128 internal constant TEA_MAX_SUPPLY = (uint128(ISSUANCE_FIRST_3_YEARS) << 96) / type(uint16).max; // Must fit in uint128
 
     uint40 internal constant THREE_YEARS = 3 * 365 days;
 

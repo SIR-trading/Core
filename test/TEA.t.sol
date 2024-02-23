@@ -977,4 +977,31 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         // Assert SIR rewards are correct
         _verifySIRRewards(testParams);
     }
+
+    function testFuzz_mintOverflows(uint8 lpFee, uint8 tax) public {
+        VaultStructs.Reserves memory reserves = testFuzz_mint1stTime(
+            TestParams({reserveLPers: 0, collateralDeposited: SystemConstants.TEA_MAX_SUPPLY, tsCheck: 0}),
+            lpFee,
+            tax,
+            0
+        );
+
+        // Mint max
+        uint144 collateralDeposited = type(uint144).max - reserves.reserveLPers;
+
+        // Simulate new deposit
+        collateral.mint(address(this), collateralDeposited);
+
+        // Mint
+        vm.expectRevert(TEAMaxSupplyExceeded.selector);
+        mint(
+            address(collateral),
+            bob,
+            VAULT_ID,
+            systemParams,
+            vaultIssuanceParams[VAULT_ID],
+            reserves,
+            collateralDeposited
+        );
+    }
 }
