@@ -1121,11 +1121,6 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         );
 
         // Assert balances are correct
-        console.log(
-            totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-            testParams.collateralDeposited,
-            testParams.reserveLPers
-        );
         assertEq(
             amount,
             FullMath.mulDiv(

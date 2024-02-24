@@ -313,10 +313,10 @@ contract Vault is TEA {
         address collateralToken,
         uint144 collateralDepositedOrWithdrawn
     ) private {
-        uint256 collectedFeeNew = tokenState.collectedFees + collectedFee;
-        require(collectedFeeNew < type(uint112).max); // Ensure it fits in a uint112
+        uint256 collectedFees_ = tokenState.collectedFees + collectedFee;
+        require(collectedFees_ <= type(uint112).max); // Ensure it fits in a uint112
         tokenState = VaultStructs.TokenState({
-            collectedFees: uint112(collectedFeeNew),
+            collectedFees: uint112(collectedFees_),
             total: isMint
                 ? tokenState.total + collateralDepositedOrWithdrawn
                 : tokenState.total - collateralDepositedOrWithdrawn
