@@ -352,7 +352,6 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         VaultStructs.Reserves memory reserves,
         uint144 collateralDepositedOrOut
     ) private returns (uint144 collateralInOrWidthdrawn, uint144 collectedFee) {
-        uint256 amountPOL;
         unchecked {
             // To avoid stack too deep errors
             // Substract fees
@@ -368,7 +367,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             reserves.reserveLPers += lpersFee;
 
             // Mint some TEA as protocol owned liquidity (POL)
-            amountPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
+            uint256 amountPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
                 ? _amountFirstMint(collateral, polFee + reserves.reserveLPers) // Any ownless LP reserve is minted as POL too
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, polFee, reserves.reserveLPers);
             if (amountPOL + totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY)
@@ -376,8 +375,9 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountPOL);
             totalSupplyAndBalanceVault_.totalSupply += uint128(amountPOL);
             reserves.reserveLPers += polFee;
+
+            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountPOL);
         }
-        emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountPOL);
     }
 
     /*////////////////////////////////////////////////////////////////

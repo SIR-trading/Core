@@ -93,15 +93,16 @@ contract Vault is TEA {
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
-                mint(
-                    vaultParams.collateralToken,
-                    address(this),
-                    vaultState.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    reserves,
-                    polFee
-                );
+                if (polFee > 0)
+                    mint(
+                        vaultParams.collateralToken,
+                        address(this),
+                        vaultState.vaultId,
+                        systemParams_,
+                        vaultIssuanceParams_,
+                        reserves,
+                        polFee
+                    );
             } else {
                 // Mint TEA for user and protocol owned liquidity (POL)
                 (amount, collectedFee) = mint(
@@ -155,15 +156,16 @@ contract Vault is TEA {
             );
 
             // Mint TEA for protocol owned liquidity (POL)
-            mint(
-                vaultParams.collateralToken,
-                address(this),
-                vaultState.vaultId,
-                systemParams_,
-                vaultIssuanceParams_,
-                reserves,
-                polFee
-            );
+            if (polFee > 0)
+                mint(
+                    vaultParams.collateralToken,
+                    address(this),
+                    vaultState.vaultId,
+                    systemParams_,
+                    vaultIssuanceParams_,
+                    reserves,
+                    polFee
+                );
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
             (collateralWidthdrawn, collectedFee) = burn(
