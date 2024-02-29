@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// Interfaces
-import {VaultStructs} from "./VaultStructs.sol";
-
 // Libraries
+import {VaultStructs} from "./VaultStructs.sol";
 import {TickMathPrecision} from "./TickMathPrecision.sol";
 import {SaltedAddress} from "./SaltedAddress.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
@@ -26,6 +24,14 @@ library VaultExternal {
         int8 indexed leverageTier,
         uint256 vaultId
     );
+
+    // function deployTest(
+    //     Oracle oracle,
+    //     VaultStructs.VaultState storage vaultState,
+    //     VaultStructs.VaultParameters[] storage paramsById,
+    //     VaultStructs.TokenParameters storage transientTokenParameters,
+    //     VaultStructs.VaultParameters calldata vaultParams
+    // ) external {}
 
     // Deploy APE token
     function deployAPE(

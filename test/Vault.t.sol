@@ -5,13 +5,20 @@ import "forge-std/Test.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
-import {VaultEvents} from "src/interfaces/VaultEvents.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 // import {APE} from "src/APE.sol";
 // import {IERC20} from "src/interfaces/IERC20.sol";
 
-contract VaultTest is Test, VaultEvents {
+contract VaultTest is Test {
+    event VaultInitialized(
+        address indexed debtToken,
+        address indexed collateralToken,
+        int8 indexed leverageTier,
+        uint256 vaultId
+    );
+
     address public systemControl = vm.addr(1);
     address public sir = vm.addr(2);
 
@@ -22,58 +29,62 @@ contract VaultTest is Test, VaultEvents {
     address public debtToken = Addresses.ADDR_USDT;
     address public collateralToken = Addresses.ADDR_WETH;
 
-    function _predictAddress(
-        address deployer,
-        bytes32 salt,
-        address oracle,
-        address vaultExternal
-    ) internal view returns (address) {
-        return
-            address(
-                uint160(
-                    uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                bytes1(0xff),
-                                deployer,
-                                salt,
-                                keccak256(
-                                    abi.encodePacked(
-                                        type(Vault).creationCode,
-                                        abi.encode(systemControl, sir, oracle, vaultExternal)
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            );
-    }
+    // function _predictAddress(
+    //     address deployer,
+    //     bytes32 salt,
+    //     address oracle,
+    //     address vaultExternal
+    // ) internal view returns (address) {
+    //     return
+    //         address(
+    //             uint160(
+    //                 uint256(
+    //                     keccak256(
+    //                         abi.encodePacked(
+    //                             bytes1(0xff),
+    //                             deployer,
+    //                             salt,
+    //                             keccak256(
+    //                                 abi.encodePacked(
+    //                                     type(Vault).creationCode,
+    //                                     abi.encode(systemControl, sir, oracle, vaultExternal)
+    //                                 )
+    //                             )
+    //                         )
+    //                     )
+    //                 )
+    //             )
+    //         );
+    // }
 
     function setUp() public {
-        address oracle = new Oracle();
+        vm.createSelectFork("mainnet", 18128102);
 
-        // Predict address of vault
-        vault = Vault(_predictAddress(address(this), bytes32(0), oracle));
+        address oracle = address(new Oracle());
 
-        // Deploy vaultExternal
-        address vaultExternal = new VaultExternal(address(vault));
+        // // Deploy VaultExternal
+        // deployCodeTo("VaultExternal.sol", address(0x0000000000000000000000000000000000001234));
 
         // Deploy vault
-        vault = new Vault{salt: 0}(systemControl, sir, oracle, vaultExternal);
-
-        vm.createSelectFork("mainnet", 18128102);
+        vault = new Vault(systemControl, sir, oracle);
     }
 
     function testFuzz_InitializeVault(int8 leverageTier) public {
         // Stay within the allowed range of -3 to 2
-        leverageTier = int8(_bound(leverageTier, MIN_LEVERAGE_TIER, MAX_LEVERAGE_TIER));
+        leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
         vm.expectEmit();
         emit VaultInitialized(debtToken, collateralToken, leverageTier, 1);
-        vault.initialize(debtToken, collateralToken, leverageTier);
+        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
 
-        (, , , , uint48 vaultId, ) = vault.vaultState(debtToken, collateralToken, leverageTier);
+        (uint144 reserve, int64 tickPriceSatX42, uint48 vaultId) = vault.vaultStates(
+            debtToken,
+            collateralToken,
+            leverageTier
+        );
+
+        assertEq(reserve, 0);
+        assertEq(tickPriceSatX42, 0);
         assertEq(vaultId, 1);
     }
 

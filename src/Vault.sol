@@ -41,7 +41,7 @@ contract Vault is TEA {
 
     /** @notice Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
      */
-    function initialize(VaultStructs.VaultParameters calldata vaultParams) external {
+    function initialize(VaultStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deployAPE(
             _ORACLE,
             vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
