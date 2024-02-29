@@ -929,7 +929,7 @@ contract SystemStateHandler is Test {
 
         currentTimeBefore = currentTime;
         vm.warp(currentTime);
-        if (systemState.totalSupply(VAULT_ID) == 0) {
+        if (systemState.totalSupply(VAULT_ID) - systemState.balanceOf(address(systemState), VAULT_ID) == 0) {
             if (currentTime < startTime + SystemConstants.THREE_YEARS) {
                 if (currentTime + timeSkip <= startTime + SystemConstants.THREE_YEARS) {
                     totalTimeWithoutIssuanceFirst3Years += timeSkip;
@@ -1132,6 +1132,10 @@ contract SystemStateInvariantTest is Test {
         vm.warp(currentTime);
 
         if (currentTime < startTime + SystemConstants.THREE_YEARS) {
+            // console.log(
+            //     "currentTime - startTime - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years()",
+            //     currentTime - startTime - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years()
+            // );
             totalSIR =
                 _systemStateHandler.issuanceFirst3Years() *
                 (currentTime - startTime - _systemStateHandler.totalTimeWithoutIssuanceFirst3Years());
