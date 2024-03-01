@@ -125,12 +125,12 @@ contract OracleInitializeTest is Test, Oracle {
     }
 
     function test_InitializeNoPool() public {
-        vm.expectRevert(Oracle.NoFeeTiers.selector);
+        vm.expectRevert(Oracle.NoUniswapPool.selector);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
     function test_InitializeNoPoolOfBNBAndUSDT() public {
-        vm.expectRevert(Oracle.NoFeeTiers.selector);
+        vm.expectRevert(Oracle.NoUniswapPool.selector);
         _oracle.initialize(Addresses.ADDR_BNB, Addresses.ADDR_USDT);
     }
 
@@ -138,7 +138,7 @@ contract OracleInitializeTest is Test, Oracle {
         uint24 fee = 100;
         _preparePoolNoInitialization(fee);
 
-        vm.expectRevert(Oracle.NoFeeTiers.selector);
+        vm.expectRevert(Oracle.NoUniswapPool.selector);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 

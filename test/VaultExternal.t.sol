@@ -18,7 +18,7 @@ import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 contract VaultExternalTest is Test {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
-    error NoFeeTiers();
+    error NoUniswapPool();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -95,7 +95,7 @@ contract VaultExternalTest is Test {
     function testFuzz_deployWrongTokens(address debtToken, address collateralToken, int8 leverageTier) public {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MIN_LEVERAGE_TIER)); // Only accepted values in the system
 
-        vm.expectRevert(abi.encodeWithSelector(NoFeeTiers.selector));
+        vm.expectRevert(abi.encodeWithSelector(NoUniswapPool.selector));
         VaultExternal.deployAPE(
             oracle,
             vaultState[debtToken][collateralToken][leverageTier],

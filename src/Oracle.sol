@@ -164,7 +164,7 @@ import "forge-std/Test.sol";
  */
 
 contract Oracle {
-    error NoFeeTiers();
+    error NoUniswapPool();
     error UniswapFeeTierIndexOutOfBounds();
     error OracleAlreadyInitialized();
     error OracleNotInitialized();
@@ -356,7 +356,7 @@ contract Oracle {
             }
         }
 
-        if (score == 0) revert NoFeeTiers();
+        if (score == 0) revert NoUniswapPool();
         oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(uniswapFeeTiers.length);
         oracleState.initialized = true;
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];

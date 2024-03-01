@@ -12,6 +12,10 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 // import {IERC20} from "src/interfaces/IERC20.sol";
 
 contract VaultTest is Test {
+    error VaultAlreadyInitialized();
+    error LeverageTierOutOfRange();
+    error NoUniswapPool();
+
     event VaultInitialized(
         address indexed debtToken,
         address indexed collateralToken,
@@ -29,49 +33,21 @@ contract VaultTest is Test {
     address public debtToken = Addresses.ADDR_USDT;
     address public collateralToken = Addresses.ADDR_WETH;
 
-    // function _predictAddress(
-    //     address deployer,
-    //     bytes32 salt,
-    //     address oracle,
-    //     address vaultExternal
-    // ) internal view returns (address) {
-    //     return
-    //         address(
-    //             uint160(
-    //                 uint256(
-    //                     keccak256(
-    //                         abi.encodePacked(
-    //                             bytes1(0xff),
-    //                             deployer,
-    //                             salt,
-    //                             keccak256(
-    //                                 abi.encodePacked(
-    //                                     type(Vault).creationCode,
-    //                                     abi.encode(systemControl, sir, oracle, vaultExternal)
-    //                                 )
-    //                             )
-    //                         )
-    //                     )
-    //                 )
-    //             )
-    //         );
-    // }
-
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
         address oracle = address(new Oracle());
-
-        // // Deploy VaultExternal
-        // deployCodeTo("VaultExternal.sol", address(0x0000000000000000000000000000000000001234));
 
         // Deploy vault
         vault = new Vault(systemControl, sir, oracle);
     }
 
     function testFuzz_InitializeVault(int8 leverageTier) public {
-        // Stay within the allowed range of -3 to 2
+        // Stay within the allowed range
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
+
+        vm.expectRevert();
+        vault.paramsById(1);
 
         vm.expectEmit();
         emit VaultInitialized(debtToken, collateralToken, leverageTier, 1);
@@ -82,25 +58,62 @@ contract VaultTest is Test {
             collateralToken,
             leverageTier
         );
+        (address debtToken_, address collateralToken_, int8 leverageTier_) = vault.paramsById(1);
 
         assertEq(reserve, 0);
         assertEq(tickPriceSatX42, 0);
         assertEq(vaultId, 1);
+        assertEq(debtToken, debtToken_);
+        assertEq(collateralToken, collateralToken_);
+        assertEq(leverageTier, leverageTier_);
+
+        vm.expectRevert();
+        vault.paramsById(2);
+
+        vm.expectEmit();
+        emit VaultInitialized(collateralToken, debtToken, leverageTier, 2);
+        vault.initialize(VaultStructs.VaultParameters(collateralToken, debtToken, leverageTier));
+
+        (reserve, tickPriceSatX42, vaultId) = vault.vaultStates(collateralToken, debtToken, leverageTier);
+        (debtToken_, collateralToken_, leverageTier_) = vault.paramsById(2);
+
+        assertEq(reserve, 0);
+        assertEq(tickPriceSatX42, 0);
+        assertEq(vaultId, 2);
+        assertEq(debtToken, collateralToken_);
+        assertEq(collateralToken, debtToken_);
+        assertEq(leverageTier, leverageTier_);
+
+        vm.expectRevert();
+        vault.paramsById(3);
     }
 
-    // function testInitializeVaultInvalidLeverageTier(int8 leverageTier) public {
-    //     vm.expectRevert("LeverageTierOutOfRange");
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, invalidLeverageTier);
-    // }
+    function testFuzz_InitializeVaultWrongLeverage(int8 leverageTier) public {
+        leverageTier = _boundExclude(
+            leverageTier,
+            SystemConstants.MIN_LEVERAGE_TIER,
+            SystemConstants.MAX_LEVERAGE_TIER
+        );
 
-    // function testReInitializeVault() public {
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    //     vm.expectRevert("VaultAlreadyInitialized");
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    // }
+        vm.expectRevert(LeverageTierOutOfRange.selector);
+        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+    }
+
+    function testFuzz_InitializeVaultAlreadyInitialized(int8 leverageTier) public {
+        leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
+
+        testFuzz_InitializeVault(leverageTier);
+
+        vm.expectRevert(VaultAlreadyInitialized.selector);
+        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+    }
+
+    function testFuzz_InitializeVaultNoUniswapPool(int8 leverageTier) public {
+        leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
+
+        vm.expectRevert(NoUniswapPool.selector);
+        vault.initialize(VaultStructs.VaultParameters(Addresses.ADDR_BNB, Addresses.ADDR_ALUSD, leverageTier));
+    }
 
     // function testMintAPE() public {
     //     vm.prank(systemControl);
@@ -147,4 +160,25 @@ contract VaultTest is Test {
     //     assertTrue(amountBurned > 0);
     //     // Additional checks for reserve updates can be added here
     // }
+
+    function _boundExclude(int8 x, int8 lower, int8 upper) internal view returns (int8) {
+        assert(lower != type(int8).min || upper != type(int8).max);
+        if (x >= lower) {
+            int16 delta;
+            int256 y;
+            do {
+                console.logInt(x);
+                console.logInt(lower);
+                delta = int16(x) - lower;
+                console.logInt(x);
+                console.logInt(y);
+                y = int256(upper) + 1 + delta;
+                do {
+                    y -= 256;
+                } while (y > type(int8).max);
+                x = int8(y);
+            } while (x >= lower && x <= upper);
+        }
+        return x;
+    }
 }
