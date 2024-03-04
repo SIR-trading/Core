@@ -7,11 +7,14 @@ import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
+import {Fees} from "src/libraries/Fees.sol";
+import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
 
 // import {APE} from "src/APE.sol";
-// import {IERC20} from "src/interfaces/IERC20.sol";
+import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
-contract VaultTest is Test {
+contract VaultInitializeTest is Test {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error NoUniswapPool();
@@ -27,8 +30,6 @@ contract VaultTest is Test {
     address public sir = vm.addr(2);
 
     Vault public vault;
-
-    address public alice = vm.addr(3);
 
     address public debtToken = Addresses.ADDR_USDT;
     address public collateralToken = Addresses.ADDR_WETH;
@@ -182,3 +183,94 @@ contract VaultTest is Test {
         return x;
     }
 }
+
+contract VaultTest is Test {
+    error LeverageTierOutOfRange();
+    error NoUniswapPool();
+
+    struct SystemStateParams {
+        uint16 baseFee;
+        uint8 lpFee;
+        uint8 tax;
+    }
+
+    uint48 constant VAULT_ID = 1;
+
+    address public systemControl = vm.addr(1);
+    address public sir = vm.addr(2);
+
+    Vault public vault;
+    IERC20 public ape;
+
+    address public alice = vm.addr(3);
+
+    address public debtToken = Addresses.ADDR_USDT;
+    address public collateralToken = Addresses.ADDR_WETH;
+    int8 public leverageTier = -1;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        address oracle = address(new Oracle());
+
+        // Deploy vault
+        vault = new Vault(systemControl, sir, oracle);
+
+        // Initialize vault
+        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+
+        // Derive APE address
+        ape = IERC20(SaltedAddress.getAddress(address(vault), 1));
+
+        // Mint 2^128 WETH for testing
+        deal(alice, 2 << 155);
+        vm.prank(alice);
+        IWETH9(collateralToken).deposit{value: 2 << 155}();
+    }
+
+    modifier SetFees(SystemStateParams calldata systemStateParams) {
+        // Set base and LP fees
+        vm.prank(systemControl);
+        vault.updateSystemState(systemStateParams.baseFee, systemStateParams.lpFee, false);
+
+        // Set tax
+        vm.prank(systemControl);
+        uint48[] memory oldVaults = new uint48[](0);
+        uint48[] memory newVaults = new uint48[](1);
+        newVaults[0] = VAULT_ID;
+        uint8[] memory newTaxes = new uint8[](1);
+        newTaxes[0] = systemStateParams.tax;
+        vault.updateVaults(oldVaults, newVaults, newTaxes, systemStateParams.tax);
+
+        _;
+    }
+
+    function testFuzz_mintAPE1stTime(
+        SystemStateParams calldata systemStateParams,
+        uint144 collateralDeposited
+    ) public SetFees(systemStateParams) {
+        // Minimum amount of reserves is 2
+        // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
+        collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
+
+        // Alice deposits WETH
+        vm.prank(alice);
+        IWETH9(collateralToken).transfer(address(vault), collateralDeposited);
+
+        // Alice mints APE
+        vm.prank(alice);
+        uint256 amount = vault.mint(true, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+
+        // Verify amounts
+        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
+            testMintParams.collateralDeposited,
+            systemParams.baseFee,
+            leverageTier,
+            vaultIssuanceParams[VAULT_ID].tax
+        );
+    }
+
+    // MAKE TESTS THAT CHECK THE RESERVES WHEN PRICE FLUCTUATES, WITHOUT MINTING OR BURNING
+}
+
+// INVARIANT TEST

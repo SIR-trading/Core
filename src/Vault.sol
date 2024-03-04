@@ -93,6 +93,7 @@ contract Vault is TEA {
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
+                console.log("Minting POL");
                 if (polFee > 0)
                     mint(
                         vaultParams.collateralToken,
@@ -120,7 +121,9 @@ contract Vault is TEA {
             _updateVaultState(vaultState, reserves, vaultParams);
 
             // Update collateral params
+            console.log("Updating token state");
             _updateTokenState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
+            console.log("Updating token state done");
         }
     }
 
@@ -315,6 +318,7 @@ contract Vault is TEA {
         address collateralToken,
         uint144 collateralDepositedOrWithdrawn
     ) private {
+        console.log(collectedFee, type(uint112).max);
         uint256 collectedFees_ = tokenState.collectedFees + collectedFee;
         require(collectedFees_ <= type(uint112).max); // Ensure it fits in a uint112
         tokenState = VaultStructs.TokenState({
@@ -345,7 +349,7 @@ contract Vault is TEA {
 
     /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack
         @notice during the beta period. To execute it, the system must be in Shutdown status
-        @notice which can only be activate after SHUTDOWN_WITHDRAWAL_DELAY since Emergency status was activated.
+        @notice which can only be activated after SHUTDOWN_WITHDRAWAL_DELAY seconds elapsed since Emergency status was activated.
      */
     function withdrawToSaveSystem(
         address[] calldata tokens,

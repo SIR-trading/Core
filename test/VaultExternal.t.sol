@@ -252,7 +252,7 @@ contract VaultExternalGetReserves is Test {
         oracle = new Oracle();
     }
 
-    modifier preprocess(
+    modifier Preprocess(
         VaultStructs.TokenState memory tokenState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams // uint144 collateralDeposited, // int64 newTickPriceX42
@@ -318,7 +318,7 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.TokenState memory tokenState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(tokenState, vaultState, testParams) {
         // No collateral in the vault
         vaultState.reserve = 0;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
@@ -348,7 +348,7 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.TokenState memory tokenState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(tokenState, vaultState, testParams) {
         // type(int64).min represents -∞ => reserveLPers is empty
         vaultState.tickPriceSatX42 = type(int64).min;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
@@ -379,7 +379,7 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.TokenState memory tokenState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(tokenState, vaultState, testParams) {
         // type(int64).max represents +∞ => reserveApes is empty
         vaultState.tickPriceSatX42 = type(int64).max;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
@@ -410,7 +410,7 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.TokenState memory tokenState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(tokenState, vaultState, testParams) {
         vaultState.tickPriceSatX42 = int64(
             _bound(vaultState.tickPriceSatX42, type(int64).min + 1, type(int64).max - 1)
         );
@@ -450,7 +450,7 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.TokenState memory tokenState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(tokenState, vaultState, testParams) {
         vaultState.vaultId = 0;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
@@ -464,7 +464,7 @@ contract VaultExternalGetReserves is Test {
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams,
         uint256 extraDeposit
-    ) public preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(tokenState, vaultState, testParams) {
         // Deposit extra collateral
         uint256 balanceThis = _collateralToken.balanceOf(address(this));
         extraDeposit = _bound(extraDeposit, type(uint144).max - balanceThis + 1, type(uint256).max - balanceThis);
