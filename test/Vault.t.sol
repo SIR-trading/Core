@@ -272,25 +272,90 @@ contract VaultTest is Test {
             VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
         );
 
-        console.log("collateralIn:", collateralIn, ", collectedFee:", collectedFee);
-        console.log("lpersFee:", lpersFee, ", polFee", polFee);
+        // To simplify the math, no reserve is allowed to be 0
         assertGt(reserves.reserveApes, 0);
         assertGt(reserves.reserveLPers, 0);
+
+        // Error tolerance discovered by trial-and-error
+        assertApproxEqAbs(reserves.reserveApes, collateralIn, 1 + (collateralDeposited - collectedFee) / 1e16);
+        assertApproxEqAbs(reserves.reserveLPers, lpersFee + polFee, 1 + (collateralDeposited - collectedFee) / 1e16);
+
+        // Verify Alice's balances
         if (collateralIn == 0) {
-            assertEq(reserves.reserveApes, 1);
-            assertEq(reserves.reserveLPers, collateralDeposited - collectedFee - 1);
-        } else if (lpersFee + polFee == 0) {
-            assertEq(reserves.reserveApes, collateralDeposited - collectedFee - 1);
-            assertEq(reserves.reserveLPers, 1);
+            assertEq(amount, 0);
+            assertEq(ape.balanceOf(alice), 0);
         } else {
-            // Error tolerance discovered by trial and error
-            assertApproxEqAbs(reserves.reserveApes, collateralIn, 1 + (collateralDeposited - collectedFee) / 1e16);
-            assertApproxEqAbs(
-                reserves.reserveLPers,
-                lpersFee + polFee,
-                1 + (collateralDeposited - collectedFee) / 1e16
-            );
+            assertGe(amount, 0);
+            assertGe(ape.balanceOf(alice), 0);
         }
+        assertEq(vault.balanceOf(alice, VAULT_ID), 0);
+
+        // Verify POL's balances
+        assertEq(ape.balanceOf(address(vault)), 0);
+        if (lpersFee + polFee == 0) {
+            assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
+        } else {
+            assertGe(vault.balanceOf(address(vault), VAULT_ID), 0);
+        }
+    }
+
+    function testFuzz_mintTEA1stTime(
+        SystemParams calldata systemParams,
+        uint144 collateralDeposited
+    ) public SetFees(systemParams) {
+        // Minimum amount of reserves is 2
+        // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
+        collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
+
+        // Alice deposits WETH
+        vm.prank(alice);
+        IWETH9(collateralToken).transfer(address(vault), collateralDeposited);
+
+        // Alice mints APE
+        vm.prank(alice);
+        uint256 amount = vault.mint(false, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+
+        // Verify amounts
+        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
+            collateralDeposited,
+            systemParams.lpFee,
+            systemParams.tax
+        );
+
+        // Check reserves
+        VaultStructs.Reserves memory reserves = vault.getReserves(
+            VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
+        );
+
+        // To simplify the math, no reserve is allowed to be 0
+        assertGt(reserves.reserveLPers, 0);
+        assertGt(reserves.reserveApes, 0);
+
+        // Error tolerance discovered by trial-and-error
+        assertApproxEqAbs(
+            reserves.reserveLPers,
+            collateralIn + lpersFee + polFee - 1,
+            1 + (collateralDeposited - collectedFee) / 1e16
+        );
+        assertApproxEqAbs(reserves.reserveApes, 1, 1 + (collateralDeposited - collectedFee) / 1e16);
+
+        // Verify Alice's balances
+        if (collateralIn == 0) {
+            assertEq(amount, 0);
+            assertEq(vault.balanceOf(alice, VAULT_ID), 0);
+        } else {
+            assertGe(amount, 0);
+            assertGe(vault.balanceOf(alice, VAULT_ID), 0);
+        }
+        assertEq(ape.balanceOf(alice), 0);
+
+        // Verify POL's balances
+        if (lpersFee + polFee == 0) {
+            assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
+        } else {
+            assertGe(vault.balanceOf(address(vault), VAULT_ID), 0);
+        }
+        assertEq(ape.balanceOf(address(vault)), 0);
     }
 
     // MAKE TESTS THAT CHECK THE RESERVES WHEN PRICE FLUCTUATES, WITHOUT MINTING OR BURNING
