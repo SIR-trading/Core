@@ -10,9 +10,9 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
+import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
 // import {APE} from "src/APE.sol";
-import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
 contract VaultInitializeTest is Test {
     error VaultAlreadyInitialized();
@@ -162,17 +162,13 @@ contract VaultInitializeTest is Test {
     //     // Additional checks for reserve updates can be added here
     // }
 
-    function _boundExclude(int8 x, int8 lower, int8 upper) internal view returns (int8) {
+    function _boundExclude(int8 x, int8 lower, int8 upper) private pure returns (int8) {
         assert(lower != type(int8).min || upper != type(int8).max);
         if (x >= lower) {
             int16 delta;
             int256 y;
             do {
-                console.logInt(x);
-                console.logInt(lower);
                 delta = int16(x) - lower;
-                console.logInt(x);
-                console.logInt(y);
                 y = int256(upper) + 1 + delta;
                 do {
                     y -= 256;
@@ -188,7 +184,7 @@ contract VaultTest is Test {
     error LeverageTierOutOfRange();
     error NoUniswapPool();
 
-    struct SystemStateParams {
+    struct SystemParams {
         uint16 baseFee;
         uint8 lpFee;
         uint8 tax;
@@ -228,27 +224,29 @@ contract VaultTest is Test {
         IWETH9(collateralToken).deposit{value: 2 << 155}();
     }
 
-    modifier SetFees(SystemStateParams calldata systemStateParams) {
+    modifier SetFees(SystemParams calldata systemParams) {
         // Set base and LP fees
         vm.prank(systemControl);
-        vault.updateSystemState(systemStateParams.baseFee, systemStateParams.lpFee, false);
+        vault.updateSystemState(systemParams.baseFee, systemParams.lpFee, false);
 
         // Set tax
         vm.prank(systemControl);
-        uint48[] memory oldVaults = new uint48[](0);
-        uint48[] memory newVaults = new uint48[](1);
-        newVaults[0] = VAULT_ID;
-        uint8[] memory newTaxes = new uint8[](1);
-        newTaxes[0] = systemStateParams.tax;
-        vault.updateVaults(oldVaults, newVaults, newTaxes, systemStateParams.tax);
+        {
+            uint48[] memory oldVaults = new uint48[](0);
+            uint48[] memory newVaults = new uint48[](1);
+            newVaults[0] = VAULT_ID;
+            uint8[] memory newTaxes = new uint8[](1);
+            newTaxes[0] = systemParams.tax;
+            vault.updateVaults(oldVaults, newVaults, newTaxes, systemParams.tax);
+        }
 
         _;
     }
 
     function testFuzz_mintAPE1stTime(
-        SystemStateParams calldata systemStateParams,
+        SystemParams calldata systemParams,
         uint144 collateralDeposited
-    ) public SetFees(systemStateParams) {
+    ) public SetFees(systemParams) {
         // Minimum amount of reserves is 2
         // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
         collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
@@ -263,14 +261,41 @@ contract VaultTest is Test {
 
         // Verify amounts
         (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
-            testMintParams.collateralDeposited,
+            collateralDeposited,
             systemParams.baseFee,
             leverageTier,
-            vaultIssuanceParams[VAULT_ID].tax
+            systemParams.tax
         );
+
+        // Check reserves
+        VaultStructs.Reserves memory reserves = vault.getReserves(
+            VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
+        );
+
+        console.log("collateralIn:", collateralIn, ", collectedFee:", collectedFee);
+        console.log("lpersFee:", lpersFee, ", polFee", polFee);
+        assertGt(reserves.reserveApes, 0);
+        assertGt(reserves.reserveLPers, 0);
+        if (collateralIn == 0) {
+            assertEq(reserves.reserveApes, 1);
+            assertEq(reserves.reserveLPers, collateralDeposited - collectedFee - 1);
+        } else if (lpersFee + polFee == 0) {
+            assertEq(reserves.reserveApes, collateralDeposited - collectedFee - 1);
+            assertEq(reserves.reserveLPers, 1);
+        } else {
+            // Error tolerance discovered by trial and error
+            assertApproxEqAbs(reserves.reserveApes, collateralIn, 1 + (collateralDeposited - collectedFee) / 1e16);
+            assertApproxEqAbs(
+                reserves.reserveLPers,
+                lpersFee + polFee,
+                1 + (collateralDeposited - collectedFee) / 1e16
+            );
+        }
     }
 
     // MAKE TESTS THAT CHECK THE RESERVES WHEN PRICE FLUCTUATES, WITHOUT MINTING OR BURNING
 }
 
-// INVARIANT TEST
+// INVARIANT TEST USING REAL DATA AND USING CONSTANT PRICE
+
+// INVARIANT TEST WITH EXTREME PRICES

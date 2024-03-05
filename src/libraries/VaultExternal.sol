@@ -241,6 +241,7 @@ library VaultExternal {
                                 )
                             );
 
+                            if (reserves.reserveApes == vaultState.reserve) reserves.reserveApes--;
                             assert(reserves.reserveApes != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
                         }
 
@@ -272,6 +273,7 @@ library VaultExternal {
                                 )
                             );
 
+                            if (reserves.reserveLPers == vaultState.reserve) reserves.reserveLPers--;
                             assert(reserves.reserveLPers != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
                         }
 
