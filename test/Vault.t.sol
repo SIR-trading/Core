@@ -354,6 +354,11 @@ contract VaultTest is Test {
         );
         assertApproxEqAbs(reserves.reserveApes, 1, 1 + (collateralDeposited - collectedFee) / 1e16);
 
+        // Verify token state
+        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+        assertEq(collectedFees, collectedFee);
+        assertEq(total, collateralDeposited);
+
         // Verify Alice's balances
         if (collateralIn == 0) {
             assertEq(amount, 0);
@@ -395,44 +400,59 @@ contract VaultTest is Test {
     }
 
     function _setVaultState(VaultStructs.VaultState memory vaultState) private {
+        // Find slot of the vaultStates mapping
         // vaultStates mapping is at slot 7
-        vm.store(
-            address(vault),
-            keccak256(
-                abi.encode(
-                    vaultParams.leverageTier,
-                    keccak256(
-                        abi.encode(
-                            vaultParams.collateralToken,
-                            keccak256(
-                                abi.encode(
-                                    vaultParams.debtToken,
-                                    uint256(7) // slot of the outermost mapping
-                                )
+        bytes32 slot = keccak256(
+            abi.encode(
+                vaultParams.leverageTier,
+                keccak256(
+                    abi.encode(
+                        vaultParams.collateralToken,
+                        keccak256(
+                            abi.encode(
+                                vaultParams.debtToken,
+                                uint256(7) // slot of the outermost mapping
                             )
                         )
                     )
                 )
-            ),
-            bytes32(abi.encodePacked(vaultState.reserve, vaultState.tickPriceSatX42, vaultState.vaultId))
+            )
         );
-    }
 
-    // RANDOMIZE LEVERAGE!
+        // Pack the vault state
+        bytes32 vaultStatePacked = bytes32(
+            abi.encodePacked(vaultState.vaultId, vaultState.tickPriceSatX42, vaultState.reserve)
+        );
+
+        // Store the vault state
+        vm.store(address(vault), slot, vaultStatePacked);
+
+        // Verify the operation was correct
+        (uint144 reserve, int64 tickPriceSatX42, uint48 vaultId) = vault.vaultStates(
+            vaultParams.debtToken,
+            vaultParams.collateralToken,
+            vaultParams.leverageTier
+        );
+
+        assertEq(reserve, vaultState.reserve);
+        assertEq(tickPriceSatX42, vaultState.tickPriceSatX42);
+        assertEq(vaultId, vaultState.vaultId);
+    }
 
     // function testFuzz_mintAPE(
     //     SystemParams calldata systemParams,
     //     uint144 collateralDeposited,
     //     VaultStructs.VaultState memory vaultState
     // ) public Initialize(systemParams) {
-    //     // ENFORCE vaultId AND reserve >= 2
+    //     // Set vault id
+    //     vaultState.vaultId = VAULT_ID;
+    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
 
-    //     // CONSTRAINT collateralDeposited with vaultState.reserve
-
-    //     // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
+    //     // Max deposit is chosen so that tokenState.collectedFees for sure does not overflowed
     //     collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
 
     //     // Set state
+    //     _setVaultState(vaultState);
 
     //     // Alice deposits WETH
     //     vm.prank(alice);
@@ -486,6 +506,8 @@ contract VaultTest is Test {
 
     // TEST RESERVES UPON PRICE FLUCTUATIONS
 }
+
+// TEST MULTIPLE MINTS ON DIFFERENT VAULTS WITH SAME COLLATERAL
 
 // INVARIANT TEST USING REAL DATA AND USING CONSTANT RANDOM PRICES
 
