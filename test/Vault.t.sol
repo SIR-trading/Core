@@ -200,11 +200,12 @@ contract VaultTest is Test {
 
     address public alice = vm.addr(3);
 
-    address public debtToken = Addresses.ADDR_USDT;
-    address public collateralToken = Addresses.ADDR_WETH;
-    int8 public leverageTier = -1;
+    VaultStructs.VaultParameters public vaultParams;
 
     function setUp() public {
+        vaultParams.debtToken = Addresses.ADDR_USDT;
+        vaultParams.collateralToken = Addresses.ADDR_WETH;
+
         vm.createSelectFork("mainnet", 18128102);
 
         address oracle = address(new Oracle());
@@ -212,19 +213,25 @@ contract VaultTest is Test {
         // Deploy vault
         vault = new Vault(systemControl, sir, oracle);
 
-        // Initialize vault
-        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
-
         // Derive APE address
         ape = IERC20(SaltedAddress.getAddress(address(vault), 1));
 
         // Mint 2^128 WETH for testing
         deal(alice, 2 << 155);
         vm.prank(alice);
-        IWETH9(collateralToken).deposit{value: 2 << 155}();
+        IWETH9(vaultParams.collateralToken).deposit{value: 2 << 155}();
     }
 
-    modifier SetFees(SystemParams calldata systemParams) {
+    modifier Initialize(SystemParams calldata systemParams, int8 leverageTier) {
+        vaultParams.leverageTier = int8(
+            _bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)
+        );
+
+        // Initialize vault
+        vault.initialize(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
         // Set base and LP fees
         vm.prank(systemControl);
         vault.updateSystemState(systemParams.baseFee, systemParams.lpFee, false);
@@ -245,31 +252,35 @@ contract VaultTest is Test {
 
     function testFuzz_mintAPE1stTime(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited
-    ) public SetFees(systemParams) {
+        uint144 collateralDeposited,
+        int8 leverageTier
+    ) public Initialize(systemParams, leverageTier) {
         // Minimum amount of reserves is 2
         // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
         collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
 
         // Alice deposits WETH
         vm.prank(alice);
-        IWETH9(collateralToken).transfer(address(vault), collateralDeposited);
+        IWETH9(vaultParams.collateralToken).transfer(address(vault), collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
-        uint256 amount = vault.mint(true, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+        uint256 amount = vault.mint(
+            true,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
         // Verify amounts
         (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
             collateralDeposited,
             systemParams.baseFee,
-            leverageTier,
+            vaultParams.leverageTier,
             systemParams.tax
         );
 
         // Check reserves
         VaultStructs.Reserves memory reserves = vault.getReserves(
-            VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
         );
 
         // To simplify the math, no reserve is allowed to be 0
@@ -301,19 +312,23 @@ contract VaultTest is Test {
 
     function testFuzz_mintTEA1stTime(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited
-    ) public SetFees(systemParams) {
+        uint144 collateralDeposited,
+        int8 leverageTier
+    ) public Initialize(systemParams, leverageTier) {
         // Minimum amount of reserves is 2
         // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
         collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
 
         // Alice deposits WETH
         vm.prank(alice);
-        IWETH9(collateralToken).transfer(address(vault), collateralDeposited);
+        IWETH9(vaultParams.collateralToken).transfer(address(vault), collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
-        uint256 amount = vault.mint(false, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+        uint256 amount = vault.mint(
+            false,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
         // Verify amounts
         (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
@@ -324,7 +339,7 @@ contract VaultTest is Test {
 
         // Check reserves
         VaultStructs.Reserves memory reserves = vault.getReserves(
-            VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
         );
 
         // To simplify the math, no reserve is allowed to be 0
@@ -358,9 +373,120 @@ contract VaultTest is Test {
         assertEq(ape.balanceOf(address(vault)), 0);
     }
 
-    // MAKE TESTS THAT CHECK THE RESERVES WHEN PRICE FLUCTUATES, WITHOUT MINTING OR BURNING
+    function testFuzz_mint1stTimeDepositInsufficient(
+        SystemParams calldata systemParams,
+        uint144 collateralDeposited,
+        int8 leverageTier,
+        bool isAPE
+    ) public Initialize(systemParams, leverageTier) {
+        collateralDeposited = uint144(_bound(collateralDeposited, 0, 1));
+
+        // Alice deposits WETH
+        vm.prank(alice);
+        IWETH9(vaultParams.collateralToken).transfer(address(vault), collateralDeposited);
+
+        // Alice mints APE
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.mint(
+            isAPE,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+    }
+
+    function _setVaultState(VaultStructs.VaultState memory vaultState) private {
+        // vaultStates mapping is at slot 7
+        vm.store(
+            address(vault),
+            keccak256(
+                abi.encode(
+                    vaultParams.leverageTier,
+                    keccak256(
+                        abi.encode(
+                            vaultParams.collateralToken,
+                            keccak256(
+                                abi.encode(
+                                    vaultParams.debtToken,
+                                    uint256(7) // slot of the outermost mapping
+                                )
+                            )
+                        )
+                    )
+                )
+            ),
+            bytes32(abi.encodePacked(vaultState.reserve, vaultState.tickPriceSatX42, vaultState.vaultId))
+        );
+    }
+
+    // RANDOMIZE LEVERAGE!
+
+    // function testFuzz_mintAPE(
+    //     SystemParams calldata systemParams,
+    //     uint144 collateralDeposited,
+    //     VaultStructs.VaultState memory vaultState
+    // ) public Initialize(systemParams) {
+    //     // ENFORCE vaultId AND reserve >= 2
+
+    //     // CONSTRAINT collateralDeposited with vaultState.reserve
+
+    //     // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
+    //     collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
+
+    //     // Set state
+
+    //     // Alice deposits WETH
+    //     vm.prank(alice);
+    //     IWETH9(collateralToken).transfer(address(vault), collateralDeposited);
+
+    //     // Alice mints APE
+    //     vm.prank(alice);
+    //     uint256 amount = vault.mint(true, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+
+    //     // Verify amounts
+    //     (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
+    //         collateralDeposited,
+    //         systemParams.baseFee,
+    //         leverageTier,
+    //         systemParams.tax
+    //     );
+
+    //     // Check reserves
+    //     VaultStructs.Reserves memory reserves = vault.getReserves(
+    //         VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
+    //     );
+
+    //     // To simplify the math, no reserve is allowed to be 0
+    //     assertGt(reserves.reserveApes, 0);
+    //     assertGt(reserves.reserveLPers, 0);
+
+    //     // // Error tolerance discovered by trial-and-error
+    //     // assertApproxEqAbs(reserves.reserveApes, collateralIn, 1 + (collateralDeposited - collectedFee) / 1e16);
+    //     // assertApproxEqAbs(reserves.reserveLPers, lpersFee + polFee, 1 + (collateralDeposited - collectedFee) / 1e16);
+
+    //     // // Verify Alice's balances
+    //     // if (collateralIn == 0) {
+    //     //     assertEq(amount, 0);
+    //     //     assertEq(ape.balanceOf(alice), 0);
+    //     // } else {
+    //     //     assertGe(amount, 0);
+    //     //     assertGe(ape.balanceOf(alice), 0);
+    //     // }
+    //     // assertEq(vault.balanceOf(alice, VAULT_ID), 0);
+
+    //     // // Verify POL's balances
+    //     // assertEq(ape.balanceOf(address(vault)), 0);
+    //     // if (lpersFee + polFee == 0) {
+    //     //     assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
+    //     // } else {
+    //     //     assertGe(vault.balanceOf(address(vault), VAULT_ID), 0);
+    //     // }
+    // }
+
+    // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
+
+    // TEST RESERVES UPON PRICE FLUCTUATIONS
 }
 
-// INVARIANT TEST USING REAL DATA AND USING CONSTANT PRICE
+// INVARIANT TEST USING REAL DATA AND USING CONSTANT RANDOM PRICES
 
 // INVARIANT TEST WITH EXTREME PRICES
