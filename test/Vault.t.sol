@@ -214,12 +214,15 @@ contract VaultTest is Test {
         vault = new Vault(systemControl, sir, oracle);
 
         // Derive APE address
-        ape = IERC20(SaltedAddress.getAddress(address(vault), 1));
+        ape = IERC20(SaltedAddress.getAddress(address(vault), VAULT_ID));
+    }
 
-        // Mint 2^128 WETH for testing
-        deal(alice, 2 << 155);
+    function _depositWETH(uint144 amount) private {
+        deal(alice, amount);
         vm.prank(alice);
-        IWETH9(vaultParams.collateralToken).deposit{value: 2 << 155}();
+        IWETH9(vaultParams.collateralToken).deposit{value: amount}();
+        vm.prank(alice);
+        IWETH9(vaultParams.collateralToken).transfer(address(vault), amount);
     }
 
     modifier Initialize(SystemParams calldata systemParams, int8 leverageTier) {
@@ -260,8 +263,7 @@ contract VaultTest is Test {
         collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
 
         // Alice deposits WETH
-        vm.prank(alice);
-        IWETH9(vaultParams.collateralToken).transfer(address(vault), collateralDeposited);
+        _depositWETH(collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -291,22 +293,29 @@ contract VaultTest is Test {
         assertApproxEqAbs(reserves.reserveApes, collateralIn, 1 + (collateralDeposited - collectedFee) / 1e16);
         assertApproxEqAbs(reserves.reserveLPers, lpersFee + polFee, 1 + (collateralDeposited - collectedFee) / 1e16);
 
+        // Verify token state
+        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+        assertEq(collectedFees, collectedFee);
+        assertEq(total, collateralDeposited);
+
         // Verify Alice's balances
         if (collateralIn == 0) {
             assertEq(amount, 0);
             assertEq(ape.balanceOf(alice), 0);
         } else {
-            assertGe(amount, 0);
-            assertGe(ape.balanceOf(alice), 0);
+            assertGt(amount, 0);
+            assertGt(ape.balanceOf(alice), 0);
         }
         assertEq(vault.balanceOf(alice, VAULT_ID), 0);
 
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
-        if (lpersFee + polFee == 0) {
+        if (polFee == 0) {
             assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
-        } else {
+        } else if (IWETH9(vaultParams.collateralToken).totalSupply() > SystemConstants.TEA_MAX_SUPPLY) {
             assertGe(vault.balanceOf(address(vault), VAULT_ID), 0);
+        } else {
+            assertGt(vault.balanceOf(address(vault), VAULT_ID), 0);
         }
     }
 
@@ -320,8 +329,7 @@ contract VaultTest is Test {
         collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
 
         // Alice deposits WETH
-        vm.prank(alice);
-        IWETH9(vaultParams.collateralToken).transfer(address(vault), collateralDeposited);
+        _depositWETH(collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -364,16 +372,18 @@ contract VaultTest is Test {
             assertEq(amount, 0);
             assertEq(vault.balanceOf(alice, VAULT_ID), 0);
         } else {
-            assertGe(amount, 0);
-            assertGe(vault.balanceOf(alice, VAULT_ID), 0);
+            assertGt(amount, 0);
+            assertGt(vault.balanceOf(alice, VAULT_ID), 0);
         }
         assertEq(ape.balanceOf(alice), 0);
 
         // Verify POL's balances
         if (lpersFee + polFee == 0) {
             assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
-        } else {
+        } else if (IWETH9(vaultParams.collateralToken).totalSupply() > SystemConstants.TEA_MAX_SUPPLY) {
             assertGe(vault.balanceOf(address(vault), VAULT_ID), 0);
+        } else {
+            assertGt(vault.balanceOf(address(vault), VAULT_ID), 0);
         }
         assertEq(ape.balanceOf(address(vault)), 0);
     }
@@ -387,8 +397,7 @@ contract VaultTest is Test {
         collateralDeposited = uint144(_bound(collateralDeposited, 0, 1));
 
         // Alice deposits WETH
-        vm.prank(alice);
-        IWETH9(vaultParams.collateralToken).transfer(address(vault), collateralDeposited);
+        _depositWETH(collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -439,68 +448,93 @@ contract VaultTest is Test {
         assertEq(vaultId, vaultState.vaultId);
     }
 
-    // function testFuzz_mintAPE(
-    //     SystemParams calldata systemParams,
-    //     uint144 collateralDeposited,
-    //     VaultStructs.VaultState memory vaultState
-    // ) public Initialize(systemParams) {
-    //     // Set vault id
-    //     vaultState.vaultId = VAULT_ID;
-    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
+    function _verifyReserves(
+        SystemParams calldata systemParams,
+        uint144 collateralDeposited,
+        VaultStructs.Reserves memory reservesPre,
+        VaultStructs.Reserves memory reservesPost
+    ) private {
+        // Verify amounts
+        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
+            collateralDeposited,
+            systemParams.baseFee,
+            vaultParams.leverageTier,
+            systemParams.tax
+        );
 
-    //     // Max deposit is chosen so that tokenState.collectedFees for sure does not overflowed
-    //     collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
+        (uint144 reserve, , ) = vault.vaultStates(
+            vaultParams.debtToken,
+            vaultParams.collateralToken,
+            vaultParams.leverageTier
+        );
 
-    //     // Set state
-    //     _setVaultState(vaultState);
+        // Error tolerance discovered by trial-and-error
+        assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes + collateralIn, 1 + reserve / 1e16);
+        assertApproxEqAbs(reservesPost.reserveLPers, reservesPre.reserveLPers + lpersFee + polFee, 1 + reserve / 1e16);
+    }
 
-    //     // Alice deposits WETH
-    //     vm.prank(alice);
-    //     IWETH9(collateralToken).transfer(address(vault), collateralDeposited);
+    function testFuzz_mintAPE(
+        SystemParams calldata systemParams,
+        uint144 collateralDeposited,
+        int8 leverageTier,
+        VaultStructs.VaultState memory vaultState
+    ) public Initialize(systemParams, leverageTier) {
+        // Set vault id
+        vaultState.vaultId = VAULT_ID;
+        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
 
-    //     // Alice mints APE
-    //     vm.prank(alice);
-    //     uint256 amount = vault.mint(true, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+        // Max deposit is chosen so that tokenState.collectedFees for sure does not overflowed
+        collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
 
-    //     // Verify amounts
-    //     (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
-    //         collateralDeposited,
-    //         systemParams.baseFee,
-    //         leverageTier,
-    //         systemParams.tax
-    //     );
+        // Set state
+        _setVaultState(vaultState);
 
-    //     // Check reserves
-    //     VaultStructs.Reserves memory reserves = vault.getReserves(
-    //         VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier)
-    //     );
+        // Alice deposits WETH
+        _depositWETH(collateralDeposited);
 
-    //     // To simplify the math, no reserve is allowed to be 0
-    //     assertGt(reserves.reserveApes, 0);
-    //     assertGt(reserves.reserveLPers, 0);
+        // Retrieve reserves before minting
+        VaultStructs.Reserves memory reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // // Error tolerance discovered by trial-and-error
-    //     // assertApproxEqAbs(reserves.reserveApes, collateralIn, 1 + (collateralDeposited - collectedFee) / 1e16);
-    //     // assertApproxEqAbs(reserves.reserveLPers, lpersFee + polFee, 1 + (collateralDeposited - collectedFee) / 1e16);
+        // Alice mints APE
+        vm.prank(alice);
+        uint256 amount = vault.mint(
+            true,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // // Verify Alice's balances
-    //     // if (collateralIn == 0) {
-    //     //     assertEq(amount, 0);
-    //     //     assertEq(ape.balanceOf(alice), 0);
-    //     // } else {
-    //     //     assertGe(amount, 0);
-    //     //     assertGe(ape.balanceOf(alice), 0);
-    //     // }
-    //     // assertEq(vault.balanceOf(alice, VAULT_ID), 0);
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // // Verify POL's balances
-    //     // assertEq(ape.balanceOf(address(vault)), 0);
-    //     // if (lpersFee + polFee == 0) {
-    //     //     assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
-    //     // } else {
-    //     //     assertGe(vault.balanceOf(address(vault), VAULT_ID), 0);
-    //     // }
-    // }
+        // Verify amounts
+        _verifyReserves(systemParams, collateralDeposited, reservesPre, reservesPost);
+
+        // // Verify token state
+        // (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+        // assertEq(collectedFees, collectedFee);
+        // assertEq(total, collateralDeposited);
+
+        // // Verify Alice's balances
+        // if (collateralIn == 0) {
+        //     assertEq(amount, 0);
+        //     assertEq(ape.balanceOf(alice), 0);
+        // } else {
+        //     assertGt(amount, 0);
+        //     assertGt(ape.balanceOf(alice), 0);
+        // }
+        // assertEq(vault.balanceOf(alice, VAULT_ID), 0);
+
+        // // Verify POL's balances
+        // assertEq(ape.balanceOf(address(vault)), 0);
+        // if (lpersFee + polFee == 0) {
+        //     assertEq(vault.balanceOf(address(vault), VAULT_ID), 0);
+        // } else {
+        //     assertGt(vault.balanceOf(address(vault), VAULT_ID), 0);
+        // }
+    }
 
     // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
 

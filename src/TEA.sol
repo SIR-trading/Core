@@ -252,10 +252,14 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
                 ? _amountFirstMint(collateral, collateralIn + reserves.reserveLPers)
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralIn, reserves.reserveLPers);
-            if (to != address(this)) balances[to][vaultId] = balanceTo + amount;
-            else totalSupplyAndBalanceVault_.balanceVault += uint128(amount);
-            if (totalSupplyAndBalanceVault_.totalSupply + amount > SystemConstants.TEA_MAX_SUPPLY)
+            if (to != address(this)) {
+                balances[to][vaultId] = balanceTo + amount;
+            } else {
+                totalSupplyAndBalanceVault_.balanceVault += uint128(amount);
+            }
+            if (totalSupplyAndBalanceVault_.totalSupply + amount > SystemConstants.TEA_MAX_SUPPLY) {
                 revert TEAMaxSupplyExceeded();
+            }
             totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
             reserves.reserveLPers += collateralIn;
             emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
@@ -319,7 +323,9 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             );
 
             // Update total supply and vault balance
-            if (totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY) revert TEAMaxSupplyExceeded();
+            if (totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY) {
+                revert TEAMaxSupplyExceeded();
+            }
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
         }
     }
