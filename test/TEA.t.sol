@@ -380,12 +380,20 @@ contract TEATest is Test, TEATestConstants {
         // Valt liquidity can never be transfered out
         vm.assume(from != address(tea));
 
-        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY - 1);
         tea.mint(from, mintAmountA);
 
-        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountB = _bound(
+            transferAmountB,
+            1,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
+        mintAmountB = _bound(
+            mintAmountB,
+            transferAmountB,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
         tea.mint(from, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -435,12 +443,20 @@ contract TEATest is Test, TEATestConstants {
         address from = address(tea);
         address to = _idToAddress(toId);
 
-        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY - 1);
         tea.mint(from, mintAmountA);
 
-        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountB = _bound(
+            transferAmountB,
+            1,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
+        mintAmountB = _bound(
+            mintAmountB,
+            transferAmountB,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
         tea.mint(from, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -477,15 +493,25 @@ contract TEATest is Test, TEATestConstants {
         vm.assume(from != address(tea));
 
         transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountA = _bound(mintAmountA, 0, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountA = _bound(mintAmountA, 0, SystemConstants.TEA_MAX_SUPPLY - 1);
         tea.mint(from, mintAmountA);
 
-        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountB = _bound(mintAmountB, 0, SystemConstants.TEA_MAX_SUPPLY);
+        mintAmountB = _bound(
+            mintAmountB,
+            0,
+            vaultIdB != VAULT_ID ? SystemConstants.TEA_MAX_SUPPLY - 1 : SystemConstants.TEA_MAX_SUPPLY - 1 - mintAmountA
+        );
+        transferAmountB = _bound(
+            transferAmountB,
+            transferAmountA <= mintAmountA ? mintAmountB + 1 : 1,
+            SystemConstants.TEA_MAX_SUPPLY
+        );
+
         tea.mint(from, vaultIdB, mintAmountB);
 
         // Ensure that 1 transfer amount exceeds the balance
-        vm.assume(mintAmountA < transferAmountA || mintAmountB < transferAmountB);
+        if (vaultIdB == VAULT_ID)
+            vm.assume(mintAmountA + mintAmountB < transferAmountA || mintAmountA + mintAmountB < transferAmountB);
 
         // Bob approves Alice to transfer on his behalf
         vm.prank(from);
@@ -523,12 +549,20 @@ contract TEATest is Test, TEATestConstants {
         // To ensure that the operator is not the same as the sender
         vm.assume(operator != from);
 
-        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY - 1);
         tea.mint(from, mintAmountA);
 
-        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountB = _bound(
+            transferAmountB,
+            1,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
+        mintAmountB = _bound(
+            mintAmountB,
+            transferAmountB,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
         tea.mint(from, vaultIdB, mintAmountB);
 
         // Alice batch transfers from Bob to Charlie
@@ -559,12 +593,20 @@ contract TEATest is Test, TEATestConstants {
         // Valt liquidity can never be transfered out
         vm.assume(from != address(tea));
 
-        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY - 1);
         tea.mint(from, mintAmountA);
 
-        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountB = _bound(
+            transferAmountB,
+            1,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
+        mintAmountB = _bound(
+            mintAmountB,
+            transferAmountB,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
         tea.mint(from, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
@@ -605,12 +647,20 @@ contract TEATest is Test, TEATestConstants {
         // Valt liquidity can never be transfered out
         vm.assume(from != address(tea));
 
-        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountA = _bound(transferAmountA, 1, SystemConstants.TEA_MAX_SUPPLY - 1);
+        mintAmountA = _bound(mintAmountA, transferAmountA, SystemConstants.TEA_MAX_SUPPLY - 1);
         tea.mint(from, mintAmountA);
 
-        transferAmountB = _bound(transferAmountB, 1, SystemConstants.TEA_MAX_SUPPLY);
-        mintAmountB = _bound(mintAmountB, transferAmountB, SystemConstants.TEA_MAX_SUPPLY);
+        transferAmountB = _bound(
+            transferAmountB,
+            1,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
+        mintAmountB = _bound(
+            mintAmountB,
+            transferAmountB,
+            SystemConstants.TEA_MAX_SUPPLY - (VAULT_ID == vaultIdB ? mintAmountA : 0)
+        );
         tea.mint(from, vaultIdB, mintAmountB);
 
         // Bob approves Alice to transfer on his behalf
