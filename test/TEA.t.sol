@@ -1054,28 +1054,17 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         reserves.reserveLPers = testMintParams.reserveLPers;
         reserves.reserveApes = reserve - testMintParams.reserveLPers;
 
-        if (
-            // Condition for the FullMath below to not OF
-            SystemConstants.TEA_MAX_SUPPLY < 2 * totalSupplyAndBalanceVault[VAULT_ID].totalSupply ||
-            reserves.reserveLPers <=
-            FullMath.mulDiv(
-                type(uint256).max,
-                totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-                SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply
-            )
-        ) {
-            // Condition for not reaching TEA_MAX_SUPPLY
-            testMintParams.collateralDeposited = uint144(
-                _bound(
-                    testMintParams.collateralDeposited,
-                    0,
-                    FullMath.mulDiv(
-                        reserves.reserveLPers,
-                        SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-                        totalSupplyAndBalanceVault[VAULT_ID].totalSupply
-                    )
-                )
+        // Condition for not reaching TEA_MAX_SUPPLY
+        {
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reserves.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
+                totalSupplyAndBalanceVault[VAULT_ID].totalSupply
             );
+            if (success)
+                testMintParams.collateralDeposited = uint144(
+                    _bound(testMintParams.collateralDeposited, 0, collateralDepositedUpperBound)
+                );
         }
 
         // Simulate new deposit
@@ -1146,28 +1135,17 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         reserves.reserveLPers = testMintParams.reserveLPers;
         reserves.reserveApes = reserve - testMintParams.reserveLPers;
 
-        if (
-            // Condition for the FullMath below to not OF
-            SystemConstants.TEA_MAX_SUPPLY < 2 * totalSupplyAndBalanceVault[VAULT_ID].totalSupply ||
-            reserves.reserveLPers <=
-            FullMath.mulDiv(
-                type(uint256).max,
-                totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-                SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply
-            )
-        ) {
-            // Condition for not reaching TEA_MAX_SUPPLY
-            testMintParams.collateralDeposited = uint144(
-                _bound(
-                    testMintParams.collateralDeposited,
-                    0,
-                    FullMath.mulDiv(
-                        reserves.reserveLPers,
-                        SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-                        totalSupplyAndBalanceVault[VAULT_ID].totalSupply
-                    )
-                )
+        // Condition for not reaching TEA_MAX_SUPPLY
+        {
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reserves.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
+                totalSupplyAndBalanceVault[VAULT_ID].totalSupply
             );
+            if (success)
+                testMintParams.collateralDeposited = uint144(
+                    _bound(testMintParams.collateralDeposited, 0, collateralDepositedUpperBound)
+                );
         }
 
         // Simulate new deposit

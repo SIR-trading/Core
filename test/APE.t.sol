@@ -32,10 +32,12 @@ contract APETest is Test {
         uint256 totalSupply = uint256(vm.load(address(ape), bytes32(uint256(2))));
         totalSupply += amount;
         vm.store(address(ape), bytes32(uint256(2)), bytes32(totalSupply));
+        assertEq(ape.totalSupply(), totalSupply, "Wrong slot used by vm.store");
 
         uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(uint256(3))))));
         balance += amount;
         vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
+        assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
     }
 
     /// @dev Auxiliary function for burning APE tokens
@@ -43,10 +45,12 @@ contract APETest is Test {
         uint256 totalSupply = uint256(vm.load(address(ape), bytes32(uint256(2))));
         totalSupply -= amount;
         vm.store(address(ape), bytes32(uint256(2)), bytes32(totalSupply));
+        assertEq(ape.totalSupply(), totalSupply, "Wrong slot used by vm.store");
 
         uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(uint256(3))))));
         balance -= amount;
         vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
+        assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
     }
 
     function latestTokenParams()

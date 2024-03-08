@@ -46,7 +46,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         uint128 balanceVault;
     }
 
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+    event ApprovalForAll(address indexed account, address indexed operator, bool approved);
     event URI(string value, uint256 indexed id);
 
     mapping(address => mapping(uint256 => uint256)) internal balances;
@@ -79,8 +79,8 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         return VaultExternal.teaURI(paramsById, vaultId, totalSupply_);
     }
 
-    function balanceOf(address owner, uint256 vaultId) public view override returns (uint256) {
-        return owner == address(this) ? totalSupplyAndBalanceVault[vaultId].balanceVault : balances[owner][vaultId];
+    function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {
+        return account == address(this) ? totalSupplyAndBalanceVault[vaultId].balanceVault : balances[account][vaultId];
     }
 
     function balanceOfBatch(
@@ -344,9 +344,9 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             : collateralIn;
     }
 
-    function _setBalance(address owner, uint256 vaultId, uint256 balance) private {
-        if (owner == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault = uint128(balance);
-        else balances[owner][vaultId] = balance;
+    function _setBalance(address account, uint256 vaultId, uint256 balance) private {
+        if (account == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault = uint128(balance);
+        else balances[account][vaultId] = balance;
     }
 
     function _distributeFees(

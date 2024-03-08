@@ -92,11 +92,9 @@ contract Vault is TEA {
                     reserves,
                     collateralDeposited
                 );
-                console.log("Fees (contract)", collectedFee, polFee, amount);
 
                 // Mint TEA for protocol owned liquidity (POL)
                 if (polFee > 0) {
-                    console.log("Minting TEA for POL");
                     mint(
                         vaultParams.collateralToken,
                         address(this),
