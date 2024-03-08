@@ -639,29 +639,25 @@ contract APEHandler is Test {
         rndAPE = uint8(_bound(rndAPE, 0, 1));
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max)); // Cannot be 0
 
-        // To avoid overflow of totalCollateral
-        uint144 totalCollateral = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers;
-        collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - totalCollateral));
-
         totalSupplyOld[rndAPE] = ape[rndAPE].totalSupply();
         collectedFeesOld = collectedFees;
         apesReserveOld[rndAPE] = reserves[rndAPE].reserveApes;
-        uint256 amountMax = type(uint256).max - totalSupplyOld[rndAPE];
-        if (
-            totalSupplyOld[rndAPE] >
-            FullMath.mulDivRoundingUp(reserves[rndAPE].reserveApes, amountMax, type(uint256).max)
-        ) {
+
+        // To avoid overflow of totalCollateral
+        uint144 totalCollateral = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers;
+        collateralDeposited = uint144(
+            _bound(collateralDeposited, totalSupplyOld[rndAPE] == 0 ? 2 : 0, type(uint144).max - totalCollateral)
+        );
+
+        if (totalSupplyOld[rndAPE] != 0) {
             // Ensure max supply of APE (2^256-1) is not exceeded
-            collateralDeposited = uint144(
-                _bound(
-                    collateralDeposited,
-                    0,
-                    FullMath.mulDiv(reserves[rndAPE].reserveApes, amountMax, totalSupplyOld[rndAPE])
-                )
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reserves[rndAPE].reserveApes,
+                type(uint256).max - totalSupplyOld[rndAPE],
+                totalSupplyOld[rndAPE]
             );
-        } else if (totalSupplyOld[rndAPE] == 0) {
-            if (collateralDeposited < 2) return;
-            collateralDeposited = uint144(_bound(collateralDeposited, 2, collateralDeposited));
+            if (success && collateralDepositedUpperBound < type(uint144).max)
+                collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
         }
 
         // Update totalCollateralDeposited

@@ -5,7 +5,6 @@ import "forge-std/Test.sol";
 import {SystemState} from "src/SystemState.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
-import {FullMath} from "src/libraries/FullMath.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 
 contract SystemStateWrapper is SystemState {
