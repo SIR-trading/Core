@@ -521,38 +521,27 @@ contract VaultTest is Test {
         }
 
         // Verify Alice's balances
-        if (collateralIn == 0 && (balances.apeSupply > 0 || reservesPre.reserveApes == 0)) {
-            // No collateral => no APE minted
-            assertEq(amount, 0, "1");
-            assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "a");
-        } else if (
-            balances.apeSupply > 0 &&
-            reservesPre.reserveApes > 0 &&
-            FullMath.mulDiv(balances.apeSupply, collateralIn, reservesPre.reserveApes) == 0
-        ) {
-            assertEq(amount, 0, "2");
-            assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "b");
+        if (balances.apeSupply == 0) {
+            assertEq(amount, collateralIn + reservesPre.reserveApes);
+        } else if (reservesPre.reserveApes > 0) {
+            assertEq(amount, FullMath.mulDiv(balances.apeSupply, collateralIn, reservesPre.reserveApes));
         } else {
-            // supplyAPE * collateralIn  < reserves.reserveApes
-            assertGt(amount, 0, "3");
-            assertGt(ape.balanceOf(alice) - balances.apeAlice, 0, "c");
+            revert("Invalid state");
         }
-        assertEq(vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, 0, "d");
+        assertEq(amount, ape.balanceOf(alice) - balances.apeAlice);
+        assertEq(vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, 0);
 
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
+        amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
         if (polFee == 0) {
-            // If no POL fee, no TEA is minted for the vault
-            assertEq(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault, 0, "1");
-        } else if (
-            // The ratio of tea tokens / reserveLPers is so small that no TEA is minted for the vault
-            balances.teaSupply > 0 &&
-            reservesPre.reserveLPers + lpersFee > 0 &&
-            FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers + lpersFee) == 0
-        ) {
-            assertEq(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault, 0, "2");
-        } else if (IWETH9(vaultParams.collateralToken).totalSupply() <= SystemConstants.TEA_MAX_SUPPLY) {
-            assertGt(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault, 0, "3");
+            assertEq(amount, 0);
+        } else if (balances.teaSupply == 0) {
+            assertGt(amount, 0);
+        } else if (reservesPre.reserveLPers + lpersFee > 0) {
+            assertEq(amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers + lpersFee));
+        } else {
+            revert("Invalid state");
         }
     }
 
