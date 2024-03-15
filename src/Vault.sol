@@ -408,7 +408,7 @@ contract Vault is TEA {
                     );
 
                     // Compute saturation price
-                    int256 temptickPriceSatX42 = reserves.tickPriceX42 +
+                    int256 tempTickPriceSatX42 = reserves.tickPriceX42 +
                         (
                             vaultParams.leverageTier >= 0
                                 ? tickRatioX42 >> absLeverageTier
@@ -416,8 +416,8 @@ contract Vault is TEA {
                         );
 
                     // Check if overflow
-                    if (temptickPriceSatX42 > type(int64).max) vaultState.tickPriceSatX42 = type(int64).max;
-                    else vaultState.tickPriceSatX42 = int64(temptickPriceSatX42);
+                    if (tempTickPriceSatX42 > type(int64).max) vaultState.tickPriceSatX42 = type(int64).max;
+                    else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 } else {
                     /**
                      * PRICE IN SATURATION ZONE
@@ -431,11 +431,11 @@ contract Vault is TEA {
                     );
 
                     // Compute saturation price
-                    int256 temptickPriceSatX42 = reserves.tickPriceX42 - tickRatioX42;
+                    int256 tempTickPriceSatX42 = reserves.tickPriceX42 - tickRatioX42;
 
                     // Check if underflow
-                    if (temptickPriceSatX42 < type(int64).min) vaultState.tickPriceSatX42 = type(int64).min;
-                    else vaultState.tickPriceSatX42 = int64(temptickPriceSatX42);
+                    if (tempTickPriceSatX42 < type(int64).min) vaultState.tickPriceSatX42 = type(int64).min;
+                    else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 }
             }
 

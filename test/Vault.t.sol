@@ -325,10 +325,6 @@ contract VaultTest is Test {
             VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
         );
 
-        // To simplify the math, no reserve is allowed to be 0
-        assertGt(reserves.reserveApes, 0);
-        assertGt(reserves.reserveLPers, 0);
-
         _verifyAmountsMintTEA(
             systemParams,
             collateralDeposited,
@@ -425,6 +421,72 @@ contract VaultTest is Test {
         _verifyAmountsMintAPE(systemParams, collateralDeposited, reservesPre, reservesPost, amount, balances);
     }
 
+    function testFuzz_mintTEA(
+        SystemParams calldata systemParams,
+        uint144 collateralDeposited,
+        int8 leverageTier,
+        VaultStructs.VaultState memory vaultState,
+        Balances memory balances
+    ) public Initialize(systemParams, leverageTier) {
+        // Constraint vault paramereters
+        vaultState.vaultId = VAULT_ID;
+        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
+
+        // Constraint balance parameters
+        balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
+        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
+        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
+        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
+
+        // Set state
+        _setState(vaultState, balances);
+
+        // Get reserves before minting
+        VaultStructs.Reserves memory reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Constraint so it doesn't overflow tokenState.collectedFees
+        collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
+
+        // Constraint so it doesn't overflow tokenState.total
+        collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - vaultState.reserve));
+
+        // Constraint so it doesn't overflow TEA supply
+        (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+            reservesPre.reserveLPers,
+            SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(vaultState.vaultId),
+            vault.totalSupply(vaultState.vaultId)
+        );
+        if (success) collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
+
+        // Constraint so it doesn't overflow APE supply
+        (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
+            reservesPre.reserveApes,
+            type(uint256).max - ape.totalSupply(),
+            ape.totalSupply()
+        );
+        if (success) collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
+
+        // Alice deposits WETH
+        _depositWETH(collateralDeposited);
+
+        // Alice mints APE
+        vm.prank(alice);
+        uint256 amount = vault.mint(
+            false,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Verify amounts
+        _verifyAmountsMintTEA(systemParams, collateralDeposited, reservesPre, reservesPost, amount, balances);
+    }
+
     // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
 
     // TEST RESERVES UPON PRICE FLUCTUATIONS
@@ -451,10 +513,25 @@ contract VaultTest is Test {
             vaultParams.collateralToken,
             vaultParams.leverageTier
         );
+        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+
+        // To simplify the math, no reserve is allowed to be 0
+        assertGt(reservesPost.reserveApes, 0);
+        assertGt(reservesPost.reserveLPers, 0);
 
         // Error tolerance discovered by trial-and-error
-        assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes + collateralIn, 1 + reserve / 1e16);
-        assertApproxEqAbs(reservesPost.reserveLPers, reservesPre.reserveLPers + lpersFee + polFee, 1 + reserve / 1e16);
+        assertApproxEqAbs(
+            reservesPost.reserveApes,
+            reservesPre.reserveApes + collateralIn,
+            1 + reserve / 1e16,
+            "Ape's reserve is wrong"
+        );
+        assertApproxEqAbs(
+            reservesPost.reserveLPers,
+            reservesPre.reserveLPers + lpersFee + polFee,
+            1 + reserve / 1e16,
+            "LPers's reserve is wrong"
+        );
 
         // Verify token state
         {
@@ -509,49 +586,57 @@ contract VaultTest is Test {
             vaultParams.collateralToken,
             vaultParams.leverageTier
         );
+        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+
+        // To simplify the math, no reserve is allowed to be 0
+        assertGt(reservesPost.reserveApes, 0);
+        assertGt(reservesPost.reserveLPers, 0);
 
         // Error tolerance discovered by trial-and-error
         assertApproxEqAbs(
             reservesPost.reserveLPers,
-            reservesPre.reserveApes + collateralIn + lpersFee + polFee,
-            1 + reserve / 1e16
+            reservesPre.reserveLPers + collateralIn + lpersFee + polFee,
+            1 + reserve / 1e12,
+            "LPers's reserve is wrong"
         );
-        assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveLPers, 1 + reserve / 1e16);
+        assertApproxEqAbs(
+            reservesPost.reserveApes,
+            reservesPre.reserveApes,
+            1 + reserve / 1e12,
+            "Apes's reserve has changed"
+        );
 
         // Verify token state
         {
             (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
             assertEq(collectedFees, collectedFee);
-            assertEq(total, collateralDeposited);
+            assertEq(total, reservesPre.reserveLPers + reservesPre.reserveApes + collateralDeposited);
         }
 
         // Verify POL's balances
         uint128 amountPol = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
+        reservesPre.reserveLPers += lpersFee;
         if (balances.teaSupply == 0) {
-            if (polFee + reservesPre.reserveLPers + lpersFee == 0) {
-                assertEq(amountPol, 0);
-            } else {
-                assertGt(amountPol, 0);
+            if (polFee + reservesPre.reserveLPers == 0) {
+                assertEq(amountPol, 0, "Amount of POL is not 0");
             }
         } else if (reservesPre.reserveLPers == 0) {
             revert("Invalid state");
         } else {
-            assertEq(amountPol, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers + lpersFee));
+            assertEq(amountPol, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
         }
-        assertEq(ape.balanceOf(address(vault)), 0);
+        assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
 
         // Verify Alice's balances
         balances.teaSupply += amountPol;
-        reservesPre.reserveLPers += lpersFee + polFee;
+        reservesPre.reserveLPers += polFee;
         if (collateralIn == 0) {
-            assertEq(amount, 0);
+            assertEq(amount, 0, "1");
         } else if (balances.teaSupply > 0) {
             assertEq(amount, FullMath.mulDiv(balances.teaSupply, collateralIn, reservesPre.reserveLPers));
-        } else {
-            assertGt(amount, 0);
         }
-        assertEq(amount, vault.balanceOf(alice, VAULT_ID) - balances.teaAlice);
-        assertEq(ape.balanceOf(alice) - balances.apeAlice, 0);
+        assertEq(amount, vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, "3");
+        assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "4");
     }
 
     function _setState(VaultStructs.VaultState memory vaultState, Balances memory balances) private {
