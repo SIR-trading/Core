@@ -158,7 +158,7 @@ contract Vault is TEA {
             );
 
             // Mint TEA for protocol owned liquidity (POL)
-            if (polFee > 0)
+            if (polFee > 0) {
                 mint(
                     vaultParams.collateralToken,
                     address(this),
@@ -168,6 +168,7 @@ contract Vault is TEA {
                     reserves,
                     polFee
                 );
+            }
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
             (collateralWidthdrawn, collectedFee) = burn(
