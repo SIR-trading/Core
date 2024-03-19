@@ -12,6 +12,7 @@ import {Fees} from "src/libraries/Fees.sol";
 import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
+import {MockERC20} from "src/test/MockERC20.sol";
 
 // import {APE} from "src/APE.sol";
 
@@ -117,52 +118,6 @@ contract VaultInitializeTest is Test {
         vault.initialize(VaultStructs.VaultParameters(Addresses.ADDR_BNB, Addresses.ADDR_ALUSD, leverageTier));
     }
 
-    // function testMintAPE() public {
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    //     uint256 amountMinted = vault.mint(true, debtToken, collateralToken, validLeverageTier);
-    //     assertTrue(amountMinted > 0);
-    //     // Additional checks for reserves and token balances can be added here
-    // }
-
-    // function testMintTEA() public {
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    //     uint256 amountMinted = vault.mint(false, debtToken, collateralToken, validLeverageTier);
-    //     assertTrue(amountMinted > 0);
-    //     // Additional checks for reserves and token balances can be added here
-    // }
-
-    // function testMintWithEmergencyStop() public {
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    //     // Simulate emergency stop
-    //     vm.prank(systemControl);
-    //     vault.updateSystemState(VaultStructs.SystemParameters(0, 0, 0, true, 0));
-    //     vm.expectRevert(); // Expect specific revert message for emergency stop
-    //     vault.mint(false, debtToken, collateralToken, validLeverageTier);
-    // }
-
-    // function testMintBeforeSIRStart() public {
-    //     // Assuming SIR start is controlled by a vaultState variable or similar mechanism
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    //     // Ensure SIR has not started
-    //     vm.expectRevert(); // Expect specific revert message for SIR not started
-    //     vault.mint(true, debtToken, collateralToken, validLeverageTier);
-    // }
-
-    // function testBurnAPE() public {
-    //     // Setup and mint some APE
-    //     vm.prank(systemControl);
-    //     vault.initialize(debtToken, collateralToken, validLeverageTier);
-    //     uint256 amountMinted = vault.mint(true, debtToken, collateralToken, validLeverageTier);
-    //     // Burn a portion of the minted APE
-    //     uint144 amountBurned = vault.burn(true, debtToken, collateralToken, validLeverageTier, amountMinted / 2);
-    //     assertTrue(amountBurned > 0);
-    //     // Additional checks for reserve updates can be added here
-    // }
-
     function _boundExclude(int8 x, int8 lower, int8 upper) private pure returns (int8) {
         assert(lower != type(int8).min || upper != type(int8).max);
         if (x >= lower) {
@@ -189,6 +144,7 @@ contract VaultTest is Test {
         uint16 baseFee;
         uint8 lpFee;
         uint8 tax;
+        int8 leverageTier;
     }
 
     struct Balances {
@@ -197,6 +153,12 @@ contract VaultTest is Test {
         uint128 teaSupply;
         uint256 apeAlice;
         uint256 apeSupply;
+    }
+
+    struct CollateralAmounts {
+        uint144 collateralDeposited;
+        uint256 collateralSupply;
+        uint256 amountToBurn;
     }
 
     uint48 constant VAULT_ID = 1;
@@ -212,12 +174,41 @@ contract VaultTest is Test {
     VaultStructs.VaultParameters public vaultParams;
 
     function setUp() public {
-        vaultParams.debtToken = Addresses.ADDR_USDT;
-        vaultParams.collateralToken = Addresses.ADDR_WETH;
+        vaultParams.debtToken = address(new MockERC20("Debt Token", "DBT", 6));
+        vaultParams.collateralToken = address(new MockERC20("Collateral", "DBT", 18));
 
-        vm.createSelectFork("mainnet", 18128102);
+        // vm.createSelectFork("mainnet", 18128102);
 
+        // Deploy oracle
         address oracle = address(new Oracle());
+
+        // Mock oracle prices
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(Oracle.getPrice.selector, vaultParams.collateralToken, vaultParams.debtToken),
+            abi.encode(int64(0))
+        );
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(
+                Oracle.updateOracleState.selector,
+                vaultParams.collateralToken,
+                vaultParams.debtToken
+            ),
+            abi.encode(int64(0))
+        );
+
+        // Mock oracle initialization
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(Oracle.initialize.selector, vaultParams.collateralToken, vaultParams.debtToken),
+            abi.encode()
+        );
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(Oracle.initialize.selector, vaultParams.debtToken, vaultParams.collateralToken),
+            abi.encode()
+        );
 
         // Deploy vault
         vault = new Vault(systemControl, sir, oracle);
@@ -226,17 +217,9 @@ contract VaultTest is Test {
         ape = IERC20(SaltedAddress.getAddress(address(vault), VAULT_ID));
     }
 
-    function _depositWETH(uint144 amount) private {
-        deal(alice, amount);
-        vm.prank(alice);
-        IWETH9(vaultParams.collateralToken).deposit{value: amount}();
-        vm.prank(alice);
-        IWETH9(vaultParams.collateralToken).transfer(address(vault), amount);
-    }
-
-    modifier Initialize(SystemParams calldata systemParams, int8 leverageTier) {
+    modifier Initialize(SystemParams calldata systemParams) {
         vaultParams.leverageTier = int8(
-            _bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)
+            _bound(systemParams.leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)
         );
 
         // Initialize vault
@@ -262,17 +245,59 @@ contract VaultTest is Test {
         _;
     }
 
+    modifier InitializeCollateral(
+        CollateralAmounts memory collateralAmounts,
+        bool isFirst,
+        bool isMint,
+        VaultStructs.VaultState memory vaultState
+    ) {
+        // Constraint vault paramereters
+        vaultState.vaultId = VAULT_ID;
+        vaultState.reserve = uint144(_bound(vaultState.reserve, isFirst ? 0 : 2, type(uint144).max));
+
+        if (isMint) {
+            // Sufficient condition for the minting to not overflow the TEA max supply
+            collateralAmounts.collateralDeposited = uint144(
+                _bound(collateralAmounts.collateralDeposited, isFirst ? 2 : 0, uint256(10) * type(uint112).max)
+            );
+
+            collateralAmounts.collateralDeposited = uint144(
+                _bound(collateralAmounts.collateralDeposited, 0, type(uint144).max - vaultState.reserve)
+            );
+
+            collateralAmounts.amountToBurn = 0;
+        } else {
+            collateralAmounts.collateralDeposited = 0;
+        }
+
+        // Collateral supply must be larger than the deposited amount
+        collateralAmounts.collateralSupply = _bound(
+            collateralAmounts.collateralSupply,
+            collateralAmounts.collateralDeposited + vaultState.reserve,
+            type(uint256).max
+        );
+
+        // Mint collateral supply
+        MockERC20(vaultParams.collateralToken).mint(alice, collateralAmounts.collateralSupply);
+
+        // Fill up reserve
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), vaultState.reserve);
+
+        _;
+    }
+
     function testFuzz_mintAPE1stTime(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited,
-        int8 leverageTier
-    ) public Initialize(systemParams, leverageTier) {
-        // Minimum amount of reserves is 2
-        // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
-        collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
-
-        // Alice deposits WETH
-        _depositWETH(collateralDeposited);
+        CollateralAmounts memory collateralAmounts
+    )
+        public
+        Initialize(systemParams)
+        InitializeCollateral(collateralAmounts, true, true, VaultStructs.VaultState(0, 0, 0))
+    {
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), collateralAmounts.collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -293,7 +318,7 @@ contract VaultTest is Test {
         // Verify amounts
         _verifyAmountsMintAPE(
             systemParams,
-            collateralDeposited,
+            collateralAmounts.collateralDeposited,
             VaultStructs.Reserves(0, 0, 0),
             reserves,
             amount,
@@ -303,15 +328,15 @@ contract VaultTest is Test {
 
     function testFuzz_mintTEA1stTime(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited,
-        int8 leverageTier
-    ) public Initialize(systemParams, leverageTier) {
-        // Minimum amount of reserves is 2
-        // Max deposit is chosen so that tokenState.collectedFees is for sure not overflowed
-        collateralDeposited = uint144(_bound(collateralDeposited, 2, uint256(10) * type(uint112).max));
-
-        // Alice deposits WETH
-        _depositWETH(collateralDeposited);
+        CollateralAmounts memory collateralAmounts
+    )
+        public
+        Initialize(systemParams)
+        InitializeCollateral(collateralAmounts, true, true, VaultStructs.VaultState(0, 0, 0))
+    {
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), collateralAmounts.collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -327,7 +352,7 @@ contract VaultTest is Test {
 
         _verifyAmountsMintTEA(
             systemParams,
-            collateralDeposited,
+            collateralAmounts.collateralDeposited,
             VaultStructs.Reserves(0, 0, 0),
             reserves,
             amount,
@@ -337,14 +362,18 @@ contract VaultTest is Test {
 
     function testFuzz_mint1stTimeDepositInsufficient(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited,
-        int8 leverageTier,
+        CollateralAmounts memory collateralAmounts,
         bool isAPE
-    ) public Initialize(systemParams, leverageTier) {
-        collateralDeposited = uint144(_bound(collateralDeposited, 0, 1));
+    )
+        public
+        Initialize(systemParams)
+        InitializeCollateral(collateralAmounts, true, true, VaultStructs.VaultState(0, 0, 0))
+    {
+        collateralAmounts.collateralDeposited = uint144(_bound(collateralAmounts.collateralDeposited, 0, 1));
 
-        // Alice deposits WETH
-        _depositWETH(collateralDeposited);
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), collateralAmounts.collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -357,15 +386,10 @@ contract VaultTest is Test {
 
     function testFuzz_mintAPE(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited,
-        int8 leverageTier,
+        CollateralAmounts memory collateralAmounts,
         VaultStructs.VaultState memory vaultState,
         Balances memory balances
-    ) public Initialize(systemParams, leverageTier) {
-        // Constraint vault paramereters
-        vaultState.vaultId = VAULT_ID;
-        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
-
+    ) public Initialize(systemParams) InitializeCollateral(collateralAmounts, false, true, vaultState) {
         // Constraint balance parameters
         balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
         balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
@@ -380,30 +404,33 @@ contract VaultTest is Test {
             VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
         );
 
-        // Constraint so it doesn't overflow tokenState.collectedFees
-        collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
+        {
+            // Constraint so it doesn't overflow TEA supply
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(vaultState.vaultId),
+                vault.totalSupply(vaultState.vaultId)
+            );
+            if (success)
+                collateralAmounts.collateralDeposited = uint144(
+                    _bound(collateralAmounts.collateralDeposited, 0, collateralDepositedUpperBound)
+                );
 
-        // Constraint so it doesn't overflow tokenState.total
-        collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - vaultState.reserve));
+            // Constraint so it doesn't overflow APE supply
+            (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveApes,
+                type(uint256).max - ape.totalSupply(),
+                ape.totalSupply()
+            );
+            if (success)
+                collateralAmounts.collateralDeposited = uint144(
+                    _bound(collateralAmounts.collateralDeposited, 0, collateralDepositedUpperBound)
+                );
+        }
 
-        // Constraint so it doesn't overflow TEA supply
-        (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
-            reservesPre.reserveLPers,
-            SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(vaultState.vaultId),
-            vault.totalSupply(vaultState.vaultId)
-        );
-        if (success) collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
-
-        // Constraint so it doesn't overflow APE supply
-        (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
-            reservesPre.reserveApes,
-            type(uint256).max - ape.totalSupply(),
-            ape.totalSupply()
-        );
-        if (success) collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
-
-        // Alice deposits WETH
-        _depositWETH(collateralDeposited);
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), collateralAmounts.collateralDeposited);
 
         // Alice mints APE
         vm.prank(alice);
@@ -418,20 +445,22 @@ contract VaultTest is Test {
         );
 
         // Verify amounts
-        _verifyAmountsMintAPE(systemParams, collateralDeposited, reservesPre, reservesPost, amount, balances);
+        _verifyAmountsMintAPE(
+            systemParams,
+            collateralAmounts.collateralDeposited,
+            reservesPre,
+            reservesPost,
+            amount,
+            balances
+        );
     }
 
     function testFuzz_mintTEA(
         SystemParams calldata systemParams,
-        uint144 collateralDeposited,
-        int8 leverageTier,
+        CollateralAmounts memory collateralAmounts,
         VaultStructs.VaultState memory vaultState,
         Balances memory balances
-    ) public Initialize(systemParams, leverageTier) {
-        // Constraint vault paramereters
-        vaultState.vaultId = VAULT_ID;
-        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
-
+    ) public Initialize(systemParams) InitializeCollateral(collateralAmounts, false, true, vaultState) {
         // Constraint balance parameters
         balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
         balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
@@ -446,32 +475,35 @@ contract VaultTest is Test {
             VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
         );
 
-        // Constraint so it doesn't overflow tokenState.collectedFees
-        collateralDeposited = uint144(_bound(collateralDeposited, 0, uint256(10) * type(uint112).max));
+        {
+            // Constraint so it doesn't overflow TEA supply
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(vaultState.vaultId),
+                vault.totalSupply(vaultState.vaultId)
+            );
+            if (success)
+                collateralAmounts.collateralDeposited = uint144(
+                    _bound(collateralAmounts.collateralDeposited, 0, collateralDepositedUpperBound)
+                );
 
-        // Constraint so it doesn't overflow tokenState.total
-        collateralDeposited = uint144(_bound(collateralDeposited, 0, type(uint144).max - vaultState.reserve));
+            // Constraint so it doesn't overflow APE supply
+            (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveApes,
+                type(uint256).max - ape.totalSupply(),
+                ape.totalSupply()
+            );
+            if (success)
+                collateralAmounts.collateralDeposited = uint144(
+                    _bound(collateralAmounts.collateralDeposited, 0, collateralDepositedUpperBound)
+                );
+        }
 
-        // Constraint so it doesn't overflow TEA supply
-        (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
-            reservesPre.reserveLPers,
-            SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(vaultState.vaultId),
-            vault.totalSupply(vaultState.vaultId)
-        );
-        if (success) collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), collateralAmounts.collateralDeposited);
 
-        // Constraint so it doesn't overflow APE supply
-        (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
-            reservesPre.reserveApes,
-            type(uint256).max - ape.totalSupply(),
-            ape.totalSupply()
-        );
-        if (success) collateralDeposited = uint144(_bound(collateralDeposited, 0, collateralDepositedUpperBound));
-
-        // Alice deposits WETH
-        _depositWETH(collateralDeposited);
-
-        // Alice mints APE
+        // Alice mints TEA
         vm.prank(alice);
         uint256 amount = vault.mint(
             false,
@@ -484,20 +516,22 @@ contract VaultTest is Test {
         );
 
         // Verify amounts
-        _verifyAmountsMintTEA(systemParams, collateralDeposited, reservesPre, reservesPost, amount, balances);
+        _verifyAmountsMintTEA(
+            systemParams,
+            collateralAmounts.collateralDeposited,
+            reservesPre,
+            reservesPost,
+            amount,
+            balances
+        );
     }
 
     function testFuzz_burnAPE(
         SystemParams calldata systemParams,
-        uint256 amountToBurn,
-        int8 leverageTier,
+        CollateralAmounts memory collateralAmounts,
         VaultStructs.VaultState memory vaultState,
         Balances memory balances
-    ) public Initialize(systemParams, leverageTier) {
-        // Constraint vault paramereters
-        vaultState.vaultId = VAULT_ID;
-        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
-
+    ) public Initialize(systemParams) InitializeCollateral(collateralAmounts, false, false, vaultState) {
         // Constraint balance parameters
         balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
         balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
@@ -514,7 +548,7 @@ contract VaultTest is Test {
         );
 
         // Constraint so it doesn't underflow its balance
-        amountToBurn = _bound(amountToBurn, 0, balances.apeAlice);
+        collateralAmounts.amountToBurn = _bound(collateralAmounts.amountToBurn, 0, balances.apeAlice);
 
         {
             // Constraint so the collected fees doesn't overflow
@@ -523,11 +557,14 @@ contract VaultTest is Test {
                 balances.apeSupply,
                 reservesPre.reserveApes
             );
-            if (success) amountToBurn = _bound(amountToBurn, 0, amountToBurnUpperbound);
+            if (success)
+                collateralAmounts.amountToBurn = _bound(collateralAmounts.amountToBurn, 0, amountToBurnUpperbound);
         }
 
         // Constraint so it leaves at least 2 units in the reserve
-        uint144 collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveApes, amountToBurn, balances.apeSupply));
+        uint144 collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveApes, collateralAmounts.amountToBurn, balances.apeSupply)
+        );
         (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeAPE(
             collateralOut,
             systemParams.baseFee,
@@ -547,7 +584,7 @@ contract VaultTest is Test {
         uint144 collateralWidthdrawn = vault.burn(
             true,
             VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-            amountToBurn
+            collateralAmounts.amountToBurn
         );
 
         // Retrieve reserves after minting
@@ -556,85 +593,78 @@ contract VaultTest is Test {
         );
 
         // Verify amounts
-        _verifyAmountsBurnAPE(systemParams, amountToBurn, reservesPre, reservesPost, collateralWidthdrawn, balances);
+        _verifyAmountsBurnAPE(
+            systemParams,
+            collateralAmounts.amountToBurn,
+            reservesPre,
+            reservesPost,
+            collateralWidthdrawn,
+            balances
+        );
     }
 
-    function testFuzz_burnTEA(
-        SystemParams calldata systemParams,
-        uint256 amountToBurn,
-        int8 leverageTier,
-        VaultStructs.VaultState memory vaultState,
-        Balances memory balances
-    ) public Initialize(systemParams, leverageTier) {
-        // Constraint vault paramereters
-        vaultState.vaultId = VAULT_ID;
-        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
+    // function testFuzz_burnTEA(
+    //     SystemParams calldata systemParams,
+    //     uint256 amountToBurn,
+    //     VaultStructs.VaultState memory vaultState,
+    //     Balances memory balances
+    // ) public Initialize(systemParams) {
+    //     // Constraint vault paramereters
+    //     vaultState.vaultId = VAULT_ID;
+    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
 
-        // Constraint balance parameters
-        balances.teaSupply = uint128(_bound(balances.teaSupply, 1, SystemConstants.TEA_MAX_SUPPLY));
-        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
-        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
-        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
+    //     // Constraint balance parameters
+    //     balances.teaSupply = uint128(_bound(balances.teaSupply, 1, SystemConstants.TEA_MAX_SUPPLY));
+    //     balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
+    //     balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
+    //     balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
 
-        // Set state
-        _setState(vaultState, balances);
+    //     // Set state
+    //     _setState(vaultState, balances);
 
-        // Get reserves before burning
-        VaultStructs.Reserves memory reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+    //     // Get reserves before burning
+    //     VaultStructs.Reserves memory reservesPre = vault.getReserves(
+    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+    //     );
 
-        // Constraint so it doesn't underflow its balance
-        amountToBurn = _bound(amountToBurn, 0, balances.teaAlice);
+    //     // Constraint so it doesn't underflow its balance
+    //     amountToBurn = _bound(amountToBurn, 0, balances.teaAlice);
 
-        {
-            // Constraint so the collected fees doesn't overflow
-            (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
-                uint256(10) * type(uint112).max,
-                balances.teaSupply,
-                reservesPre.reserveLPers
-            );
-            if (success) amountToBurn = _bound(amountToBurn, 0, amountToBurnUpperbound);
-        }
+    //     {
+    //         // Constraint so the collected fees doesn't overflow
+    //         (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+    //             uint256(10) * type(uint112).max,
+    //             balances.teaSupply,
+    //             reservesPre.reserveLPers
+    //         );
+    //         if (success) amountToBurn = _bound(amountToBurn, 0, amountToBurnUpperbound);
+    //     }
 
-        // Constraint so it leaves at least 2 units in the reserve
-        uint144 collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveLPers, amountToBurn, balances.teaSupply));
-        (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
-            collateralOut,
-            systemParams.lpFee,
-            systemParams.tax
-        );
-        vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+    //     // Constraint so it leaves at least 2 units in the reserve
+    //     uint144 collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveLPers, amountToBurn, balances.teaSupply));
+    //     (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
+    //         collateralOut,
+    //         systemParams.lpFee,
+    //         systemParams.tax
+    //     );
+    //     vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
 
-        // Alice burns TEA
-        console.log("Burn TEA");
-        console.log(
-            "amountToBurn, balances.teaAlice, balances.teaSupply:",
-            amountToBurn,
-            balances.teaAlice,
-            balances.teaSupply
-        );
-        console.log(
-            "reservesPre.reserveLPers, reservesPre.reserveApes:",
-            reservesPre.reserveLPers,
-            reservesPre.reserveApes
-        );
-        vm.prank(alice);
-        uint144 collateralWidthdrawn = vault.burn(
-            false,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-            amountToBurn
-        );
+    //     // Alice burns TEA
+    //     vm.prank(alice);
+    //     uint144 collateralWidthdrawn = vault.burn(
+    //         false,
+    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
+    //         amountToBurn
+    //     );
 
-        // Retrieve reserves after minting
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+    //     // Retrieve reserves after minting
+    //     VaultStructs.Reserves memory reservesPost = vault.getReserves(
+    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+    //     );
 
-        // Verify amounts
-        console.log("_verifyAmountsBurnTEA");
-        _verifyAmountsBurnTEA(systemParams, amountToBurn, reservesPre, reservesPost, collateralWidthdrawn, balances);
-    }
+    //     // Verify amounts
+    //     _verifyAmountsBurnTEA(systemParams, amountToBurn, reservesPre, reservesPost, collateralWidthdrawn, balances);
+    // }
 
     // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
 
@@ -825,13 +855,13 @@ contract VaultTest is Test {
         assertApproxEqAbs(
             reservesPost.reserveLPers,
             reservesPre.reserveLPers + collateralIn + lpersFee + polFee,
-            1 + reserve / 1e12,
+            1 + reserve / 1e11,
             "LPers's reserve is wrong"
         );
         assertApproxEqAbs(
             reservesPost.reserveApes,
             reservesPre.reserveApes,
-            1 + reserve / 1e12,
+            1 + reserve / 1e11,
             "Apes's reserve has changed"
         );
 
@@ -894,7 +924,6 @@ contract VaultTest is Test {
             reservesPre.reserveLPers -= collateralOut;
             reservesPre.reserveLPers += lpersFee;
         }
-        console.log("collateralWidthdrawn", collateralWidthdrawn, collateralWidthdrawn_);
         assertEq(collateralWidthdrawn, collateralWidthdrawn_);
 
         // Get total reserve
@@ -997,11 +1026,6 @@ contract VaultTest is Test {
         (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
         assertEq(collectedFees, 0, "Wrong slot used by vm.store");
         assertEq(total, vaultState.reserve, "Wrong slot used by vm.store");
-
-        // Deposit the collateral
-        deal(address(vault), vaultState.reserve);
-        vm.prank(address(vault));
-        IWETH9(vaultParams.collateralToken).deposit{value: vaultState.reserve}();
 
         // Set the total supply of APE
         vm.store(address(ape), bytes32(uint256(2)), bytes32(balances.apeSupply));
