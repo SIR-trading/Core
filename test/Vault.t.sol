@@ -518,12 +518,12 @@ contract VaultTest is Test {
 
         {
             // Constraint so the collected fees doesn't overflow
-            (bool success, uint256 temp) = FullMath.tryMulDiv(
+            (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
                 uint256(10) * type(uint112).max,
                 balances.apeSupply,
                 reservesPre.reserveApes
             );
-            if (success) amountToBurn = _bound(amountToBurn, 0, temp);
+            if (success) amountToBurn = _bound(amountToBurn, 0, amountToBurnUpperbound);
         }
 
         // Constraint so it leaves at least 2 units in the reserve
@@ -557,6 +557,83 @@ contract VaultTest is Test {
 
         // Verify amounts
         _verifyAmountsBurnAPE(systemParams, amountToBurn, reservesPre, reservesPost, collateralWidthdrawn, balances);
+    }
+
+    function testFuzz_burnTEA(
+        SystemParams calldata systemParams,
+        uint256 amountToBurn,
+        int8 leverageTier,
+        VaultStructs.VaultState memory vaultState,
+        Balances memory balances
+    ) public Initialize(systemParams, leverageTier) {
+        // Constraint vault paramereters
+        vaultState.vaultId = VAULT_ID;
+        vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
+
+        // Constraint balance parameters
+        balances.teaSupply = uint128(_bound(balances.teaSupply, 1, SystemConstants.TEA_MAX_SUPPLY));
+        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
+        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
+        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
+
+        // Set state
+        _setState(vaultState, balances);
+
+        // Get reserves before burning
+        VaultStructs.Reserves memory reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Constraint so it doesn't underflow its balance
+        amountToBurn = _bound(amountToBurn, 0, balances.teaAlice);
+
+        {
+            // Constraint so the collected fees doesn't overflow
+            (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+                uint256(10) * type(uint112).max,
+                balances.teaSupply,
+                reservesPre.reserveLPers
+            );
+            if (success) amountToBurn = _bound(amountToBurn, 0, amountToBurnUpperbound);
+        }
+
+        // Constraint so it leaves at least 2 units in the reserve
+        uint144 collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveLPers, amountToBurn, balances.teaSupply));
+        (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
+            collateralOut,
+            systemParams.lpFee,
+            systemParams.tax
+        );
+        vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+
+        // Alice burns TEA
+        console.log("Burn TEA");
+        console.log(
+            "amountToBurn, balances.teaAlice, balances.teaSupply:",
+            amountToBurn,
+            balances.teaAlice,
+            balances.teaSupply
+        );
+        console.log(
+            "reservesPre.reserveLPers, reservesPre.reserveApes:",
+            reservesPre.reserveLPers,
+            reservesPre.reserveApes
+        );
+        vm.prank(alice);
+        uint144 collateralWidthdrawn = vault.burn(
+            false,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
+            amountToBurn
+        );
+
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Verify amounts
+        console.log("_verifyAmountsBurnTEA");
+        _verifyAmountsBurnTEA(systemParams, amountToBurn, reservesPre, reservesPost, collateralWidthdrawn, balances);
     }
 
     // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
@@ -789,6 +866,85 @@ contract VaultTest is Test {
         }
         assertEq(amount, vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, "3");
         assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "4");
+    }
+
+    function _verifyAmountsBurnTEA(
+        SystemParams calldata systemParams,
+        uint256 amount,
+        VaultStructs.Reserves memory reservesPre,
+        VaultStructs.Reserves memory reservesPost,
+        uint144 collateralWidthdrawn,
+        Balances memory balances
+    ) private {
+        uint144 collateralWidthdrawn_;
+        uint144 collectedFee;
+        uint144 lpersFee;
+        uint144 polFee;
+
+        {
+            // Compute amount of collateral
+            uint144 collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveLPers, amount, balances.teaSupply));
+
+            // Verify amounts
+            (collateralWidthdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
+                collateralOut,
+                systemParams.lpFee,
+                systemParams.tax
+            );
+            reservesPre.reserveLPers -= collateralOut;
+            reservesPre.reserveLPers += lpersFee;
+        }
+        console.log("collateralWidthdrawn", collateralWidthdrawn, collateralWidthdrawn_);
+        assertEq(collateralWidthdrawn, collateralWidthdrawn_);
+
+        // Get total reserve
+        (uint144 reserve, , ) = vault.vaultStates(
+            vaultParams.debtToken,
+            vaultParams.collateralToken,
+            vaultParams.leverageTier
+        );
+        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+
+        // To simplify the math, no reserve is allowed to be 0
+        assertGt(reservesPost.reserveApes, 0);
+        assertGt(reservesPost.reserveLPers, 0);
+
+        // Error tolerance discovered by trial-and-error
+        assertApproxEqAbs(
+            reservesPost.reserveLPers,
+            reservesPre.reserveLPers + polFee,
+            1 + reserve / 1e12,
+            "LPers's reserve is wrong"
+        );
+        assertApproxEqAbs(
+            reservesPost.reserveApes,
+            reservesPre.reserveApes,
+            1 + reserve / 1e12,
+            "Apes's reserve has changed"
+        );
+
+        // Verify token state
+        {
+            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+            assertEq(collectedFees, collectedFee);
+            assertEq(total, reservesPre.reserveLPers + polFee + reservesPre.reserveApes + collectedFee);
+        }
+
+        // Verify Alice's balances
+        assertEq(amount, balances.teaAlice - vault.balanceOf(alice, VAULT_ID));
+        assertEq(ape.balanceOf(alice), balances.apeAlice);
+
+        // Verify POL's balances
+        balances.teaSupply -= uint128(amount);
+        amount = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
+        if (balances.teaSupply > 0) {
+            if (reservesPre.reserveLPers == 0) {
+                revert("Invalid state");
+            } else {
+                assertEq(amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+            }
+        }
+        assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
     }
 
     function _setState(VaultStructs.VaultState memory vaultState, Balances memory balances) private {
