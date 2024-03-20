@@ -245,11 +245,12 @@ contract VaultTest is Test {
         _;
     }
 
-    modifier InitializeCollateral(
-        CollateralAmounts memory collateralAmounts,
+    modifier ConstraintAmounts(
         bool isFirst,
         bool isMint,
-        VaultStructs.VaultState memory vaultState
+        CollateralAmounts memory collateralAmounts,
+        VaultStructs.VaultState memory vaultState,
+        Balances memory balances
     ) {
         // Constraint vault paramereters
         vaultState.vaultId = VAULT_ID;
@@ -268,7 +269,16 @@ contract VaultTest is Test {
             collateralAmounts.amountToBurn = 0;
         } else {
             collateralAmounts.collateralDeposited = 0;
+
+            balances.apeSupply = _bound(balances.apeSupply, 1, type(uint256).max); // APE supply must be at least 1 for mintAPE to work
+            balances.teaSupply = uint128(_bound(balances.teaSupply, 1, SystemConstants.TEA_MAX_SUPPLY)); // TEA supply must be at least 1 for mintTEA to work
         }
+
+        // Constraint balance parameters
+        balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
+        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
+        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
+        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
 
         // Collateral supply must be larger than the deposited amount
         collateralAmounts.collateralSupply = _bound(
@@ -293,7 +303,7 @@ contract VaultTest is Test {
     )
         public
         Initialize(systemParams)
-        InitializeCollateral(collateralAmounts, true, true, VaultStructs.VaultState(0, 0, 0))
+        ConstraintAmounts(true, true, collateralAmounts, VaultStructs.VaultState(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         // Alice deposits collateral
         vm.prank(alice);
@@ -332,7 +342,7 @@ contract VaultTest is Test {
     )
         public
         Initialize(systemParams)
-        InitializeCollateral(collateralAmounts, true, true, VaultStructs.VaultState(0, 0, 0))
+        ConstraintAmounts(true, true, collateralAmounts, VaultStructs.VaultState(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         // Alice deposits collateral
         vm.prank(alice);
@@ -367,7 +377,7 @@ contract VaultTest is Test {
     )
         public
         Initialize(systemParams)
-        InitializeCollateral(collateralAmounts, true, true, VaultStructs.VaultState(0, 0, 0))
+        ConstraintAmounts(true, true, collateralAmounts, VaultStructs.VaultState(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         collateralAmounts.collateralDeposited = uint144(_bound(collateralAmounts.collateralDeposited, 0, 1));
 
@@ -389,13 +399,7 @@ contract VaultTest is Test {
         CollateralAmounts memory collateralAmounts,
         VaultStructs.VaultState memory vaultState,
         Balances memory balances
-    ) public Initialize(systemParams) InitializeCollateral(collateralAmounts, false, true, vaultState) {
-        // Constraint balance parameters
-        balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
-        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
-        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
-        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
-
+    ) public Initialize(systemParams) ConstraintAmounts(false, true, collateralAmounts, vaultState, balances) {
         // Set state
         _setState(vaultState, balances);
 
@@ -460,13 +464,7 @@ contract VaultTest is Test {
         CollateralAmounts memory collateralAmounts,
         VaultStructs.VaultState memory vaultState,
         Balances memory balances
-    ) public Initialize(systemParams) InitializeCollateral(collateralAmounts, false, true, vaultState) {
-        // Constraint balance parameters
-        balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
-        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
-        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
-        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
-
+    ) public Initialize(systemParams) ConstraintAmounts(false, true, collateralAmounts, vaultState, balances) {
         // Set state
         _setState(vaultState, balances);
 
@@ -526,19 +524,29 @@ contract VaultTest is Test {
         );
     }
 
+    function _constraintReserveBurnAPE(
+        SystemParams calldata systemParams,
+        VaultStructs.Reserves memory reservesPre,
+        CollateralAmounts memory collateralAmounts,
+        Balances memory balances
+    ) private returns (uint144 collateralOut, uint144 collateralWidthdrawn_, uint144 collectedFee) {
+        collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveApes, collateralAmounts.amountToBurn, balances.apeSupply)
+        );
+        (collateralWidthdrawn_, collectedFee, , ) = Fees.hiddenFeeAPE(
+            collateralOut,
+            systemParams.baseFee,
+            vaultParams.leverageTier,
+            systemParams.tax
+        );
+    }
+
     function testFuzz_burnAPE(
         SystemParams calldata systemParams,
         CollateralAmounts memory collateralAmounts,
         VaultStructs.VaultState memory vaultState,
         Balances memory balances
-    ) public Initialize(systemParams) InitializeCollateral(collateralAmounts, false, false, vaultState) {
-        // Constraint balance parameters
-        balances.teaSupply = uint128(_bound(balances.teaSupply, 0, SystemConstants.TEA_MAX_SUPPLY));
-        balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
-        balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
-        balances.apeSupply = _bound(balances.apeAlice, 1, type(uint256).max);
-        balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
-
+    ) public Initialize(systemParams) ConstraintAmounts(false, false, collateralAmounts, vaultState, balances) {
         // Set state
         _setState(vaultState, balances);
 
@@ -562,26 +570,28 @@ contract VaultTest is Test {
         }
 
         // Constraint so it leaves at least 2 units in the reserve
-        uint144 collateralOut = uint144(
-            FullMath.mulDiv(reservesPre.reserveApes, collateralAmounts.amountToBurn, balances.apeSupply)
-        );
-        (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeAPE(
-            collateralOut,
-            systemParams.baseFee,
-            vaultParams.leverageTier,
-            systemParams.tax
-        );
-        vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+        uint144 collateralWidthdrawn;
+        {
+            uint144 collateralOut;
+            uint144 collectedFee;
+            (collateralOut, collateralWidthdrawn, collectedFee) = _constraintReserveBurnAPE(
+                systemParams,
+                reservesPre,
+                collateralAmounts,
+                balances
+            );
+            vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn + collectedFee);
 
-        // Sufficient condition to ensure the POL minting does not overflow the TEA max supply
-        vm.assume(
-            FullMath.mulDiv(collateralOut, balances.teaSupply, uint(10) * reservesPre.reserveLPers) <=
-                SystemConstants.TEA_MAX_SUPPLY - balances.teaSupply
-        );
+            // Sufficient condition to ensure the POL minting does not overflow the TEA max supply
+            vm.assume(
+                FullMath.mulDiv(collateralOut, balances.teaSupply, uint(10) * reservesPre.reserveLPers) <=
+                    SystemConstants.TEA_MAX_SUPPLY - balances.teaSupply
+            );
+        }
 
         // Alice burns APE
         vm.prank(alice);
-        uint144 collateralWidthdrawn = vault.burn(
+        collateralWidthdrawn = vault.burn(
             true,
             VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
             collateralAmounts.amountToBurn
@@ -603,68 +613,86 @@ contract VaultTest is Test {
         );
     }
 
-    // function testFuzz_burnTEA(
-    //     SystemParams calldata systemParams,
-    //     uint256 amountToBurn,
-    //     VaultStructs.VaultState memory vaultState,
-    //     Balances memory balances
-    // ) public Initialize(systemParams) {
-    //     // Constraint vault paramereters
-    //     vaultState.vaultId = VAULT_ID;
-    //     vaultState.reserve = uint144(_bound(vaultState.reserve, 2, type(uint144).max));
+    function _constraintReserveBurnTEA(
+        SystemParams calldata systemParams,
+        VaultStructs.Reserves memory reservesPre,
+        CollateralAmounts memory collateralAmounts,
+        Balances memory balances
+    ) private returns (uint144 collateralWidthdrawn_, uint144 collectedFee) {
+        uint144 collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveLPers, collateralAmounts.amountToBurn, balances.teaSupply)
+        );
+        (collateralWidthdrawn_, collectedFee, , ) = Fees.hiddenFeeTEA(
+            collateralOut,
+            systemParams.lpFee,
+            systemParams.tax
+        );
+    }
 
-    //     // Constraint balance parameters
-    //     balances.teaSupply = uint128(_bound(balances.teaSupply, 1, SystemConstants.TEA_MAX_SUPPLY));
-    //     balances.teaVault = uint128(_bound(balances.teaVault, 0, balances.teaSupply));
-    //     balances.teaAlice = uint128(_bound(balances.teaAlice, 0, balances.teaSupply - balances.teaVault));
-    //     balances.apeAlice = _bound(balances.apeAlice, 0, balances.apeSupply);
+    function testFuzz_burnTEA(
+        SystemParams calldata systemParams,
+        CollateralAmounts memory collateralAmounts,
+        VaultStructs.VaultState memory vaultState,
+        Balances memory balances
+    ) public Initialize(systemParams) ConstraintAmounts(false, false, collateralAmounts, vaultState, balances) {
+        // Set state
+        _setState(vaultState, balances);
 
-    //     // Set state
-    //     _setState(vaultState, balances);
+        // Get reserves before burning
+        VaultStructs.Reserves memory reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Get reserves before burning
-    //     VaultStructs.Reserves memory reservesPre = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Constraint so it doesn't underflow its balance
+        collateralAmounts.amountToBurn = _bound(collateralAmounts.amountToBurn, 0, balances.teaAlice);
 
-    //     // Constraint so it doesn't underflow its balance
-    //     amountToBurn = _bound(amountToBurn, 0, balances.teaAlice);
+        {
+            // Constraint so the collected fees doesn't overflow
+            (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+                uint256(10) * type(uint112).max,
+                balances.teaSupply,
+                reservesPre.reserveLPers
+            );
+            if (success)
+                collateralAmounts.amountToBurn = _bound(collateralAmounts.amountToBurn, 0, amountToBurnUpperbound);
+        }
 
-    //     {
-    //         // Constraint so the collected fees doesn't overflow
-    //         (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
-    //             uint256(10) * type(uint112).max,
-    //             balances.teaSupply,
-    //             reservesPre.reserveLPers
-    //         );
-    //         if (success) amountToBurn = _bound(amountToBurn, 0, amountToBurnUpperbound);
-    //     }
+        // Constraint so it leaves at least 2 units in the reserve
+        uint144 collateralWidthdrawn;
+        {
+            uint144 collectedFee;
+            (collateralWidthdrawn, collectedFee) = _constraintReserveBurnTEA(
+                systemParams,
+                reservesPre,
+                collateralAmounts,
+                balances
+            );
+            vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn + collectedFee);
+        }
 
-    //     // Constraint so it leaves at least 2 units in the reserve
-    //     uint144 collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveLPers, amountToBurn, balances.teaSupply));
-    //     (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
-    //         collateralOut,
-    //         systemParams.lpFee,
-    //         systemParams.tax
-    //     );
-    //     vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+        // Alice burns TEA
+        vm.prank(alice);
+        collateralWidthdrawn = vault.burn(
+            false,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
+            collateralAmounts.amountToBurn
+        );
 
-    //     // Alice burns TEA
-    //     vm.prank(alice);
-    //     uint144 collateralWidthdrawn = vault.burn(
-    //         false,
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-    //         amountToBurn
-    //     );
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Retrieve reserves after minting
-    //     VaultStructs.Reserves memory reservesPost = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
-
-    //     // Verify amounts
-    //     _verifyAmountsBurnTEA(systemParams, amountToBurn, reservesPre, reservesPost, collateralWidthdrawn, balances);
-    // }
+        // Verify amounts
+        _verifyAmountsBurnTEA(
+            systemParams,
+            collateralAmounts.amountToBurn,
+            reservesPre,
+            reservesPost,
+            collateralWidthdrawn,
+            balances
+        );
+    }
 
     // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
 
