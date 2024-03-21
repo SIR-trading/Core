@@ -14,6 +14,7 @@ import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
+import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 
 // import {APE} from "src/APE.sol";
 
@@ -137,7 +138,29 @@ contract VaultInitializeTest is Test {
     }
 }
 
+library ExtraABDKMathQuad {
+    using ABDKMathQuad for bytes16;
+
+    function tickToFP(int64 tickX42) internal pure returns (bytes16) {
+        bytes16 log2Point0001 = ABDKMathQuad.fromUInt(10001).div(ABDKMathQuad.fromUInt(10000)).log_2();
+        return ABDKMathQuad.fromInt(tickX42).div(ABDKMathQuad.fromUInt(1 << 42)).mul(log2Point0001).pow_2();
+    }
+}
+
+library BonusABDKMathQuad {
+    using ABDKMathQuad for bytes16;
+
+    // x^y
+    function pow(bytes16 x, bytes16 y) internal pure returns (bytes16) {
+        return x.log_2().mul(y).pow_2();
+    }
+}
+
 contract VaultTest is Test {
+    using ABDKMathQuad for bytes16;
+    using ExtraABDKMathQuad for int64;
+    using BonusABDKMathQuad for bytes16;
+
     error LeverageTierOutOfRange();
     error NoUniswapPool();
     error VaultDoesNotExist();
@@ -165,6 +188,7 @@ contract VaultTest is Test {
     }
 
     uint48 constant VAULT_ID = 1;
+    bytes16 immutable ONE;
 
     address public systemControl = vm.addr(1);
     address public sir = vm.addr(2);
@@ -176,6 +200,10 @@ contract VaultTest is Test {
     address public alice = vm.addr(3);
 
     VaultStructs.VaultParameters public vaultParams;
+
+    constructor() {
+        ONE = ABDKMathQuad.fromUInt(1);
+    }
 
     function setUp() public {
         vaultParams.debtToken = address(new MockERC20("Debt Token", "DBT", 6));
@@ -672,7 +700,93 @@ contract VaultTest is Test {
         }
     }
 
-    // TEST RESERVES BEFORE AND AFTER MINTING / BURNING
+    function testFuzz_priceFluctuation(
+        SystemParams calldata systemParams,
+        VaultStructs.VaultState memory vaultState,
+        Balances memory balances,
+        int64 newTickPriceX42
+    ) public Initialize(systemParams) ConstraintAmounts(false, true, InputsOutputs(0, 0, 0), vaultState, balances) {
+        // Set state
+        _setState(vaultState, balances);
+
+        // Get reserves before price fluctuation
+        VaultStructs.Reserves memory reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Starting price
+        int64 tickPriceX42 = int64(
+            _bound(systemParams.tickPriceX42, int64(TickMath.MIN_TICK) << 42, int64(TickMath.MAX_TICK) << 42)
+        );
+        vm.assume(tickPriceX42 != type(int64).min && tickPriceX42 != type(int64).max);
+
+        // New price
+        newTickPriceX42 = int64(
+            _bound(newTickPriceX42, int64(TickMath.MIN_TICK) << 42, int64(TickMath.MAX_TICK) << 42)
+        );
+        vm.assume(newTickPriceX42 != type(int64).min && newTickPriceX42 != type(int64).max);
+
+        // Mock oracle price
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(Oracle.getPrice.selector, vaultParams.collateralToken, vaultParams.debtToken),
+            abi.encode(newTickPriceX42)
+        );
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(
+                Oracle.updateOracleState.selector,
+                vaultParams.collateralToken,
+                vaultParams.debtToken
+            ),
+            abi.encode(newTickPriceX42)
+        );
+
+        // Retrieve reserves after price fluctuation
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        console.logInt(vaultState.tickPriceSatX42);
+        // AM I TESTING IMPOSSIBLE tickPriceSatX42??????
+        // GENERATE ARBITRARY RESERVES, COMPUTE tickPriceSatX42 AND STORE THAT!
+        // ALSO DO IT FOR THE PREVIOUS TESTS??
+        if (tickPriceX42 < vaultState.tickPriceSatX42 && newTickPriceX42 < vaultState.tickPriceSatX42) {
+            // Price remains in the Power Zone
+            assertInPowerZone(vaultState, reservesPre, reservesPost, tickPriceX42, newTickPriceX42);
+        }
+
+        // Price remains in the Saturation Zone
+
+        // Price goes from the Power Zone to the Saturation Zone
+
+        // Price goes from the Saturation Zone to the Power Zone
+    }
+
+    function assertInPowerZone(
+        VaultStructs.VaultState memory vaultState,
+        VaultStructs.Reserves memory reservesPre,
+        VaultStructs.Reserves memory reservesPost,
+        int64 tickPriceX42,
+        int64 newTickPriceX42
+    ) internal {
+        bytes16 leverageRatioSub1 = ABDKMathQuad.fromInt(vaultParams.leverageTier).pow_2();
+        bytes16 leveragedGain = newTickPriceX42.tickToFP().div(tickPriceX42.tickToFP()).pow(leverageRatioSub1);
+        uint256 newReserveApes = ABDKMathQuad.fromUInt(reservesPre.reserveApes).mul(leveragedGain).toUInt();
+
+        if (newReserveApes > vaultState.reserve - 1) {
+            newReserveApes = vaultState.reserve - 1;
+        } else if (newReserveApes == 0) {
+            newReserveApes = 1;
+        }
+
+        console.logInt(tickPriceX42);
+        console.logInt(newTickPriceX42);
+        console.logInt(vaultParams.leverageTier);
+        console.log("Leveraged gain:", leveragedGain.toUInt());
+        console.log(reservesPre.reserveApes, newReserveApes, reservesPost.reserveApes, vaultState.reserve);
+        assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, 1 + vaultState.reserve / 1e5);
+    }
 
     // TEST RESERVES UPON PRICE FLUCTUATIONS
 
