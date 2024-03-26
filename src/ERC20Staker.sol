@@ -30,7 +30,7 @@ contract ERC20Staker {
     IWETH9 private immutable _WETH = IWETH9(payable(Addresses.ADDR_WETH));
     Vault internal vault;
 
-    string public name = "Supercharged Investment Returns";
+    string public name = "Safer Investment Rehypothecation";
     string public symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
