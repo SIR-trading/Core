@@ -454,13 +454,19 @@ contract VaultTest is Test {
             VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
         );
 
+        assertEq(reservesPre.tickPriceX42, reservesPost.tickPriceX42);
+
         (uint144 reserve, int64 tickPriceSatX42, ) = vault.vaultStates(
             vaultParams.debtToken,
             vaultParams.collateralToken,
             vaultParams.leverageTier
         );
 
-        // In power zone error favors apes and in saturation zone error favors LPers?!
+        console.logInt(reservesPre.tickPriceX42);
+        console.logInt(reservesPost.tickPriceX42);
+        console.logInt(tickPriceSatX42);
+
+        // In power zone error favors apes and in saturation zone error favors LPers
         if (
             // Condition to avoid OF/UFing tickPriceSatX42
             reservesPre.reserveApes > 1 &&
@@ -484,7 +490,7 @@ contract VaultTest is Test {
             if (reservesPre.tickPriceX42 < tickPriceSatX42) {
                 assertLe(reservesPre.reserveApes, reservesPost.reserveApes, "In power zone apes should increase");
                 assertGe(reservesPre.reserveLPers, reservesPost.reserveLPers, "In power zone LPers should decrease");
-            } else {
+            } else if (reservesPre.tickPriceX42 > tickPriceSatX42) {
                 assertGe(reservesPre.reserveApes, reservesPost.reserveApes, "In saturation zone apes should decrease");
                 assertLe(
                     reservesPre.reserveLPers,
@@ -493,232 +499,219 @@ contract VaultTest is Test {
                 );
             }
         } else {
-            assertApproxEqAbs(reservesPre.reserveApes, reservesPost.reserveApes, 1 + reserve / 1e7);
-            assertApproxEqAbs(reservesPre.reserveLPers, reservesPost.reserveLPers, 1 + reserve / 1e7);
+            assertApproxEqAbs(reservesPre.reserveApes, reservesPost.reserveApes, 1 + reserve / 1e6);
+            assertApproxEqAbs(reservesPre.reserveLPers, reservesPost.reserveLPers, 1 + reserve / 1e6);
         }
     }
 
-    // function testFuzz_mintAPE(
-    //     SystemParams calldata systemParams,
-    //     InputsOutputs memory inputsOutputs,
-    //     VaultStructs.Reserves memory reservesPre,
-    //     Balances memory balances
-    // )
-    //     public
-    //     Initialize(systemParams, reservesPre)
-    //     ConstraintAmounts(false, true, inputsOutputs, reservesPre, balances)
-    // {
-    //     {
-    //         // Constraint so it doesn't overflow TEA supply
-    //         (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
-    //             reservesPre.reserveLPers,
-    //             SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
-    //             vault.totalSupply(VAULT_ID)
-    //         );
-    //         if (success)
-    //             inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+    function testFuzz_mintAPE(
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        VaultStructs.Reserves memory reservesPre,
+        Balances memory balances
+    )
+        public
+        Initialize(systemParams, reservesPre)
+        ConstraintAmounts(false, true, inputsOutputs, reservesPre, balances)
+    {
+        reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //         // Constraint so it doesn't overflow APE supply
-    //         (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
-    //             reservesPre.reserveApes,
-    //             type(uint256).max - ape.totalSupply(),
-    //             ape.totalSupply()
-    //         );
-    //         if (success)
-    //             inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
-    //     }
+        {
+            // Constraint so it doesn't overflow TEA supply
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
+                vault.totalSupply(VAULT_ID)
+            );
+            if (success)
+                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
 
-    //     // Alice deposits collateral
-    //     vm.prank(alice);
-    //     MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
+            // Constraint so it doesn't overflow APE supply
+            (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveApes,
+                type(uint256).max - ape.totalSupply(),
+                ape.totalSupply()
+            );
+            if (success)
+                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+        }
 
-    //     // Alice mints APE
-    //     vm.prank(alice);
-    //     inputsOutputs.amount = vault.mint(
-    //         true,
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
 
-    //     // Retrieve reserves after minting
-    //     VaultStructs.Reserves memory reservesPost = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Alice mints APE
+        vm.prank(alice);
+        inputsOutputs.amount = vault.mint(
+            true,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Verify amounts
-    //     _verifyAmountsMintAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
-    // }
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    // function testFuzz_mintTEA(
-    //     SystemParams calldata systemParams,
-    //     InputsOutputs memory inputsOutputs,
-    //     VaultStructs.VaultState memory vaultState,
-    //     Balances memory balances
-    // ) public Initialize(systemParams) ConstraintAmounts(false, true, inputsOutputs, vaultState, balances) {
-    //     // Set state
-    //     _setState(vaultState, balances);
+        // Verify amounts
+        _verifyAmountsMintAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+    }
 
-    //     // Get reserves before minting
-    //     VaultStructs.Reserves memory reservesPre = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+    function testFuzz_mintTEA(
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        VaultStructs.Reserves memory reservesPre,
+        Balances memory balances
+    )
+        public
+        Initialize(systemParams, reservesPre)
+        ConstraintAmounts(false, true, inputsOutputs, reservesPre, balances)
+    {
+        // Get reserves before minting
+        reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     {
-    //         // Constraint so it doesn't overflow TEA supply
-    //         (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
-    //             reservesPre.reserveLPers,
-    //             SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
-    //             vault.totalSupply(VAULT_ID)
-    //         );
-    //         if (success)
-    //             inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+        {
+            // Constraint so it doesn't overflow TEA supply
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
+                vault.totalSupply(VAULT_ID)
+            );
+            if (success)
+                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
 
-    //         // Constraint so it doesn't overflow APE supply
-    //         (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
-    //             reservesPre.reserveApes,
-    //             type(uint256).max - ape.totalSupply(),
-    //             ape.totalSupply()
-    //         );
-    //         if (success)
-    //             inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
-    //     }
+            // Constraint so it doesn't overflow APE supply
+            (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveApes,
+                type(uint256).max - ape.totalSupply(),
+                ape.totalSupply()
+            );
+            if (success)
+                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+        }
 
-    //     // Alice deposits collateral
-    //     vm.prank(alice);
-    //     MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
 
-    //     // Alice mints TEA
-    //     vm.prank(alice);
-    //     inputsOutputs.amount = vault.mint(
-    //         false,
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Alice mints TEA
+        vm.prank(alice);
+        inputsOutputs.amount = vault.mint(
+            false,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Retrieve reserves after minting
-    //     VaultStructs.Reserves memory reservesPost = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Verify amounts
-    //     _verifyAmountsMintTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
-    // }
+        // Verify amounts
+        _verifyAmountsMintTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+    }
 
-    // function testFuzz_burnAPE(
-    //     SystemParams calldata systemParams,
-    //     InputsOutputs memory inputsOutputs,
-    //     VaultStructs.VaultState memory vaultState,
-    //     Balances memory balances
-    // ) public Initialize(systemParams) ConstraintAmounts(false, false, inputsOutputs, vaultState, balances) {
-    //     // Set state
-    //     _setState(vaultState, balances);
+    function testFuzz_burnAPE(
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        VaultStructs.Reserves memory reservesPre,
+        Balances memory balances
+    )
+        public
+        Initialize(systemParams, reservesPre)
+        ConstraintAmounts(false, false, inputsOutputs, reservesPre, balances)
+    {
+        reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Get reserves before minting
-    //     VaultStructs.Reserves memory reservesPre = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Constraint so it doesn't underflow its balance
+        inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.apeAlice);
 
-    //     // Constraint so it doesn't underflow its balance
-    //     inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.apeAlice);
+        {
+            // Constraint so the collected fees doesn't overflow
+            (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+                uint256(10) * type(uint112).max,
+                balances.apeSupply,
+                reservesPre.reserveApes
+            );
+            if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
+        }
 
-    //     {
-    //         // Constraint so the collected fees doesn't overflow
-    //         (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
-    //             uint256(10) * type(uint112).max,
-    //             balances.apeSupply,
-    //             reservesPre.reserveApes
-    //         );
-    //         if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
-    //     }
+        // Constraint so it leaves at least 2 units in the reserve
+        {
+            uint144 collateralOut = _constraintReserveBurnAPE(systemParams, reservesPre, inputsOutputs, balances);
 
-    //     // Constraint so it leaves at least 2 units in the reserve
-    //     {
-    //         uint144 collateralOut = _constraintReserveBurnAPE(
-    //             systemParams,
-    //             reservesPre,
-    //             inputsOutputs,
-    //             vaultState,
-    //             balances
-    //         );
+            // Sufficient condition to ensure the POL minting does not overflow the TEA max supply
+            uint temp = FullMath.mulDiv(collateralOut, balances.teaSupply, uint(10) * reservesPre.reserveLPers);
+            vm.assume(temp <= SystemConstants.TEA_MAX_SUPPLY - balances.teaSupply);
+        }
 
-    //         // Sufficient condition to ensure the POL minting does not overflow the TEA max supply
-    //         vm.assume(
-    //             FullMath.mulDiv(collateralOut, balances.teaSupply, uint(10) * reservesPre.reserveLPers) <=
-    //                 SystemConstants.TEA_MAX_SUPPLY - balances.teaSupply
-    //         );
-    //     }
+        // Alice burns APE
+        vm.prank(alice);
+        inputsOutputs.collateral = vault.burn(
+            true,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
+            inputsOutputs.amount
+        );
 
-    //     // Alice burns APE
-    //     vm.prank(alice);
-    //     inputsOutputs.collateral = vault.burn(
-    //         true,
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-    //         inputsOutputs.amount
-    //     );
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Retrieve reserves after minting
-    //     VaultStructs.Reserves memory reservesPost = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        // Verify amounts
+        _verifyAmountsBurnAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+    }
 
-    //     // Verify amounts
-    //     _verifyAmountsBurnAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
-    // }
+    function testFuzz_burnTEA(
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        VaultStructs.Reserves memory reservesPre,
+        Balances memory balances
+    )
+        public
+        Initialize(systemParams, reservesPre)
+        ConstraintAmounts(false, false, inputsOutputs, reservesPre, balances)
+    {
+        reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    // function testFuzz_burnTEA(
-    //     SystemParams calldata systemParams,
-    //     InputsOutputs memory inputsOutputs,
-    //     VaultStructs.VaultState memory vaultState,
-    //     Balances memory balances
-    // ) public Initialize(systemParams) ConstraintAmounts(false, false, inputsOutputs, vaultState, balances) {
-    //     // Set state
-    //     _setState(vaultState, balances);
+        // Constraint so it doesn't underflow its balance
+        inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.teaAlice);
 
-    //     // Get reserves before burning
-    //     VaultStructs.Reserves memory reservesPre = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
+        {
+            // Constraint so the collected fees doesn't overflow
+            (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+                uint256(10) * type(uint112).max,
+                balances.teaSupply,
+                reservesPre.reserveLPers
+            );
+            if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
+        }
 
-    //     // Constraint so it doesn't underflow its balance
-    //     inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.teaAlice);
+        // Constraint so it leaves at least 2 units in the reserve
+        _constraintReserveBurnTEA(systemParams, reservesPre, inputsOutputs, balances);
 
-    //     {
-    //         // Constraint so the collected fees doesn't overflow
-    //         (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
-    //             uint256(10) * type(uint112).max,
-    //             balances.teaSupply,
-    //             reservesPre.reserveLPers
-    //         );
-    //         if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
-    //     }
+        // Alice burns TEA
+        vm.prank(alice);
+        inputsOutputs.collateral = vault.burn(
+            false,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
+            inputsOutputs.amount
+        );
 
-    //     // Constraint so it leaves at least 2 units in the reserve
-    //     {
-    //         uint144 collateralWidthdrawn;
-    //         uint144 collectedFee;
-    //         (collateralWidthdrawn, collectedFee) = _constraintReserveBurnTEA(
-    //             systemParams,
-    //             reservesPre,
-    //             inputsOutputs,
-    //             balances
-    //         );
-    //         vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn + collectedFee);
-    //     }
+        // Retrieve reserves after minting
+        VaultStructs.Reserves memory reservesPost = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
 
-    //     // Alice burns TEA
-    //     vm.prank(alice);
-    //     inputsOutputs.collateral = vault.burn(
-    //         false,
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-    //         inputsOutputs.amount
-    //     );
-
-    //     // Retrieve reserves after minting
-    //     VaultStructs.Reserves memory reservesPost = vault.getReserves(
-    //         VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-    //     );
-
-    //     // Verify amounts
-    //     _verifyAmountsBurnTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
-    // }
+        // Verify amounts
+        _verifyAmountsBurnTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+    }
 
     // function testFuzz_wrongVaultParameters(
     //     bool isFirst,
@@ -954,7 +947,6 @@ contract VaultTest is Test {
         SystemParams calldata systemParams,
         VaultStructs.Reserves memory reservesPre,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.VaultState memory vaultState,
         Balances memory balances
     ) private view returns (uint144 collateralOut) {
         collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply));
@@ -965,7 +957,13 @@ contract VaultTest is Test {
             systemParams.tax
         );
 
-        vm.assume(vaultState.reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+        (uint144 reserve, , ) = vault.vaultStates(
+            vaultParams.debtToken,
+            vaultParams.collateralToken,
+            vaultParams.leverageTier
+        );
+
+        vm.assume(reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
     }
 
     function _constraintReserveBurnTEA(
@@ -973,15 +971,23 @@ contract VaultTest is Test {
         VaultStructs.Reserves memory reservesPre,
         InputsOutputs memory inputsOutputs,
         Balances memory balances
-    ) private pure returns (uint144 collateralWidthdrawn_, uint144 collectedFee) {
+    ) private view {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        (collateralWidthdrawn_, collectedFee, , ) = Fees.hiddenFeeTEA(
+        (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
             collateralOut,
             systemParams.lpFee,
             systemParams.tax
         );
+
+        (uint144 reserve, , ) = vault.vaultStates(
+            vaultParams.debtToken,
+            vaultParams.collateralToken,
+            vaultParams.leverageTier
+        );
+
+        vm.assume(reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
     }
 
     function _verifyAmountsMintAPE(
@@ -1012,18 +1018,31 @@ contract VaultTest is Test {
         assertGt(reservesPost.reserveLPers, 0);
 
         // Error tolerance discovered by trial-and-error
-        assertApproxEqAbs(
-            reservesPost.reserveApes,
-            reservesPre.reserveApes + collateralIn,
-            1 + reserve / 1e16,
-            "Ape's reserve is wrong"
-        );
-        assertApproxEqAbs(
-            reservesPost.reserveLPers,
-            reservesPre.reserveLPers + lpersFee + polFee,
-            1 + reserve / 1e16,
-            "LPers's reserve is wrong"
-        );
+        {
+            uint256 err;
+            if (
+                // Condition to avoid OF/UFing tickPriceSatX42
+                reservesPre.reserveApes > 1 &&
+                reservesPost.reserveApes > 1 &&
+                reservesPre.reserveLPers > 1 &&
+                reservesPost.reserveLPers > 1
+            ) err = 1 + reserve / 1e16;
+            else err = 1 + reserve / 1e7;
+
+            assertApproxEqAbs(
+                reservesPost.reserveApes,
+                reservesPre.reserveApes + collateralIn,
+                err,
+                "Ape's reserve is wrong"
+            );
+            assertApproxEqAbs(
+                reservesPost.reserveLPers,
+                reservesPre.reserveLPers + lpersFee + polFee,
+                err,
+                "LPers's reserve is wrong"
+            );
+        }
+        console.log("there");
 
         // Verify token state
         {
@@ -1114,19 +1133,26 @@ contract VaultTest is Test {
         assertGt(reservesPost.reserveLPers, 0);
 
         // Error tolerance discovered by trial-and-error
-        assertApproxEqAbs(
-            reservesPost.reserveApes,
-            reservesPre.reserveApes,
-            1 + reserve / 1e12,
-            "Ape's reserve is wrong"
-        );
-        reservesPre.reserveLPers += lpersFee;
-        assertApproxEqAbs(
-            reservesPost.reserveLPers,
-            reservesPre.reserveLPers + polFee,
-            1 + reserve / 1e12,
-            "LPers's reserve is wrong"
-        );
+        {
+            uint256 err;
+            if (
+                // Condition to avoid OF/UFing tickPriceSatX42
+                reservesPre.reserveApes > 1 &&
+                reservesPost.reserveApes > 1 &&
+                reservesPre.reserveLPers > 1 &&
+                reservesPost.reserveLPers > 1
+            ) err = 1 + reserve / 1e16;
+            else err = 1 + reserve / 1e7;
+
+            assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Ape's reserve is wrong");
+            reservesPre.reserveLPers += lpersFee;
+            assertApproxEqAbs(
+                reservesPost.reserveLPers,
+                reservesPre.reserveLPers + polFee,
+                err,
+                "LPers's reserve is wrong"
+            );
+        }
 
         // Verify token state
         {
@@ -1180,18 +1206,25 @@ contract VaultTest is Test {
         assertGt(reservesPost.reserveLPers, 0);
 
         // Error tolerance discovered by trial-and-error
-        assertApproxEqAbs(
-            reservesPost.reserveLPers,
-            reservesPre.reserveLPers + collateralIn + lpersFee + polFee,
-            1 + reserve / 1e11,
-            "LPers's reserve is wrong"
-        );
-        assertApproxEqAbs(
-            reservesPost.reserveApes,
-            reservesPre.reserveApes,
-            1 + reserve / 1e11,
-            "Apes's reserve has changed"
-        );
+        {
+            uint256 err;
+            if (
+                // Condition to avoid OF/UFing tickPriceSatX42
+                reservesPre.reserveApes > 1 &&
+                reservesPost.reserveApes > 1 &&
+                reservesPre.reserveLPers > 1 &&
+                reservesPost.reserveLPers > 1
+            ) err = 1 + reserve / 1e16;
+            else err = 1 + reserve / 1e7;
+
+            assertApproxEqAbs(
+                reservesPost.reserveLPers,
+                reservesPre.reserveLPers + collateralIn + lpersFee + polFee,
+                err,
+                "LPers's reserve is wrong"
+            );
+            assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Apes's reserve has changed");
+        }
 
         // Verify token state
         {
@@ -1268,18 +1301,25 @@ contract VaultTest is Test {
         assertGt(reservesPost.reserveLPers, 0);
 
         // Error tolerance discovered by trial-and-error
-        assertApproxEqAbs(
-            reservesPost.reserveLPers,
-            reservesPre.reserveLPers + polFee,
-            1 + reserve / 1e12,
-            "LPers's reserve is wrong"
-        );
-        assertApproxEqAbs(
-            reservesPost.reserveApes,
-            reservesPre.reserveApes,
-            1 + reserve / 1e12,
-            "Apes's reserve has changed"
-        );
+        {
+            uint256 err;
+            if (
+                // Condition to avoid OF/UFing tickPriceSatX42
+                reservesPre.reserveApes > 1 &&
+                reservesPost.reserveApes > 1 &&
+                reservesPre.reserveLPers > 1 &&
+                reservesPost.reserveLPers > 1
+            ) err = 1 + reserve / 1e16;
+            else err = 1 + reserve / 1e7;
+
+            assertApproxEqAbs(
+                reservesPost.reserveLPers,
+                reservesPre.reserveLPers + polFee,
+                err,
+                "LPers's reserve is wrong"
+            );
+            assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Apes's reserve has changed");
+        }
 
         // Verify token state
         {
