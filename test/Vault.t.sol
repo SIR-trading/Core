@@ -951,6 +951,8 @@ contract VaultTest is Test {
         }
     }
 
+    /////////////////////////////////////////////////////////////////////////
+
     function assertInPowerZone(
         VaultStructs.VaultState memory vaultState,
         VaultStructs.Reserves memory reservesPre,
@@ -1063,114 +1065,6 @@ contract VaultTest is Test {
 
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
-    }
-
-    // function _getReserves(
-    //     VaultStructs.VaultState memory vaultState
-    // ) private returns (VaultStructs.Reserves memory reserves) {
-    //     unchecked {
-    //         // Get price and update oracle state if needed
-    //         reserves.tickPriceX42 = Oracle(oracle).updateOracleState(
-    //             vaultParams.collateralToken,
-    //             vaultParams.debtToken
-    //         );
-
-    //         // Reserve is empty only in the 1st mint
-    //         if (vaultState.reserve != 0) {
-    //             assert(vaultState.reserve >= 2);
-
-    //             if (vaultState.tickPriceSatX42 == type(int64).min) {
-    //                 // type(int64).min represents -∞ => reserveLPers = 0
-    //                 reserves.reserveApes = vaultState.reserve - 1;
-    //                 reserves.reserveLPers = 1;
-    //             } else if (vaultState.tickPriceSatX42 == type(int64).max) {
-    //                 // type(int64).max represents +∞ => reserveApes = 0
-    //                 reserves.reserveApes = 1;
-    //                 reserves.reserveLPers = vaultState.reserve - 1;
-    //             } else {
-    //                 uint8 absLeverageTier = vaultParams.leverageTier >= 0
-    //                     ? uint8(vaultParams.leverageTier)
-    //                     : uint8(-vaultParams.leverageTier);
-
-    //                 if (reserves.tickPriceX42 < vaultState.tickPriceSatX42) {
-    //                     /**
-    //                      * POWER ZONE
-    //                      * A = (price/priceSat)^(l-1) R/l
-    //                      * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
-    //                      * We use the fact that l = 1+2^leverageTier
-    //                      * reserveApes is rounded up
-    //                      */
-    //                     int256 poweredTickPriceDiffX42 = vaultParams.leverageTier > 0
-    //                         ? (int256(vaultState.tickPriceSatX42) - reserves.tickPriceX42) << absLeverageTier
-    //                         : (int256(vaultState.tickPriceSatX42) - reserves.tickPriceX42) >> absLeverageTier;
-
-    //                     if (poweredTickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
-    //                         reserves.reserveApes = 1;
-    //                     } else {
-    //                         /** Rounds up reserveApes, rounds down reserveLPers.
-    //                             Cannot overflow.
-    //                             64 bits because getRatioAtTick returns a Q64.64 number.
-    //                         */
-    //                         uint256 poweredPriceRatioX64 = TickMathPrecision.getRatioAtTick(
-    //                             int64(poweredTickPriceDiffX42)
-    //                         );
-
-    //                         reserves.reserveApes = uint144(
-    //                             _divRoundUp(
-    //                                 uint256(vaultState.reserve) <<
-    //                                     (vaultParams.leverageTier >= 0 ? 64 : 64 + absLeverageTier),
-    //                                 poweredPriceRatioX64 + (poweredPriceRatioX64 << absLeverageTier)
-    //                             )
-    //                         );
-
-    //                         if (reserves.reserveApes == vaultState.reserve) reserves.reserveApes--;
-    //                         assert(reserves.reserveApes != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
-    //                     }
-
-    //                     reserves.reserveLPers = vaultState.reserve - reserves.reserveApes;
-    //                 } else {
-    //                     /**
-    //                      * SATURATION ZONE
-    //                      * LPers are 100% pegged to debt token.
-    //                      * L = (priceSat/price) R/r
-    //                      * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
-    //                      * We use the fact that lr = 1+2^-leverageTier
-    //                      * reserveLPers is rounded up
-    //                      */
-    //                     int256 tickPriceDiffX42 = int256(reserves.tickPriceX42) - vaultState.tickPriceSatX42;
-
-    //                     if (tickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
-    //                         reserves.reserveLPers = 1;
-    //                     } else {
-    //                         /** Rounds up reserveLPers, rounds down reserveApes.
-    //                             Cannot overflow.
-    //                             64 bits because getRatioAtTick returns a Q64.64 number.
-    //                         */
-    //                         uint256 priceRatioX64 = TickMathPrecision.getRatioAtTick(int64(tickPriceDiffX42));
-
-    //                         reserves.reserveLPers = uint144(
-    //                             _divRoundUp(
-    //                                 uint256(vaultState.reserve) <<
-    //                                     (vaultParams.leverageTier < 0 ? 64 : 64 + absLeverageTier),
-    //                                 priceRatioX64 + (priceRatioX64 << absLeverageTier)
-    //                             )
-    //                         );
-
-    //                         if (reserves.reserveLPers == vaultState.reserve) reserves.reserveLPers--;
-    //                         assert(reserves.reserveLPers != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
-    //                     }
-
-    //                     reserves.reserveApes = vaultState.reserve - reserves.reserveLPers;
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
-
-    function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
-        unchecked {
-            return (a - 1) / b + 1;
-        }
     }
 
     function _deriveVaultState(
@@ -1757,8 +1651,5 @@ contract VaultTest is Test {
     }
 }
 
+// INVARIANT TEST USING A REAL DATA PAIR AND ITS REAL PRICE CHANGES
 // TEST MULTIPLE MINTS ON DIFFERENT VAULTS WITH SAME COLLATERAL
-
-// INVARIANT TEST USING REAL DATA AND USING CONSTANT RANDOM PRICES
-
-// INVARIANT TEST WITH EXTREME PRICES
