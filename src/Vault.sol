@@ -396,9 +396,8 @@ contract Vault is TEA {
                 }
 
                 if (isPowerZone) {
-                    /**
-                     * PRICE IN POWER ZONE
-                     * priceSat = price*(R/(lA))^(r-1)
+                    /** PRICE IN POWER ZONE
+                        priceSat = price*(R/(lA))^(r-1)
                      */
 
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
@@ -420,10 +419,10 @@ contract Vault is TEA {
                     if (tempTickPriceSatX42 > type(int64).max) vaultState.tickPriceSatX42 = type(int64).max;
                     else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 } else {
-                    /**
-                     * PRICE IN SATURATION ZONE
-                     * priceSat = r*price*L/R
+                    /** PRICE IN SATURATION ZONE
+                        priceSat = r*price*L/R
                      */
+
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
                         vaultParams.leverageTier >= 0
                             ? uint256(vaultState.reserve) << absLeverageTier
