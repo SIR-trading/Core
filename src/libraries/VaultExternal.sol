@@ -194,6 +194,8 @@ library VaultExternal {
         int8 leverageTier
     ) private pure {
         unchecked {
+            if (vaultState.vaultId == 0) revert VaultDoesNotExist();
+
             // Reserve is empty only in the 1st mint
             if (vaultState.reserve != 0) {
                 assert(vaultState.reserve >= 2);

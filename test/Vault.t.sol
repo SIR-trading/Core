@@ -717,9 +717,8 @@ contract VaultTest is Test {
         _verifyAmountsBurnTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
     }
 
-    function testFuzz_wrongVaultParameters(
+    function testFuzz_mintWrongVaultParameters(
         bool isFirst,
-        bool isMint,
         bool isAPE,
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
@@ -729,7 +728,7 @@ contract VaultTest is Test {
     )
         public
         Initialize(systemParams, reservesPre)
-        ConstraintAmounts(isFirst, isMint, inputsOutputs, reservesPre, balances)
+        ConstraintAmounts(isFirst, true, inputsOutputs, reservesPre, balances)
     {
         vm.assume( // Ensure the vault does not exist
             vaultParams.debtToken != vaultParams_.debtToken ||
@@ -756,13 +755,132 @@ contract VaultTest is Test {
             abi.encode(tickPriceX42)
         );
 
-        // Alice tries to burn non-existant APE or TEA
-        vm.expectRevert(VaultDoesNotExist.selector);
-        if (isMint) {
-            vault.mint(isAPE, vaultParams_);
-        } else {
-            vault.burn(isAPE, vaultParams_, inputsOutputs.amount);
+        // Get reserves before minting
+        reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        {
+            // Constraint so it doesn't overflow TEA supply
+            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
+                vault.totalSupply(VAULT_ID)
+            );
+            if (success)
+                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+
+            // Constraint so it doesn't overflow APE supply
+            (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
+                reservesPre.reserveApes,
+                type(uint256).max - ape.totalSupply(),
+                ape.totalSupply()
+            );
+            if (success)
+                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
         }
+
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
+
+        // Alice tries to mint/burn non-existant APE or TEA
+        vm.expectRevert(VaultDoesNotExist.selector);
+        vm.prank(alice);
+        vault.mint(isAPE, vaultParams_);
+    }
+
+    function testFuzz_burnWrongVaultParameters(
+        bool isFirst,
+        bool isAPE,
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        VaultStructs.Reserves memory reservesPre,
+        Balances memory balances,
+        VaultStructs.VaultParameters memory vaultParams_
+    )
+        public
+        Initialize(systemParams, reservesPre)
+        ConstraintAmounts(isFirst, false, inputsOutputs, reservesPre, balances)
+    {
+        vm.assume( // Ensure the vault does not exist
+            vaultParams.debtToken != vaultParams_.debtToken ||
+                vaultParams.collateralToken != vaultParams_.collateralToken ||
+                vaultParams.leverageTier != vaultParams_.leverageTier
+        );
+
+        // Mock oracle prices
+        int64 tickPriceX42 = int64(
+            _bound(systemParams.tickPriceX42, int64(TickMath.MIN_TICK) << 42, int64(TickMath.MAX_TICK) << 42)
+        );
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(Oracle.getPrice.selector, vaultParams_.collateralToken, vaultParams_.debtToken),
+            abi.encode(tickPriceX42)
+        );
+        vm.mockCall(
+            oracle,
+            abi.encodeWithSelector(
+                Oracle.updateOracleState.selector,
+                vaultParams_.collateralToken,
+                vaultParams_.debtToken
+            ),
+            abi.encode(tickPriceX42)
+        );
+
+        // Get reserves before minting
+        reservesPre = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        if (isAPE) {
+            // Constraint so it doesn't underflow its balance
+            inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.apeAlice);
+
+            {
+                // Constraint so the collected fees doesn't overflow
+                (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+                    uint256(10) * type(uint112).max,
+                    balances.apeSupply,
+                    reservesPre.reserveApes
+                );
+                if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
+            }
+
+            // Constraint so it leaves at least 2 units in the reserve
+            {
+                uint144 collateralOut = _constraintReserveBurnAPE(systemParams, reservesPre, inputsOutputs, balances);
+
+                // Sufficient condition to ensure the POL minting does not overflow the TEA max supply
+                uint temp = FullMath.mulDiv(collateralOut, balances.teaSupply, uint(10) * reservesPre.reserveLPers);
+                vm.assume(temp <= SystemConstants.TEA_MAX_SUPPLY - balances.teaSupply);
+            }
+        } else {
+            // Constraint so it doesn't underflow its balance
+            inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.teaAlice);
+
+            // Constraint so the collected fees doesn't overflow
+            {
+                (bool success, uint256 amountToBurnUpperbound) = FullMath.tryMulDiv(
+                    uint256(10) * type(uint112).max,
+                    balances.teaSupply,
+                    reservesPre.reserveLPers
+                );
+                if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
+            }
+
+            // Constraint so it leaves at least 2 units in the reserve
+            _constraintReserveBurnTEA(systemParams, reservesPre, inputsOutputs, balances);
+        }
+
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
+
+        // Alice tries to mint/burn non-existant APE or TEA
+        vm.expectRevert(VaultDoesNotExist.selector);
+        vm.prank(alice);
+        vault.mint(isAPE, vaultParams_);
     }
 
     function testFuzz_priceFluctuation(
