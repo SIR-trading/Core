@@ -56,15 +56,15 @@ contract SIR is ERC20Staker {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function contributorMint() external returns (uint80 unclaimedRewards) {
+    function contributorMint() external returns (uint80 rewards) {
         // Get contributor's unclaimed rewards
-        unclaimedRewards = contributorUnclaimedSIR(msg.sender);
+        rewards = contributorUnclaimedSIR(msg.sender);
 
         // Mint if there are any unclaimed rewards
-        require(unclaimedRewards > 0);
-        _mint(msg.sender, unclaimedRewards);
+        require(rewards > 0);
+        _mint(msg.sender, rewards);
 
-        // Update time stamps
+        // Update time stamp
         tsLastMint[msg.sender] = uint40(block.timestamp);
     }
 
