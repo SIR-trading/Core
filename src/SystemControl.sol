@@ -205,17 +205,4 @@ contract SystemControl is Ownable {
         // Update hash of active vaults
         hashActiveVaults == keccak256(abi.encodePacked(newVaults));
     }
-
-    function updateContributorsIssuances(
-        address[] calldata contributors,
-        uint72[] calldata contributorIssuances
-    ) external onlyOwner {
-        if (systemStatus == SystemStatus.Unstoppable) revert WrongStatus();
-
-        uint256 lenContributors = contributors.length;
-        if (contributorIssuances.length != lenContributors) revert ArraysLengthMismatch();
-
-        // Update parameters
-        sir.changeContributorsIssuances(contributors, contributorIssuances);
-    }
 }
