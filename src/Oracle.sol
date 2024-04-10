@@ -164,7 +164,7 @@ import "forge-std/Test.sol";
  */
 
 contract Oracle {
-    error NoFeeTiers();
+    error NoUniswapPool();
     error UniswapFeeTierIndexOutOfBounds();
     error OracleAlreadyInitialized();
     error OracleNotInitialized();
@@ -233,9 +233,9 @@ contract Oracle {
     uint40 public constant TWAP_DURATION = 30 minutes;
 
     /**
-     * State variables
+     * VaultState variables
      */
-    mapping(address token0 => mapping(address token1 => OracleState)) public state;
+    mapping(address token0 => mapping(address token1 => OracleState)) public vaultState;
     uint private _uniswapExtraFeeTiers; // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier
 
     /*////////////////////////////////////////////////////////////////
@@ -272,8 +272,8 @@ contract Oracle {
     function getPrice(address collateralToken, address debtToken) external view returns (int64) {
         (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
-        // Get oracle state
-        OracleState memory oracleState = state[token0][token1];
+        // Get oracle vaultState
+        OracleState memory oracleState = vaultState[token0][token1];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Get latest price if not stored
@@ -309,8 +309,8 @@ contract Oracle {
     function initialize(address tokenA, address tokenB) external {
         (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
 
-        // Get oracle state
-        OracleState memory oracleState = state[tokenA][tokenB];
+        // Get oracle vaultState
+        OracleState memory oracleState = vaultState[tokenA][tokenB];
         if (oracleState.initialized) return; // No-op return because reverting would cause SIR to fail creating new vaults
 
         // Get all fee tiers
@@ -356,7 +356,7 @@ contract Oracle {
             }
         }
 
-        if (score == 0) revert NoFeeTiers();
+        if (score == 0) revert NoUniswapPool();
         oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(uniswapFeeTiers.length);
         oracleState.initialized = true;
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
@@ -365,8 +365,8 @@ contract Oracle {
         if (bestOracleData.cardinalityToIncrease > 0)
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
 
-        // Update oracle state
-        state[tokenA][tokenB] = oracleState;
+        // Update oracle vaultState
+        vaultState[tokenA][tokenB] = oracleState;
 
         // console.log("Oracle chose fee tier", oracleState.uniswapFeeTier.fee, "with a score of", score);
         emit OracleInitialized(
@@ -412,14 +412,14 @@ contract Oracle {
 
     /**
      * @return the TWAP price of the pair of tokens
-     * @notice Update the oracle state for the pair of tokens
-     * @notice The order of the tokens does not matter for updating the oracle state, it only matters if we need to retrie the price
+     * @notice Update the oracle vaultState for the pair of tokens
+     * @notice The order of the tokens does not matter for updating the oracle vaultState, it only matters if we need to retrie the price
      */
     function updateOracleState(address collateralToken, address debtToken) external returns (int64) {
         (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
-        // Get oracle state
-        OracleState memory oracleState = state[token0][token1];
+        // Get oracle vaultState
+        OracleState memory oracleState = vaultState[token0][token1];
         if (!oracleState.initialized) revert OracleNotInitialized();
 
         // Price is updated once per block at most
@@ -537,8 +537,8 @@ contract Oracle {
                 oracleState.timeStampFeeTier = uint40(block.timestamp);
             }
 
-            // Save new oracle state to storage
-            state[token0][token1] = oracleState;
+            // Save new oracle vaultState to storage
+            vaultState[token0][token1] = oracleState;
         }
 
         // Invert price if necessary

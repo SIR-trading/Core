@@ -2,82 +2,53 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {SystemState} from "./SystemState.sol";
-import {SystemControlAccess} from "./SystemControlAccess.sol";
+import {Vault} from "./Vault.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
+import {ERC20Staker} from "./ERC20Staker.sol";
 
 // Contracts
-contract SIR is ERC20, SystemControlAccess {
-    error ContributorsExceedsMaxIssuance();
-
-    struct ContributorIssuanceParams {
-        uint72 issuance; // [SIR/s]
-        uint40 tsLastUpdate; // timestamp of the last mint. 0 => use systemParams.tsIssuanceStart instead
-        uint104 unclaimedRewards; // SIR owed to the contributor
-    }
-
-    SystemState private immutable _VAULT;
-
-    uint72 public issuanceContributors; // issuanceContributors <= ISSUANCE - ISSUANCE_FIRST_3_YEARS
-
-    address[] public contributors;
-    mapping(address => ContributorIssuanceParams) internal _contributorsIssuances;
-
-    constructor(
-        address systemState,
-        address systemControl
-    ) ERC20("Synthetics Implemented Right", "SIR", SystemConstants.SIR_DECIMALS) SystemControlAccess(systemControl) {
-        _VAULT = SystemState(systemState);
-    }
+contract SIR is ERC20Staker {
+    mapping(address => uint40) internal tsLastMint;
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /// @notice Not all tokens may be in circulation. This function outputs the total supply if ALL tokens where in circulation.
-    function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
-
-        if (tsIssuanceStart == 0) return 0;
-        return SystemConstants.ISSUANCE * (block.timestamp - tsIssuanceStart);
-    }
-
-    function getContributorIssuance(
-        address contributor
-    ) public view returns (ContributorIssuanceParams memory contributorParams) {
+    function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
-            (uint40 tsIssuanceStart, , , , ) = _VAULT.systemParams();
+            // First issuance date
+            (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
-            // Update timestamp
-            contributorParams.tsLastUpdate = uint40(block.timestamp);
+            // Last issuance date
+            uint256 tsIssuanceEnd = tsIssuanceStart + SystemConstants.THREE_YEARS;
 
-            // If issuance has not started yet
-            if (tsIssuanceStart == 0) return contributorParams;
+            // Get last mint time stamp
+            uint256 tsLastMint_ = tsLastMint[contributor];
 
-            // Copy the parameters to memory
-            contributorParams = _contributorsIssuances[contributor];
+            // If issuance has not been stored
+            uint256 issuance;
+            if (tsLastMint_ == 0) {
+                // Get the contributor's allocation
+                uint256 allocation = _getContributorAllocation(contributor);
 
-            // Last date of unclaimedRewards
-            uint40 tsIssuanceEnd = tsIssuanceStart + SystemConstants.THREE_YEARS;
+                // No allocation, no rewards
+                if (allocation == 0) return 0;
 
-            // If issuance is over and unclaimedRewards have already been updated
-            if (contributorParams.tsLastUpdate >= tsIssuanceEnd) return contributorParams;
+                // Calculate the contributor's issuance
+                issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.ISSUANCE_FIRST_3_YEARS)) / 10000;
 
-            // If issuance is over but unclaimedRewards have not been updated
-            bool issuanceIsOver = uint40(block.timestamp) >= tsIssuanceEnd;
+                // Update issuance time stamp
+                tsLastMint_ = tsIssuanceStart;
+            } else if (tsLastMint_ >= tsIssuanceEnd) {
+                // Contributor has already claimed all rewards
+                return 0;
+            }
 
-            // If unclaimedRewards have never been updated
-            bool unclaimedRewardsNeverUpdated = tsIssuanceStart > contributorParams.tsLastUpdate;
+            // Update unclaimed rewards
+            uint256 tsNow = block.timestamp >= tsIssuanceEnd ? tsIssuanceEnd : block.timestamp;
 
-            // Update contributorParams
-            contributorParams.unclaimedRewards += uint104(
-                uint256(
-                    (issuanceIsOver ? tsIssuanceEnd : uint40(block.timestamp)) -
-                        (unclaimedRewardsNeverUpdated ? tsIssuanceStart : contributorParams.tsLastUpdate)
-                ) * contributorParams.issuance
-            );
-            if (issuanceIsOver) contributorParams.issuance = 0;
+            // Return unclaimed rewards
+            return uint80(issuance * (tsNow - tsLastMint_));
         }
     }
 
@@ -85,69 +56,40 @@ contract SIR is ERC20, SystemControlAccess {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function contributorMint() external returns (uint104) {
-        // Get contributor issuance parameters
-        ContributorIssuanceParams memory contributorParams = getContributorIssuance(msg.sender);
+    function contributorMint() external returns (uint80 rewards) {
+        // Get contributor's unclaimed rewards
+        rewards = contributorUnclaimedSIR(msg.sender);
 
         // Mint if there are any unclaimed rewards
-        require(contributorParams.unclaimedRewards > 0);
-        _mint(msg.sender, contributorParams.unclaimedRewards);
+        require(rewards > 0);
+        _mint(msg.sender, rewards);
 
-        // Reset unclaimedRewards
-        contributorParams.unclaimedRewards = 0;
-
-        // Update state
-        _contributorsIssuances[msg.sender] = contributorParams;
-
-        return contributorParams.unclaimedRewards;
+        // Update time stamp
+        tsLastMint[msg.sender] = uint40(block.timestamp);
     }
 
-    function lPerMint(uint256 vaultId) external returns (uint104 rewards) {
+    function lPerMint(uint256 vaultId) external returns (uint80 rewards) {
         // Get LPer issuance parameters
-        rewards = _VAULT.claimSIR(vaultId, msg.sender);
+        rewards = vault.claimSIR(vaultId, msg.sender);
 
         // Mint if there are any unclaimed rewards
         require(rewards > 0);
         _mint(msg.sender, rewards);
     }
 
-    /*////////////////////////////////////////////////////////////////
-                        SYSTEM CONTROL FUNCTIONS
+    /*//////////////////////////////////////////////////////////////////
+                            PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /** @notice Change the issuance of some contributors
-        @dev This function is only callable by the SystemControl contract
-        @param contributors_ The addresses of the contributors
-        @param contributorIssuances_ The new issuance of each contributor
+    /** @dev TO CHANGE BEFORE DEPLOYMENT.
+        @dev These are just example addresses. The real addresses and their issuances need to be hardcoded before deployment.
+        @dev Function returns an integer with max value of 10000.
+        @dev The sum of all contributors' allocations must be less than or equal to 10000.
      */
-    function changeContributorsIssuances(
-        address[] calldata contributors_,
-        uint72[] calldata contributorIssuances_
-    ) external onlySystemControl {
-        uint256 issuanceIncrease;
-        uint256 issuanceDecrease;
-        uint256 lenContributors = contributors_.length;
-        for (uint256 i = 0; i < lenContributors; i++) {
-            // Get contributor issuance parameters
-            ContributorIssuanceParams memory contributorParams = getContributorIssuance(contributors_[i]);
+    function _getContributorAllocation(address contributor) private pure returns (uint256) {
+        if (contributor == 0x7EE4a8493Da53686dDF4FD2F359a7D00610CE370) return 100;
+        else if (contributor == 0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5) return 1000;
 
-            // Updated aggregated issuance
-            unchecked {
-                issuanceIncrease += contributorIssuances_[i]; // Cannot overflow unless we have at least 2^(256-72) contributors...
-                issuanceDecrease += contributorParams.issuance;
-            }
-
-            // Update issuance
-            contributorParams.issuance = contributorIssuances_[i];
-
-            // Update state
-            _contributorsIssuances[contributors_[i]] = contributorParams;
-        }
-        uint256 issuanceContributors_ = issuanceContributors + issuanceIncrease - issuanceDecrease;
-
-        if (issuanceContributors_ > SystemConstants.ISSUANCE - SystemConstants.ISSUANCE_FIRST_3_YEARS)
-            revert ContributorsExceedsMaxIssuance();
-
-        issuanceContributors = uint72(issuanceContributors_);
+        return 0;
     }
 }

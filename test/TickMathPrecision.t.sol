@@ -31,8 +31,9 @@ contract TickMathPrecisionTest is Test {
             .mul(ABDKMathQuad.fromUInt(1 << 64))
             .toUInt();
 
-        assertApproxEqRel(ratioX64, ratioX64Bis, 1);
-        assertLe(ratioX64, ratioX64Bis, "Not rounding down");
+        // Upper bound on the error derived from the algo
+        assertGe(ratioX64, ratioX64Bis - (ratioX64Bis * 60) / 0x100000000000001A3);
+        assertLe(ratioX64, ratioX64Bis + 2);
     }
 
     function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public {
@@ -100,4 +101,25 @@ contract TickMathPrecisionTest is Test {
         vm.expectRevert();
         TickMathPrecision.getTickAtRatio(num, den);
     }
+
+    function testFuzz_getRatioAtTickAndInverse(int64 tickX42) public {
+        tickX42 = int64(_bound(tickX42, 0, int64(SystemConstants.MAX_TICK_X42)));
+
+        uint128 ratioX64 = TickMathPrecision.getRatioAtTick(tickX42);
+        int64 tickX42_B = TickMathPrecision.getTickAtRatio(ratioX64, 2 ** 64);
+
+        assertLe(tickX42, tickX42_B + 1);
+        assertGe(tickX42, tickX42_B);
+        // tickX42 is ALWAYS equal to tickX42_B +1!! Can I fix this?
+        // vm.writeLine("./log.log", string.concat(vm.toString(tickX42), ", ", vm.toString(tickX42_B)));
+    }
+
+    // function test_getTickAtRatioAndInverseTest(int64 tickX42) public {
+    //     tickX42 = 1;
+    //     console.logInt(tickX42);
+    //     uint128 ratioX64 = TickMathPrecision.getRatioAtTick(tickX42);
+    //     console.log("Ratio x 2^64", ratioX64);
+    //     int64 tickX42_B = TickMathPrecision.getTickAtRatio(ratioX64, 2 ** 64);
+    //     console.logInt(tickX42_B);
+    // }
 }

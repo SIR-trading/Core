@@ -15,6 +15,9 @@ import "forge-std/Test.sol";
  * @dev Modified from Solmate's ERC20.sol
  */
 contract APE is Owned {
+    error PermitDeadlineExpired();
+    error InvalidSigner();
+
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
@@ -50,7 +53,16 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (name, symbol, decimals, debtToken, collateralToken, leverageTier) = Vault(msg.sender).latestTokenParams();
+        (VaultStructs.TokenParameters memory tokenParams, VaultStructs.VaultParameters memory vaultParams) = Vault(
+            msg.sender
+        ).latestTokenParams();
+
+        name = tokenParams.name;
+        symbol = tokenParams.symbol;
+        decimals = tokenParams.decimals;
+        debtToken = vaultParams.debtToken;
+        collateralToken = vaultParams.collateralToken;
+        leverageTier = vaultParams.leverageTier;
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
@@ -113,7 +125,7 @@ contract APE is Owned {
         bytes32 r,
         bytes32 s
     ) external {
-        require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
+        if (deadline < block.timestamp) revert PermitDeadlineExpired();
 
         // Unchecked because the only math done is incrementing
         // the owner's nonce which cannot realistically overflow.
@@ -142,7 +154,7 @@ contract APE is Owned {
                 s
             );
 
-            require(recoveredAddress != address(0) && recoveredAddress == owner, "INVALID_SIGNER");
+            if (recoveredAddress == address(0) || recoveredAddress != owner) revert InvalidSigner();
 
             allowance[recoveredAddress][spender] = value;
         }
@@ -176,16 +188,19 @@ contract APE is Owned {
         uint16 baseFee,
         uint8 tax,
         VaultStructs.Reserves memory reserves,
-        uint152 collateralDeposited
-    ) external onlyOwner returns (VaultStructs.Reserves memory newReserves, uint152 polFee, uint256 amount) {
+        uint144 collateralDeposited
+    )
+        external
+        onlyOwner
+        returns (VaultStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
+    {
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
         // Substract fees
-        uint152 collateralIn;
-        uint152 treasuryFee;
-        uint152 lpersFee;
-        (collateralIn, treasuryFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
+        uint144 collateralIn;
+        uint144 lpersFee;
+        (collateralIn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
             collateralDeposited,
             baseFee,
             leverageTier,
@@ -193,18 +208,15 @@ contract APE is Owned {
         );
 
         unchecked {
-            // Diverge some of the deposited collateral to the Treasury
-            reserves.treasury += treasuryFee;
-
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.lpReserve += lpersFee;
+            reserves.reserveLPers += lpersFee;
 
             // Mint APE
-            amount = supplyAPE == 0 // By design apesReserve can never be 0 unless it is the first mint ever
-                ? collateralIn + reserves.apesReserve // Any ownless APE reserve is minted by the first ape
-                : FullMath.mulDiv(supplyAPE, collateralIn, reserves.apesReserve);
+            amount = supplyAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
+                ? collateralIn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
+                : FullMath.mulDiv(supplyAPE, collateralIn, reserves.reserveApes);
             balanceOf[to] += amount;
-            reserves.apesReserve += collateralIn;
+            reserves.reserveApes += collateralIn;
         }
         totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
         emit Transfer(address(0), to, amount);
@@ -221,34 +233,35 @@ contract APE is Owned {
     )
         external
         onlyOwner
-        returns (VaultStructs.Reserves memory newReserves, uint152 polFee, uint152 collateralWidthdrawn)
+        returns (
+            VaultStructs.Reserves memory newReserves,
+            uint144 collectedFee,
+            uint144 polFee,
+            uint144 collateralWidthdrawn
+        )
     {
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
         // Burn APE
-        uint152 collateralOut = uint152(FullMath.mulDiv(reserves.apesReserve, amount, supplyAPE)); // Compute amount of collateral
+        uint144 collateralOut = uint144(FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)); // Compute amount of collateral
         balanceOf[from] -= amount; // Checks for underflow
         unchecked {
             totalSupply = supplyAPE - amount;
-            reserves.apesReserve -= collateralOut;
+            reserves.reserveApes -= collateralOut;
             emit Transfer(from, address(0), amount);
 
             // Substract fees
-            uint152 treasuryFee;
-            uint152 lpersFee;
-            (collateralWidthdrawn, treasuryFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
+            uint144 lpersFee;
+            (collateralWidthdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
                 collateralOut,
                 baseFee,
                 leverageTier,
                 tax
             );
 
-            // Diverge some of the deposited collateral to the Treasury
-            reserves.treasury += treasuryFee;
-
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.lpReserve += lpersFee;
+            reserves.reserveLPers += lpersFee;
 
             newReserves = reserves; // Important because memory is not persistent across external calls
         }

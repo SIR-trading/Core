@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import {VaultStructs} from "./libraries/VaultStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
+
 import "forge-std/Test.sol";
 
 abstract contract SystemState is SystemControlAccess {
@@ -257,8 +258,8 @@ abstract contract SystemState is SystemControlAccess {
     }
 
     function updateVaults(
-        uint40[] calldata oldVaults,
-        uint40[] calldata newVaults,
+        uint48[] calldata oldVaults,
+        uint48[] calldata newVaults,
         uint8[] calldata newTaxes,
         uint16 cumTax
     ) external onlySystemControl {

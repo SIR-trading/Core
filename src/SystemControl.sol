@@ -14,7 +14,7 @@ import {Ownable} from "openzeppelin/access/Ownable.sol";
 contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
-    /** Flow chart of the system 4 possible states:
+    /** Flow chart of the system 4 possible vaultStates:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
         +---------------+      +---------------+       +---------------+      +---------------+
@@ -29,7 +29,7 @@ contract SystemControl is Ownable {
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint8 lpFee);
-    event TreasuryFeesWithdrawn(uint40 indexed vaultId, address indexed collateralToken, uint256 amount);
+    event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
     event FundsWithdrawn(address indexed token, uint256 amount);
 
     error FeeCannotBeZero();
@@ -39,8 +39,10 @@ contract SystemControl is Ownable {
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
-    Vault public immutable VAULT;
-    SIR public immutable SIR_TOKEN;
+    address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
+    Vault public vault;
+    SIR public sir;
+    bool private _initialized = false;
 
     uint256 private _sumTaxesToTreasury;
 
@@ -58,11 +60,19 @@ contract SystemControl is Ownable {
 
         The default value is the hash of an empty array.
      */
-    bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+    bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor(address systemState, address sir) {
-        VAULT = Vault(systemState);
-        SIR_TOKEN = SIR(sir);
+    constructor() {
+        deployer = msg.sender;
+    }
+
+    function initialize(address vault_, address sir_) external {
+        require(!_initialized && msg.sender == deployer);
+
+        vault = Vault(vault_);
+        sir = SIR(sir_);
+
+        _initialized = true;
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -84,14 +94,15 @@ contract SystemControl is Ownable {
         tsStatusChanged = uint40(block.timestamp);
 
         // Retrieve parameters
-        (, uint16 baseFee, uint8 lpFee, , ) = VAULT.systemParams();
+        Vault vault_ = vault;
+        (, uint16 baseFee, uint8 lpFee, , ) = vault_.systemParams();
 
         // Store fee parameters for later
         _oldBaseFee = baseFee;
         _oldLpFee = lpFee;
 
         // Set fees to 0 for emergency withdrawals
-        VAULT.updateSystemState(0, 0, true);
+        vault_.updateSystemState(0, 0, true);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
@@ -101,7 +112,7 @@ contract SystemControl is Ownable {
         tsStatusChanged = uint40(block.timestamp);
 
         // Restore fees
-        VAULT.updateSystemState(_oldBaseFee, _oldLpFee, false);
+        vault.updateSystemState(_oldBaseFee, _oldLpFee, false);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
     }
@@ -124,20 +135,11 @@ contract SystemControl is Ownable {
                         WITHDRAWAL FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(uint40 vaultId, address to) external onlyOwner {
-        if (systemStatus != SystemStatus.TrainingWheels || systemStatus != SystemStatus.Unstoppable)
-            revert WrongStatus();
-
-        (address collateralToken, uint256 amount) = VAULT.withdrawFees(vaultId, to);
-
-        emit TreasuryFeesWithdrawn(vaultId, collateralToken, amount);
-    }
-
     /// @notice Save the remaining funds that have not been withdrawn from the vaults
     function saveFunds(address[] calldata tokens, address to) external onlyOwner {
         if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
 
-        uint256[] memory amounts = VAULT.withdrawToSaveSystem(tokens, to);
+        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         for (uint256 i = 0; i < tokens.length; ++i) {
             emit FundsWithdrawn(tokens[i], amounts[i]);
@@ -154,9 +156,10 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        (, , uint8 lpFee, , ) = VAULT.systemParams();
+        Vault vault_ = vault;
+        (, , uint8 lpFee, , ) = vault_.systemParams();
 
-        VAULT.updateSystemState(baseFee_, lpFee, false);
+        vault_.updateSystemState(baseFee_, lpFee, false);
 
         emit NewBaseFee(baseFee_);
     }
@@ -165,23 +168,24 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        (, uint16 baseFee, , , ) = VAULT.systemParams();
+        Vault vault_ = vault;
+        (, uint16 baseFee, , , ) = vault_.systemParams();
 
-        VAULT.updateSystemState(baseFee, lpFee_, false);
+        vault_.updateSystemState(baseFee, lpFee_, false);
 
         emit NewLPFee(lpFee_);
     }
 
     function updateVaultsIssuances(
-        uint40[] calldata oldVaults,
-        uint40[] calldata newVaults,
+        uint48[] calldata oldVaults,
+        uint48[] calldata newVaults,
         uint8[] calldata newTaxes
     ) public onlyOwner {
         uint256 lenNewVaults = newVaults.length;
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
 
         // Check the array of old vaults is correct
-        if (_hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
+        if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
 
         // Aggregate taxes and squared taxes
         uint16 cumTax;
@@ -196,22 +200,9 @@ contract SystemControl is Ownable {
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
-        VAULT.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
+        vault.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
 
         // Update hash of active vaults
-        _hashActiveVaults == keccak256(abi.encodePacked(newVaults));
-    }
-
-    function updateContributorsIssuances(
-        address[] calldata contributors,
-        uint72[] calldata contributorIssuances
-    ) external onlyOwner {
-        if (systemStatus == SystemStatus.Unstoppable) revert WrongStatus();
-
-        uint256 lenContributors = contributors.length;
-        if (contributorIssuances.length != lenContributors) revert ArraysLengthMismatch();
-
-        // Update parameters
-        SIR_TOKEN.changeContributorsIssuances(contributors, contributorIssuances);
+        hashActiveVaults == keccak256(abi.encodePacked(newVaults));
     }
 }

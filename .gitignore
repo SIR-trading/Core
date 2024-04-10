@@ -19,3 +19,6 @@ node_modules/
 # Hardhat
 cache
 cache_hardhat
+
+# Others
+Core.code-workspace*

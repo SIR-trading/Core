@@ -4,13 +4,14 @@ pragma solidity >=0.8.0;
 import "forge-std/Test.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 contract FeesTest is Test {
-    function testFuzz_FeeAPE(uint152 collateralDepositedOrOut, uint16 baseFee, int8 leverageTier, uint8 tax) public {
+    function testFuzz_FeeAPE(uint144 collateralDepositedOrOut, uint16 baseFee, int8 leverageTier, uint8 tax) public {
         // Constraint leverageTier to supported values
-        leverageTier = int8(_bound(leverageTier, -3, 2));
+        leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
-        (uint152 collateralInOrWidthdrawn, uint152 treasuryFee, uint152 lpersFee, uint152 polFee) = Fees.hiddenFeeAPE(
+        (uint144 collateralInOrWidthdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
             collateralDepositedOrOut,
             baseFee,
             leverageTier,
@@ -30,14 +31,14 @@ contract FeesTest is Test {
                 10000
             );
             totalFeeUpperBound = FullMath.mulDivRoundingUp(
-                collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint152).max ? 0 : 1),
+                collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint144).max ? 0 : 1),
                 uint256(baseFee) * 2 ** uint8(leverageTier),
                 10000
             );
         } else {
             totalFeeLowerBound = FullMath.mulDiv(collateralInOrWidthdrawn, baseFee, 10000 * 2 ** uint8(-leverageTier));
             totalFeeUpperBound = FullMath.mulDivRoundingUp(
-                collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint152).max ? 0 : 1),
+                collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint144).max ? 0 : 1),
                 baseFee,
                 10000 * 2 ** uint8(-leverageTier)
             );
@@ -49,8 +50,8 @@ contract FeesTest is Test {
         assertEq(polFee, totalFee / 10, "LPers fee incorrect");
     }
 
-    function testFuzz_FeeTEA(uint152 collateralDepositedOrOut, uint8 lpFee, uint8 tax) public {
-        (uint152 collateralInOrWidthdrawn, uint152 treasuryFee, uint152 lpersFee, uint152 polFee) = Fees.hiddenFeeTEA(
+    function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint8 lpFee, uint8 tax) public {
+        (uint144 collateralInOrWidthdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
             collateralDepositedOrOut,
             lpFee,
             tax
@@ -62,7 +63,7 @@ contract FeesTest is Test {
 
         uint256 totalFeeLowerBound = FullMath.mulDiv(collateralInOrWidthdrawn, lpFee, 10000);
         uint256 totalFeeUpperBound = FullMath.mulDivRoundingUp(
-            collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint152).max ? 0 : 1),
+            collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint144).max ? 0 : 1),
             lpFee,
             10000
         );

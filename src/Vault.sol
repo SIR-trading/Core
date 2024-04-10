@@ -18,14 +18,16 @@ import {Oracle} from "./Oracle.sol";
 import {TEA} from "./TEA.sol";
 
 import "forge-std/console.sol";
+import {SystemConstants} from "./libraries/SystemConstants.sol";
 
 contract Vault is TEA {
-    error VaultDoesNotExist();
-
     Oracle private immutable _ORACLE;
 
-    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.State)))
-        public state; // Do not use vaultId 0
+    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
+        public vaultStates; // Do not use vaultId 0
+
+    // Global parameters for each type of collateral that aggregates amounts from all vaults
+    mapping(address collateral => VaultStructs.TokenState) public tokenStates;
 
     // Used to pass parameters to the APE token constructor
     VaultStructs.TokenParameters private _transientTokenParameters;
@@ -35,43 +37,27 @@ contract Vault is TEA {
         _ORACLE = Oracle(oracle);
 
         // Push empty parameters to avoid vaultId 0
-        paramsById.push(VaultStructs.Parameters(address(0), address(0), 0));
+        paramsById.push(VaultStructs.VaultParameters(address(0), address(0), 0));
     }
 
     /** @notice Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
      */
-    function initialize(address debtToken, address collateralToken, int8 leverageTier) external {
+    function initialize(VaultStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deployAPE(
             _ORACLE,
-            state[debtToken][collateralToken][leverageTier],
+            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
             paramsById,
             _transientTokenParameters,
-            debtToken,
-            collateralToken,
-            leverageTier
+            vaultParams
         );
     }
 
     function latestTokenParams()
         external
         view
-        returns (
-            string memory name,
-            string memory symbol,
-            uint8 decimals,
-            address debtToken,
-            address collateralToken,
-            int8 leverageTier
-        )
+        returns (VaultStructs.TokenParameters memory, VaultStructs.VaultParameters memory)
     {
-        name = _transientTokenParameters.name;
-        symbol = _transientTokenParameters.symbol;
-        decimals = _transientTokenParameters.decimals;
-
-        VaultStructs.Parameters memory params = paramsById[paramsById.length - 1];
-        debtToken = params.debtToken;
-        collateralToken = params.collateralToken;
-        leverageTier = params.leverageTier;
+        return (_transientTokenParameters, paramsById[paramsById.length - 1]);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -80,36 +66,26 @@ contract Vault is TEA {
 
     /** @notice Function for minting APE or TEA
      */
-    function mint(
-        bool isAPE,
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) external returns (uint256 amount) {
+    function mint(bool isAPE, VaultStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
         unchecked {
             VaultStructs.SystemParameters memory systemParams_ = systemParams;
             require(!systemParams_.mintingStopped);
 
-            // Until SIR is running, only LPers are allowed to mint (deposit collateral)
-            if (isAPE) require(systemParams_.tsIssuanceStart > 0);
+            // Get reserves
+            (
+                VaultStructs.TokenState memory tokenState,
+                VaultStructs.VaultState memory vaultState,
+                VaultStructs.Reserves memory reserves,
+                APE ape,
+                uint144 collateralDeposited
+            ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
 
-            // Get state
-            VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
-
-            // Compute reserves from state
-            (VaultStructs.Reserves memory reserves, APE ape, uint152 collateralDeposited) = VaultExternal.getReserves(
-                true,
-                isAPE,
-                state_,
-                collateralToken,
-                leverageTier
-            );
-
-            VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[state_.vaultId];
+            VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+            uint256 collectedFee;
             if (isAPE) {
                 // Mint APE
-                uint152 polFee;
-                (reserves, polFee, amount) = ape.mint(
+                uint144 polFee;
+                (reserves, collectedFee, polFee, amount) = ape.mint(
                     msg.sender,
                     systemParams_.baseFee,
                     vaultIssuanceParams_.tax,
@@ -118,21 +94,23 @@ contract Vault is TEA {
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
-                mint(
-                    collateralToken,
-                    address(this),
-                    state_.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    reserves,
-                    polFee
-                );
+                if (polFee > 0) {
+                    mint(
+                        vaultParams.collateralToken,
+                        address(this),
+                        vaultState.vaultId,
+                        systemParams_,
+                        vaultIssuanceParams_,
+                        reserves,
+                        polFee
+                    );
+                }
             } else {
                 // Mint TEA for user and protocol owned liquidity (POL)
-                amount = mint(
-                    collateralToken,
+                (amount, collectedFee) = mint(
+                    vaultParams.collateralToken,
                     msg.sender,
-                    state_.vaultId,
+                    vaultState.vaultId,
                     systemParams_,
                     vaultIssuanceParams_,
                     reserves,
@@ -140,8 +118,11 @@ contract Vault is TEA {
                 );
             }
 
-            // Update state from new reserves
-            _updateState(state_, reserves, debtToken, collateralToken, leverageTier);
+            // Update vaultStates from new reserves
+            _updateVaultState(vaultState, reserves, vaultParams);
+
+            // Update collateral params
+            _updateTokenState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
         }
     }
 
@@ -149,29 +130,26 @@ contract Vault is TEA {
      */
     function burn(
         bool isAPE,
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier,
+        VaultStructs.VaultParameters calldata vaultParams,
         uint256 amount
-    ) external returns (uint152 collateralWidthdrawn) {
-        // Get state
-        VaultStructs.State memory state_ = _getState(debtToken, collateralToken, leverageTier);
-
-        // Compute reserves from state
-        (VaultStructs.Reserves memory reserves, APE ape, ) = VaultExternal.getReserves(
-            false,
-            isAPE,
-            state_,
-            collateralToken,
-            leverageTier
-        );
-
+    ) external returns (uint144 collateralWidthdrawn) {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[state_.vaultId];
+
+        // Get reserves
+        (
+            VaultStructs.TokenState memory tokenState,
+            VaultStructs.VaultState memory vaultState,
+            VaultStructs.Reserves memory reserves,
+            APE ape,
+
+        ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+
+        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+        uint256 collectedFee;
         if (isAPE) {
             // Burn APE
-            uint152 polFee;
-            (reserves, polFee, collateralWidthdrawn) = ape.burn(
+            uint144 polFee;
+            (reserves, collectedFee, polFee, collateralWidthdrawn) = ape.burn(
                 msg.sender,
                 systemParams_.baseFee,
                 vaultIssuanceParams_.tax,
@@ -180,13 +158,23 @@ contract Vault is TEA {
             );
 
             // Mint TEA for protocol owned liquidity (POL)
-            mint(collateralToken, address(this), state_.vaultId, systemParams_, vaultIssuanceParams_, reserves, polFee);
+            if (polFee > 0) {
+                mint(
+                    vaultParams.collateralToken,
+                    address(this),
+                    vaultState.vaultId,
+                    systemParams_,
+                    vaultIssuanceParams_,
+                    reserves,
+                    polFee
+                );
+            }
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
-            collateralWidthdrawn = burn(
-                collateralToken,
+            (collateralWidthdrawn, collectedFee) = burn(
+                vaultParams.collateralToken,
                 msg.sender,
-                state_.vaultId,
+                vaultState.vaultId,
                 systemParams_,
                 vaultIssuanceParams_,
                 reserves,
@@ -194,11 +182,14 @@ contract Vault is TEA {
             );
         }
 
-        // Update state from new reserves
-        _updateState(state_, reserves, debtToken, collateralToken, leverageTier);
+        // Update vaultStates from new reserves
+        _updateVaultState(vaultState, reserves, vaultParams);
+
+        // Update collateral params
+        _updateTokenState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWidthdrawn);
 
         // Send collateral
-        TransferHelper.safeTransfer(collateralToken, msg.sender, collateralWidthdrawn);
+        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, collateralWidthdrawn);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -210,21 +201,142 @@ contract Vault is TEA {
     /** @dev Kick it to periphery if more space is needed
      */
     function getReserves(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) external view returns (VaultStructs.Reserves memory reserves) {
-        // Retrieve state and check it actually exists
-        VaultStructs.State memory state_ = state[debtToken][collateralToken][leverageTier];
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
+        VaultStructs.VaultParameters calldata vaultParams
+    ) external view returns (VaultStructs.Reserves memory) {
+        // return
+        //     getReservesReadOnly(
+        //         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
+        //         _ORACLE,
+        //         vaultParams
+        //     );
+        return VaultExternal.getReservesReadOnly(vaultStates, _ORACLE, vaultParams);
+    }
 
-        // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
-        if (state_.timeStampPrice != block.timestamp) {
-            state_.tickPriceX42 = _ORACLE.getPrice(collateralToken, debtToken);
-            state_.timeStampPrice = uint40(block.timestamp);
+    // function getReservesReadOnly(
+    //     VaultStructs.VaultState memory vaultState,
+    //     Oracle oracle,
+    //     VaultStructs.VaultParameters calldata vaultParams
+    // ) public view returns (VaultStructs.Reserves memory reserves) {
+    //     // Get price
+    //     reserves.tickPriceX42 = oracle.getPrice(vaultParams.collateralToken, vaultParams.debtToken);
+
+    //     _getReserves(vaultState, reserves, vaultParams.leverageTier);
+    // }
+
+    // function _getReserves(
+    //     VaultStructs.VaultState memory vaultState,
+    //     VaultStructs.Reserves memory reserves,
+    //     int8 leverageTier
+    // ) private view {
+    //     unchecked {
+    //         console.logInt(leverageTier);
+    //         if (vaultState.vaultId == 0) revert();
+
+    //         // Reserve is empty only in the 1st mint
+    //         console.log("vaultState.reserve", vaultState.reserve);
+    //         if (vaultState.reserve != 0) {
+    //             assert(vaultState.reserve >= 2);
+
+    //             if (vaultState.tickPriceSatX42 == type(int64).min) {
+    //                 // type(int64).min represents -∞ => reserveLPers = 0
+    //                 reserves.reserveApes = vaultState.reserve - 1;
+    //                 reserves.reserveLPers = 1;
+    //             } else if (vaultState.tickPriceSatX42 == type(int64).max) {
+    //                 // type(int64).max represents +∞ => reserveApes = 0
+    //                 reserves.reserveApes = 1;
+    //                 reserves.reserveLPers = vaultState.reserve - 1;
+    //             } else {
+    //                 uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+
+    //                 if (reserves.tickPriceX42 < vaultState.tickPriceSatX42) {
+    //                     console.log("POWER ZONE");
+    //                     /**
+    //                      * POWER ZONE
+    //                      * A = (price/priceSat)^(l-1) R/l
+    //                      * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+    //                      * We use the fact that l = 1+2^leverageTier
+    //                      * reserveApes is rounded up
+    //                      */
+    //                     int256 poweredTickPriceDiffX42 = leverageTier > 0
+    //                         ? (int256(vaultState.tickPriceSatX42) - reserves.tickPriceX42) << absLeverageTier
+    //                         : (int256(vaultState.tickPriceSatX42) - reserves.tickPriceX42) >> absLeverageTier;
+
+    //                     if (poweredTickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
+    //                         console.log("reserves.reserveApes = 1");
+    //                         reserves.reserveApes = 1;
+    //                     } else {
+    //                         console.log("reserves.reserveApes != 1");
+    //                         /** Rounds up reserveApes, rounds down reserveLPers.
+    //                             Cannot overflow.
+    //                             64 bits because getRatioAtTick returns a Q64.64 number.
+    //                         */
+    //                         uint256 poweredPriceRatioX64 = TickMathPrecision.getRatioAtTick(
+    //                             int64(poweredTickPriceDiffX42)
+    //                         );
+
+    //                         console.log("poweredPriceRatioX64", poweredPriceRatioX64);
+    //                         reserves.reserveApes = uint144(
+    //                             _divRoundUp(
+    //                                 uint256(vaultState.reserve) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
+    //                                 poweredPriceRatioX64 + (poweredPriceRatioX64 << absLeverageTier)
+    //                             )
+    //                         );
+
+    //                         if (reserves.reserveApes == vaultState.reserve) reserves.reserveApes--;
+    //                         assert(reserves.reserveApes != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
+    //                     }
+
+    //                     console.log("reserves.reserveApes", reserves.reserveApes);
+    //                     reserves.reserveLPers = vaultState.reserve - reserves.reserveApes;
+    //                     console.log("reserves.reserveLPers", reserves.reserveLPers);
+    //                 } else {
+    //                     console.log("SATURATION ZONE");
+    //                     /**
+    //                      * SATURATION ZONE
+    //                      * LPers are 100% pegged to debt token.
+    //                      * L = (priceSat/price) R/r
+    //                      * price = 1.0001^tickPriceX42 and priceSat = 1.0001^tickPriceSatX42
+    //                      * We use the fact that lr = 1+2^-leverageTier
+    //                      * reserveLPers is rounded up
+    //                      */
+    //                     int256 tickPriceDiffX42 = int256(reserves.tickPriceX42) - vaultState.tickPriceSatX42;
+
+    //                     if (tickPriceDiffX42 > SystemConstants.MAX_TICK_X42) {
+    //                         console.log("reserves.reserveLPers = 1");
+    //                         reserves.reserveLPers = 1;
+    //                     } else {
+    //                         console.log("reserves.reserveLPers != 1");
+    //                         /** Rounds up reserveLPers, rounds down reserveApes.
+    //                             Cannot overflow.
+    //                             64 bits because getRatioAtTick returns a Q64.64 number.
+    //                         */
+    //                         uint256 priceRatioX64 = TickMathPrecision.getRatioAtTick(int64(tickPriceDiffX42));
+
+    //                         console.log("priceRatioX64", priceRatioX64);
+    //                         reserves.reserveLPers = uint144(
+    //                             _divRoundUp(
+    //                                 uint256(vaultState.reserve) << (leverageTier < 0 ? 64 : 64 + absLeverageTier),
+    //                                 priceRatioX64 + (priceRatioX64 << absLeverageTier)
+    //                             )
+    //                         );
+
+    //                         if (reserves.reserveLPers == vaultState.reserve) reserves.reserveLPers--;
+    //                         assert(reserves.reserveLPers != 0); // It should never be 0 because it's rounded up. Important for the protocol that it is at least 1.
+    //                     }
+
+    //                     console.log("reserves.reserveLPers", reserves.reserveLPers);
+    //                     reserves.reserveApes = vaultState.reserve - reserves.reserveLPers;
+    //                     console.log("reserves.reserveApes", reserves.reserveApes);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+
+    function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
+        unchecked {
+            return (a - 1) / b + 1;
         }
-
-        (reserves, , ) = VaultExternal.getReserves(false, false, state_, collateralToken, leverageTier);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -232,59 +344,41 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * Connections Between State Variables (R,priceSat) & Reserves (A,L)
+     * Connections Between VaultState Variables (R,priceSat) & Reserves (A,L)
      *     where R = Total reserve, A = Apes reserve, L = LP reserve
      *     (R,priceSat) ⇔ (A,L)
      *     (R,  ∞  ) ⇔ (0,L)
      *     (R,  0  ) ⇔ (A,0)
      */
-
-    function _getState(
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
-    ) private returns (VaultStructs.State memory state_) {
-        // Retrieve state and check it actually exists
-        state_ = state[debtToken][collateralToken][leverageTier];
-        if (state_.vaultId == 0) revert VaultDoesNotExist();
-
-        // Retrieve price from _ORACLE if not retrieved in a previous tx in this block
-        if (state_.timeStampPrice != block.timestamp) {
-            state_.tickPriceX42 = _ORACLE.updateOracleState(collateralToken, debtToken);
-            state_.timeStampPrice = uint40(block.timestamp);
-        }
-    }
-
-    function _updateState(
-        VaultStructs.State memory state_,
+    function _updateVaultState(
+        VaultStructs.VaultState memory vaultState,
         VaultStructs.Reserves memory reserves,
-        address debtToken,
-        address collateralToken,
-        int8 leverageTier
+        VaultStructs.VaultParameters calldata vaultParams
     ) private {
         unchecked {
-            state_.treasury = reserves.treasury;
-            state_.totalReserves = reserves.apesReserve + reserves.lpReserve;
+            vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
 
             // To ensure division by 0 does not occur when recoverying the reserves
-            require(state_.totalReserves >= 2);
+            require(vaultState.reserve >= 2);
 
             // Compute tickPriceSatX42
-            if (reserves.apesReserve == 0) {
-                state_.tickPriceSatX42 = type(int64).max;
-            } else if (reserves.lpReserve == 0) {
-                state_.tickPriceSatX42 = type(int64).min;
+            if (reserves.reserveApes == 0) {
+                vaultState.tickPriceSatX42 = type(int64).max;
+            } else if (reserves.reserveLPers == 0) {
+                vaultState.tickPriceSatX42 = type(int64).min;
             } else {
                 /**
                  * Decide if we are in the power or saturation zone
                  * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
                  */
-                uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+                uint8 absLeverageTier = vaultParams.leverageTier >= 0
+                    ? uint8(vaultParams.leverageTier)
+                    : uint8(-vaultParams.leverageTier);
                 bool isPowerZone;
-                if (leverageTier > 0) {
+                if (vaultParams.leverageTier > 0) {
                     if (
-                        uint256(reserves.apesReserve) << absLeverageTier < reserves.lpReserve
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
+                        uint256(reserves.reserveApes) << absLeverageTier < reserves.reserveLPers
+                    ) // Cannot OF because reserveApes is an uint144, and |leverageTier|<=3
                     {
                         isPowerZone = true;
                     } else {
@@ -292,8 +386,8 @@ contract Vault is TEA {
                     }
                 } else {
                     if (
-                        reserves.apesReserve < uint256(reserves.lpReserve) << absLeverageTier
-                    ) // Cannot OF because apesReserve is an uint152, and |leverageTier|<=3
+                        reserves.reserveApes < uint256(reserves.reserveLPers) << absLeverageTier
+                    ) // Cannot OF because reserveApes is an uint144, and |leverageTier|<=3
                     {
                         isPowerZone = true;
                     } else {
@@ -302,65 +396,91 @@ contract Vault is TEA {
                 }
 
                 if (isPowerZone) {
-                    /**
-                     * PRICE IN POWER ZONE
-                     * priceSat = price*(R/(lA))^(r-1)
+                    /** PRICE IN POWER ZONE
+                        priceSat = price*(R/(lA))^(r-1)
                      */
 
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? state_.totalReserves : uint256(state_.totalReserves) << absLeverageTier, // Cannot OF cuz totalReserves is uint152, and |leverageTier|<=3
-                        (uint256(reserves.apesReserve) << absLeverageTier) + reserves.apesReserve // Cannot OF cuz apesReserve is uint152, and |leverageTier|<=3
+                        vaultParams.leverageTier >= 0
+                            ? vaultState.reserve
+                            : uint256(vaultState.reserve) << absLeverageTier, // Cannot OF cuz reserve is uint144, and |leverageTier|<=3
+                        (uint256(reserves.reserveApes) << absLeverageTier) + reserves.reserveApes // Cannot OF cuz reserveApes is uint144, and |leverageTier|<=3
                     );
 
                     // Compute saturation price
-                    int256 temptickPriceSatX42 = state_.tickPriceX42 +
-                        (leverageTier >= 0 ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier);
+                    int256 tempTickPriceSatX42 = reserves.tickPriceX42 +
+                        (
+                            vaultParams.leverageTier >= 0
+                                ? tickRatioX42 >> absLeverageTier
+                                : tickRatioX42 << absLeverageTier
+                        );
 
                     // Check if overflow
-                    if (temptickPriceSatX42 > type(int64).max) state_.tickPriceSatX42 = type(int64).max;
-                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
+                    if (tempTickPriceSatX42 > type(int64).max) vaultState.tickPriceSatX42 = type(int64).max;
+                    else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 } else {
-                    /**
-                     * PRICE IN SATURATION ZONE
-                     * priceSat = r*price*L/R
+                    /** PRICE IN SATURATION ZONE
+                        priceSat = r*price*L/R
                      */
+
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        leverageTier >= 0 ? uint256(state_.totalReserves) << absLeverageTier : state_.totalReserves,
-                        (uint256(reserves.lpReserve) << absLeverageTier) + reserves.lpReserve
+                        vaultParams.leverageTier >= 0
+                            ? uint256(vaultState.reserve) << absLeverageTier
+                            : vaultState.reserve,
+                        (uint256(reserves.reserveLPers) << absLeverageTier) + reserves.reserveLPers
                     );
 
                     // Compute saturation price
-                    int256 temptickPriceSatX42 = state_.tickPriceX42 - tickRatioX42;
+                    int256 tempTickPriceSatX42 = reserves.tickPriceX42 - tickRatioX42;
 
                     // Check if underflow
-                    if (temptickPriceSatX42 < type(int64).min) state_.tickPriceSatX42 = type(int64).min;
-                    else state_.tickPriceSatX42 = int64(temptickPriceSatX42);
+                    if (tempTickPriceSatX42 < type(int64).min) vaultState.tickPriceSatX42 = type(int64).min;
+                    else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 }
             }
 
-            // Store new state
-            state[debtToken][collateralToken][leverageTier] = state_;
+            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         }
+    }
+
+    function _updateTokenState(
+        bool isMint,
+        VaultStructs.TokenState memory tokenState,
+        uint256 collectedFee,
+        address collateralToken,
+        uint144 collateralDepositedOrWithdrawn
+    ) private {
+        uint256 collectedFees_ = tokenState.collectedFees + collectedFee;
+        require(collectedFees_ <= type(uint112).max); // Ensure it fits in a uint112
+        tokenState = VaultStructs.TokenState({
+            collectedFees: uint112(collectedFees_),
+            total: isMint
+                ? tokenState.total + collateralDepositedOrWithdrawn
+                : tokenState.total - collateralDepositedOrWithdrawn
+        });
+
+        tokenStates[collateralToken] = tokenState;
     }
 
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(uint40 vaultId, address to) external onlySystemControl returns (address, uint256) {
-        VaultStructs.Parameters memory params = paramsById[vaultId];
+    function withdrawFees(address token) external {
+        require(msg.sender == sir);
 
-        uint256 treasury = state[params.debtToken][params.collateralToken][params.leverageTier].treasury;
-        state[params.debtToken][params.collateralToken][params.leverageTier].treasury = 0; // Null balance to avoid reentrancy attack
+        VaultStructs.TokenState memory tokenState = tokenStates[token];
+        uint112 collectedFees = tokenState.collectedFees;
+        if (collectedFees == 0) return;
 
-        if (treasury > 0) TransferHelper.safeTransfer(params.collateralToken, to, treasury);
+        tokenStates[token] = VaultStructs.TokenState({collectedFees: 0, total: tokenState.total - collectedFees});
 
-        return (params.collateralToken, treasury);
+        TransferHelper.safeTransfer(token, msg.sender, collectedFees);
     }
 
     /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack
         @notice during the beta period. To execute it, the system must be in Shutdown status
-        @notice which can only be activate after SHUTDOWN_WITHDRAWAL_DELAY since Emergency status was activated.
+        @notice which can only be activated after SHUTDOWN_WITHDRAWAL_DELAY seconds elapsed since Emergency status was activated.
      */
     function withdrawToSaveSystem(
         address[] calldata tokens,
