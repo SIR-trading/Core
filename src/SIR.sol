@@ -29,7 +29,7 @@ contract SIR is ERC20Staker {
             uint256 issuance;
             if (tsLastMint_ == 0) {
                 // Get the contributor's allocation
-                uint256 allocation = _getContributoAllocation(contributor);
+                uint256 allocation = _getContributorAllocation(contributor);
 
                 // No allocation, no rewards
                 if (allocation == 0) return 0;
@@ -86,7 +86,7 @@ contract SIR is ERC20Staker {
         @dev Function returns an integer with max value of 10000.
         @dev The sum of all contributors' allocations must be less than or equal to 10000.
      */
-    function _getContributoAllocation(address contributor) private pure returns (uint256) {
+    function _getContributorAllocation(address contributor) private pure returns (uint256) {
         if (contributor == 0x7EE4a8493Da53686dDF4FD2F359a7D00610CE370) return 100;
         else if (contributor == 0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5) return 1000;
 

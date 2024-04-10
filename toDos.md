@@ -15,9 +15,6 @@ Minimize # hot SLOADs
 
 # Core
 
--   Do not distribute SIR to POL. Easy to hack without extra gas in the current implementation because totalSupply and vaultBalance share the same slot.
--   Remove SIR withdrawal functions since there is no SIR to collect.
--   Code Staker which is allowed to withdraw fees. Staker inherits SIR? Stakers do not get SIR from POL.
 -   Consider adding more leverage tiers by rerunning tests
 
 # Marketing
@@ -26,11 +23,6 @@ Minimize # hot SLOADs
     -   Airdrop tokens to ETH stakers (in particular, home stakers)
     -   Allocate up to 1% of the token supply to @ProtocolGuild
 
-# Contributors
-
--   Consider not allowing changes on contributors allocations at mainnet
--   Instead allocate a fix amount of SIR to post mainnet.
-
 # SIR contracts
 
 -   Hard wire allocations with 30% of the tokens.
@@ -38,3 +30,7 @@ Minimize # hot SLOADs
 -   10% is for investors
 -   10% for pre-launch contributors
 -   No changing allocations post-launch
+
+# Tests
+
+-   Test Vault state divergence as it is updated consecutively without minting or burning anything.
