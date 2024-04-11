@@ -42,7 +42,7 @@ contract VaultInitializeTest is Test {
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
-        address oracle = address(new Oracle());
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy vault
         vault = new Vault(systemControl, sir, oracle);
@@ -213,7 +213,7 @@ contract VaultTest is Test {
         // vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        oracle = address(new Oracle());
+        oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Mock oracle initialization
         vm.mockCall(

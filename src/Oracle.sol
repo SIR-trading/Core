@@ -10,7 +10,6 @@ import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 
 // Contracts
-import {Addresses} from "./libraries/Addresses.sol";
 import "forge-std/Test.sol";
 
 /**
@@ -194,6 +193,8 @@ contract Oracle {
     );
     event PriceUpdated(address indexed token0, address indexed token1, bool indexed priceTruncated, int64 priceTickX42);
 
+    address private immutable _ADDR_UNISWAPV3_FACTORY;
+
     /**
      * Parameters of a Uniswap v3 tier.
      */
@@ -237,6 +238,10 @@ contract Oracle {
      */
     mapping(address token0 => mapping(address token1 => OracleState)) public vaultState;
     uint private _uniswapExtraFeeTiers; // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier
+
+    constructor(address uniswapV3Factory) {
+        _ADDR_UNISWAPV3_FACTORY = uniswapV3Factory;
+    }
 
     /*////////////////////////////////////////////////////////////////
                             READ-ONLY FUNCTIONS
@@ -389,7 +394,7 @@ contract Oracle {
         require(uniswapFeeTiers.length < 9); // 4 basic fee tiers + 5 extra fee tiers max
 
         // Check fee tier actually exists in Uniswap v3
-        int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
+        int24 tickSpacing = IUniswapV3Factory(_ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
         require(tickSpacing > 0);
 
         // Check fee tier has not been added yet
@@ -731,11 +736,11 @@ contract Oracle {
         return (((aggOrAvLiquidity * uniswapFeeTier.fee) << 72) - 1) / uint24(uniswapFeeTier.tickSpacing) + 1;
     }
 
-    function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private pure returns (IUniswapV3Pool) {
+    function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private view returns (IUniswapV3Pool) {
         return
             IUniswapV3Pool(
                 UniswapPoolAddress.computeAddress(
-                    Addresses.ADDR_UNISWAPV3_FACTORY,
+                    _ADDR_UNISWAPV3_FACTORY,
                     UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee)
                 )
             );

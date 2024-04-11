@@ -10,6 +10,8 @@ import {ERC20Staker} from "./ERC20Staker.sol";
 contract SIR is ERC20Staker {
     mapping(address => uint40) internal tsLastMint;
 
+    constructor(address weth) ERC20Staker(weth) {}
+
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/

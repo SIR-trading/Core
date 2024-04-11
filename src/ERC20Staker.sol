@@ -2,7 +2,6 @@
 pragma solidity >=0.8.0;
 
 import {SystemConstants} from "./libraries/SystemConstants.sol";
-import {Addresses} from "./libraries/Addresses.sol";
 import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 
@@ -27,7 +26,7 @@ contract ERC20Staker {
     event Unstaked(address indexed staker, uint256 amount);
 
     address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
-    IWETH9 private immutable _WETH = IWETH9(payable(Addresses.ADDR_WETH));
+    IWETH9 private immutable _WETH;
     Vault internal vault;
 
     string public name = "Safer Investment Rehypothecation";
@@ -67,8 +66,10 @@ contract ERC20Staker {
 
     mapping(address => uint256) public nonces;
 
-    constructor() {
+    constructor(address weth) {
         deployer = msg.sender;
+
+        _WETH = IWETH9(payable(weth));
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
@@ -354,7 +355,7 @@ contract ERC20Staker {
 
     function collectFeesAndStartAuction(address token) external {
         // (W)ETH is the dividend paying token, so we do not start an auction for it.
-        if (token != Addresses.ADDR_WETH) {
+        if (token != address(_WETH)) {
             Auction memory auction = auctions[token];
 
             if (block.timestamp < auction.startTime + SystemConstants.AUCTION_COOLDOWN)

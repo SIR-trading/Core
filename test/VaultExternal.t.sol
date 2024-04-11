@@ -55,7 +55,7 @@ contract VaultExternalTest is Test {
         }
 
         // Deployr oracle
-        oracle = new Oracle();
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
 
         alice = vm.addr(1);
     }
@@ -249,7 +249,7 @@ contract VaultExternalGetReserves is Test {
         vaultParams = VaultStructs.VaultParameters(Addresses.ADDR_USDC, address(_collateralToken), 0);
 
         alice = vm.addr(1);
-        oracle = new Oracle();
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
     }
 
     modifier Preprocess(
