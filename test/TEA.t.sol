@@ -424,10 +424,25 @@ contract TEATest is Test, TEATestConstants {
             assertEq(tea.balanceOf(operator, VAULT_ID), 0);
             assertEq(tea.balanceOf(operator, vaultIdB), 0);
         }
-        assertEq(tea.balanceOf(from, VAULT_ID), from == to ? mintAmountA : mintAmountA - transferAmountA);
-        assertEq(tea.balanceOf(to, VAULT_ID), to == from ? mintAmountA : transferAmountA);
-        assertEq(tea.balanceOf(from, vaultIdB), from == to ? mintAmountB : mintAmountB - transferAmountB);
-        assertEq(tea.balanceOf(to, vaultIdB), to == from ? mintAmountB : transferAmountB);
+
+        if (VAULT_ID != vaultIdB) {
+            if (from == to) {
+                assertEq(tea.balanceOf(from, VAULT_ID), mintAmountA);
+                assertEq(tea.balanceOf(from, vaultIdB), mintAmountB);
+            } else {
+                assertEq(tea.balanceOf(from, VAULT_ID), mintAmountA - transferAmountA);
+                assertEq(tea.balanceOf(to, VAULT_ID), transferAmountA);
+                assertEq(tea.balanceOf(from, vaultIdB), mintAmountB - transferAmountB);
+                assertEq(tea.balanceOf(to, vaultIdB), transferAmountB);
+            }
+        } else {
+            if (from == to) {
+                assertEq(tea.balanceOf(from, VAULT_ID), mintAmountA + mintAmountB);
+            } else {
+                assertEq(tea.balanceOf(from, VAULT_ID), mintAmountA + mintAmountB - transferAmountA - transferAmountB);
+                assertEq(tea.balanceOf(to, VAULT_ID), transferAmountA + transferAmountB);
+            }
+        }
     }
 
     function testFuzz_safeBatchTransferFromVaultFails(

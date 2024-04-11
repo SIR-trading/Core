@@ -10,7 +10,7 @@ fs_permissions = [{ access = "read-write", path = "./"}]
 
 [fuzz]
 # seed = "0x02"
-# runs = 10000
+ runs = 10000
 
 [rpc_endpoints]
 mainnet = "https://mainnet.infura.io/v3/${RPC_MAINNET}"
