@@ -43,7 +43,7 @@ abstract contract SystemState is SystemControlAccess {
 
     address internal immutable sir;
 
-    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) public vaultIssuanceParams;
+    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
     VaultStructs.SystemParameters public systemParams;
@@ -176,6 +176,10 @@ abstract contract SystemState is SystemControlAccess {
 
     function unclaimedRewards(uint256 vaultId, address lper) external view returns (uint80) {
         return unclaimedRewards(vaultId, lper, balanceOf(lper, vaultId), cumulativeSIRPerTEA(vaultId));
+    }
+
+    function vaultTax(uint48 vaultId) external view returns (uint8) {
+        return vaultIssuanceParams[vaultId].tax;
     }
 
     /*////////////////////////////////////////////////////////////////
