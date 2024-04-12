@@ -43,7 +43,7 @@ abstract contract SystemState is SystemControlAccess {
 
     address internal immutable sir;
 
-    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal vaultIssuanceParams;
+    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) public vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
     VaultStructs.SystemParameters public systemParams;
