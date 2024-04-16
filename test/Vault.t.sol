@@ -1653,3 +1653,192 @@ contract VaultTest is Test {
 
 // INVARIANT TEST USING A REAL DATA PAIR AND ITS REAL PRICE CHANGES
 // TEST MULTIPLE MINTS ON DIFFERENT VAULTS WITH SAME COLLATERAL
+
+contract VaultHandler is Test {
+    struct InputOutput {
+        bool advanceBlock;
+        uint256 vaultId;
+        uint256 userId;
+        uint256 amountCollateral;
+    }
+
+    // NEED TO MAKE SURE TIME IS WORKING PROPERLY
+    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+    Vault public vault;
+    Oracle public oracle;
+
+    uint256 public blockNumber;
+
+    modifier AdvanceBlock(bool advanceBlock) {
+        if (advanceBlock) vm.createSelectFork("mainnet", ++blockNumber);
+        _;
+    }
+
+    modifier WithdrawCollateral(InputOutput memory inputOutput) {
+        _;
+
+        // User
+        address user = _idToAddr(inputOutput.userId);
+
+        // Unwrap ETH
+        vm.prank(user);
+        _WETH.withdraw(inputOutput.amountCollateral);
+    }
+
+    constructor(uint256 blockNumber_) {
+        blockNumber = blockNumber_;
+
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        vault = new Vault(address(0), address(oracle)); // SystemControl's address is set to 0 because we are not using it.
+
+        // Set tax between 2 vaults
+        vm.prank(systemControl);
+        {
+            uint48[] memory oldVaults = new uint48[](0);
+            uint48[] memory newVaults = new uint48[](2);
+            newVaults[0] = 1;
+            newVaults[1] = 2;
+            uint8[] memory newTaxes = new uint8[](1);
+            newTaxes[0] = 228;
+            newTaxes[0] = 114; // Ensure 114^2+228^2 <= (2^8-1)^2
+            vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
+        }
+
+        // Intialize vault 1.25xETH/USDT
+        vault.initialize(
+            VaultStructs.VaultParameters({
+                debtToken: Addresses.ADDR_USDT,
+                collateralToken: Addresses.ADDR_WETH,
+                leverageTier: int8(-2)
+            })
+        );
+
+        // Intialize vault 1.5xETH/USDC
+        vault.initialize(
+            VaultStructs.VaultParameters({
+                debtToken: Addresses.ADDR_USDC,
+                collateralToken: Addresses.ADDR_WETH,
+                leverageTier: int8(-1)
+            })
+        );
+    }
+
+    function mintAPE(InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
+        // Get vault parameters
+        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = _idToVault(
+            inputOutput.vaultId
+        );
+
+        // Get reserves
+        VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
+
+        // Sufficient condition to not overflow APE supply
+        (bool success, uint256 maxCollateralAmount) = FullMath.tryMulDiv(
+            reserves.reserveApes,
+            type(uint256).max,
+            ape.totalSupply()
+        );
+
+        // Bound the collateral amount
+        if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, maxCollateralAmount);
+
+        // Sufficient condition to not overflow TEA supply
+        uint256 teaSupply = vault.totalSupply(vaultId);
+        if (teaSupply > 0) {
+            (success, maxCollateralAmount) = FullMath.tryMulDiv(
+                uint256(10) * reserves.lpReserve,
+                SystemConstants.TEA_MAX_SUPPLY,
+                teaSupply
+            );
+
+            // Bound the collateral amount
+            if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, maxCollateralAmount);
+        }
+
+        // Deposit collateral
+        address user = _depositCollateral(inputOutput);
+
+        // Mint APE
+        vm.prank(user);
+        vault.mint(true, vaultParameters);
+    }
+
+    function mintTEA(InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
+        // If supply of TEA is not 0, I need to make sure to not overflow the max supply
+    }
+
+    function burnAPE(
+        InputOutput memory inputOutput,
+        uint256 amountAPE
+    ) external AdvanceBlock(inputOutput) WithdrawCollateral(inputOutput) {
+        // BURN APE
+    }
+
+    function burnTEA(
+        InputOutput memory inputOutput,
+        uint256 amountTEA
+    ) external AdvanceBlock(inputOutput) WithdrawCollateral(inputOutput) {
+        // BURN TEA
+    }
+
+    /////////////////////////////////////////////////////////
+    ///////////////////// PRIVATE FUNCTIONS /////////////////
+
+    function _depositCollateral(InputOutput memory inputOutput) private returns (address user) {
+        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, (2 << 128) - _WETH.totalSupply());
+
+        // User
+        user = _idToAddr(inputOutput.userId);
+
+        // Deal ETH
+        if (user.balance < inputOutput.amountCollateral) vm.deal(user, inputOutput.amountCollateral - user.balance);
+
+        // Wrap ETH and deposit to vault
+        vm.startPrank(user);
+        _WETH.deposit{value: inputOutput.amountCollateral}();
+        _WETH.transfer(address(vault), inputOutput.amountCollateral);
+        vm.stopPrank();
+    }
+
+    function _idToAddr(uint256 userId) private pure returns (address) {
+        userId = _bound(userId, 1, 3);
+        return vm.addr(userId);
+    }
+
+    function _idToVault(uint256 vaultId) private pure returns (uint256, VaultStructs.VaultParameters memory, address) {
+        vaultId = _bound(vaultId, 1, 2);
+        (address debtToken, address collateralToken, int8 leverageTier) = vault.paramsById(vaultId);
+        address ape = SaltedAddress.getAddress(address(vault), vaultId);
+        return (vaultId, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier), ape);
+    }
+
+    // EVERY FUNCTION CALL MAY ADVANCED A BLOCK OR NOT
+
+    // ADD HANDLE FOR MINT/BURN FUNCTIONS
+}
+
+contract VaultInvariantTest is Test {
+    uint256 constant BLOCK_NUMBER_START = 18128102;
+
+    VaultHandler public vaultHandler;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+
+        // Deploy the vault handler
+        vaultHandler = new VaultHandler(BLOCK_NUMBER_START);
+
+        targetContract(address(vaultHandler));
+
+        bytes4[] memory selectors = new bytes4[](4);
+        selectors[0] = vaultHandler.mintAPE.selector;
+        selectors[1] = vaultHandler.mintTEA.selector;
+        selectors[2] = vaultHandler.burnAPE.selector;
+        selectors[3] = vaultHandler.burnTEA.selector;
+        targetSelector(FuzzSelector({addr: address(_systemStateHandler), selectors: selectors}));
+
+        vm.makePersistent(address(vaultHandler));
+        vm.makePersistent(vaultHandler.vaul());
+        vm.makePersistent(vaultHandler.oracle());
+    }
+}
