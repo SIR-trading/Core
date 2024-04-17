@@ -12,6 +12,8 @@ Minimize # hot SLOADs
 -   Add quoting functions
 -   Add getReserves function
 -   Add donate() function which basically transfer TEA to Vault
+-   Function that returns the amount of TEA and amount in the reserve LP.
+-   Function that returns the amount of APE and amount in the reserve of apes.
 
 # Core
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-import "forge-std/Test.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
@@ -17,7 +16,7 @@ import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 
-// import {APE} from "src/APE.sol";
+import "forge-std/Test.sol";
 
 contract VaultInitializeTest is Test {
     error VaultAlreadyInitialized();
@@ -1669,8 +1668,8 @@ contract VaultHandler is Test {
 
     uint256 public blockNumber;
 
-    modifier AdvanceBlock(bool advanceBlock) {
-        if (advanceBlock) vm.createSelectFork("mainnet", ++blockNumber);
+    modifier AdvanceBlock(InputOutput memory inputOutput) {
+        if (inputOutput.advanceBlock) vm.createSelectFork("mainnet", ++blockNumber);
         _;
     }
 
@@ -1689,18 +1688,18 @@ contract VaultHandler is Test {
         blockNumber = blockNumber_;
 
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
-        vault = new Vault(address(0), address(oracle)); // SystemControl's address is set to 0 because we are not using it.
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
 
         // Set tax between 2 vaults
-        vm.prank(systemControl);
+        vm.prank(vm.addr(100));
         {
             uint48[] memory oldVaults = new uint48[](0);
             uint48[] memory newVaults = new uint48[](2);
             newVaults[0] = 1;
             newVaults[1] = 2;
-            uint8[] memory newTaxes = new uint8[](1);
+            uint8[] memory newTaxes = new uint8[](2);
             newTaxes[0] = 228;
-            newTaxes[0] = 114; // Ensure 114^2+228^2 <= (2^8-1)^2
+            newTaxes[1] = 114; // Ensure 114^2+228^2 <= (2^8-1)^2
             vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
         }
 
@@ -1736,7 +1735,7 @@ contract VaultHandler is Test {
         (bool success, uint256 maxCollateralAmount) = FullMath.tryMulDiv(
             reserves.reserveApes,
             type(uint256).max,
-            ape.totalSupply()
+            IERC20(ape).totalSupply()
         );
 
         // Bound the collateral amount
@@ -1746,7 +1745,7 @@ contract VaultHandler is Test {
         uint256 teaSupply = vault.totalSupply(vaultId);
         if (teaSupply > 0) {
             (success, maxCollateralAmount) = FullMath.tryMulDiv(
-                uint256(10) * reserves.lpReserve,
+                uint256(10) * reserves.reserveLPers,
                 SystemConstants.TEA_MAX_SUPPLY,
                 teaSupply
             );
@@ -1772,6 +1771,7 @@ contract VaultHandler is Test {
         uint256 amountAPE
     ) external AdvanceBlock(inputOutput) WithdrawCollateral(inputOutput) {
         // BURN APE
+        inputOutput.amountCollateral = 0;
     }
 
     function burnTEA(
@@ -1779,13 +1779,14 @@ contract VaultHandler is Test {
         uint256 amountTEA
     ) external AdvanceBlock(inputOutput) WithdrawCollateral(inputOutput) {
         // BURN TEA
+        inputOutput.amountCollateral = 0;
     }
 
     /////////////////////////////////////////////////////////
     ///////////////////// PRIVATE FUNCTIONS /////////////////
 
     function _depositCollateral(InputOutput memory inputOutput) private returns (address user) {
-        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, (2 << 128) - _WETH.totalSupply());
+        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, (1 << 128) - _WETH.totalSupply());
 
         // User
         user = _idToAddr(inputOutput.userId);
@@ -1805,7 +1806,7 @@ contract VaultHandler is Test {
         return vm.addr(userId);
     }
 
-    function _idToVault(uint256 vaultId) private pure returns (uint256, VaultStructs.VaultParameters memory, address) {
+    function _idToVault(uint256 vaultId) private view returns (uint256, VaultStructs.VaultParameters memory, address) {
         vaultId = _bound(vaultId, 1, 2);
         (address debtToken, address collateralToken, int8 leverageTier) = vault.paramsById(vaultId);
         address ape = SaltedAddress.getAddress(address(vault), vaultId);
@@ -1819,8 +1820,10 @@ contract VaultHandler is Test {
 
 contract VaultInvariantTest is Test {
     uint256 constant BLOCK_NUMBER_START = 18128102;
+    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
 
     VaultHandler public vaultHandler;
+    Vault public vault;
 
     function setUp() public {
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
@@ -1835,10 +1838,18 @@ contract VaultInvariantTest is Test {
         selectors[1] = vaultHandler.mintTEA.selector;
         selectors[2] = vaultHandler.burnAPE.selector;
         selectors[3] = vaultHandler.burnTEA.selector;
-        targetSelector(FuzzSelector({addr: address(_systemStateHandler), selectors: selectors}));
+        targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
 
+        vault = vaultHandler.vault();
         vm.makePersistent(address(vaultHandler));
-        vm.makePersistent(vaultHandler.vaul());
-        vm.makePersistent(vaultHandler.oracle());
+        vm.makePersistent(address(vault));
+        vm.makePersistent(address(vaultHandler.oracle()));
+        vm.makePersistent(SaltedAddress.getAddress(address(vault), 1));
+        vm.makePersistent(SaltedAddress.getAddress(address(vault), 2));
+    }
+
+    function invariant_totalCollateral() public {
+        (, uint144 total) = vault.tokenStates(address(_WETH));
+        assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
     }
 }
