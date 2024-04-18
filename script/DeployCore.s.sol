@@ -9,7 +9,7 @@ import {SystemControl} from "src/SystemControl.sol";
 import {SIR} from "src/SIR.sol";
 import {Vault} from "src/Vault.sol";
 
-contract DeploySIR is Script {
+contract DeployCore is Script {
     function setUp() public {}
 
     /** 

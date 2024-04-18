@@ -1731,6 +1731,17 @@ contract VaultHandler is Test {
         // Get reserves
         VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
 
+        // Sufficient condition to not overflow total collateral
+        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
+        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, type(uint144).max - total);
+
+        // Sufficient condition to not overflow collected fees
+        inputOutput.amountCollateral = _bound(
+            inputOutput.amountCollateral,
+            1,
+            uint256(10) * (type(uint112).max - collectedFees)
+        );
+
         // Sufficient condition to not overflow APE supply
         (bool success, uint256 maxCollateralAmount) = FullMath.tryMulDiv(
             reserves.reserveApes,
@@ -1752,9 +1763,14 @@ contract VaultHandler is Test {
 
             // Bound the collateral amount
             if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, maxCollateralAmount);
+        } else {
+            // Cannot mint 1 single unit of collateral if TEA supply is 0
+            if (inputOutput.amountCollateral == 1) return;
         }
 
         // Deposit collateral
+        console.log("-----------------------------------------");
+        console.log("Minted with", inputOutput.amountCollateral, "WEI");
         address user = _depositCollateral(inputOutput);
 
         // Mint APE
