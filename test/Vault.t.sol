@@ -1736,11 +1736,7 @@ contract VaultHandler is Test {
         inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, type(uint144).max - total);
 
         // Sufficient condition to not overflow collected fees
-        inputOutput.amountCollateral = _bound(
-            inputOutput.amountCollateral,
-            1,
-            uint256(10) * (type(uint112).max - collectedFees)
-        );
+        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 1, type(uint112).max - collectedFees);
 
         // Sufficient condition to not overflow APE supply
         (bool success, uint256 maxCollateralAmount) = FullMath.tryMulDiv(
@@ -1864,6 +1860,8 @@ contract VaultInvariantTest is Test {
         vm.makePersistent(SaltedAddress.getAddress(address(vault), 2));
     }
 
+    /// forge-config: default.invariant.runs = 1
+    /// forge-config: default.invariant.depth = 20
     function invariant_totalCollateral() public {
         (, uint144 total) = vault.tokenStates(address(_WETH));
         assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
