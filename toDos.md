@@ -18,6 +18,7 @@ Minimize # hot SLOADs
 # Core
 
 -   Consider adding more leverage tiers by rerunning tests
+-   Index VaultStates by vaultId instead of by VaultParameters. That way I can save gas by just passing vaultId to the mint and burn functions.
 
 # Marketing
 
