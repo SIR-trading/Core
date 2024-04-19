@@ -122,9 +122,7 @@ contract Vault is TEA {
             _updateVaultState(vaultState, reserves, vaultParams);
 
             // Update collateral params
-            console.log("hola");
             _updateTokenState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
-            console.log("hello");
         }
     }
 
