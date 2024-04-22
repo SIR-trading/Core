@@ -1667,80 +1667,9 @@ contract VaultHandler is Test {
 
     uint256 public blockNumber;
 
-    // Dummy storage
-    address user;
-    VaultStructs.VaultParameters vaultParameters;
-
     modifier AdvanceBlock(InputOutput memory inputOutput) {
         if (inputOutput.advanceBlock) vm.createSelectFork("mainnet", ++blockNumber);
         _;
-    }
-
-    modifier DepositCollateral(bool isAPE, InputOutput memory inputOutput) {
-        // Get vault parameters
-        uint256 vaultId;
-        address ape;
-        (vaultId, vaultParameters, ape) = _idToVault(inputOutput.vaultId);
-
-        // Get reserves
-        VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
-
-        // Sufficient condition to not overflow total collateral
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
-        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint144).max - total);
-
-        // Sufficient condition to not overflow collected fees
-        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint112).max - collectedFees);
-
-        bool success;
-        uint256 maxCollateralAmount;
-        if (isAPE) {
-            // Sufficient condition to not overflow APE supply
-            uint256 apeSupply = IERC20(ape).totalSupply();
-            (success, maxCollateralAmount) = FullMath.tryMulDiv(
-                reserves.reserveApes,
-                type(uint256).max - apeSupply,
-                apeSupply
-            );
-            if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
-        }
-
-        // Sufficient condition to not overflow TEA supply
-        uint256 teaSupply = vault.totalSupply(vaultId);
-        (success, maxCollateralAmount) = FullMath.tryMulDiv(
-            (isAPE ? uint256(10) : 1) * reserves.reserveLPers,
-            SystemConstants.TEA_MAX_SUPPLY - teaSupply,
-            teaSupply
-        );
-        if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
-
-        // Cannot mint 1 single unit of collateral if TEA supply is 0
-        if (reserves.reserveApes + reserves.reserveLPers == 0 && inputOutput.amountCollateral < 2) return;
-
-        // User
-        user = _idToAddr(inputOutput.userId);
-
-        // Deal ETH
-        if (user.balance < inputOutput.amountCollateral) vm.deal(user, inputOutput.amountCollateral - user.balance);
-
-        // Wrap ETH and deposit to vault
-        vm.startPrank(user);
-        _WETH.deposit{value: inputOutput.amountCollateral}();
-        _WETH.transfer(address(vault), inputOutput.amountCollateral);
-        vm.stopPrank();
-
-        _;
-    }
-
-    modifier WithdrawCollateral(InputOutput memory inputOutput) {
-        _;
-
-        // User
-        user = _idToAddr(inputOutput.userId);
-
-        // Unwrap ETH
-        vm.prank(user);
-        _WETH.withdraw(inputOutput.amountCollateral);
     }
 
     constructor(uint256 blockNumber_) {
@@ -1781,28 +1710,120 @@ contract VaultHandler is Test {
         );
     }
 
-    function mint(
-        bool isAPE,
-        InputOutput memory inputOutput
-    ) external AdvanceBlock(inputOutput) DepositCollateral(isAPE, inputOutput) {
+    function mint(bool isAPE, InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
+        // TEST
+        inputOutput.vaultId = 1;
+        // TEST
+
+        // Get vault parameters
+        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = _idToVault(
+            inputOutput.vaultId
+        );
+
+        // Get reserves
+        VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
         console.log("-----------------------------------------");
-        isAPE ? console.log("mintAPE") : console.log("mintTEA");
+        console.log("Reserve APE:", reserves.reserveApes, ", Supply APE:", IERC20(ape).totalSupply());
+        console.log("Reserve TEA:", reserves.reserveLPers, ", Supply TEA:", vault.totalSupply(vaultId));
+
+        console.log("-----------------------------------------");
+        console.log("Mint ", isAPE ? "APE" : "TEA");
+        console.log("Vault:", vaultId);
+
+        // Sufficient condition to not overflow total collateral
+        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
+        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint144).max - total);
+
+        // Sufficient condition to not overflow collected fees
+        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint112).max - collectedFees);
+
+        bool success;
+        uint256 maxCollateralAmount;
+        if (isAPE) {
+            // Sufficient condition to not overflow APE supply
+            uint256 apeSupply = IERC20(ape).totalSupply();
+            (success, maxCollateralAmount) = FullMath.tryMulDiv(
+                reserves.reserveApes,
+                type(uint256).max - apeSupply,
+                apeSupply
+            );
+            if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+        }
+
+        // Sufficient condition to not overflow TEA supply
+        uint256 teaSupply = vault.totalSupply(vaultId);
+        (success, maxCollateralAmount) = FullMath.tryMulDiv(
+            (isAPE ? uint256(10) : 1) * reserves.reserveLPers,
+            SystemConstants.TEA_MAX_SUPPLY - teaSupply,
+            teaSupply
+        );
+        if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+
+        // Cannot mint 1 single unit of collateral if TEA supply is 0
+        if (reserves.reserveApes + reserves.reserveLPers == 0 && inputOutput.amountCollateral < 2) return;
+        if (inputOutput.amountCollateral == 0) return;
+
+        // User
+        address user = _idToAddr(inputOutput.userId);
+
+        // Deal ETH
+        if (user.balance < inputOutput.amountCollateral) vm.deal(user, inputOutput.amountCollateral - user.balance);
+
+        // Wrap ETH and deposit to vault
+        vm.startPrank(user);
+        _WETH.deposit{value: inputOutput.amountCollateral}();
+        _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
         // Mint
-        vm.prank(user);
-        vault.mint(isAPE, vaultParameters);
+        console.log("Send", inputOutput.amountCollateral, "WEI");
+        uint256 amount = vault.mint(isAPE, vaultParameters);
+        vm.stopPrank();
+        console.log("Receive", amount);
     }
 
-    function burn(
-        bool isAPE,
-        InputOutput memory inputOutput,
-        uint256 amount
-    ) external AdvanceBlock(inputOutput) WithdrawCollateral(inputOutput) {
-        console.log("-----------------------------------------");
-        isAPE ? console.log("burnAPE") : console.log("burnTEA");
+    function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
+        // TEST
+        inputOutput.vaultId = 1;
+        // TEST
 
-        // BURN APE
-        inputOutput.amountCollateral = 0;
+        // User
+        address user = _idToAddr(inputOutput.userId);
+
+        // Get vault parameters
+        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = _idToVault(
+            inputOutput.vaultId
+        );
+
+        // Ensure user has enough balance
+        uint256 balance = isAPE ? IERC20(ape).balanceOf(user) : vault.balanceOf(user, inputOutput.vaultId);
+        amount = _bound(amount, 0, balance);
+        if (amount == 0) return;
+
+        // Get reserves
+        VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
+        console.log("-----------------------------------------");
+        console.log("Reserve APE:", reserves.reserveApes, ", Supply APE:", IERC20(ape).totalSupply());
+        console.log("Reserve TEA:", reserves.reserveLPers, ", Supply TEA:", vault.totalSupply(vaultId));
+        uint256 collateralOutApprox = isAPE
+            ? FullMath.mulDiv(reserves.reserveApes, amount, IERC20(ape).totalSupply())
+            : FullMath.mulDiv(reserves.reserveLPers, amount, vault.totalSupply(vaultId));
+
+        console.log("-----------------------------------------");
+        console.log("Burn ", isAPE ? "APE" : "TEA");
+        console.log("Vault:", vaultId);
+
+        // Sufficient condition to not underflow total collateral
+        if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox < 2) return;
+
+        // Burn
+        console.log("Burn", amount, isAPE ? "APE" : "TEA");
+        vm.startPrank(user);
+        inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
+        console.log("Receive", inputOutput.amountCollateral, "WEI");
+
+        // Unwrap ETH
+        _WETH.withdraw(inputOutput.amountCollateral);
+        vm.stopPrank();
     }
 
     /////////////////////////////////////////////////////////
