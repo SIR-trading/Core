@@ -1661,6 +1661,8 @@ contract VaultHandler is Test {
         uint256 amountCollateral;
     }
 
+    bool immutable ONE_VAULT_IN_POWER;
+
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
     Vault public vault;
     Oracle public oracle;
@@ -1669,11 +1671,13 @@ contract VaultHandler is Test {
 
     modifier AdvanceBlock(InputOutput memory inputOutput) {
         if (inputOutput.advanceBlock) vm.createSelectFork("mainnet", ++blockNumber);
+        if (ONE_VAULT_IN_POWER) inputOutput.vaultId = 1;
         _;
     }
 
-    constructor(uint256 blockNumber_) {
+    constructor(uint256 blockNumber_, bool oneVaultInPower) {
         blockNumber = blockNumber_;
+        ONE_VAULT_IN_POWER = oneVaultInPower;
 
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
@@ -1696,7 +1700,7 @@ contract VaultHandler is Test {
             VaultStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDT,
                 collateralToken: Addresses.ADDR_WETH,
-                leverageTier: int8(-2)
+                leverageTier: int8(1)
             })
         );
 
@@ -1705,18 +1709,14 @@ contract VaultHandler is Test {
             VaultStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDC,
                 collateralToken: Addresses.ADDR_WETH,
-                leverageTier: int8(-1)
+                leverageTier: int8(-2)
             })
         );
     }
 
     function mint(bool isAPE, InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
-        // TEST
-        inputOutput.vaultId = 1;
-        // TEST
-
         // Get vault parameters
-        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = _idToVault(
+        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = idToVault(
             inputOutput.vaultId
         );
 
@@ -1748,6 +1748,19 @@ contract VaultHandler is Test {
                 apeSupply
             );
             if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+
+            if (ONE_VAULT_IN_POWER) {
+                // Do not mint too much APE that it changes to Saturation
+                maxCollateralAmount = vaultParameters.leverageTier >= 0
+                    ? reserves.reserveLPers << uint8(vaultParameters.leverageTier)
+                    : reserves.reserveLPers >> uint8(-vaultParameters.leverageTier);
+
+                if (maxCollateralAmount < reserves.reserveApes) revert("Saturation zone");
+
+                maxCollateralAmount -= reserves.reserveApes;
+
+                inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+            }
         }
 
         // Sufficient condition to not overflow TEA supply
@@ -1782,15 +1795,11 @@ contract VaultHandler is Test {
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
-        // TEST
-        inputOutput.vaultId = 1;
-        // TEST
-
         // User
         address user = _idToAddr(inputOutput.userId);
 
         // Get vault parameters
-        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = _idToVault(
+        (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = idToVault(
             inputOutput.vaultId
         );
 
@@ -1811,6 +1820,21 @@ contract VaultHandler is Test {
         console.log("-----------------------------------------");
         console.log("Burn ", isAPE ? "APE" : "TEA");
         console.log("Vault:", vaultId);
+
+        if (!isAPE && ONE_VAULT_IN_POWER) {
+            // Do not burn too much TEA that it changes to Saturation
+            uint256 reserveLPersMin = vaultParameters.leverageTier < 0
+                ? reserves.reserveApes << uint8(-vaultParameters.leverageTier)
+                : reserves.reserveApes >> uint8(vaultParameters.leverageTier);
+
+            if (reserves.reserveLPers < reserveLPersMin) revert("Saturation zone");
+
+            uint256 maxCollateralAmount = reserves.reserveLPers - reserveLPersMin;
+
+            uint256 maxAmount = FullMath.mulDiv(vault.totalSupply(vaultId), maxCollateralAmount, reserves.reserveLPers);
+
+            amount = _bound(amount, 0, maxAmount);
+        }
 
         // Sufficient condition to not underflow total collateral
         if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox < 2) return;
@@ -1834,7 +1858,7 @@ contract VaultHandler is Test {
         return vm.addr(userId);
     }
 
-    function _idToVault(uint256 vaultId) private view returns (uint256, VaultStructs.VaultParameters memory, address) {
+    function idToVault(uint256 vaultId) public view returns (uint256, VaultStructs.VaultParameters memory, address) {
         vaultId = _bound(vaultId, 1, 2);
         (address debtToken, address collateralToken, int8 leverageTier) = vault.paramsById(vaultId);
         address ape = SaltedAddress.getAddress(address(vault), vaultId);
@@ -1853,13 +1877,21 @@ contract VaultInvariantTest is Test {
     VaultHandler public vaultHandler;
     Vault public vault;
 
+    VaultStructs.VaultParameters public vaultParameters1;
+    VaultStructs.VaultParameters public vaultParameters2;
+
     function setUp() public {
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
-        vaultHandler = new VaultHandler(BLOCK_NUMBER_START);
+        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, false);
 
         targetContract(address(vaultHandler));
+
+        address ape1;
+        address ape2;
+        (, vaultParameters1, ape1) = vaultHandler.idToVault(1);
+        (, vaultParameters2, ape2) = vaultHandler.idToVault(2);
 
         bytes4[] memory selectors = new bytes4[](2);
         selectors[0] = vaultHandler.mint.selector;
@@ -1871,14 +1903,72 @@ contract VaultInvariantTest is Test {
         vm.makePersistent(address(vaultHandler));
         vm.makePersistent(address(vault));
         vm.makePersistent(address(vaultHandler.oracle()));
-        vm.makePersistent(SaltedAddress.getAddress(address(vault), 1));
-        vm.makePersistent(SaltedAddress.getAddress(address(vault), 2));
+        vm.makePersistent(ape1);
+        vm.makePersistent(ape2);
     }
 
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_totalCollateral() public {
-        (, uint144 total) = vault.tokenStates(address(_WETH));
+        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
         assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+
+        VaultStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
+        VaultStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
+        assertEq(
+            reserves1.reserveApes + reserves1.reserveLPers + reserves2.reserveApes + reserves2.reserveLPers,
+            total - collectedFees,
+            "Total collateral minus fees is wrong"
+        );
+    }
+}
+
+contract PowerZoneInvariantTest is Test {
+    uint256 constant BLOCK_NUMBER_START = 18128102;
+    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+
+    VaultHandler public vaultHandler;
+    Vault public vault;
+    Oracle public oracle;
+
+    VaultStructs.VaultParameters public vaultParameters1;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+
+        // Deploy the vault handler
+        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, true);
+
+        targetContract(address(vaultHandler));
+
+        address ape1;
+        (, vaultParameters1, ape1) = vaultHandler.idToVault(1);
+
+        bytes4[] memory selectors = new bytes4[](2);
+        selectors[0] = vaultHandler.mint.selector;
+        selectors[1] = vaultHandler.burn.selector;
+        targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
+
+        vault = vaultHandler.vault();
+        oracle = vaultHandler.oracle();
+        vm.makePersistent(address(Addresses.ADDR_WETH));
+        vm.makePersistent(address(vaultHandler));
+        vm.makePersistent(address(vault));
+        vm.makePersistent(address(oracle));
+        vm.makePersistent(ape1);
+    }
+
+    /// forge-config: default.invariant.runs = 1
+    /// forge-config: default.invariant.depth = 10
+    function invariant_powerZone() public {
+        VaultStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
+
+        uint256 reserveApesMax = vaultParameters1.leverageTier >= 0
+            ? reserves1.reserveLPers << uint8(vaultParameters1.leverageTier)
+            : reserves1.reserveLPers >> uint8(-vaultParameters1.leverageTier);
+
+        assertLe(reserves1.reserveApes, reserveApesMax, "Not in power zone");
+
+        // Compute theoretical leveraged price vs. actual price
     }
 }
