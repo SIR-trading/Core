@@ -1661,7 +1661,7 @@ contract VaultHandler is Test {
         uint256 amountCollateral;
     }
 
-    bool immutable ONE_VAULT_IN_POWER;
+    bool immutable POWER_ZONE_TEST;
 
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
     Vault public vault;
@@ -1673,17 +1673,20 @@ contract VaultHandler is Test {
     address user;
 
     modifier AdvanceBlock(InputOutput memory inputOutput) {
-        if (inputOutput.advanceBlock) {
+        if (POWER_ZONE_TEST) {
+            inputOutput.vaultId = 1;
             vm.createSelectFork("mainnet", blockNumber);
-            blockNumber += 10;
+            blockNumber += 100;
+        } else if (inputOutput.advanceBlock) {
+            vm.createSelectFork("mainnet", blockNumber);
+            blockNumber += 100;
         }
-        if (ONE_VAULT_IN_POWER) inputOutput.vaultId = 1;
         _;
     }
 
     constructor(uint256 blockNumber_, bool oneVaultInPower) {
         blockNumber = blockNumber_;
-        ONE_VAULT_IN_POWER = oneVaultInPower;
+        POWER_ZONE_TEST = oneVaultInPower;
 
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
@@ -1724,6 +1727,16 @@ contract VaultHandler is Test {
         bool isAPE,
         InputOutput memory inputOutput
     ) external AdvanceBlock(inputOutput) returns (uint256 amount) {
+        console.log("-----------------------------------------");
+        string memory temp = string.concat(
+            "Mint ",
+            isAPE ? "APE" : "TEA",
+            " in block ",
+            vm.toString(blockNumber - 100)
+        );
+        console.log(temp);
+        vm.writeLine("./gains.log", temp);
+
         // Get vault parameters
         (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = idToVault(
             inputOutput.vaultId
@@ -1731,13 +1744,6 @@ contract VaultHandler is Test {
 
         // Get reserves
         VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
-        console.log("-----------------------------------------");
-        console.log("Reserve APE:", reserves.reserveApes, ", Supply APE:", IERC20(ape).totalSupply());
-        console.log("Reserve TEA:", reserves.reserveLPers, ", Supply TEA:", vault.totalSupply(vaultId));
-
-        console.log("-----------------------------------------");
-        console.log("Mint ", isAPE ? "APE" : "TEA");
-        console.log("Vault:", vaultId);
 
         // Sufficient condition to not overflow total collateral
         (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
@@ -1758,11 +1764,11 @@ contract VaultHandler is Test {
             );
             if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
 
-            if (ONE_VAULT_IN_POWER) {
+            if (POWER_ZONE_TEST) {
                 // Do not mint too much APE that it changes to Saturation
-                maxCollateralAmount = vaultParameters.leverageTier >= 0
-                    ? uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
-                    : reserves.reserveLPers >> uint8(-vaultParameters.leverageTier);
+                maxCollateralAmount = vaultParameters.leverageTier < 0
+                    ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
+                    : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
 
                 if (maxCollateralAmount < reserves.reserveApes) revert("Saturation zone");
 
@@ -1772,14 +1778,16 @@ contract VaultHandler is Test {
             }
         }
 
-        // Sufficient condition to not overflow TEA supply
-        uint256 teaSupply = vault.totalSupply(vaultId);
-        (success, maxCollateralAmount) = FullMath.tryMulDiv(
-            (isAPE ? uint256(10) : 1) * reserves.reserveLPers,
-            SystemConstants.TEA_MAX_SUPPLY - teaSupply,
-            teaSupply
-        );
-        if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+        {
+            // Sufficient condition to not overflow TEA supply
+            uint256 teaSupply = vault.totalSupply(vaultId);
+            (success, maxCollateralAmount) = FullMath.tryMulDiv(
+                (isAPE ? uint256(10) : 1) * reserves.reserveLPers,
+                SystemConstants.TEA_MAX_SUPPLY - teaSupply,
+                teaSupply
+            );
+            if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+        }
 
         // Cannot mint 1 single unit of collateral if TEA supply is 0
         if (reserves.reserveApes + reserves.reserveLPers == 0 && inputOutput.amountCollateral < 2) return 0;
@@ -1797,15 +1805,93 @@ contract VaultHandler is Test {
         _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
         // Mint
-        console.log("Send", inputOutput.amountCollateral, "WEI");
+        // temp = "-----------------------------------------";
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // string memory temp = string.concat(
+        //     "Mint ",
+        //     isAPE ? "APE" : "TEA",
+        //     " with ",
+        //     vm.toString(inputOutput.amountCollateral),
+        //     " WEI"
+        // );
+        // vm.writeLine("./gains.log", temp);
+
+        // string memory temp = "-----------------------------------------";
+        // vm.writeLine("./gains.log", temp);
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Reserve APE: ",
+        //     vm.toString(reserves.reserveApes),
+        //     ", Supply APE: ",
+        //     vm.toString(IERC20(ape).totalSupply())
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Reserve TEA: ",
+        //     vm.toString(reserves.reserveLPers),
+        //     ", Supply TEA: ",
+        //     vm.toString(vault.totalSupply(vaultId))
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Mint ",
+        //     isAPE ? "APE" : "TEA",
+        //     " with ",
+        //     vm.toString(inputOutput.amountCollateral),
+        //     " WEI"
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = "-----------------------------------------";
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
         _checkSaturation(vaultParameters, reserves);
         amount = vault.mint(isAPE, vaultParameters);
         _checkSaturation(vaultParameters, vault.getReserves(vaultParameters));
         vm.stopPrank();
-        console.log("Receive", amount);
+
+        // reserves = vault.getReserves(vaultParameters);
+        // temp = string.concat(
+        //     "Reserve APE: ",
+        //     vm.toString(reserves.reserveApes),
+        //     ", Supply APE: ",
+        //     vm.toString(IERC20(ape).totalSupply())
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Reserve TEA: ",
+        //     vm.toString(reserves.reserveLPers),
+        //     ", Supply TEA: ",
+        //     vm.toString(vault.totalSupply(vaultId))
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
+        console.log("-----------------------------------------");
+        string memory temp = string.concat(
+            "Burn ",
+            isAPE ? "APE" : "TEA",
+            " in block ",
+            vm.toString(blockNumber - 100)
+        );
+        console.log(temp);
+        vm.writeLine("./gains.log", temp);
+
         // User
         user = _idToAddr(inputOutput.userId);
 
@@ -1821,18 +1907,36 @@ contract VaultHandler is Test {
 
         // Get reserves
         VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
-        console.log("-----------------------------------------");
-        console.log("Reserve APE:", reserves.reserveApes, ", Supply APE:", IERC20(ape).totalSupply());
-        console.log("Reserve TEA:", reserves.reserveLPers, ", Supply TEA:", vault.totalSupply(vaultId));
+
+        // string memory temp = "-----------------------------------------";
+        // vm.writeLine("./gains.log", temp);
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Reserve APE: ",
+        //     vm.toString(reserves.reserveApes),
+        //     ", Supply APE: ",
+        //     vm.toString(IERC20(ape).totalSupply())
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Reserve TEA: ",
+        //     vm.toString(reserves.reserveLPers),
+        //     ", Supply TEA: ",
+        //     vm.toString(vault.totalSupply(vaultId))
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
         uint256 collateralOutApprox = isAPE
             ? FullMath.mulDiv(reserves.reserveApes, amount, IERC20(ape).totalSupply())
             : FullMath.mulDiv(reserves.reserveLPers, amount, vault.totalSupply(vaultId));
 
-        console.log("-----------------------------------------");
-        console.log("Burn ", isAPE ? "APE" : "TEA");
-        console.log("Vault:", vaultId);
-
-        if (ONE_VAULT_IN_POWER) {
+        if (POWER_ZONE_TEST) {
             uint256 maxAmount;
             if (isAPE) {
                 // Keep at least 1 ETH in the apes reserve to make sure gain comptuations are preturbed by small numbers numeric approximation
@@ -1846,9 +1950,9 @@ contract VaultHandler is Test {
                 maxAmount = FullMath.mulDiv(IERC20(ape).totalSupply(), maxCollateralAmount, reserves.reserveApes);
             } else {
                 // Do not burn too much TEA that it changes to Saturation
-                uint256 reserveLPersMin = vaultParameters.leverageTier < 0
-                    ? uint256(reserves.reserveApes) << uint8(-vaultParameters.leverageTier)
-                    : reserves.reserveApes >> uint8(vaultParameters.leverageTier);
+                uint256 reserveLPersMin = vaultParameters.leverageTier >= 0
+                    ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
+                    : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
 
                 if (reserves.reserveLPers < reserveLPersMin) revert("Saturation zone");
 
@@ -1864,16 +1968,51 @@ contract VaultHandler is Test {
         if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox < 2) return;
 
         // Burn
-        console.log("Burn", amount, isAPE ? "APE" : "TEA");
         vm.startPrank(user);
         _checkSaturation(vaultParameters, reserves);
         inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
         _checkSaturation(vaultParameters, vault.getReserves(vaultParameters));
-        console.log("Receive", inputOutput.amountCollateral, "WEI");
+
+        // temp = "-----------------------------------------";
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Burn ",
+        //     isAPE ? "APE" : "TEA",
+        //     " and receive ",
+        //     vm.toString(inputOutput.amountCollateral),
+        //     " WEI"
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = "-----------------------------------------";
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
 
         // Unwrap ETH
         _WETH.withdraw(inputOutput.amountCollateral);
         vm.stopPrank();
+
+        // reserves = vault.getReserves(vaultParameters);
+        // temp = string.concat(
+        //     "Reserve APE: ",
+        //     vm.toString(reserves.reserveApes),
+        //     ", Supply APE: ",
+        //     vm.toString(IERC20(ape).totalSupply())
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
+
+        // temp = string.concat(
+        //     "Reserve TEA: ",
+        //     vm.toString(reserves.reserveLPers),
+        //     ", Supply TEA: ",
+        //     vm.toString(vault.totalSupply(vaultId))
+        // );
+        // vm.writeLine("./gains.log", temp);
+        // console.log(temp);
     }
 
     /////////////////////////////////////////////////////////
@@ -1897,8 +2036,8 @@ contract VaultHandler is Test {
     ) private {
         if (
             vaultParameters.leverageTier >= 0
-                ? reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
-                : reserves.reserveLPers < uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
+                ? reserves.reserveLPers < uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
+                : reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
         ) {
             console.log("SATURATION");
             vm.writeLine("./gains.log", "SATURATION");
@@ -1987,6 +2126,8 @@ contract PowerZoneInvariantTest is Test {
     }
 
     function setUp() public {
+        vm.writeFile("./gains.log", "");
+
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
@@ -2029,11 +2170,29 @@ contract PowerZoneInvariantTest is Test {
         VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
         reserveApes0 = reserves.reserveApes;
 
-        vm.writeFile("./gains.log", "");
+        // string memory temp = ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
+        // console.log(temp);
+        // vm.writeLine("./gains.log", temp);
+        // console.log("");
+        // vm.writeLine("./gains.log", "");
+        // temp = string.concat("TICK 0: ", vm.toString(oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT)));
+        // console.log(temp);
+        // vm.writeLine("./gains.log", temp);
+        // temp = string.concat("SUPPLY APE 0: ", vm.toString(supplyAPE0));
+        // console.log(temp);
+        // vm.writeLine("./gains.log", temp);
+        // temp = string.concat("RESERVE APES 0: ", vm.toString(reserveApes0));
+        // console.log(temp);
+        // vm.writeLine("./gains.log", temp);
+        // console.log("");
+        // vm.writeLine("./gains.log", "");
+        // temp = "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
+        // console.log(temp);
+        // vm.writeLine("./gains.log", temp);
     }
 
     /// forge-config: default.invariant.runs = 1
-    /// forge-config: default.invariant.depth = 10
+    /// forge-config: default.invariant.depth = 20
     function invariant_powerZone() public {
         VaultStructs.Reserves memory reserves = vault.getReserves(vaultParameters);
 
@@ -2048,23 +2207,51 @@ contract PowerZoneInvariantTest is Test {
             // Compute unleveraged gain
             uint256 gainUnleveragedX1B = _getPriceETHvsUSDT()
                 .div(priceFP0)
-                .mul(ABDKMathQuad.fromUInt(10 ** 9))
+                .mul(ABDKMathQuad.fromUInt(10 ** 15))
                 .toUInt();
 
             // Compute theoretical leveraged gain
             uint256 gainIdealX1B = _getPriceETHvsUSDT()
                 .div(priceFP0)
-                .pow(ABDKMathQuad.fromInt(vaultParameters.leverageTier).pow_2())
-                .mul(ABDKMathQuad.fromUInt(10 ** 9))
+                .pow(ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier)))
+                .mul(ABDKMathQuad.fromUInt(10 ** 15))
                 .toUInt();
 
             // Compute actual leveraged gain
+            // {
+            //     string memory temp = "-----------------------------------------";
+            //     vm.writeLine("./gains.log", temp);
+            //     temp = string.concat(
+            //         "Reserve APE: ",
+            //         vm.toString(reserves.reserveApes),
+            //         ", Supply APE: ",
+            //         vm.toString(supplyAPE)
+            //     );
+            //     vm.writeLine("./gains.log", temp);
+            //     temp = string.concat(
+            //         "Reserve TEA: ",
+            //         vm.toString(reserves.reserveLPers),
+            //         ", Supply TEA: ",
+            //         vm.toString(vault.totalSupply(1))
+            //     );
+            //     vm.writeLine("./gains.log", temp);
+            //     temp = string.concat(
+            //         vm.toString(reserves.reserveApes),
+            //         "/",
+            //         vm.toString(reserveApes0),
+            //         "*",
+            //         vm.toString(supplyAPE0),
+            //         "/",
+            //         vm.toString(supplyAPE)
+            //     );
+            //     vm.writeLine("./gains.log", temp);
+            // }
             uint256 gainActualX1B = ABDKMathQuad
                 .fromUInt(reserves.reserveApes)
                 .div(ABDKMathQuad.fromUInt(reserveApes0))
                 .mul(ABDKMathQuad.fromUInt(supplyAPE0))
                 .div(ABDKMathQuad.fromUInt(supplyAPE))
-                .mul(ABDKMathQuad.fromUInt(10 ** 9))
+                .mul(ABDKMathQuad.fromUInt(10 ** 15))
                 .toUInt();
 
             vm.writeLine(

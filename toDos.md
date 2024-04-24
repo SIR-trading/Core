@@ -37,6 +37,7 @@ Minimize # hot SLOADs
 # Tests
 
 -   Test Vault state divergence as it is updated consecutively without minting or burning anything.
+-   Why is the price not updated on every block?!
 
 # UI
 
