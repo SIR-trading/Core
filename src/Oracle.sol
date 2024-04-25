@@ -299,8 +299,7 @@ contract Oracle {
         }
 
         // Invert price if necessary
-        if (collateralToken == token1) return -oracleState.tickPriceX42;
-        return oracleState.tickPriceX42;
+        return collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -451,9 +450,7 @@ contract Oracle {
             }
 
             // Updates price and emits event
-            console.log("Updating oracle price");
             bool priceTruncated = _updatePrice(oracleState, oracleData);
-            console.log("Updated oracle price");
             emit PriceUpdated(token0, token1, priceTruncated, oracleState.tickPriceX42);
 
             // Update timestamp
@@ -698,8 +695,6 @@ contract Oracle {
                     truncated = true;
                 } else oracleState.tickPriceX42 = int64(tickPriceX42);
             }
-            console.log("Block:", block.number);
-            console.logInt(tickPriceX42);
         }
     }
 
