@@ -473,16 +473,17 @@ contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     MockERC20 private _tokenB;
     UniswapPoolAddress.PoolKey private _poolKey;
 
-    uint256 immutable forkId;
-
-    constructor() {
+    function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
-        forkId = vm.createSelectFork("mainnet", 18149275);
+        vm.createSelectFork("mainnet", 18149275);
 
         _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
+
+        // Order tokens
+        if (address(_tokenA) < address(_tokenB)) (_tokenA, _tokenB) = (_tokenB, _tokenA);
 
         uint24 feeTier = 100;
         uint128 liquidity = 2 ** 10; // Small liquidity to push the price easily
@@ -637,14 +638,14 @@ contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
             ((int256(887271) << 42) * int40(TWAP_DURATION - periodTick0)) / int40(TWAP_DURATION)
         );
         tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
-        if (address(_tokenA) == _poolKey.token0) assertEq(tickPriceX42, expTickPriceX42);
-        else assertEq(tickPriceX42, -expTickPriceX42);
+
+        assertEq(tickPriceX42, address(_tokenA) == _poolKey.token0 ? expTickPriceX42 : -expTickPriceX42);
 
         vm.expectEmit();
         emit PriceUpdated(_poolKey.token0, _poolKey.token1, false, expTickPriceX42);
         tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
-        if (address(_tokenA) == _poolKey.token0) assertEq(tickPriceX42, expTickPriceX42);
-        else assertEq(tickPriceX42, -expTickPriceX42);
+
+        assertEq(tickPriceX42, address(_tokenA) == _poolKey.token0 ? expTickPriceX42 : -expTickPriceX42);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -767,12 +768,11 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
     MockERC20 private usdc = MockERC20(Addresses.ADDR_USDC);
     IWETH9 private weth = IWETH9(Addresses.ADDR_WETH);
 
-    uint256 immutable forkId;
     uint24 newFeeTier = 69;
 
-    constructor() {
+    function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
-        forkId = vm.createSelectFork("mainnet", 18149275);
+        vm.createSelectFork("mainnet", 18149275);
 
         _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         _oracle.initialize(Addresses.ADDR_WETH, Addresses.ADDR_USDC); // It picks feeTier = 500

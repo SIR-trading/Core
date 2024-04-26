@@ -1898,9 +1898,12 @@ contract VaultHandler is Test {
 
     function _checkSaturation(VaultStructs.VaultParameters memory vaultParameters) private view {
         if (
-            vaultParameters.leverageTier >= 0
-                ? reserves.reserveLPers < uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
-                : reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
+            POWER_ZONE_TEST &&
+            (
+                vaultParameters.leverageTier >= 0
+                    ? reserves.reserveLPers < uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
+                    : reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
+            )
         ) {
             revert("Saturation");
         }
