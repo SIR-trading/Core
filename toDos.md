@@ -37,3 +37,8 @@ Minimize # hot SLOADs
 # Tests
 
 -   Test Vault state divergence as it is updated consecutively without minting or burning anything.
+-   Why is the price not updated on every block?!
+
+# UI
+
+-   Vaults allow minting APE to the point that it saturates them. However, do not allow that in the UI because we wish to stay in the power zone.

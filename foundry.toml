@@ -9,7 +9,7 @@ fs_permissions = [{ access = "read-write", path = "./"}]
 # libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4"]
 
 [fuzz]
-# seed = "0x02"
+# seed = "0x14"
 # runs = 10000
 
 [rpc_endpoints]

@@ -299,8 +299,7 @@ contract Oracle {
         }
 
         // Invert price if necessary
-        if (collateralToken == token1) return -oracleState.tickPriceX42;
-        return oracleState.tickPriceX42;
+        return collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42;
     }
 
     /*////////////////////////////////////////////////////////////////
