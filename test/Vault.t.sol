@@ -1650,9 +1650,6 @@ contract VaultTest is Test {
     }
 }
 
-// INVARIANT TEST USING A REAL DATA PAIR AND ITS REAL PRICE CHANGES
-// TEST MULTIPLE MINTS ON DIFFERENT VAULTS WITH SAME COLLATERAL
-
 contract VaultHandler is Test {
     struct InputOutput {
         bool advanceBlock;
@@ -1669,6 +1666,7 @@ contract VaultHandler is Test {
     Oracle public oracle;
 
     uint256 public blockNumber;
+    uint256 public iterations;
     int64 public priceTickX42;
     VaultStructs.Reserves public reserves;
     uint256 public supplyAPE;
@@ -1688,7 +1686,10 @@ contract VaultHandler is Test {
 
         _;
 
-        if (POWER_ZONE_TEST || inputOutput.advanceBlock) blockNumber += TIME_ADVANCE / 12 seconds;
+        if (POWER_ZONE_TEST || inputOutput.advanceBlock) {
+            blockNumber += TIME_ADVANCE / 12 seconds;
+            iterations++;
+        }
     }
 
     constructor(uint256 blockNumber_, bool oneVaultInPower) {
@@ -1734,16 +1735,6 @@ contract VaultHandler is Test {
         bool isAPE,
         InputOutput memory inputOutput
     ) external AdvanceBlock(inputOutput) returns (uint256 amount) {
-        console.log("-----------------------------------------");
-        string memory temp = string.concat(
-            "Mint ",
-            isAPE ? "APE" : "TEA",
-            " in block ",
-            vm.toString(blockNumber - 100)
-        );
-        console.log(temp);
-        // vm.writeLine("./gains.log", temp);
-
         // Get vault parameters
         (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = idToVault(
             inputOutput.vaultId
@@ -1813,96 +1804,17 @@ contract VaultHandler is Test {
         _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
         // Mint
-        // temp = "-----------------------------------------";
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-
-        // string memory temp = string.concat(
-        //     "Mint ",
-        //     isAPE ? "APE" : "TEA",
-        //     " with ",
-        //     vm.toString(inputOutput.amountCollateral),
-        //     " WEI"
-        // );
-        // vm.writeLine("./gains.log", temp);
-
-        // string memory temp = "-----------------------------------------";
-        // vm.writeLine("./gains.log", temp);
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-        // console.log(temp);
-
-        temp = string.concat(
-            "Reserve APE: ",
-            vm.toString(reserves.reserveApes),
-            ", Supply APE: ",
-            vm.toString(IERC20(ape).totalSupply())
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
-
-        temp = string.concat(
-            "Reserve TEA: ",
-            vm.toString(reserves.reserveLPers),
-            ", Supply TEA: ",
-            vm.toString(vault.totalSupply(vaultId))
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
-
-        // temp = string.concat(
-        //     "Mint ",
-        //     isAPE ? "APE" : "TEA",
-        //     " with ",
-        //     vm.toString(inputOutput.amountCollateral),
-        //     " WEI"
-        // );
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-
-        // temp = "-----------------------------------------";
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-
         _checkSaturation(vaultParameters);
         amount = vault.mint(isAPE, vaultParameters);
         vm.stopPrank();
 
-        console.log("here");
+        // Update storage
         reserves = vault.getReserves(vaultParameters);
         supplyAPE = IERC20(ape).totalSupply();
         _checkSaturation(vaultParameters);
-
-        temp = string.concat(
-            "Reserve APE: ",
-            vm.toString(reserves.reserveApes),
-            ", Supply APE: ",
-            vm.toString(IERC20(ape).totalSupply())
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
-
-        temp = string.concat(
-            "Reserve TEA: ",
-            vm.toString(reserves.reserveLPers),
-            ", Supply TEA: ",
-            vm.toString(vault.totalSupply(vaultId))
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
-        console.log("-----------------------------------------");
-        string memory temp = string.concat(
-            "Burn ",
-            isAPE ? "APE" : "TEA",
-            " in block ",
-            vm.toString(blockNumber - 100)
-        );
-        console.log(temp);
-        // vm.writeLine("./gains.log", temp);
-
         // User
         user = _idToAddr(inputOutput.userId);
 
@@ -1919,34 +1831,6 @@ contract VaultHandler is Test {
         uint256 balance = isAPE ? IERC20(ape).balanceOf(user) : vault.balanceOf(user, inputOutput.vaultId);
         amount = _bound(amount, 0, balance);
         if (amount == 0) return;
-
-        // string memory temp = "-----------------------------------------";
-        // vm.writeLine("./gains.log", temp);
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-        // console.log(temp);
-
-        temp = string.concat(
-            "Reserve APE: ",
-            vm.toString(reserves.reserveApes),
-            ", Supply APE: ",
-            vm.toString(IERC20(ape).totalSupply())
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
-
-        temp = string.concat(
-            "Reserve TEA: ",
-            vm.toString(reserves.reserveLPers),
-            ", Supply TEA: ",
-            vm.toString(vault.totalSupply(vaultId))
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
-
-        uint256 collateralOutApprox = isAPE
-            ? FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)
-            : FullMath.mulDiv(reserves.reserveLPers, amount, vault.totalSupply(vaultId));
 
         if (POWER_ZONE_TEST) {
             uint256 maxAmount;
@@ -1976,6 +1860,10 @@ contract VaultHandler is Test {
         }
 
         // Sufficient condition to not underflow total collateral
+        uint256 collateralOutApprox = isAPE
+            ? FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)
+            : FullMath.mulDiv(reserves.reserveLPers, amount, vault.totalSupply(vaultId));
+
         if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox < 2) return;
 
         // Burn
@@ -1983,49 +1871,14 @@ contract VaultHandler is Test {
         _checkSaturation(vaultParameters);
         inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
 
-        // temp = "-----------------------------------------";
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-
-        // temp = string.concat(
-        //     "Burn ",
-        //     isAPE ? "APE" : "TEA",
-        //     " and receive ",
-        //     vm.toString(inputOutput.amountCollateral),
-        //     " WEI"
-        // );
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-
-        // temp = "-----------------------------------------";
-        // vm.writeLine("./gains.log", temp);
-        // console.log(temp);
-
         // Unwrap ETH
         _WETH.withdraw(inputOutput.amountCollateral);
         vm.stopPrank();
 
+        // Update storage
         reserves = vault.getReserves(vaultParameters);
         supplyAPE = IERC20(ape).totalSupply();
         _checkSaturation(vaultParameters);
-
-        temp = string.concat(
-            "Reserve APE: ",
-            vm.toString(reserves.reserveApes),
-            ", Supply APE: ",
-            vm.toString(IERC20(ape).totalSupply())
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
-
-        temp = string.concat(
-            "Reserve TEA: ",
-            vm.toString(reserves.reserveLPers),
-            ", Supply TEA: ",
-            vm.toString(vault.totalSupply(vaultId))
-        );
-        // vm.writeLine("./gains.log", temp);
-        console.log(temp);
     }
 
     /////////////////////////////////////////////////////////
@@ -2112,7 +1965,7 @@ contract PowerZoneInvariantTest is Test {
     using ExtraABDKMathQuad for int64;
     using BonusABDKMathQuad for bytes16;
 
-    uint256 constant BLOCK_NUMBER_START = 18192902;
+    uint256 constant BLOCK_NUMBER_START = 15210000; // July 25, 2022
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
 
     VaultHandler public vaultHandler;
@@ -2132,8 +1985,6 @@ contract PowerZoneInvariantTest is Test {
     }
 
     function setUp() public {
-        vm.writeFile("./gains.log", "");
-
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
@@ -2174,26 +2025,6 @@ contract PowerZoneInvariantTest is Test {
         priceFP0 = _getPriceETHvsUSDT();
         supplyAPE0 = ape.totalSupply();
         (reserveApes0, , ) = vaultHandler.reserves();
-
-        // string memory temp = ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>";
-        // console.log(temp);
-        // vm.writeLine("./gains.log", temp);
-        // console.log("");
-        // vm.writeLine("./gains.log", "");
-        // temp = string.concat("TICK 0: ", vm.toString(oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT)));
-        // console.log(temp);
-        // vm.writeLine("./gains.log", temp);
-        // temp = string.concat("SUPPLY APE 0: ", vm.toString(supplyAPE0));
-        // console.log(temp);
-        // vm.writeLine("./gains.log", temp);
-        // temp = string.concat("RESERVE APES 0: ", vm.toString(reserveApes0));
-        // console.log(temp);
-        // vm.writeLine("./gains.log", temp);
-        // console.log("");
-        // vm.writeLine("./gains.log", "");
-        // temp = "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
-        // console.log(temp);
-        // vm.writeLine("./gains.log", temp);
     }
 
     /// forge-config: default.invariant.runs = 1
@@ -2211,44 +2042,60 @@ contract PowerZoneInvariantTest is Test {
             assertGe(reserveLPers, reserveLPersMin, "Not in power zone");
         }
 
-        uint256 supplyAPE = vaultHandler.supplyAPE();
-        if (supplyAPE > 0) {
-            // Compute unleveraged gain
-            uint256 gainUnleveragedX1B = _getPriceETHvsUSDT()
-                .div(priceFP0)
-                .mul(ABDKMathQuad.fromUInt(10 ** 15))
-                .toUInt();
+        // // Compute unleveraged gain
+        // uint256 gainUnleveragedX1B = _getPriceETHvsUSDT().mul(ABDKMathQuad.fromUInt(10 ** 12)).toUInt();
 
-            // Compute theoretical leveraged gain
-            uint256 gainIdealX1B = _getPriceETHvsUSDT()
-                .div(priceFP0)
-                .pow(ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier)))
-                .mul(ABDKMathQuad.fromUInt(10 ** 15))
-                .toUInt();
+        // // Compute theoretical leveraged gain
+        // uint256 gainIdealX1B = _getPriceETHvsUSDT()
+        //     .div(priceFP0)
+        //     .pow(ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier)))
+        //     .mul(priceFP0)
+        //     .mul(ABDKMathQuad.fromUInt(10 ** 12))
+        //     .toUInt();
 
-            // Compute actual leveraged gain
-            uint256 gainActualX1B = ABDKMathQuad
-                .fromUInt(reserveApes)
-                .div(ABDKMathQuad.fromUInt(reserveApes0))
-                .mul(ABDKMathQuad.fromUInt(supplyAPE0))
-                .div(ABDKMathQuad.fromUInt(supplyAPE))
-                .mul(ABDKMathQuad.fromUInt(10 ** 15))
-                .toUInt();
+        // // Compute actual leveraged gain
+        // bytes16 gainActualX1B = ABDKMathQuad
+        //     .fromUInt(reserveApes)
+        //     .div(ABDKMathQuad.fromUInt(reserveApes0))
+        //     .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+        //     .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
 
-            vm.writeLine(
-                "./gains.log",
-                string.concat(
-                    "Block: ",
-                    vm.toString(vaultHandler.blockNumber()),
-                    ", UNleveraged gain: ",
-                    vm.toString(gainUnleveragedX1B),
-                    ", Ideal leveraged gain: ",
-                    vm.toString(gainIdealX1B),
-                    ", Actual gain: ",
-                    vm.toString(gainActualX1B)
-                )
-            );
-            // vm.writeLine("./gains.log", "------------------------------------------------------------------------");
-        }
+        // gainActualX1B = gainActualX1B.mul(priceFP0).mul(ABDKMathQuad.fromUInt(10 ** 12));
+
+        // vm.writeLine(
+        //     "./gains.log",
+        //     string.concat(
+        //         "Time: ",
+        //         vm.toString(vaultHandler.timestamp()),
+        //         ", UNleveraged gain: ",
+        //         vm.toString(gainUnleveragedX1B),
+        //         ", Ideal leveraged gain: ",
+        //         vm.toString(gainIdealX1B),
+        //         ", Actual gain: ",
+        //         vm.toString(gainActualX1B.toUInt())
+        //     )
+        // );
+
+        // Compute theoretical leveraged gain
+        bytes16 gainIdeal = _getPriceETHvsUSDT().div(priceFP0).pow(
+            ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier))
+        );
+
+        // Compute actual leveraged gain
+        bytes16 gainActual = ABDKMathQuad
+            .fromUInt(reserveApes)
+            .div(ABDKMathQuad.fromUInt(reserveApes0))
+            .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+            .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
+
+        assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
+
+        // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
+        bytes16 relErr = ABDKMathQuad.fromUInt(vaultHandler.iterations()).div(ABDKMathQuad.fromUInt(1e16));
+        assertLe(
+            gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
+            0,
+            "Divergence between ideal and actual gain is too large"
+        );
     }
 }
