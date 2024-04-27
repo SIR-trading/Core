@@ -1283,7 +1283,7 @@ contract VaultTest is Test {
                 "Minted amount is wrong"
             );
         } else {
-            revert("Invalid state");
+            fail("Invalid state");
         }
         assertEq(inputsOutputs.amount, ape.balanceOf(alice) - balances.apeAlice);
         assertEq(vault.balanceOf(alice, VAULT_ID), balances.teaAlice);
@@ -1300,7 +1300,7 @@ contract VaultTest is Test {
                     FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers + lpersFee)
                 );
             } else {
-                revert("Invalid state");
+                fail("Invalid state");
             }
         }
     }
@@ -1388,7 +1388,7 @@ contract VaultTest is Test {
             if (reservesPre.reserveLPers > 0) {
                 assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
             } else {
-                revert("Invalid state");
+                fail("Invalid state");
             }
         }
     }
@@ -1455,7 +1455,7 @@ contract VaultTest is Test {
                 assertEq(amountPol, 0, "Amount of POL is not 0");
             }
         } else if (reservesPre.reserveLPers == 0) {
-            revert("Invalid state");
+            fail("Invalid state");
         } else {
             assertEq(amountPol, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
         }
@@ -1551,7 +1551,7 @@ contract VaultTest is Test {
         inputsOutputs.amount = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
         if (balances.teaSupply > 0) {
             if (reservesPre.reserveLPers == 0) {
-                revert("Invalid state");
+                fail("Invalid state");
             } else {
                 assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
             }
@@ -1650,7 +1650,15 @@ contract VaultTest is Test {
     }
 }
 
-contract VaultHandler is Test {
+contract RegimeEnum {
+    enum Regime {
+        Any,
+        Power,
+        Saturation
+    }
+}
+
+contract VaultHandler is Test, RegimeEnum {
     struct InputOutput {
         bool advanceBlock;
         uint256 vaultId;
@@ -1659,7 +1667,7 @@ contract VaultHandler is Test {
     }
 
     uint256 public constant TIME_ADVANCE = 1 days;
-    bool immutable POWER_ZONE_TEST;
+    Regime immutable regime;
 
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
     Vault public vault;
@@ -1675,10 +1683,10 @@ contract VaultHandler is Test {
     address user;
 
     modifier AdvanceBlock(InputOutput memory inputOutput) {
-        if (POWER_ZONE_TEST || inputOutput.advanceBlock) {
+        if (regime != Regime.Any || inputOutput.advanceBlock) {
             vm.createSelectFork("mainnet", blockNumber);
 
-            if (POWER_ZONE_TEST) {
+            if (regime != Regime.Any) {
                 inputOutput.vaultId = 1;
                 priceTickX42 = oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
             }
@@ -1686,15 +1694,15 @@ contract VaultHandler is Test {
 
         _;
 
-        if (POWER_ZONE_TEST || inputOutput.advanceBlock) {
+        if (regime != Regime.Any || inputOutput.advanceBlock) {
             blockNumber += TIME_ADVANCE / 12 seconds;
             iterations++;
         }
     }
 
-    constructor(uint256 blockNumber_, bool oneVaultInPower) {
+    constructor(uint256 blockNumber_, Regime regime_) {
         blockNumber = blockNumber_;
-        POWER_ZONE_TEST = oneVaultInPower;
+        regime = regime_;
 
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
@@ -1763,13 +1771,13 @@ contract VaultHandler is Test {
             );
             if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
 
-            if (POWER_ZONE_TEST) {
+            if (regime == Regime.Power) {
                 // Do not mint too much APE that it changes to Saturation
                 maxCollateralAmount = vaultParameters.leverageTier < 0
                     ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
                     : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
 
-                if (maxCollateralAmount < reserves.reserveApes) revert("Saturation zone");
+                if (maxCollateralAmount < reserves.reserveApes) fail("Saturation zone");
 
                 maxCollateralAmount -= reserves.reserveApes;
 
@@ -1804,14 +1812,14 @@ contract VaultHandler is Test {
         _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
         // Mint
-        _checkSaturation(vaultParameters);
+        _checkRegime(vaultParameters);
         amount = vault.mint(isAPE, vaultParameters);
         vm.stopPrank();
 
         // Update storage
         reserves = vault.getReserves(vaultParameters);
         supplyAPE = IERC20(ape).totalSupply();
-        _checkSaturation(vaultParameters);
+        _checkRegime(vaultParameters);
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
@@ -1832,7 +1840,7 @@ contract VaultHandler is Test {
         amount = _bound(amount, 0, balance);
         if (amount == 0) return;
 
-        if (POWER_ZONE_TEST) {
+        if (regime == Regime.Power) {
             uint256 maxAmount;
             if (isAPE) {
                 // Keep at least 1 ETH in the apes reserve to make sure gain comptuations are preturbed by small numbers numeric approximation
@@ -1850,7 +1858,7 @@ contract VaultHandler is Test {
                     ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
                     : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
 
-                if (reserves.reserveLPers < reserveLPersMin) revert("Saturation zone");
+                if (reserves.reserveLPers < reserveLPersMin) fail("Saturation zone");
                 uint256 maxCollateralAmount = reserves.reserveLPers - reserveLPersMin;
 
                 maxAmount = FullMath.mulDiv(vault.totalSupply(vaultId), maxCollateralAmount, reserves.reserveLPers);
@@ -1868,7 +1876,7 @@ contract VaultHandler is Test {
 
         // Burn
         vm.startPrank(user);
-        _checkSaturation(vaultParameters);
+        _checkRegime(vaultParameters);
         inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
 
         // Unwrap ETH
@@ -1878,7 +1886,7 @@ contract VaultHandler is Test {
         // Update storage
         reserves = vault.getReserves(vaultParameters);
         supplyAPE = IERC20(ape).totalSupply();
-        _checkSaturation(vaultParameters);
+        _checkRegime(vaultParameters);
     }
 
     /////////////////////////////////////////////////////////
@@ -1896,21 +1904,34 @@ contract VaultHandler is Test {
         return (vaultId, VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier), ape);
     }
 
-    function _checkSaturation(VaultStructs.VaultParameters memory vaultParameters) private view {
+    function _checkRegime(VaultStructs.VaultParameters memory vaultParameters) private {
+        if (regime == Regime.Any) return;
+
         if (
-            POWER_ZONE_TEST &&
+            regime == Regime.Power &&
             (
                 vaultParameters.leverageTier >= 0
                     ? reserves.reserveLPers < uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
                     : reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
             )
         ) {
-            revert("Saturation");
+            fail("Saturation");
+        }
+
+        if (
+            regime == Regime.Saturation &&
+            (
+                vaultParameters.leverageTier >= 0
+                    ? reserves.reserveLPers > uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
+                    : reserves.reserveApes < uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
+            )
+        ) {
+            fail("Power zone");
         }
     }
 }
 
-contract VaultInvariantTest is Test {
+contract VaultInvariantTest is Test, RegimeEnum {
     uint256 constant BLOCK_NUMBER_START = 18128102;
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
 
@@ -1924,7 +1945,7 @@ contract VaultInvariantTest is Test {
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
-        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, false);
+        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Any);
 
         targetContract(address(vaultHandler));
 
@@ -1963,7 +1984,7 @@ contract VaultInvariantTest is Test {
     }
 }
 
-contract PowerZoneInvariantTest is Test {
+contract PowerZoneInvariantTest is Test, RegimeEnum {
     using ABDKMathQuad for bytes16;
     using ExtraABDKMathQuad for int64;
     using BonusABDKMathQuad for bytes16;
@@ -1991,7 +2012,7 @@ contract PowerZoneInvariantTest is Test {
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
-        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, true);
+        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Power);
 
         targetContract(address(vaultHandler));
 
@@ -2102,3 +2123,143 @@ contract PowerZoneInvariantTest is Test {
         );
     }
 }
+
+// contract SaturationInvariantTest is Test {
+//     using ABDKMathQuad for bytes16;
+//     using ExtraABDKMathQuad for int64;
+//     using BonusABDKMathQuad for bytes16;
+
+//     uint256 constant BLOCK_NUMBER_START = 15210000; // July 25, 2022
+//     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+
+//     VaultHandler public vaultHandler;
+
+//     VaultStructs.VaultParameters public vaultParameters;
+//     IERC20 public ape;
+
+//     bytes16 priceFP0;
+//     uint144 reserveApes0;
+//     uint256 supplyAPE0;
+
+//     function _getPriceETHvsUSDT() private view returns (bytes16 priceFP) {
+//         int64 priceTick = vaultHandler.priceTickX42();
+
+//         // x1M + 6 decimals from USDT + 18 decimals from WETH
+//         priceFP = priceTick.tickToFP();
+//     }
+
+//     function setUp() public {
+//         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+
+//         // Deploy the vault handler
+//         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, true);
+
+//         targetContract(address(vaultHandler));
+
+//         address ape_;
+//         (, vaultParameters, ape_) = vaultHandler.idToVault(1);
+//         ape = IERC20(ape_);
+
+//         bytes4[] memory selectors = new bytes4[](2);
+//         selectors[0] = vaultHandler.mint.selector;
+//         selectors[1] = vaultHandler.burn.selector;
+//         targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
+
+//         Vault vault = vaultHandler.vault();
+//         Oracle oracle = vaultHandler.oracle();
+//         vm.makePersistent(address(Addresses.ADDR_WETH));
+//         vm.makePersistent(address(vaultHandler));
+//         vm.makePersistent(address(vault));
+//         vm.makePersistent(address(oracle));
+//         vm.makePersistent(ape_);
+
+//         // Mint 10 ETH worth of TEA
+//         vaultHandler.mint(
+//             false,
+//             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 10 * (10 ** 18)})
+//         );
+
+//         // Mint 2 ETH worth of APE
+//         vaultHandler.mint(
+//             true,
+//             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 2 * (10 ** 18)})
+//         );
+
+//         // Initial values
+//         priceFP0 = _getPriceETHvsUSDT();
+//         supplyAPE0 = ape.totalSupply();
+//         (reserveApes0, , ) = vaultHandler.reserves();
+//     }
+
+//     /// forge-config: default.invariant.runs = 1
+//     /// forge-config: default.invariant.depth = 10
+//     function invariant_powerZone() public {
+//         uint144 reserveApes;
+//         {
+//             uint144 reserveLPers;
+//             (reserveApes, reserveLPers, ) = vaultHandler.reserves();
+
+//             uint256 reserveLPersMin = vaultParameters.leverageTier >= 0
+//                 ? reserveApes << uint8(vaultParameters.leverageTier)
+//                 : reserveApes >> uint8(-vaultParameters.leverageTier);
+
+//             assertGe(reserveLPers, reserveLPersMin, "Not in power zone");
+//         }
+
+//         // // Compute unleveraged gain
+//         // uint256 gainUnleveragedX1B = _getPriceETHvsUSDT().mul(ABDKMathQuad.fromUInt(10 ** 12)).toUInt();
+
+//         // // Compute theoretical leveraged gain
+//         // uint256 gainIdealX1B = _getPriceETHvsUSDT()
+//         //     .div(priceFP0)
+//         //     .pow(ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier)))
+//         //     .mul(priceFP0)
+//         //     .mul(ABDKMathQuad.fromUInt(10 ** 12))
+//         //     .toUInt();
+
+//         // // Compute actual leveraged gain
+//         // bytes16 gainActualX1B = ABDKMathQuad
+//         //     .fromUInt(reserveApes)
+//         //     .div(ABDKMathQuad.fromUInt(reserveApes0))
+//         //     .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+//         //     .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
+
+//         // gainActualX1B = gainActualX1B.mul(priceFP0).mul(ABDKMathQuad.fromUInt(10 ** 12));
+
+//         // vm.writeLine(
+//         //     "./gains.log",
+//         //     string.concat(
+//         //         "Time: ",
+//         //         vm.toString(vaultHandler.timestamp()),
+//         //         ", UNleveraged gain: ",
+//         //         vm.toString(gainUnleveragedX1B),
+//         //         ", Ideal leveraged gain: ",
+//         //         vm.toString(gainIdealX1B),
+//         //         ", Actual gain: ",
+//         //         vm.toString(gainActualX1B.toUInt())
+//         //     )
+//         // );
+
+//         // Compute theoretical leveraged gain
+//         bytes16 gainIdeal = _getPriceETHvsUSDT().div(priceFP0).pow(
+//             ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier))
+//         );
+
+//         // Compute actual leveraged gain
+//         bytes16 gainActual = ABDKMathQuad
+//             .fromUInt(reserveApes)
+//             .div(ABDKMathQuad.fromUInt(reserveApes0))
+//             .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+//             .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
+
+//         assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
+
+//         // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
+//         bytes16 relErr = ABDKMathQuad.fromUInt(vaultHandler.iterations()).div(ABDKMathQuad.fromUInt(1e16));
+//         assertLe(
+//             gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
+//             0,
+//             "Divergence between ideal and actual gain is too large"
+//         );
+//     }
+// }
