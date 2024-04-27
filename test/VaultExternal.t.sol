@@ -65,7 +65,7 @@ contract VaultExternalTest is Test {
 
         vm.expectEmit();
         emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
-        VaultExternal.deployAPE(
+        VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
@@ -96,7 +96,7 @@ contract VaultExternalTest is Test {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MIN_LEVERAGE_TIER)); // Only accepted values in the system
 
         vm.expectRevert(abi.encodeWithSelector(NoUniswapPool.selector));
-        VaultExternal.deployAPE(
+        VaultExternal.deploy(
             oracle,
             vaultState[debtToken][collateralToken][leverageTier],
             paramsById,
@@ -109,7 +109,7 @@ contract VaultExternalTest is Test {
         vm.assume(leverageTier < -3 || leverageTier > 2); // Non accepted values in the system
 
         vm.expectRevert(abi.encodeWithSelector(LeverageTierOutOfRange.selector));
-        VaultExternal.deployAPE(
+        VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
@@ -127,7 +127,7 @@ contract VaultExternalTest is Test {
         for (; vaultId < VAULT_ID + 6; vaultId++) {
             vm.expectEmit();
             emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
-            VaultExternal.deployAPE(
+            VaultExternal.deploy(
                 oracle,
                 vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
                 paramsById,
@@ -161,7 +161,7 @@ contract VaultExternalTest is Test {
         int8 leverageTier = test_deployMaxNumberOfVaultsPerTokenTuple();
 
         vm.expectRevert(abi.encodeWithSelector(LeverageTierOutOfRange.selector));
-        VaultExternal.deployAPE(
+        VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
@@ -175,7 +175,7 @@ contract VaultExternalTest is Test {
 
         leverageTier--;
         vm.expectRevert(abi.encodeWithSelector(VaultAlreadyInitialized.selector));
-        VaultExternal.deployAPE(
+        VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,

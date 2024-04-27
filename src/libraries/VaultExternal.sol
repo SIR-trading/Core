@@ -26,7 +26,7 @@ library VaultExternal {
     );
 
     // Deploy APE token
-    function deployAPE(
+    function deploy(
         Oracle oracle,
         VaultStructs.VaultState storage vaultState,
         VaultStructs.VaultParameters[] storage paramsById,
