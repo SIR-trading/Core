@@ -29,6 +29,9 @@ abstract contract SystemState is SystemControlAccess {
             Max Supply of TEA = T / 10^18 ≈ 6.18 * 10^19
         which is more than a Quintillion TEA, sufficient for almost any ERC-20.
      */
+
+    event VaultNewTax(uint48 indexed vault, uint8 tax, uint16 cumTax);
+
     struct LPerIssuanceParams {
         uint176 cumSIRPerTEAx96; // Q80.96, cumulative SIR minted by an LPer per unit of TEA
         uint80 unclaimedRewards; // SIR owed to the LPer. 80 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
@@ -280,6 +283,8 @@ abstract contract SystemState is SystemControlAccess {
                 tsLastUpdate: uint40(block.timestamp),
                 cumSIRPerTEAx96: cumSIRPerTEAx96
             });
+
+            emit VaultNewTax(oldVaults[i], 0, 0);
         }
 
         // Start new issuances
@@ -293,6 +298,8 @@ abstract contract SystemState is SystemControlAccess {
                 tsLastUpdate: uint40(block.timestamp),
                 cumSIRPerTEAx96: cumSIRPerTEAx96
             });
+
+            emit VaultNewTax(newVaults[i], newTaxes[i], cumTax);
         }
 
         // Update cumulative taxes
