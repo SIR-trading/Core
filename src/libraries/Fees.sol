@@ -9,7 +9,7 @@ pragma solidity ^0.8.0;
     In 3 months, ETH remained flat while SQUEETH lost -16%. Without fees and volatility decay, SQUEETH should also have remained flat.
     Compounding the fees for 4 times, we get (1-0.16)^(1 year/3 months) = 50% lost over a year with a flat price a 2x.
     This computation has to be done on flat prices, because when the price moves, SQUEETH has to overpay shorters to stay short.
-    In SIR the LPers take the loss when the market moves against them, and viceversa.
+    In SIR the LPers take the loss gitwhen the market moves against them, and viceversa.
     This implies a baseFee = 100% for 2x constant leverage. At 1.2x, fee = 20%.
 
     Gentleman Sandwitch Attack:
@@ -66,7 +66,7 @@ library Fees {
 
     function hiddenFeeTEA(
         uint144 collateralDepositedOrOut,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax
     ) internal pure returns (uint144 collateralInOrWidthdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
         unchecked {

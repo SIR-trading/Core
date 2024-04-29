@@ -252,7 +252,7 @@ abstract contract SystemState is SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     /// @dev All checks and balances to be done at system control
-    function updateSystemState(uint16 baseFee, uint8 lpFee, bool mintingStopped) external onlySystemControl {
+    function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
         systemParams_ = VaultStructs.SystemParameters({
             tsIssuanceStart: systemParams_.tsIssuanceStart,

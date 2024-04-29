@@ -50,7 +50,7 @@ contract FeesTest is Test {
         assertEq(polFee, totalFee / 10, "LPers fee incorrect");
     }
 
-    function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint8 lpFee, uint8 tax) public {
+    function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public {
         (uint144 collateralInOrWidthdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
             collateralDepositedOrOut,
             lpFee,

@@ -833,7 +833,7 @@ contract SystemStateTest is Test {
         systemState.claimSIR(VAULT_ID, alice);
     }
 
-    function testFuzz_updateSystem(uint16 baseFee, uint8 lpFee, bool mintingStopped, uint16 numVaults) public {
+    function testFuzz_updateSystem(uint16 baseFee, uint16 lpFee, bool mintingStopped, uint16 numVaults) public {
         numVaults = uint16(_bound(numVaults, 0, uint16(type(uint8).max) ** 2));
 
         // Update system vaultState
@@ -852,7 +852,7 @@ contract SystemStateTest is Test {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
         // Check system vaultState
-        (uint40 tsIssuanceStart_, uint16 baseFee_, uint8 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState
+        (uint40 tsIssuanceStart_, uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState
             .systemParams();
 
         assertEq(tsIssuanceStart_, tsStart);
@@ -879,7 +879,7 @@ contract SystemStateTest is Test {
         assertEq(cumTax_, type(uint8).max);
     }
 
-    function testFuzz_updateSystemStateNotSystemControl(uint16 baseFee, uint8 lpFee, bool mintingStopped) public {
+    function testFuzz_updateSystemStateNotSystemControl(uint16 baseFee, uint16 lpFee, bool mintingStopped) public {
         // Update system vaultState
         vm.expectRevert();
         systemState.updateSystemState(baseFee, lpFee, mintingStopped);
