@@ -11,9 +11,20 @@ pragma solidity ^0.8.0;
     This computation has to be done on flat prices, because when the price moves, SQUEETH has to overpay shorters to stay short.
     In SIR the LPers take the loss when the market moves against them, and viceversa.
     This implies a baseFee = 100% for 2x constant leverage. At 1.2x, fee = 20%.
-    BUT this would make overcollateralized stablecoins very expensive unless they mint and burn when they are the minority.
-    If the market consensus is that the price will go up, then the LPers would want to cash out and the apes to stay in, right?
-    Not exactly because then the LPers also lose on the ludicrous fees of those that just open a long.
+
+    Gentleman Sandwitch Attack:
+
+    An MEV attacker could mint TEA before an ape makes its deposit and burn the TEA immediately after, pocketing the fees minus the LP fee of minting/burning.
+    This way the LPer avoids any negative impact from price fluctuations.
+    We are assuming that the ape is not depositing more than L/(l-1) collateral, where L is the LP reserve and l is the leverage because it wants
+    the system to operate in the power zone.
+
+    1) The gentlman sandwitch attacker mints a TEA depositing y collateral, but after fees only y'=y/(lpFee+1) makes it.
+    2) The ape deposits, including the fee, the maximum it can assuming we stay in the power zone is L/(l-1), and its fee is L/(l-1)*(l-1)baseFee
+       The gentlman's TEA after the ape's mint is now worth y''=y'+y'/(y+L)*L*baseFee. y''/y' is maximized for y' small, simplyfing we get y''≈y'(1+baseFee).
+    3) The gentlemen finally pays the exit fee upon burning, pocketing y'''=y''/(1+lpFee)=y(1+baseFee)/(lpFee+1)^2.
+
+    So, if we wish to make the sandwitch attack irrelevant, y''' ≤ y, and therefore (lpFee+1)^2 ≥ baseFee+1.
 */
 
 library Fees {
