@@ -1870,7 +1870,7 @@ contract VaultHandler is Test, RegimeEnum {
         // Ensure user has enough balance
         uint256 balance = isAPE ? IERC20(ape).balanceOf(user) : vault.balanceOf(user, inputOutput.vaultId);
         amount = _bound(amount, 0, balance);
-        if (amount == 0) {
+        if (amount != 0) {
             uint256 maxAmount;
             if (regime == Regime.Power) {
                 if (isAPE) {
