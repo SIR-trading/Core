@@ -1740,10 +1740,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function mint(
-        bool isAPE,
-        InputOutput memory inputOutput
-    ) external AdvanceBlock(inputOutput) returns (uint256 amount) {
+    function mint(bool isAPE, InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
         console.log("-----------------------------");
         console.log(isAPE ? "Mint APE attempt at block" : "Mint TEA attempt at block", blockNumber);
         // Get vault parameters
@@ -1817,33 +1814,41 @@ contract VaultHandler is Test, RegimeEnum {
         }
 
         // Cannot mint 1 single unit of collateral if TEA supply is 0
-        if (reserves.reserveApes + reserves.reserveLPers == 0 && inputOutput.amountCollateral < 2) return 0;
-        if (inputOutput.amountCollateral == 0) return 0;
+        console.log(
+            "reserves: ",
+            reserves.reserveApes + reserves.reserveLPers,
+            ", amountCollateral: ",
+            inputOutput.amountCollateral
+        );
+        if (
+            (reserves.reserveApes + reserves.reserveLPers > 0 || inputOutput.amountCollateral >= 2) &&
+            inputOutput.amountCollateral != 0
+        ) {
+            // User
+            user = _idToAddr(inputOutput.userId);
 
-        // User
-        user = _idToAddr(inputOutput.userId);
+            // Deal ETH
+            vm.deal(user, inputOutput.amountCollateral);
 
-        // Deal ETH
-        vm.deal(user, inputOutput.amountCollateral);
+            // Wrap ETH and deposit to vault
+            vm.startPrank(user);
+            _WETH.deposit{value: inputOutput.amountCollateral}();
+            _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
-        // Wrap ETH and deposit to vault
-        vm.startPrank(user);
-        _WETH.deposit{value: inputOutput.amountCollateral}();
-        _WETH.transfer(address(vault), inputOutput.amountCollateral);
+            // Mint
+            console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
+            console.log(isAPE ? "Mint APE with" : "Mint TEA with", inputOutput.amountCollateral, "wei");
+            _checkRegime(vaultParameters);
+            vault.mint(isAPE, vaultParameters);
+            vm.stopPrank();
 
-        // Mint
-        console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
-        console.log(isAPE ? "Mint APE with" : "Mint TEA with", inputOutput.amountCollateral, "wei");
-        _checkRegime(vaultParameters);
-        amount = vault.mint(isAPE, vaultParameters);
-        vm.stopPrank();
-
-        // Update storage
-        reserves = vault.getReserves(vaultParameters);
-        console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
-        supplyAPE = IERC20(ape).totalSupply();
-        supplyTEA = vault.totalSupply(vaultId);
-        _checkRegime(vaultParameters);
+            // Update storage
+            reserves = vault.getReserves(vaultParameters);
+            console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
+            supplyAPE = IERC20(ape).totalSupply();
+            supplyTEA = vault.totalSupply(vaultId);
+            _checkRegime(vaultParameters);
+        }
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
@@ -1865,77 +1870,98 @@ contract VaultHandler is Test, RegimeEnum {
         // Ensure user has enough balance
         uint256 balance = isAPE ? IERC20(ape).balanceOf(user) : vault.balanceOf(user, inputOutput.vaultId);
         amount = _bound(amount, 0, balance);
-        if (amount == 0) return;
+        if (amount == 0) {
+            uint256 maxAmount;
+            if (regime == Regime.Power) {
+                if (isAPE) {
+                    // Keep at least 1 ETH in the apes reserve to make sure gain comptuations are preturbed by small numbers numeric approximation
+                    // Do not burn too much TEA that it changes to Saturation
+                    uint256 reserveMin = 10 ** 18;
 
-        uint256 maxAmount;
-        if (regime == Regime.Power) {
-            if (isAPE) {
-                // Keep at least 1 ETH in the apes reserve to make sure gain comptuations are preturbed by small numbers numeric approximation
-                // Do not burn too much TEA that it changes to Saturation
-                uint256 reserveMin = 10 ** 18;
+                    if (reserves.reserveApes >= reserveMin) {
+                        uint256 maxCollateralAmount = reserves.reserveApes - reserveMin;
+                        maxAmount = FullMath.mulDiv(supplyAPE, maxCollateralAmount, reserves.reserveApes);
+                    }
+                } else {
+                    // Do not burn too much TEA that it changes to Saturation
+                    uint256 reserveMin = vaultParameters.leverageTier >= 0
+                        ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
+                        : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
 
-                if (reserves.reserveApes < reserveMin) return;
-                uint256 maxCollateralAmount = reserves.reserveApes - reserveMin;
+                    if (reserves.reserveLPers < reserveMin) fail("Saturation zone");
+                    uint256 maxCollateralAmount = reserves.reserveLPers - reserveMin;
 
-                maxAmount = FullMath.mulDiv(supplyAPE, maxCollateralAmount, reserves.reserveApes);
-            } else {
-                // Do not burn too much TEA that it changes to Saturation
-                uint256 reserveMin = vaultParameters.leverageTier >= 0
-                    ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
-                    : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
+                    maxAmount = FullMath.mulDiv(supplyTEA, maxCollateralAmount, reserves.reserveLPers);
+                }
+            } else if (regime == Regime.Saturation) {
+                if (!isAPE) {
+                    // Keep at least 1 ETH in the LPers reserve
+                    uint256 reserveMin = 10 ** 18;
 
-                if (reserves.reserveLPers < reserveMin) fail("Saturation zone");
-                uint256 maxCollateralAmount = reserves.reserveLPers - reserveMin;
+                    if (reserves.reserveLPers >= reserveMin) {
+                        uint256 maxCollateralAmount = reserves.reserveLPers - reserveMin;
+                        maxAmount = FullMath.mulDiv(supplyTEA, maxCollateralAmount, reserves.reserveLPers);
+                    }
+                } else {
+                    // Do not burn too much APE that it changes to Power, sufficient condition
+                    uint256 reserveMin = vaultParameters.leverageTier < 0
+                        ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
+                        : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
 
-                maxAmount = FullMath.mulDiv(supplyTEA, maxCollateralAmount, reserves.reserveLPers);
+                    console.log("ReserveMin:", reserveMin, "reserveApes:", reserves.reserveApes);
+                    if (reserves.reserveApes < reserveMin) fail("Saturation zone");
+
+                    // Sufficient condition to change to Power
+                    uint256 maxCollateralAmount = vaultParameters.leverageTier < 0
+                        ? (reserves.reserveApes - reserveMin) / (1 + 2 ** uint8(-vaultParameters.leverageTier))
+                        : ((reserves.reserveApes - reserveMin) << uint8(vaultParameters.leverageTier)) /
+                            (1 + 2 ** uint8(vaultParameters.leverageTier));
+
+                    maxAmount = FullMath.mulDiv(supplyAPE, maxCollateralAmount, reserves.reserveApes);
+                    console.log("MaxAmount:", maxAmount);
+                }
             }
-        } else if (regime == Regime.Saturation) {
-            if (!isAPE) {
-                // Keep at least 1 ETH in the LPers reserve
-                uint256 reserveMin = 10 ** 18;
+            amount = _bound(amount, 0, maxAmount);
+            console.log("amount:", amount);
 
-                if (reserves.reserveLPers < reserveMin) return;
-                uint256 maxCollateralAmount = reserves.reserveLPers - reserveMin;
+            if (amount != 0) {
+                // Sufficient condition to not underflow total collateral
+                uint256 collateralOutApprox = isAPE
+                    ? FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)
+                    : FullMath.mulDiv(reserves.reserveLPers, amount, supplyTEA);
 
-                maxAmount = FullMath.mulDiv(supplyTEA, maxCollateralAmount, reserves.reserveLPers);
-            } else {
-                // Do not burn too much APE that it changes to Power
-                uint256 reserveMin = vaultParameters.leverageTier < 0
-                    ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
-                    : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
+                if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox >= 2) {
+                    // Burn
+                    console.log(
+                        "Reserves of Apes:",
+                        reserves.reserveApes,
+                        ", Reserves of LPers:",
+                        reserves.reserveLPers
+                    );
+                    console.log("Burn", amount, isAPE ? "APE" : " TEA");
+                    vm.startPrank(user);
+                    _checkRegime(vaultParameters);
+                    inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
 
-                if (reserves.reserveApes < reserveMin) fail("Saturation zone");
-                uint256 maxCollateralAmount = reserves.reserveApes - reserveMin;
+                    // Unwrap ETH
+                    _WETH.withdraw(inputOutput.amountCollateral);
+                    vm.stopPrank();
 
-                maxAmount = FullMath.mulDiv(supplyAPE, maxCollateralAmount, reserves.reserveApes);
+                    // Update storage
+                    reserves = vault.getReserves(vaultParameters);
+                    console.log(
+                        "Reserves of Apes:",
+                        reserves.reserveApes,
+                        ", Reserves of LPers:",
+                        reserves.reserveLPers
+                    );
+                    supplyAPE = IERC20(ape).totalSupply();
+                    supplyTEA = vault.totalSupply(vaultId);
+                    _checkRegime(vaultParameters);
+                }
             }
+            console.log("exit");
         }
-        amount = _bound(amount, 0, maxAmount);
-
-        // Sufficient condition to not underflow total collateral
-        uint256 collateralOutApprox = isAPE
-            ? FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)
-            : FullMath.mulDiv(reserves.reserveLPers, amount, supplyTEA);
-
-        if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox < 2) return;
-
-        // Burn
-        console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
-        console.log("Burn", amount, isAPE ? "APE" : " TEA");
-        vm.startPrank(user);
-        _checkRegime(vaultParameters);
-        inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
-
-        // Unwrap ETH
-        _WETH.withdraw(inputOutput.amountCollateral);
-        vm.stopPrank();
-
-        // Update storage
-        reserves = vault.getReserves(vaultParameters);
-        console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
-        supplyAPE = IERC20(ape).totalSupply();
-        supplyTEA = vault.totalSupply(vaultId);
-        _checkRegime(vaultParameters);
     }
 
     /////////////////////////////////////////////////////////
@@ -2058,6 +2084,7 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     }
 
     function setUp() public {
+        vm.writeFile("./gains.log", "");
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
@@ -2127,6 +2154,18 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
             .mul(ABDKMathQuad.fromUInt(supplyAPE0))
             .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
 
+        vm.writeLine(
+            "./gains.log",
+            string.concat(
+                "Time: ",
+                vm.toString(vaultHandler.blockNumber()),
+                ", Ideal leveraged gain: ",
+                vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
+                ", Actual gain: ",
+                vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
+            )
+        );
+
         assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
 
         // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
@@ -2169,7 +2208,6 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Saturation);
-
         targetContract(address(vaultHandler));
 
         address ape_;
@@ -2208,7 +2246,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
         uint144 reserveApes;
         {
             uint144 reserveLPers;
-            vm.writeLine("./gains.log", "getting reserves");
+            vm.writeLine("./gains.log", string.concat("vaultHandler: ", vm.toString(address(vaultHandler))));
             (reserveApes, reserveLPers, ) = vaultHandler.reserves();
             vm.writeLine("./gains.log", "got reserves");
 

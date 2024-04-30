@@ -9,7 +9,7 @@ fs_permissions = [{ access = "read-write", path = "./"}]
 # libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4"]
 
 [fuzz]
-seed = "0x14"
+seed = "0x11"
 # runs = 10000
 
 [rpc_endpoints]
@@ -18,5 +18,6 @@ tarp_testnet = "https://docker-anvil-production-aa2c.up.railway.app/"
 
 [invariant]
 fail_on_revert = true   # Fail the test if the contract reverts
+preserve_state = true
 runs           = 10   # Number of times that a sequence of function calls is generated and run
 depth          = 100     # Number of function calls made in a given run.
