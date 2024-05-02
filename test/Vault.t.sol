@@ -1659,6 +1659,10 @@ contract RegimeEnum {
 }
 
 contract VaultHandler is Test, RegimeEnum {
+    using ABDKMathQuad for bytes16;
+    using ExtraABDKMathQuad for int64;
+    using BonusABDKMathQuad for bytes16;
+
     struct InputOutput {
         bool advanceBlock;
         uint256 vaultId;
@@ -1675,33 +1679,46 @@ contract VaultHandler is Test, RegimeEnum {
 
     uint256 public blockNumber;
     uint256 public iterations;
-    int64 public priceTickX42;
+
     VaultStructs.Reserves public reserves;
     uint256 public supplyAPE;
     uint256 public supplyTEA;
+    int64 public priceTick;
+
+    VaultStructs.Reserves public reserves0;
+    uint256 public supplyAPE0;
+    uint256 public supplyTEA0;
+    int64 public priceTick0;
 
     // Dummy variables
     address user;
 
     modifier AdvanceBlock(InputOutput memory inputOutput) {
+        console.log("-----------------------------");
         if (regime != Regime.Any || inputOutput.advanceBlock) {
-            vm.createSelectFork("mainnet", blockNumber);
-
-            if (regime != Regime.Any) {
-                inputOutput.vaultId = 1;
-                priceTickX42 = oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
-            }
+            blockNumber += TIME_ADVANCE / 12 seconds;
+            console.log("ADVANCING TO BLOCK", blockNumber);
+        } else {
+            console.log("STAYING IN BLOCK", blockNumber);
+        }
+        vm.createSelectFork("mainnet", blockNumber);
+        if (regime != Regime.Any) {
+            inputOutput.vaultId = 1;
+            priceTick = oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
         }
 
         _;
 
         if (regime != Regime.Any || inputOutput.advanceBlock) {
-            blockNumber += TIME_ADVANCE / 12 seconds;
             iterations++;
         }
+
+        if (regime == Regime.Power) _invariantPowerZone();
+        else if (regime == Regime.Saturation) _invariantSaturationZone();
     }
 
     constructor(uint256 blockNumber_, Regime regime_) {
+        vm.writeFile("./gains.log", "");
         blockNumber = blockNumber_;
         regime = regime_;
 
@@ -1740,8 +1757,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function mint(bool isAPE, InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
-        console.log("-----------------------------");
+    function setupMint(bool isAPE, InputOutput memory inputOutput) public {
         console.log(isAPE ? "Mint APE attempt at block" : "Mint TEA attempt at block", blockNumber);
         // Get vault parameters
         (uint256 vaultId, VaultStructs.VaultParameters memory vaultParameters, address ape) = idToVault(
@@ -1851,8 +1867,11 @@ contract VaultHandler is Test, RegimeEnum {
         }
     }
 
+    function mint(bool isAPE, InputOutput memory inputOutput) external AdvanceBlock(inputOutput) {
+        setupMint(isAPE, inputOutput);
+    }
+
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external AdvanceBlock(inputOutput) {
-        console.log("-----------------------------");
         console.log(isAPE ? "Burn APE attempt at blockNumber" : "Burn TEA attempt at blockNumber", blockNumber);
         // User
         user = _idToAddr(inputOutput.userId);
@@ -2004,6 +2023,93 @@ contract VaultHandler is Test, RegimeEnum {
             fail("Power zone");
         }
     }
+
+    function _invariantPowerZone() private {
+        (, VaultStructs.VaultParameters memory vaultParameters, ) = idToVault(1);
+
+        // Compute theoretical leveraged gain
+        bytes16 gainIdeal = priceTick.tickToFP().div(priceTick0.tickToFP()).pow(
+            ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier))
+        );
+
+        // Compute actual leveraged gain
+        bytes16 gainActual = ABDKMathQuad
+            .fromUInt(reserves.reserveApes)
+            .div(ABDKMathQuad.fromUInt(reserves0.reserveApes))
+            .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+            .div(ABDKMathQuad.fromUInt(supplyAPE));
+
+        vm.writeLine(
+            "./gains.log",
+            string.concat(
+                "Block number: ",
+                vm.toString(blockNumber),
+                ", Ideal leveraged gain: ",
+                vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
+                ", Actual gain: ",
+                vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
+            )
+        );
+
+        assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
+
+        // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
+        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromUInt(1e16));
+        assertLe(
+            gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
+            0,
+            "Divergence between ideal and actual gain is too large"
+        );
+    }
+
+    function _invariantSaturationZone() private {
+        // Compute theoretical margin gain
+        bytes16 one = ABDKMathQuad.fromUInt(1);
+
+        console.log("Price at", blockNumber, "is", vm.toString(priceTick));
+        bytes16 gainIdeal = one
+            .sub(priceTick0.tickToFP().div(priceTick.tickToFP()))
+            .mul(ABDKMathQuad.fromUInt(reserves0.reserveLPers))
+            .div(ABDKMathQuad.fromUInt(reserves0.reserveApes))
+            .add(one);
+
+        // Compute actual margin gain
+        console.log(reserves.reserveApes, reserves0.reserveApes, supplyAPE0, supplyAPE);
+        bytes16 gainActual = ABDKMathQuad
+            .fromUInt(reserves.reserveApes)
+            .div(ABDKMathQuad.fromUInt(reserves0.reserveApes))
+            .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+            .div(ABDKMathQuad.fromUInt(supplyAPE));
+
+        vm.writeLine(
+            "./gains.log",
+            string.concat(
+                "Block number: ",
+                vm.toString(blockNumber),
+                ", Ideal gain: ",
+                vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e24)).toUInt()),
+                ", Actual gain: ",
+                vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e24)).toUInt())
+            )
+        );
+
+        assertLe(gainActual.cmp(gainIdeal), 0, "Actual gain is larger than the ideal gain");
+
+        // bytes16 relErr = one.div(ABDKMathQuad.fromUInt(1e15));
+        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromUInt(1e16));
+        assertLe(
+            one.sub(gainActual.div(gainIdeal)).cmp(relErr),
+            0,
+            "Divergence between ideal and actual gain is too large"
+        );
+    }
+
+    function initialize() public {
+        priceTick0 = oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
+        console.log("Price at", blockNumber, "is", vm.toString(priceTick0));
+        reserves0 = reserves;
+        supplyAPE0 = supplyAPE;
+    }
 }
 
 contract VaultInvariantTest is Test, RegimeEnum {
@@ -2060,41 +2166,45 @@ contract VaultInvariantTest is Test, RegimeEnum {
 }
 
 contract PowerZoneInvariantTest is Test, RegimeEnum {
-    using ABDKMathQuad for bytes16;
-    using ExtraABDKMathQuad for int64;
-    using BonusABDKMathQuad for bytes16;
+    // using ABDKMathQuad for bytes16;
+    // using ExtraABDKMathQuad for int64;
+    // using BonusABDKMathQuad for bytes16;
 
     uint256 constant BLOCK_NUMBER_START = 15210000; // July 25, 2022
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
 
     VaultHandler public vaultHandler;
 
-    VaultStructs.VaultParameters public vaultParameters;
-    IERC20 public ape;
+    // VaultStructs.VaultParameters public vaultParameters;
+    // IERC20 public ape;
 
-    bytes16 priceFP0;
-    uint144 reserveApes0;
-    uint256 supplyAPE0;
+    // bytes16 priceFP0;
+    // uint144 reserveApes0;
+    // uint256 supplyAPE0;
 
-    function _getPriceETHvsUSDT() private view returns (bytes16 priceFP) {
-        int64 priceTick = vaultHandler.priceTickX42();
+    // function _getPriceETHvsUSDT() private view returns (bytes16 priceFP) {
+    //     int64 priceTick = vaultHandler.priceTick();
 
-        // x1M + 6 decimals from USDT + 18 decimals from WETH
-        priceFP = priceTick.tickToFP();
+    //     // x1M + 6 decimals from USDT + 18 decimals from WETH
+    //     priceFP = priceTick.tickToFP();
+    // }
+
+    constructor() {
+        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
     }
 
     function setUp() public {
-        vm.writeFile("./gains.log", "");
-        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+        // vm.writeFile("./gains.log", "");
+        // vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
 
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Power);
 
         targetContract(address(vaultHandler));
 
-        address ape_;
-        (, vaultParameters, ape_) = vaultHandler.idToVault(1);
-        ape = IERC20(ape_);
+        // address ape_;
+        // (, vaultParameters, ape_) = vaultHandler.idToVault(1);
+        // ape = IERC20(ape_);
 
         bytes4[] memory selectors = new bytes4[](2);
         selectors[0] = vaultHandler.mint.selector;
@@ -2103,11 +2213,12 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
 
         Vault vault = vaultHandler.vault();
         Oracle oracle = vaultHandler.oracle();
+        (, , address ape) = vaultHandler.idToVault(1);
         vm.makePersistent(address(Addresses.ADDR_WETH));
         vm.makePersistent(address(vaultHandler));
         vm.makePersistent(address(vault));
         vm.makePersistent(address(oracle));
-        vm.makePersistent(ape_);
+        vm.makePersistent(ape);
 
         // Mint 8 ETH worth of TEA
         vaultHandler.mint(
@@ -2122,97 +2233,107 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
         );
 
         // Initial values
-        priceFP0 = _getPriceETHvsUSDT();
-        supplyAPE0 = ape.totalSupply();
-        (reserveApes0, , ) = vaultHandler.reserves();
+        vaultHandler.initialize();
+
+        // // Initial values
+        // priceFP0 = _getPriceETHvsUSDT();
+        // supplyAPE0 = ape.totalSupply();
+        // (reserveApes0, , ) = vaultHandler.reserves();
     }
 
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
-    function invariant_powerZone() public {
-        uint144 reserveApes;
-        {
-            uint144 reserveLPers;
-            (reserveApes, reserveLPers, ) = vaultHandler.reserves();
-
-            uint256 reserveLPersMin = vaultParameters.leverageTier >= 0
-                ? reserveApes << uint8(vaultParameters.leverageTier)
-                : reserveApes >> uint8(-vaultParameters.leverageTier);
-
-            assertGe(reserveLPers, reserveLPersMin, "Not in power zone");
-        }
-
-        // Compute theoretical leveraged gain
-        bytes16 gainIdeal = _getPriceETHvsUSDT().div(priceFP0).pow(
-            ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier))
-        );
-
-        // Compute actual leveraged gain
-        bytes16 gainActual = ABDKMathQuad
-            .fromUInt(reserveApes)
-            .div(ABDKMathQuad.fromUInt(reserveApes0))
-            .mul(ABDKMathQuad.fromUInt(supplyAPE0))
-            .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
-
-        vm.writeLine(
-            "./gains.log",
-            string.concat(
-                "Time: ",
-                vm.toString(vaultHandler.blockNumber()),
-                ", Ideal leveraged gain: ",
-                vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
-                ", Actual gain: ",
-                vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
-            )
-        );
-
-        assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
-
-        // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
-        bytes16 relErr = ABDKMathQuad.fromUInt(vaultHandler.iterations()).div(ABDKMathQuad.fromUInt(1e16));
-        assertLe(
-            gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
-            0,
-            "Divergence between ideal and actual gain is too large"
-        );
+    function invariant_dummy() public {
+        // Dummy invariant to avoid "No invariants" error
     }
+
+    // function invariant_powerZone() public {
+    //     uint144 reserveApes;
+    //     {
+    //         uint144 reserveLPers;
+    //         (reserveApes, reserveLPers, ) = vaultHandler.reserves();
+
+    //         uint256 reserveLPersMin = vaultParameters.leverageTier >= 0
+    //             ? reserveApes << uint8(vaultParameters.leverageTier)
+    //             : reserveApes >> uint8(-vaultParameters.leverageTier);
+
+    //         assertGe(reserveLPers, reserveLPersMin, "Not in power zone");
+    //     }
+
+    //     // Compute theoretical leveraged gain
+    //     bytes16 gainIdeal = _getPriceETHvsUSDT().div(priceFP0).pow(
+    //         ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier))
+    //     );
+
+    //     // Compute actual leveraged gain
+    //     bytes16 gainActual = ABDKMathQuad
+    //         .fromUInt(reserveApes)
+    //         .div(ABDKMathQuad.fromUInt(reserveApes0))
+    //         .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+    //         .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
+
+    //     vm.writeLine(
+    //         "./gains.log",
+    //         string.concat(
+    //             "Time: ",
+    //             vm.toString(vaultHandler.blockNumber()),
+    //             ", Ideal leveraged gain: ",
+    //             vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
+    //             ", Actual gain: ",
+    //             vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
+    //         )
+    //     );
+
+    //     assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
+
+    //     // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
+    //     bytes16 relErr = ABDKMathQuad.fromUInt(vaultHandler.iterations()).div(ABDKMathQuad.fromUInt(1e16));
+    //     assertLe(
+    //         gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
+    //         0,
+    //         "Divergence between ideal and actual gain is too large"
+    //     );
+    // }
 }
 
 contract SaturationInvariantTest is Test, RegimeEnum {
-    using ABDKMathQuad for bytes16;
-    using ExtraABDKMathQuad for int64;
+    // using ABDKMathQuad for bytes16;
+    // using ExtraABDKMathQuad for int64;
 
     uint256 constant BLOCK_NUMBER_START = 15210000; // July 25, 2022
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
 
     VaultHandler public vaultHandler;
 
-    VaultStructs.VaultParameters public vaultParameters;
-    IERC20 public ape;
+    // VaultStructs.VaultParameters public vaultParameters;
+    // IERC20 public ape;
 
-    bytes16 priceFP0;
-    uint144 reserveApes0;
-    uint144 reserveLPers0;
-    uint256 supplyAPE0;
+    // bytes16 priceFP0;
+    // uint144 reserveApes0;
+    // uint144 reserveLPers0;
+    // uint256 supplyAPE0;
 
-    function _getPriceETHvsUSDT() private view returns (bytes16 priceFP) {
-        int64 priceTick = vaultHandler.priceTickX42();
+    // function _getPriceETHvsUSDT() private view returns (bytes16 priceFP) {
+    //     int64 priceTick = vaultHandler.priceTick();
 
-        // x1M + 6 decimals from USDT + 18 decimals from WETH
-        priceFP = priceTick.tickToFP();
+    //     // x1M + 6 decimals from USDT + 18 decimals from WETH
+    //     priceFP = priceTick.tickToFP();
+    // }
+
+    constructor() {
+        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
     }
 
     function setUp() public {
-        vm.writeFile("./gains.log", "");
-        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+        // vm.writeFile("./gains.log", "");
 
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Saturation);
         targetContract(address(vaultHandler));
 
-        address ape_;
-        (, vaultParameters, ape_) = vaultHandler.idToVault(1);
-        ape = IERC20(ape_);
+        // address ape_;
+        // (, vaultParameters, ape_) = vaultHandler.idToVault(1);
+        // ape = IERC20(ape_);
 
         bytes4[] memory selectors = new bytes4[](2);
         selectors[0] = vaultHandler.mint.selector;
@@ -2221,80 +2342,78 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
         Vault vault = vaultHandler.vault();
         Oracle oracle = vaultHandler.oracle();
+        (, , address ape) = vaultHandler.idToVault(1);
         vm.makePersistent(address(Addresses.ADDR_WETH));
         vm.makePersistent(address(vaultHandler));
         vm.makePersistent(address(vault));
         vm.makePersistent(address(oracle));
-        vm.makePersistent(ape_);
+        vm.makePersistent(ape);
 
         // Mint 4 ETH worth of APE (Fees will also mint 2 ETH approx of TEA)
-        vaultHandler.mint(
+        vaultHandler.setupMint(
             true,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 4e18})
         );
 
         // Initial values
-        priceFP0 = _getPriceETHvsUSDT();
-        supplyAPE0 = ape.totalSupply();
-        (reserveApes0, reserveLPers0, ) = vaultHandler.reserves();
+        vaultHandler.initialize();
     }
 
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
-    function invariant_saturationZone() public {
-        vm.writeLine("./gains.log", "invariant_saturationZone");
-        uint144 reserveApes;
-        {
-            uint144 reserveLPers;
-            vm.writeLine("./gains.log", string.concat("vaultHandler: ", vm.toString(address(vaultHandler))));
-            (reserveApes, reserveLPers, ) = vaultHandler.reserves();
-            vm.writeLine("./gains.log", "got reserves");
-
-            uint256 reserveApesMin = vaultParameters.leverageTier < 0
-                ? reserveLPers << uint8(-vaultParameters.leverageTier)
-                : reserveLPers >> uint8(vaultParameters.leverageTier);
-
-            vm.writeLine("./gains.log", string.concat(vm.toString(reserveApes), vm.toString(reserveApesMin)));
-            assertGe(reserveApes, reserveApesMin, "Not in saturation zone");
-        }
-        vm.writeLine("./gains.log", "confirmed saturation zone");
-
-        // Compute theoretical margin gain
-        bytes16 one = ABDKMathQuad.fromUInt(1);
-
-        bytes16 gainIdeal = one
-            .sub(priceFP0.div(_getPriceETHvsUSDT()))
-            .mul(ABDKMathQuad.fromUInt(reserveLPers0))
-            .div(ABDKMathQuad.fromUInt(reserveApes0))
-            .add(one);
-
-        // Compute actual margin gain
-        bytes16 gainActual = ABDKMathQuad
-            .fromUInt(reserveApes)
-            .div(ABDKMathQuad.fromUInt(reserveApes0))
-            .mul(ABDKMathQuad.fromUInt(supplyAPE0))
-            .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
-
-        vm.writeLine(
-            "./gains.log",
-            string.concat(
-                "Block number: ",
-                vm.toString(vaultHandler.blockNumber()),
-                ", Ideal gain: ",
-                vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
-                ", Actual gain: ",
-                vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
-            )
-        );
-
-        assertLe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
-
-        // bytes16 relErr = one.div(ABDKMathQuad.fromUInt(1e15));
-        bytes16 relErr = ABDKMathQuad.fromUInt(vaultHandler.iterations()).div(ABDKMathQuad.fromUInt(1e16));
-        assertLe(
-            one.sub(gainActual.div(gainIdeal)).cmp(relErr),
-            0,
-            "Divergence between ideal and actual gain is too large"
-        );
+    function invariant_dummy() public {
+        // Dummy invariant to avoid "No invariants" error
     }
+
+    // function invariant_saturationZone() public {
+    //     uint144 reserveApes;
+    //     {
+    //         uint144 reserveLPers;
+    //         (reserveApes, reserveLPers, ) = vaultHandler.reserves();
+
+    //         uint256 reserveApesMin = vaultParameters.leverageTier < 0
+    //             ? reserveLPers << uint8(-vaultParameters.leverageTier)
+    //             : reserveLPers >> uint8(vaultParameters.leverageTier);
+
+    //         assertGe(reserveApes, reserveApesMin, "Not in saturation zone");
+    //     }
+
+    //     // Compute theoretical margin gain
+    //     bytes16 one = ABDKMathQuad.fromUInt(1);
+
+    //     bytes16 gainIdeal = one
+    //         .sub(priceFP0.div(_getPriceETHvsUSDT()))
+    //         .mul(ABDKMathQuad.fromUInt(reserveLPers0))
+    //         .div(ABDKMathQuad.fromUInt(reserveApes0))
+    //         .add(one);
+
+    //     // Compute actual margin gain
+    //     bytes16 gainActual = ABDKMathQuad
+    //         .fromUInt(reserveApes)
+    //         .div(ABDKMathQuad.fromUInt(reserveApes0))
+    //         .mul(ABDKMathQuad.fromUInt(supplyAPE0))
+    //         .div(ABDKMathQuad.fromUInt(vaultHandler.supplyAPE()));
+
+    //     vm.writeLine(
+    //         "./gains.log",
+    //         string.concat(
+    //             "Block number: ",
+    //             vm.toString(vaultHandler.blockNumber()),
+    //             ", Ideal gain: ",
+    //             vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
+    //             ", Actual gain: ",
+    //             vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
+    //         )
+    //     );
+
+    //     assertLe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
+
+    //     // bytes16 relErr = one.div(ABDKMathQuad.fromUInt(1e15));
+    //     bytes16 relErr = ABDKMathQuad.fromUInt(vaultHandler.iterations()).div(ABDKMathQuad.fromUInt(1e16));
+    //     assertLe(
+    //         one.sub(gainActual.div(gainIdeal)).cmp(relErr),
+    //         0,
+    //         "Divergence between ideal and actual gain is too large"
+    //     );
+    // }
 }
