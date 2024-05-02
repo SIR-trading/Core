@@ -83,7 +83,7 @@ contract TickMathPrecisionTest is Test {
         );
 
         assertApproxEqAbs(tickX42, tickX42Bis, 1);
-        assertLe(tickX42, tickX42Bis, "Not rounding down");
+        assertGe(tickX42, tickX42Bis, "Not rounding up");
     }
 
     function testFuzz_getTickAtRatioWrongNumerator(uint256 num, uint256 den) public {
