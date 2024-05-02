@@ -1830,12 +1830,6 @@ contract VaultHandler is Test, RegimeEnum {
         }
 
         // Cannot mint 1 single unit of collateral if TEA supply is 0
-        console.log(
-            "reserves: ",
-            reserves.reserveApes + reserves.reserveLPers,
-            ", amountCollateral: ",
-            inputOutput.amountCollateral
-        );
         if (
             (reserves.reserveApes + reserves.reserveLPers > 0 || inputOutput.amountCollateral >= 2) &&
             inputOutput.amountCollateral != 0
@@ -1852,7 +1846,7 @@ contract VaultHandler is Test, RegimeEnum {
             _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
             // Mint
-            console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
+            console.log("Reserves of Apes:", reserves.reserveApes, ", Supply of APE:", supplyAPE);
             console.log(isAPE ? "Mint APE with" : "Mint TEA with", inputOutput.amountCollateral, "wei");
             _checkRegime(vaultParameters);
             vault.mint(isAPE, vaultParameters);
@@ -1860,8 +1854,8 @@ contract VaultHandler is Test, RegimeEnum {
 
             // Update storage
             reserves = vault.getReserves(vaultParameters);
-            console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
             supplyAPE = IERC20(ape).totalSupply();
+            console.log("Reserves of Apes:", reserves.reserveApes, ", Supply of APE:", supplyAPE);
             supplyTEA = vault.totalSupply(vaultId);
             _checkRegime(vaultParameters);
         }
@@ -1927,7 +1921,6 @@ contract VaultHandler is Test, RegimeEnum {
                         ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
                         : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
 
-                    console.log("ReserveMin:", reserveMin, "reserveApes:", reserves.reserveApes);
                     if (reserves.reserveApes < reserveMin) fail("Saturation zone");
 
                     // Sufficient condition to change to Power
@@ -1937,11 +1930,9 @@ contract VaultHandler is Test, RegimeEnum {
                             (1 + 2 ** uint8(vaultParameters.leverageTier));
 
                     maxAmount = FullMath.mulDiv(supplyAPE, maxCollateralAmount, reserves.reserveApes);
-                    console.log("MaxAmount:", maxAmount);
                 }
             }
             amount = _bound(amount, 0, maxAmount);
-            console.log("amount:", amount);
 
             if (amount != 0) {
                 // Sufficient condition to not underflow total collateral
@@ -1951,12 +1942,7 @@ contract VaultHandler is Test, RegimeEnum {
 
                 if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox >= 2) {
                     // Burn
-                    console.log(
-                        "Reserves of Apes:",
-                        reserves.reserveApes,
-                        ", Reserves of LPers:",
-                        reserves.reserveLPers
-                    );
+                    console.log("Reserves of Apes:", reserves.reserveApes, ", Supply of APE:", supplyAPE);
                     console.log("Burn", amount, isAPE ? "APE" : " TEA");
                     vm.startPrank(user);
                     _checkRegime(vaultParameters);
@@ -1975,6 +1961,7 @@ contract VaultHandler is Test, RegimeEnum {
                         reserves.reserveLPers
                     );
                     supplyAPE = IERC20(ape).totalSupply();
+                    console.log("Reserves of Apes:", reserves.reserveApes, ", Supply of APE:", supplyAPE);
                     supplyTEA = vault.totalSupply(vaultId);
                     _checkRegime(vaultParameters);
                 }
