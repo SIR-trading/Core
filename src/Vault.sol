@@ -79,6 +79,8 @@ contract Vault is TEA {
                 APE ape,
                 uint144 collateralDeposited
             ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+            console.log("Reserve: ", vaultState.reserve);
+            console.logInt(vaultState.tickPriceSatX42);
 
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             uint256 collectedFee;
@@ -143,6 +145,8 @@ contract Vault is TEA {
             APE ape,
 
         ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+        console.log("Reserve: ", vaultState.reserve);
+        console.logInt(vaultState.tickPriceSatX42);
 
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         uint256 collectedFee;
@@ -302,6 +306,18 @@ contract Vault is TEA {
                         priceSat = r*price*L/R
                      */
 
+                    console.log(
+                        "COMPUTING PSAT, Reserves of Apes:",
+                        reserves.reserveApes,
+                        ", Reserves of LPers:",
+                        reserves.reserveLPers
+                    );
+                    // console.log("reserveLPers: ", reserves.reserveLPers);
+                    // console.log("reserveLPers*2: ", uint256(reserves.reserveLPers) << absLeverageTier);
+                    // console.log(
+                    //     "reserveLPers*(1+2): ",
+                    //     (uint256(reserves.reserveLPers) << absLeverageTier) + reserves.reserveLPers
+                    // );
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
                         vaultParams.leverageTier >= 0
                             ? uint256(vaultState.reserve) << absLeverageTier
@@ -310,12 +326,16 @@ contract Vault is TEA {
                     );
 
                     // Compute saturation price
+                    // console.log("tickRatioX42:");
+                    // console.logInt(tickRatioX42);
                     int256 tempTickPriceSatX42 = reserves.tickPriceX42 - tickRatioX42;
 
                     // Check if underflow
                     if (tempTickPriceSatX42 < type(int64).min) vaultState.tickPriceSatX42 = type(int64).min;
                     else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 }
+                console.log("Reserve: ", vaultState.reserve);
+                console.logInt(vaultState.tickPriceSatX42);
             }
 
             vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;

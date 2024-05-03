@@ -7,9 +7,6 @@ import {SystemConstants} from "./SystemConstants.sol";
 /// @notice Modified from Uniswap v3 TickMath
 /// @notice Math library for computing log_1.0001(x/y) and 1.0001^z where x and y are uint and z is Q21.42
 library TickMathPrecision {
-    // We want getTickAtRatio to round up
-    uint256 private constant _ROUND_UP_VAL = (1 << (13 + 179 - 1));
-
     /// @return uint128 in Q63.64
     function getRatioAtTick(int64 tickX42) internal pure returns (uint128) {
         assert(tickX42 >= 0 && tickX42 <= SystemConstants.MAX_TICK_X42);
@@ -87,7 +84,7 @@ library TickMathPrecision {
 
     /// @return tickX42 Q21.42 (+1 bit for sign)
     /// @notice The result is never negative, but it is returned as an int for compatibilty with negative ticks used outside this library.
-    /// @dev Rounds up!
+    /// @dev We cannot ensure that this function rounds up or down.
     function getTickAtRatio(uint256 num, uint256 den) internal pure returns (int64 tickX42) {
         assert(num >= den);
         assert(den != 0);
@@ -157,20 +154,7 @@ library TickMathPrecision {
             }
         }
 
-        // Check if there is any significant residual value in r that would impact rounding
-        if (r > 0) {
-            // If r is not zero after final shift, round up
-            log_2++; // Increment log_2 to round up the final value
-        }
-
         // 2^179/log_2(1.0001) = 5311490373674440127006610942261594940696236095528553491154
         return int64(uint64((log_2 * 5311490373674440127006610942261594940696236095528553491154) >> (13 + 179)));
-        // return
-        //     int64(
-        //         uint64(
-        //             (log_2 * (5311490373674440127006610942261594940696236095528553491154 + 1) + _ROUND_UP_VAL) >>
-        //                 (13 + 179)
-        //         )
-        //     );
     }
 }
