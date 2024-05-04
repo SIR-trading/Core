@@ -1706,6 +1706,8 @@ contract VaultHandler is Test, RegimeEnum {
         });
 
     modifier advanceBlock(InputOutput memory inputOutput) {
+        console.log("------------------");
+
         if (regime != Regime.Any || inputOutput.advanceBlock) {
             blockNumber += TIME_ADVANCE / 12 seconds;
         }
@@ -1780,6 +1782,8 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
+        console.log("Mint attempt");
+
         // Sufficient condition to not overflow total collateral
         (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
         inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint144).max - total);
@@ -1857,12 +1861,14 @@ contract VaultHandler is Test, RegimeEnum {
 
             // Mint
             _checkRegime();
+            console.log(isAPE ? "Minting APE with" : "Minting TEA with ", inputOutput.amountCollateral, "wei");
             vault.mint(isAPE, vaultParameters);
             vm.stopPrank();
         }
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external advanceBlock(inputOutput) {
+        console.log("Burn attempt of", amount, isAPE ? "APE" : "TEA");
         // User
         user = _idToAddr(inputOutput.userId);
 
@@ -1870,7 +1876,7 @@ contract VaultHandler is Test, RegimeEnum {
         uint256 balance = isAPE ? IERC20(ape).balanceOf(user) : vault.balanceOf(user, inputOutput.vaultId);
         amount = _bound(amount, 0, balance);
         if (amount != 0) {
-            uint256 maxAmount;
+            uint256 maxAmount = type(uint256).max;
             if (regime == Regime.Power) {
                 if (isAPE) {
                     // Keep at least 1 ETH in the apes reserve to make sure gain comptuations are preturbed by small numbers numeric approximation
@@ -1930,6 +1936,7 @@ contract VaultHandler is Test, RegimeEnum {
                     // Burn
                     vm.startPrank(user);
                     _checkRegime();
+                    console.log("Burning", amount, isAPE ? "of APE" : "of TEA ");
                     inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
 
                     // Unwrap ETH
@@ -2217,7 +2224,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
         );
     }
 
-    /// forge-config: default.invariant.runs = 1
+    /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public {
         (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));

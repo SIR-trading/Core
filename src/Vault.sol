@@ -79,8 +79,6 @@ contract Vault is TEA {
                 APE ape,
                 uint144 collateralDeposited
             ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
-            console.log("Reserve: ", vaultState.reserve);
-            console.logInt(vaultState.tickPriceSatX42);
 
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             uint256 collectedFee;
@@ -145,8 +143,6 @@ contract Vault is TEA {
             APE ape,
 
         ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
-        console.log("Reserve: ", vaultState.reserve);
-        console.logInt(vaultState.tickPriceSatX42);
 
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         uint256 collectedFee;
@@ -306,18 +302,6 @@ contract Vault is TEA {
                         priceSat = r*price*L/R
                      */
 
-                    console.log(
-                        "COMPUTING PSAT, Reserves of Apes:",
-                        reserves.reserveApes,
-                        ", Reserves of LPers:",
-                        reserves.reserveLPers
-                    );
-                    // console.log("reserveLPers: ", reserves.reserveLPers);
-                    // console.log("reserveLPers*2: ", uint256(reserves.reserveLPers) << absLeverageTier);
-                    // console.log(
-                    //     "reserveLPers*(1+2): ",
-                    //     (uint256(reserves.reserveLPers) << absLeverageTier) + reserves.reserveLPers
-                    // );
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
                         vaultParams.leverageTier >= 0
                             ? uint256(vaultState.reserve) << absLeverageTier

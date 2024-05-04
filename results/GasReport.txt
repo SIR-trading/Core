@@ -1,0 +1,12 @@
+| Function Name                | min             | avg    | median | max    | # calls |
+| balanceOf                    | 2706            | 2706   | 2706   | 2706   | 6       |
+| burn                         | 235604          | 235604 | 235604 | 235604 | 2       |
+| getReserves                  | 6130            | 44434  | 30527  | 90819  | 80      |
+| latestTokenParams            | 3938            | 3938   | 3938   | 3938   | 2       |
+| mint                         | 143918          | 222010 | 225989 | 292124 | 12      |
+| paramsById                   | 6897            | 6897   | 6897   | 6897   | 22      |
+| tokenStates                  | 656             | 1781   | 2656   | 2656   | 32      |
+| totalSupply                  | 478             | 1478   | 1478   | 2478   | 40      |
+
+According to Alcueca in Twitter
+"Operaciones comunes tendrían que usar menos de 200k."
