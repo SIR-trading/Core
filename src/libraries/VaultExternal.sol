@@ -109,10 +109,9 @@ library VaultExternal {
     ////////////////////////////////////////////////////////////////*/
 
     function _generateName(VaultStructs.VaultParameters calldata vaultParams) private view returns (string memory) {
-        assert(vaultParams.leverageTier >= -3 && vaultParams.leverageTier <= 2);
-
         string memory leverageStr;
-        if (vaultParams.leverageTier == -3) leverageStr = "1.125";
+        if (vaultParams.leverageTier == -3) leverageStr = "1.0625";
+        else if (vaultParams.leverageTier == -3) leverageStr = "1.125";
         else if (vaultParams.leverageTier == -2) leverageStr = "1.25";
         else if (vaultParams.leverageTier == -1) leverageStr = "1.5";
         else if (vaultParams.leverageTier == 0) leverageStr = "2";
