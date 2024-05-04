@@ -27,7 +27,7 @@ library VaultStructs {
             For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
          */
         uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
-        uint8 lpFee; // Base fee in basis points. Given type(uint8).max, the max baseFee is 2.56%.
+        uint16 lpFee; // Base fee in basis points.
         bool mintingStopped; // If true, no minting of TEA/APE
         /** Aggregated taxes for all vaults. Choice of uint16 type.
             For vault i, (tax_i / type(uint8).max)*10% is charged, where tax_i is of type uint8.

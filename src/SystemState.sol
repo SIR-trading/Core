@@ -68,7 +68,7 @@ abstract contract SystemState is SystemControlAccess {
         systemParams = VaultStructs.SystemParameters({
             tsIssuanceStart: uint40(block.timestamp),
             baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
-            lpFee: 50, // Test 0.5% LP fee
+            lpFee: 2248, // 22.48% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
             mintingStopped: false,
             cumTax: 0
         });
@@ -252,7 +252,7 @@ abstract contract SystemState is SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     /// @dev All checks and balances to be done at system control
-    function updateSystemState(uint16 baseFee, uint8 lpFee, bool mintingStopped) external onlySystemControl {
+    function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
         systemParams_ = VaultStructs.SystemParameters({
             tsIssuanceStart: systemParams_.tsIssuanceStart,

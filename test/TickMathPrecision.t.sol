@@ -86,6 +86,41 @@ contract TickMathPrecisionTest is Test {
         assertLe(tickX42, tickX42Bis, "Not rounding down");
     }
 
+    // function test_getTickAtRatio() public {
+    //     // uint256 num = 3821176474624677194 << 1;
+    //     // uint256 den = (3821176474624677194 - 1857000370979752666) + ((3821176474624677194 - 1857000370979752666) << 1);
+    //     // console.log("den:", den);
+    //     // den = (3821176474624677194 - 1857000370979752666) * 3;
+    //     // console.log("den:", den);
+    //     // num = 7642352941176479624;
+    //     // den = 5892528298825461324;
+    //     // console.log("den:", den);
+
+    //     // Using reserve and LP reserve
+    //     uint256 num = 7642352941176470590;
+    //     uint256 den = 5463529411764705885;
+
+    //     // Using reserve and Ape's reserve (this leads to -1 result)
+    //     num = 3821176470588235295 << 1;
+    //     den = (3821176470588235295 - 1999999999999999982) + ((3821176470588235295 - 1999999999999999982) << 1);
+
+    //     int64 tickX42 = TickMathPrecision.getTickAtRatio(num, den);
+    //     console.log("TEST tickX42:", vm.toString(tickX42));
+
+    //     int64 tickX42Bis = int64(
+    //         ABDKMathQuad
+    //             .fromUInt(num)
+    //             .div(ABDKMathQuad.fromUInt(den))
+    //             .log_2()
+    //             .div(LOG_2_10001)
+    //             .mul(ABDKMathQuad.fromUInt(1 << 42))
+    //             .toInt()
+    //     );
+
+    //     assertApproxEqAbs(tickX42, tickX42Bis, 1);
+    //     assertLe(tickX42, tickX42Bis, "Not rounding down");
+    // }
+
     function testFuzz_getTickAtRatioWrongNumerator(uint256 num, uint256 den) public {
         vm.assume(den > 0);
         num = _bound(num, 0, den - 1);

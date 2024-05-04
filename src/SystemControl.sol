@@ -28,7 +28,7 @@ contract SystemControl is Ownable {
 
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event NewBaseFee(uint16 baseFee);
-    event NewLPFee(uint8 lpFee);
+    event NewLPFee(uint16 lpFee);
     event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
     event FundsWithdrawn(address indexed token, uint256 amount);
 
@@ -50,7 +50,7 @@ contract SystemControl is Ownable {
     uint40 public tsStatusChanged; // Timestamp when the status last changed
 
     uint16 private _oldBaseFee;
-    uint8 private _oldLpFee;
+    uint16 private _oldLpFee;
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
@@ -95,7 +95,7 @@ contract SystemControl is Ownable {
 
         // Retrieve parameters
         Vault vault_ = vault;
-        (, uint16 baseFee, uint8 lpFee, , ) = vault_.systemParams();
+        (, uint16 baseFee, uint16 lpFee, , ) = vault_.systemParams();
 
         // Store fee parameters for later
         _oldBaseFee = baseFee;
@@ -157,14 +157,14 @@ contract SystemControl is Ownable {
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        (, , uint8 lpFee, , ) = vault_.systemParams();
+        (, , uint16 lpFee, , ) = vault_.systemParams();
 
         vault_.updateSystemState(baseFee_, lpFee, false);
 
         emit NewBaseFee(baseFee_);
     }
 
-    function setLPFee(uint8 lpFee_) external onlyOwner {
+    function setLPFee(uint16 lpFee_) external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 

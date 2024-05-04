@@ -353,7 +353,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         address collateral,
         uint48 vaultId,
         TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         VaultStructs.Reserves memory reserves,
         uint144 collateralDepositedOrOut

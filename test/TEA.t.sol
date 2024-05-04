@@ -905,7 +905,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
 
     function testFuzz_mint1stTime(
         TestMintParams memory testMintParams,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public returns (VaultStructs.Reserves memory reserves) {
@@ -963,7 +963,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
 
     function testFuzz_mintPOL1stTime(
         TestMintParams memory testMintParams,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public returns (VaultStructs.Reserves memory reserves) {
@@ -1038,7 +1038,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function testFuzz_mint(
         TestMintParams memory testMintParams0,
         TestMintParams memory testMintParams,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public returns (VaultStructs.Reserves memory reserves) {
@@ -1114,7 +1114,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function testFuzz_mintPOL(
         TestMintParams memory testMintParams0,
         TestMintParams memory testMintParams,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public {
@@ -1202,7 +1202,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         assertEq(rewardsVault, 0);
     }
 
-    function testFuzz_mintOverflows(uint8 lpFee, uint8 tax) public {
+    function testFuzz_mintOverflows(uint16 lpFee, uint8 tax) public {
         VaultStructs.Reserves memory reserves = testFuzz_mint1stTime(
             TestMintParams({reserveLPers: 0, collateralDeposited: SystemConstants.TEA_MAX_SUPPLY, tsCheck: 0}),
             lpFee,
@@ -1233,7 +1233,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         TestMintParams memory testMintParams0,
         TestMintParams memory testMintParams,
         TestBurnParams memory testBurnParams,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public {
@@ -1293,7 +1293,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         TestMintParams memory testMintParams0,
         TestMintParams memory testMintParams,
         TestBurnParams memory testBurnParams,
-        uint8 lpFee,
+        uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public {

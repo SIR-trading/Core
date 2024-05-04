@@ -42,3 +42,7 @@ Minimize # hot SLOADs
 # UI
 
 -   Vaults allow minting APE to the point that it saturates them. However, do not allow that in the UI because we wish to stay in the power zone.
+
+# Docs
+
+-   Add a Ponzinomics section under Liquidity that mentions how LPers also pay fees to LPers.
