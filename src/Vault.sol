@@ -326,16 +326,12 @@ contract Vault is TEA {
                     );
 
                     // Compute saturation price
-                    // console.log("tickRatioX42:");
-                    // console.logInt(tickRatioX42);
                     int256 tempTickPriceSatX42 = reserves.tickPriceX42 - tickRatioX42;
 
                     // Check if underflow
                     if (tempTickPriceSatX42 < type(int64).min) vaultState.tickPriceSatX42 = type(int64).min;
                     else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 }
-                console.log("Reserve: ", vaultState.reserve);
-                console.logInt(vaultState.tickPriceSatX42);
             }
 
             vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
