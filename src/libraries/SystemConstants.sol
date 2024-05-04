@@ -27,5 +27,5 @@ library SystemConstants {
 
     int8 internal constant MAX_LEVERAGE_TIER = 2;
 
-    int8 internal constant MIN_LEVERAGE_TIER = -3;
+    int8 internal constant MIN_LEVERAGE_TIER = -4;
 }
