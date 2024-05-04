@@ -964,10 +964,6 @@ contract VaultTest is Test {
         bytes16 leveragedGain = newTickPriceX42.tickToFP().div(tickPriceX42.tickToFP()).pow(leverageRatioSub1);
         uint256 newReserveApes = ABDKMathQuad.fromUInt(reservesPre.reserveApes).mul(leveragedGain).toUInt();
 
-        console.log("Old tick price, new tick price, tick price sat:");
-        console.logInt(tickPriceX42);
-        console.logInt(newTickPriceX42);
-        console.logInt(vaultState.tickPriceSatX42);
         uint256 err;
         if (
             // Condition to avoid OF/UFing tickPriceSatX42
@@ -1073,7 +1069,6 @@ contract VaultTest is Test {
         unchecked {
             vaultState.vaultId = VAULT_ID;
             vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
-            // console.log("reserve:", vaultState.reserve);
 
             // To ensure division by 0 does not occur when recoverying the reserves
             require(vaultState.reserve >= 2);
@@ -1711,12 +1706,8 @@ contract VaultHandler is Test, RegimeEnum {
         });
 
     modifier advanceBlock(InputOutput memory inputOutput) {
-        console.log("-----------------------------");
         if (regime != Regime.Any || inputOutput.advanceBlock) {
             blockNumber += TIME_ADVANCE / 12 seconds;
-            console.log("ADVANCING TO BLOCK", blockNumber);
-        } else {
-            console.log("STAYING IN BLOCK", blockNumber);
         }
 
         // Fork mainnet
@@ -1730,20 +1721,15 @@ contract VaultHandler is Test, RegimeEnum {
 
         // Get reserves
         reserves = vault.getReserves(vaultParameters);
-        console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
         supplyAPE = IERC20(ape).totalSupply();
-        console.log("Supply of APE:", supplyAPE);
         supplyTEA = vault.totalSupply(inputOutput.vaultId);
         priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
-        console.log(string.concat("Price tick at block ", vm.toString(blockNumber), " is ", vm.toString(priceTick)));
 
         _;
 
         // Get reserves
         reserves = vault.getReserves(vaultParameters);
-        console.log("Reserves of Apes:", reserves.reserveApes, ", Reserves of LPers:", reserves.reserveLPers);
         supplyAPE = IERC20(ape).totalSupply();
-        console.log("Supply of APE:", supplyAPE);
         supplyTEA = vault.totalSupply(inputOutput.vaultId);
         priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
 
@@ -1766,7 +1752,7 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     constructor(uint256 blockNumber_, Regime regime_) {
-        vm.writeFile("./gains.log", "");
+        // vm.writeFile("./gains.log", "");
         blockNumber = blockNumber_;
         regime = regime_;
 
@@ -1794,8 +1780,6 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        console.log(isAPE ? "Mint APE attempt at block" : "Mint TEA attempt at block", blockNumber);
-
         // Sufficient condition to not overflow total collateral
         (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
         inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint144).max - total);
@@ -1872,7 +1856,6 @@ contract VaultHandler is Test, RegimeEnum {
             _WETH.transfer(address(vault), inputOutput.amountCollateral);
 
             // Mint
-            console.log(isAPE ? "Mint APE with" : "Mint TEA with", inputOutput.amountCollateral, "wei");
             _checkRegime();
             vault.mint(isAPE, vaultParameters);
             vm.stopPrank();
@@ -1880,7 +1863,6 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external advanceBlock(inputOutput) {
-        console.log(isAPE ? "Burn APE attempt at blockNumber" : "Burn TEA attempt at blockNumber", blockNumber);
         // User
         user = _idToAddr(inputOutput.userId);
 
@@ -1946,7 +1928,6 @@ contract VaultHandler is Test, RegimeEnum {
 
                 if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox >= 2) {
                     // Burn
-                    console.log("Burn", amount, isAPE ? "APE" : " TEA");
                     vm.startPrank(user);
                     _checkRegime();
                     inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
@@ -2029,17 +2010,17 @@ contract VaultHandler is Test, RegimeEnum {
             .mul(ABDKMathQuad.fromUInt(supplyAPEOld))
             .div(ABDKMathQuad.fromUInt(supplyAPE));
 
-        vm.writeLine(
-            "./gains.log",
-            string.concat(
-                "Block number: ",
-                vm.toString(blockNumber),
-                ", Ideal leveraged gain: ",
-                vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
-                ", Actual gain: ",
-                vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
-            )
-        );
+        // vm.writeLine(
+        //     "./gains.log",
+        //     string.concat(
+        //         "Block number: ",
+        //         vm.toString(blockNumber),
+        //         ", Ideal leveraged gain: ",
+        //         vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
+        //         ", Actual gain: ",
+        //         vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
+        //     )
+        // );
 
         assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
 
