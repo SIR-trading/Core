@@ -37,8 +37,8 @@ Reduce Oracle queries? For example reduce checking the optimal Uniswap pool. Red
 
 # Tests
 
--   Test Vault state divergence as it is updated consecutively without minting or burning anything.
--   Why is the price not updated on every block?!
+-   ADD ORACLE TEST THAT CHECKS ON ETH PRICE FROM 9653500 UNTIL 1 DAY AND 6H LATER FOR MAX PRICE VOLATILITY. CHECK IF TRUNCATION IS ACTIVATED.
+-   Add non-fuzzy mint test in Vault to study gas optimization.
 
 # UI
 

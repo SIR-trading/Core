@@ -755,6 +755,8 @@ contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     }
 }
 
+// ADD ORACLE TEST THAT CHECKS ON ETH PRICE FROM 9653500 UNTIL 1 DAY AND 6H LATER FOR MAX PRICE VOLATILITY. CHECK IF TRUNCATION IS ACTIVATED.
+
 contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     event IncreaseObservationCardinalityNext(
         uint16 observationCardinalityNextOld,
