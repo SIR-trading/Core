@@ -65,6 +65,10 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    function numberOfVaults() external view returns (uint256) {
+        return paramsById.length;
+    }
+
     function totalSupply(uint256 vaultId) external view returns (uint256) {
         return totalSupplyAndBalanceVault[vaultId].totalSupply;
     }
