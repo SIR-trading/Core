@@ -6,6 +6,7 @@ This is to save the TVL if the oracle is buggy and reverts.
 # Optimizations
 
 Minimize # hot SLOADs
+Reduce Oracle queries? For example reduce checking the optimal Uniswap pool. Reduce TWAP length increments. Reduce interval between TWAP length increments.
 
 # Periphery
 
