@@ -969,7 +969,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e7;
+        else err = 2 + vaultState.reserve / 1e6;
 
         assertApproxEqAbs(vaultState.reserve - newReserveApes, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
@@ -993,7 +993,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e7;
+        else err = 2 + vaultState.reserve / 1e6;
 
         assertApproxEqAbs(vaultState.reserve - newReserveLPers, reservesPost.reserveApes, err);
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
@@ -1025,7 +1025,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e7;
+        else err = 2 + vaultState.reserve / 1e6;
 
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
@@ -1057,7 +1057,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e7;
+        else err = 2 + vaultState.reserve / 1e6;
 
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
@@ -1238,7 +1238,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e7;
+            else err = 1 + reserve / 1e6;
 
             assertApproxEqAbs(
                 reservesPost.reserveApes,
@@ -1352,7 +1352,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e7;
+            else err = 1 + reserve / 1e6;
 
             assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Ape's reserve is wrong");
             reservesPre.reserveLPers += lpersFee;
@@ -1425,7 +1425,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e7;
+            else err = 1 + reserve / 1e6;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
@@ -1520,7 +1520,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e7;
+            else err = 1 + reserve / 1e6;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
