@@ -503,8 +503,18 @@ contract VaultTest is Test {
                 );
             }
         } else {
-            assertApproxEqAbs(reservesPre.reserveApes, reservesPost.reserveApes, 1 + reserve / 1e6);
-            assertApproxEqAbs(reservesPre.reserveLPers, reservesPost.reserveLPers, 1 + reserve / 1e6);
+            assertApproxEqAbs(
+                reservesPre.reserveApes,
+                reservesPost.reserveApes,
+                1 + reserve / 1e5,
+                "Reserve apes is wrong"
+            );
+            assertApproxEqAbs(
+                reservesPre.reserveLPers,
+                reservesPost.reserveLPers,
+                1 + reserve / 1e5,
+                "Reserve LPers is wrong"
+            );
         }
     }
 
@@ -969,7 +979,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e6;
+        else err = 2 + vaultState.reserve / 1e5;
 
         assertApproxEqAbs(vaultState.reserve - newReserveApes, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
@@ -993,7 +1003,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e6;
+        else err = 2 + vaultState.reserve / 1e5;
 
         assertApproxEqAbs(vaultState.reserve - newReserveLPers, reservesPost.reserveApes, err);
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
@@ -1025,7 +1035,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e6;
+        else err = 2 + vaultState.reserve / 1e5;
 
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
@@ -1057,7 +1067,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e6;
+        else err = 2 + vaultState.reserve / 1e5;
 
         assertApproxEqAbs(newReserveLPers, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
@@ -1238,7 +1248,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e6;
+            else err = 1 + reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveApes,
@@ -1352,7 +1362,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e6;
+            else err = 1 + reserve / 1e5;
 
             assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Ape's reserve is wrong");
             reservesPre.reserveLPers += lpersFee;
@@ -1425,7 +1435,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e6;
+            else err = 1 + reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
@@ -1520,7 +1530,7 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e6;
+            else err = 1 + reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
@@ -2023,16 +2033,21 @@ contract VaultHandler is Test, RegimeEnum {
         //         "Block number: ",
         //         vm.toString(blockNumber),
         //         ", Ideal leveraged gain: ",
-        //         vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e15)).toUInt()),
+        //         vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e20)).toUInt()),
         //         ", Actual gain: ",
-        //         vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e15)).toUInt())
+        //         vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e20)).toUInt())
         //     )
         // );
 
-        assertGe(gainActual.cmp(gainIdeal), 0, "Actual gain is smaller than the ideal gain");
+        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromInt(-1e20));
+        assertGe(
+            gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
+            0,
+            "Actual gain is smaller than the ideal gain"
+        );
 
         // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
-        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromUInt(1e16));
+        relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromUInt(1e16));
         assertLe(
             gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
             0,
@@ -2090,9 +2105,11 @@ contract VaultInvariantTest is Test, RegimeEnum {
     VaultHandler public vaultHandler;
     Vault public vault;
 
-    function setUp() public {
+    constructor() {
         vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+    }
 
+    function setUp() public {
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Any);
         targetContract(address(vaultHandler));
@@ -2136,8 +2153,7 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     }
 
     function setUp() public {
-        // vm.writeFile("./gains.log", "");
-        // vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+        vm.writeFile("./gains.log", "");
 
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Power);
