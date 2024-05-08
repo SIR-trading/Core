@@ -16,6 +16,7 @@ import {MockERC20} from "src/test/MockERC20.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
+import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 import "forge-std/Test.sol";
 
@@ -352,6 +353,44 @@ contract VaultTest is Test {
         }
 
         _;
+    }
+
+    function test_mintAPE1stTime(
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs
+    )
+        public
+        Initialize(systemParams, VaultStructs.Reserves(0, 0, 0))
+        ConstraintAmounts(true, true, inputsOutputs, VaultStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
+    {
+        // Alice deposits collateral
+        vm.prank(alice);
+        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
+
+        // Alice mints APE
+        vm.prank(alice);
+        inputsOutputs.amount = vault.mint(
+            true,
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // Check reserves
+        VaultStructs.Reserves memory reserves = vault.getReserves(
+            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
+        );
+
+        // To simplify the math, no reserve is allowed to be 0
+        assertGt(reserves.reserveApes, 0);
+        assertGt(reserves.reserveLPers, 0);
+
+        // Verify amounts
+        _verifyAmountsMintAPE(
+            systemParams,
+            inputsOutputs,
+            VaultStructs.Reserves(0, 0, 0),
+            reserves,
+            Balances(0, 0, 0, 0, 0)
+        );
     }
 
     function testFuzz_mintAPE1stTime(
@@ -1653,6 +1692,195 @@ contract VaultTest is Test {
         );
         vm.store(address(vault), slot, bytes32(uint256(balances.teaAlice)));
         assertEq(vault.balanceOf(alice, VAULT_ID), balances.teaAlice, "Wrong slot used by vm.store");
+    }
+}
+
+contract VaultGasTest is Test, ERC1155TokenReceiver {
+    uint256 public constant TIME_ADVANCE = 1 days;
+    uint256 public constant BLOCK_NUMBER_START = 18128102;
+
+    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+    Vault public vault;
+
+    // WETH/USDT's Uniswap TWAP has a long cardinality
+    VaultStructs.VaultParameters public vaultParameters1 =
+        VaultStructs.VaultParameters({
+            debtToken: Addresses.ADDR_USDT,
+            collateralToken: address(WETH),
+            leverageTier: int8(-1)
+        });
+
+    // BNB/WETH's Uniswap TWAP is of cardinality 1
+    VaultStructs.VaultParameters public vaultParameters2 =
+        VaultStructs.VaultParameters({
+            debtToken: Addresses.ADDR_BNB,
+            collateralToken: address(WETH),
+            leverageTier: int8(0)
+        });
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
+
+        // vm.writeFile("./gains.log", "");
+
+        Oracle oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
+
+        // Set tax between 2 vaults
+        {
+            uint48[] memory oldVaults = new uint48[](0);
+            uint48[] memory newVaults = new uint48[](2);
+            newVaults[0] = 1;
+            newVaults[1] = 2;
+            uint8[] memory newTaxes = new uint8[](2);
+            newTaxes[0] = 228;
+            newTaxes[1] = 114; // Ensure 114^2+228^2 <= (2^8-1)^2
+            vm.prank(vm.addr(100));
+            vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
+        }
+
+        // Intialize vaults
+        vault.initialize(vaultParameters1);
+        vault.initialize(vaultParameters2);
+    }
+
+    function _depositWETH(uint256 amount) private {
+        // Deal ETH
+        vm.deal(address(this), amount);
+
+        // Wrap ETH to WETH
+        WETH.deposit{value: amount}();
+
+        // Deposit WETH to vault
+        WETH.transfer(address(vault), amount);
+    }
+
+    function _mint1stTime_TWAPFull() private {
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint TEA
+        vault.mint(false, vaultParameters1);
+
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint APE
+        vault.mint(true, vaultParameters1);
+    }
+
+    function _mint1stTime_TWAPEmpty() private {
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint TEA
+        vault.mint(false, vaultParameters2);
+
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint APE
+        vault.mint(true, vaultParameters2);
+    }
+
+    function test_TWAPFull_mintTEA() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPFull();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Deposit WETH to vault
+        _depositWETH(1 ether);
+
+        // Mint TEA
+        vault.mint(false, vaultParameters1);
+    }
+
+    function test_TWAPFull_mintAPE() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPFull();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Deposit WETH to vault
+        _depositWETH(1 ether);
+
+        // Mint TEA
+        vault.mint(true, vaultParameters1);
+    }
+
+    function test_TWAPFull_burnTEA() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPFull();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Burn TEA
+        vault.burn(false, vaultParameters1, 1 ether); // We are not burning ETH, but it is convenient to use
+    }
+
+    function test_TWAPFull_burnAPE() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPFull();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Burn TEA
+        vault.burn(true, vaultParameters1, 1 ether); // We are not burning ETH, but it is convenient to use
+    }
+
+    function test_TWAPEmpty_mintTEA() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPEmpty();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Deposit WETH to vault
+        _depositWETH(1 ether);
+
+        // Mint TEA
+        vault.mint(false, vaultParameters2);
+    }
+
+    function test_TWAPEmpty_mintAPE() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPEmpty();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Deposit WETH to vault
+        _depositWETH(1 ether);
+
+        // Mint TEA
+        vault.mint(true, vaultParameters2);
+    }
+
+    function test_TWAPEmpty_burnTEA() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPEmpty();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Burn TEA
+        vault.burn(false, vaultParameters2, 1 ether); // We are not burning ETH, but it is convenient to use
+    }
+
+    function test_TWAPEmpty_burnAPE() public {
+        // Mint some TEA and APE
+        _mint1stTime_TWAPEmpty();
+
+        // Advance time
+        skip(TIME_ADVANCE / (12 seconds));
+
+        // Burn TEA
+        vault.burn(true, vaultParameters2, 1 ether); // We are not burning ETH, but it is convenient to use
     }
 }
 
