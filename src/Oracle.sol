@@ -636,6 +636,9 @@ contract Oracle {
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
 
             // This can only occur if the fee tier has cardinality 1
+            console.log("interval[0]:", interval[0]);
+            console.log("cardinalityNow:", cardinalityNow);
+            console.log("cardinalityNext:", cardinalityNext);
             if (interval[0] == 0) {
                 // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
                 oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
@@ -648,8 +651,10 @@ contract Oracle {
              * ...and if so, increment by CARDINALITY_DELTA.
              */
             uint256 cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1; // Estimate necessary length of the oracle if we want it to be TWAP_DURATION long
+            console.log("cardinalityNeeded:", cardinalityNeeded);
             if (cardinalityNeeded > cardinalityNext)
                 oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
+            console.log("cardinalityToIncrease:", oracleData.cardinalityToIncrease);
 
             tickCumulatives[0] = tickCumulative_;
             liquidityCumulatives[0] = liquidityCumulative_;
