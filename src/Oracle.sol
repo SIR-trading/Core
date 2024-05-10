@@ -229,7 +229,7 @@ contract Oracle {
      */
     uint256 internal constant DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
-    uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
+    uint40 internal constant TWAP_DELTA = 30 seconds; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
     uint16 internal constant CARDINALITY_DELTA = uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
     uint40 public constant TWAP_DURATION = 30 minutes;
 
@@ -365,8 +365,15 @@ contract Oracle {
         oracleState.uniswapFeeTier = uniswapFeeTiers[oracleState.indexFeeTier];
 
         // We increase the cardinality of the selected tier if necessary
-        if (bestOracleData.cardinalityToIncrease > 0)
+        if (bestOracleData.cardinalityToIncrease > 0) {
+            console.log(
+                "Increasing cardinality of fee tier",
+                oracleState.uniswapFeeTier.fee,
+                "to",
+                bestOracleData.cardinalityToIncrease
+            );
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
+        }
 
         // Update oracle vaultState
         vaultState[tokenA][tokenB] = oracleState;
@@ -503,7 +510,12 @@ contract Oracle {
                         if (scoreProbed > score) {
                             // If the probed fee tier is better than the current one, then we increase its cardinality if necessary
                             if (oracleDataProbed.cardinalityToIncrease > 0) {
-                                console.log("Increasing cardinality of fee tier", uniswapFeeTierProbed.fee);
+                                console.log(
+                                    "Increasing cardinality of fee tier",
+                                    uniswapFeeTierProbed.fee,
+                                    "to",
+                                    oracleDataProbed.cardinalityToIncrease
+                                );
                                 oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
                                     oracleDataProbed.cardinalityToIncrease
                                 );
@@ -532,7 +544,12 @@ contract Oracle {
 
                 if (checkCardinalityCurrentFeeTier && oracleData.cardinalityToIncrease > 0) {
                     // We increase the cardinality of the current tier if necessary
-                    console.log("Increasing cardinality of fee tier", oracleState.uniswapFeeTier.fee);
+                    console.log(
+                        "Increasing cardinality of fee tier",
+                        oracleState.uniswapFeeTier.fee,
+                        "to",
+                        oracleData.cardinalityToIncrease
+                    );
                     oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
                 }
 
@@ -644,7 +661,9 @@ contract Oracle {
             // This can only occur if the fee tier has cardinality 1
             if (interval[0] == 0) {
                 // We get the instant liquidity because TWAP liquidity is not available
-                oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
+                if (cardinalityNow + CARDINALITY_DELTA > cardinalityNext) {
+                    oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
+                }
                 oracleData.avLiquidity = oracleData.uniswapPool.liquidity();
                 oracleData.period = 1;
                 return oracleData;
