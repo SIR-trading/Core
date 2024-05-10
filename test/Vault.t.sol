@@ -1697,7 +1697,7 @@ contract VaultTest is Test {
 
 contract VaultGasTest is Test, ERC1155TokenReceiver {
     uint256 public constant TIME_ADVANCE = 1 days;
-    uint256 public constant BLOCK_NUMBER_START = 18128077; // In this block the pair WETH/USDT's TWAP has druation 0
+    uint256 public constant BLOCK_NUMBER_START = 18128102;
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
     Vault public vault;
@@ -1738,10 +1738,6 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
             vm.prank(vm.addr(100));
             vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
         }
-
-        // Intialize vaults
-        vault.initialize(vaultParameters1);
-        vault.initialize(vaultParameters2);
     }
 
     function _depositWETH(uint256 amount) private {
@@ -1757,74 +1753,34 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
 
     ///////////////////////////////////////////////
 
-    function test_TWAPFull_mintTEA() public {
-        // Deposit WETH to vault and mint some TEA
-        _depositWETH(2 ether);
-        vault.mint(false, vaultParameters1);
-    }
+    /// @dev Around 205,457 gas
+    function test_DoNotProbeFeeTier() public {
+        // To make sure mint() is done exactly at the same time than other tests
+        skip(TIME_ADVANCE);
 
-    function test_TWAPFull_mintAPE() public {
-        // Deposit WETH to vault and mint some APE
+        // Intialize vault
+        vault.initialize(vaultParameters1);
+
+        // Deposit WETH to vault
         _depositWETH(2 ether);
+
+        // Mint some APE
         vault.mint(true, vaultParameters1);
     }
 
-    function test_TWAPFull_burnTEA() public {
-        // Deposit WETH to vault and mint some TEA
-        test_TWAPFull_mintTEA();
+    /// @dev Around 232,642 gas
+    function test_ProbeFeeTier() public {
+        // Intialize vault
+        vault.initialize(vaultParameters1);
 
-        // Advance time
-        skip(TIME_ADVANCE / (12 seconds));
+        // Skip
+        skip(TIME_ADVANCE);
 
-        // Burn some TEA
-        vault.burn(false, vaultParameters1, 1 ether); // We are not burning ETH, but it is convenient to use
-    }
-
-    function test_TWAPFull_burnAPE() public {
-        // Deposit WETH to vault and mint some APE
-        test_TWAPFull_mintAPE();
-
-        // Advance time
-        skip(TIME_ADVANCE / (12 seconds));
-
-        // Burn some APE
-        vault.burn(true, vaultParameters1, 1 ether); // We are not burning ETH, but it is convenient to use
-    }
-
-    ///////////////////////////////////////////////
-
-    function test_TWAPEmpty_mintTEA() public {
-        // Deposit WETH to vault and mint some TEA
+        // Deposit WETH to vault
         _depositWETH(2 ether);
-        vault.mint(false, vaultParameters2);
-    }
 
-    function test_TWAPEmpty_mintAPE() public {
-        // Deposit WETH to vault and mint some APE
-        _depositWETH(2 ether);
-        vault.mint(true, vaultParameters2);
-    }
-
-    function test_TWAPEmpty_burnTEA() public {
-        // Deposit WETH to vault and mint some TEA
-        test_TWAPEmpty_mintTEA();
-
-        // Advance time
-        skip(TIME_ADVANCE / (12 seconds));
-
-        // Burn some TEA
-        vault.burn(false, vaultParameters2, 1 ether); // We are not burning ETH, but it is convenient to use
-    }
-
-    function test_TWAPEmpty_burnAPE() public {
-        // Deposit WETH to vault and mint some APE
-        test_TWAPEmpty_mintAPE();
-
-        // Advance time
-        skip(TIME_ADVANCE / (12 seconds));
-
-        // Burn some APE
-        vault.burn(true, vaultParameters2, 1 ether); // We are not burning ETH, but it is convenient to use
+        // Mint some APE
+        vault.mint(true, vaultParameters1);
     }
 }
 
