@@ -2227,7 +2227,7 @@ contract VaultHandler is Test, RegimeEnum {
 }
 
 contract VaultInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 18128102;
+    uint256 constant BLOCK_NUMBER_START = 18128302;
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
 
     VaultHandler public vaultHandler;

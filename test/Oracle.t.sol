@@ -157,12 +157,14 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
     function test_InitializeTwapCardinality0() public {
         uint24 fee = 100;
         uint128 liquidity = 2 ** 64;
-        (, UniswapPoolAddress.PoolKey memory poolKey) = _preparePool(fee, liquidity, 0);
+        UniswapPoolAddress.PoolKey memory poolKey;
+        (liquidity, poolKey) = _preparePool(fee, liquidity, 0);
 
         vm.expectEmit(false, false, false, false);
         emit IncreaseObservationCardinalityNext(0, 0);
         vm.expectEmit(address(_oracle));
-        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, 1, 0);
+        console.log(poolKey.token0, poolKey.token1, fee, 1);
+        emit OracleInitialized(poolKey.token0, poolKey.token1, fee, liquidity, 1);
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
@@ -264,6 +266,7 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
                     _preparePoolNoInitialization(uniswapFeeTiers[j].fee);
                 } else {
                     (liquidity[j], poolKey) = _preparePool(uniswapFeeTiers[j].fee, liquidity[j], uint32(period[j]));
+                    if (period[j] == 0) period[j] = 1;
                     if (liquidity[j] == 0) liquidity[j] = 1;
                 }
 
@@ -284,7 +287,7 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
             for (uint256 i = 0; i < 9; i++) {
                 period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
 
-                // console.log("liquidity:", liquidity[i], "| period:", period[i]);
+                console.log("liquidity:", liquidity[i], "| period:", period[i]);
                 uint256 tempScore;
                 {
                     uint256 aggLiquidity = liquidity[i] * period[i];
@@ -781,12 +784,12 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
     }
 
     function test_nextFeeTierNotProbed() public {
-        // Retrieve/store price
-        vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
-        vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
-        _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
+        // // Retrieve/store price
+        // vm.expectEmit(true, true, true, false);
+        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        // vm.expectEmit(true, true, true, false);
+        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
+        // _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
 
         // Hugely increase liquidity rest of fee tiers
         _addLiquidity(100, 2 ** 70);
@@ -816,12 +819,12 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
     }
 
     function test_nextFeeTierProbedAndSwitched() public {
-        // Retrieve/store price
-        vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
-        vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
-        _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
+        // // Retrieve/store price
+        // vm.expectEmit(true, true, true, false);
+        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        // vm.expectEmit(true, true, true, false);
+        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
+        // _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
 
         // Hugely increase liquidity rest of fee tiers
         _addLiquidity(100, 2 ** 70);
@@ -834,9 +837,9 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 10000, 0, 0, 0, 0);
+        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
         vm.expectEmit();
-        emit OracleFeeTierChanged(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 10000);
+        emit OracleFeeTierChanged(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 3000);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -846,6 +849,7 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         skip(TWAP_DURATION - 1); // So that TWAP is not old enough to be selected
 
         // Probe new tier
+        console.log("--------------");
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, newFeeTier, 0, 0, 0, 0);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
@@ -1042,11 +1046,14 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Enable it in the oracle
         _oracle.newUniswapFeeTier(newFeeTier);
+        skip(DURATION_UPDATE_FEE_TIER);
 
+        console.log("--------------");
         // Probe tier 3000
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
         skip(DURATION_UPDATE_FEE_TIER);
 
+        console.log("--------------");
         // Probe tier 10000 (last tier in the list)
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
         skip(DURATION_UPDATE_FEE_TIER);

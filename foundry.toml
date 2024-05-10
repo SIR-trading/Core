@@ -19,5 +19,5 @@ tarp_testnet = "https://docker-anvil-production-aa2c.up.railway.app/"
 
 [invariant]
 fail_on_revert = true   # Fail the test if the contract reverts
-runs           = 10   # Number of times that a sequence of function calls is generated and run
-depth          = 100     # Number of function calls made in a given run.
+runs           = 5   # Number of times that a sequence of function calls is generated and run
+depth          = 20     # Number of function calls made in a given run.

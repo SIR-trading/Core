@@ -337,13 +337,7 @@ contract Oracle {
                 oracleData.period,
                 oracleData.cardinalityToIncrease
             );
-            // console.log("Fee tier", uniswapFeeTiers[i].fee, "has period", oracleData.period);
-            // console.log(
-            //     "Liquidity",
-            //     oracleData.avLiquidity,
-            //     ", cardinality to increase",
-            //     oracleData.cardinalityToIncrease
-            // );
+            console.log("Fee tier", uniswapFeeTiers[i].fee, oracleData.avLiquidity, oracleData.period);
 
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
@@ -447,6 +441,7 @@ contract Oracle {
                 oracleData.period,
                 oracleData.cardinalityToIncrease
             );
+            // console.log("UniswapOracleProbed", token0, token1, oracleState.uniswapFeeTier.fee);
 
             // oracleData.period == 0 is not possible because it would mean the pool is not initialized
             if (oracleData.period == 1) {
@@ -492,6 +487,7 @@ contract Oracle {
                         oracleDataProbed.period,
                         oracleDataProbed.cardinalityToIncrease
                     );
+                    // console.log("UniswapOracleProbed", token0, token1, uniswapFeeTierProbed.fee);
 
                     if (oracleDataProbed.avLiquidity > 0) {
                         /** Compute scores.
@@ -660,6 +656,7 @@ contract Oracle {
             if (interval[0] == 0) {
                 // We get the instant liquidity because TWAP liquidity is not available
                 oracleData.avLiquidity = oracleData.uniswapPool.liquidity();
+                if (oracleData.avLiquidity == 0) oracleData.avLiquidity = 1;
                 oracleData.period = 1;
                 oracleData.cardinalityToIncrease = 1 + CARDINALITY_DELTA;
                 return oracleData;
