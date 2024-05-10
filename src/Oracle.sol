@@ -661,12 +661,10 @@ contract Oracle {
             // This can only occur if the fee tier has cardinality 1
             if (interval[0] == 0) {
                 // We get the instant liquidity because TWAP liquidity is not available
-                if ((TWAP_DURATION - 1) / (12 seconds) + 1 > cardinalityNext) // Estimate necessary length of the oracle
-                {
-                    oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
-                }
                 oracleData.avLiquidity = oracleData.uniswapPool.liquidity();
                 oracleData.period = 1;
+                // cardinalityNext must be 1
+                oracleData.cardinalityToIncrease = 1 + CARDINALITY_DELTA;
                 return oracleData;
             }
 
