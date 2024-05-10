@@ -372,7 +372,11 @@ contract Oracle {
                 "to",
                 bestOracleData.cardinalityToIncrease
             );
+            console.log("TS:", block.timestamp);
             bestOracleData.uniswapPool.increaseObservationCardinalityNext(bestOracleData.cardinalityToIncrease);
+
+            // Update timestamp
+            oracleState.timeStampFeeTier = uint40(block.timestamp);
         }
 
         // Update oracle vaultState
@@ -516,6 +520,7 @@ contract Oracle {
                                     "to",
                                     oracleDataProbed.cardinalityToIncrease
                                 );
+                                console.log("TS:", block.timestamp);
                                 oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
                                     oracleDataProbed.cardinalityToIncrease
                                 );
@@ -550,6 +555,7 @@ contract Oracle {
                         "to",
                         oracleData.cardinalityToIncrease
                     );
+                    console.log("TS:", block.timestamp);
                     oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
                 }
 
@@ -658,12 +664,11 @@ contract Oracle {
             // Current TWAP duration
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
 
-            // This can only occur if the fee tier has cardinality 1
+            // This can only occur if the fee tier has cardinalityNow 1
             if (interval[0] == 0) {
                 // We get the instant liquidity because TWAP liquidity is not available
                 oracleData.avLiquidity = oracleData.uniswapPool.liquidity();
                 oracleData.period = 1;
-                // cardinalityNext must be 1
                 oracleData.cardinalityToIncrease = 1 + CARDINALITY_DELTA;
                 return oracleData;
             }
