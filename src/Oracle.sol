@@ -519,7 +519,7 @@ contract Oracle {
                                 oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
                                     oracleDataProbed.cardinalityToIncrease
                                 );
-                            } else {
+                            } else if (oracleDataProbed.period >= TWAP_DURATION) {
                                 // If the probed fee tier is better than the current one AND the cardinality is sufficient, switch to the probed tier
                                 oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
                                 emit OracleFeeTierChanged(
@@ -661,7 +661,8 @@ contract Oracle {
             // This can only occur if the fee tier has cardinality 1
             if (interval[0] == 0) {
                 // We get the instant liquidity because TWAP liquidity is not available
-                if (cardinalityNow + CARDINALITY_DELTA > cardinalityNext) {
+                if ((TWAP_DURATION - 1) / (12 seconds) + 1 > cardinalityNext) // Estimate necessary length of the oracle
+                {
                     oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
                 }
                 oracleData.avLiquidity = oracleData.uniswapPool.liquidity();
@@ -673,7 +674,7 @@ contract Oracle {
              * Check if cardinality must increase,
              * ...and if so, increment by CARDINALITY_DELTA.
              */
-            uint256 cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1; // Estimate necessary length of the oracle if we want it to be TWAP_DURATION long
+            uint256 cardinalityNeeded = (uint256(cardinalityNow) * TWAP_DURATION - 1) / interval[0] + 1; // Estimate necessary length of the oracle
             if (cardinalityNeeded > cardinalityNext) {
                 oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
             }

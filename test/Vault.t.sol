@@ -1697,7 +1697,7 @@ contract VaultTest is Test {
 
 contract VaultGasTest is Test, ERC1155TokenReceiver {
     uint256 public constant TIME_ADVANCE = 1 days;
-    uint256 public constant BLOCK_NUMBER_START = 18128102;
+    uint256 public constant BLOCK_NUMBER_START = 18128077; // In this block the pair WETH/USDT's TWAP has druation 0
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
     Vault public vault;
