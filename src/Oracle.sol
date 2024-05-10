@@ -286,7 +286,8 @@ contract Oracle {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
 
-            if (oracleData.period == 0) {
+            // oracleData.period == 0 is not possible because it would mean the pool is not initialized
+            if (oracleData.period == 1) {
                 /** If the fee tier has been updated this block
                     AND the cardinality of the selected fee tier is 1,
                     THEN the price is unavailable as TWAP.
@@ -347,9 +348,10 @@ contract Oracle {
                     we do not want to select a fee tier whose liquidity is easy manipulated.
                         avLiquidity * period = aggregate Liquidity
                  */
-                uint256 scoreTemp = oracleData.period == 0
-                    ? 1
-                    : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
+                uint256 scoreTemp = _feeTierScore(
+                    uint256(oracleData.avLiquidity) * oracleData.period,
+                    uniswapFeeTiers[i]
+                );
                 // if (oracleData.period != 0)
                 // console.log("liquidity:", oracleData.avLiquidity, "| period:", oracleData.period);
                 // console.log("score is ", scoreTemp, " for fee tier", uniswapFeeTiers[i].fee);
@@ -383,6 +385,7 @@ contract Oracle {
             bestOracleData.avLiquidity,
             bestOracleData.period
         );
+        console.log(oracleState.uniswapFeeTier.fee, "FEE TIER SELECTED");
         console.log("------------------------------");
     }
 
@@ -444,7 +447,8 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
-            if (oracleData.period == 0) {
+            // oracleData.period == 0 is not possible because it would mean the pool is not initialized
+            if (oracleData.period == 1) {
                 /** If the fee tier has been updated this block
                     AND the cardinality of the selected fee tier is 1,
                     THEN the price is unavailable as TWAP.
@@ -498,15 +502,22 @@ contract Oracle {
                             its average liquidity is the best AND the TWAP is fully initialized.
                         */
                         console.log(
-                            "Liquidity current fee tier",
-                            oracleData.avLiquidity,
-                            "Liquidity probed fee tier",
+                            "Liquidity for fee tier",
+                            oracleState.uniswapFeeTier.fee,
+                            "is",
+                            oracleData.avLiquidity
+                        );
+                        console.log(
+                            "Liquidity for probed fee tier",
+                            uniswapFeeTierProbed.fee,
+                            "is",
                             oracleDataProbed.avLiquidity
                         );
+
+                        // oracleData.period == 0 is not possible because it can only happen if the pool is not initialized
                         uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
-                        uint256 scoreProbed = oracleDataProbed.period == 0
-                            ? type(uint256).max // When period is 0, average liquidity cannot be estimated, so we force a cardinality increment
-                            : _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
+                        // oracleDataProbed.period == 0 is not possible because it would have filtered out by condition oracleDataProbed.avLiquidity > 0
+                        uint256 scoreProbed = _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
 
                         console.log("score", score, "scoreProbed", scoreProbed);
                         if (scoreProbed > score) {
@@ -631,24 +642,26 @@ contract Oracle {
 
             // Get oracle data for the oldest observation possible
             uint32 blockTimestampOldest;
-            bool initialized;
-            if (cardinalityNow > 1) {
-                // If cardinalityNow is 1, oldest (and newest) observations are at index 0.
-                (blockTimestampOldest, tickCumulative_, liquidityCumulative_, initialized) = oracleData
-                    .uniswapPool
-                    .observations((observationIndex + 1) % cardinalityNow);
-            }
+            {
+                bool initialized;
+                if (cardinalityNow > 1) {
+                    // If cardinalityNow is 1, oldest (and newest) observations are at index 0.
+                    (blockTimestampOldest, tickCumulative_, liquidityCumulative_, initialized) = oracleData
+                        .uniswapPool
+                        .observations((observationIndex + 1) % cardinalityNow);
+                }
 
-            /** The next index might not be populated if the cardinality is in the process of increasing.
+                /** The next index might not be populated if the cardinality is in the process of increasing.
                 In this case the oldest observation is always in index 0.
                 Observation at index 0 is always initialized.
              */
-            if (!initialized) {
-                (blockTimestampOldest, tickCumulative_, liquidityCumulative_, ) = oracleData.uniswapPool.observations(
-                    0
-                );
-                cardinalityNow = observationIndex + 1;
-                // The 1st element of observations is always initialized
+                if (!initialized) {
+                    (blockTimestampOldest, tickCumulative_, liquidityCumulative_, ) = oracleData
+                        .uniswapPool
+                        .observations(0);
+                    cardinalityNow = observationIndex + 1;
+                    // The 1st element of observations is always initialized
+                }
             }
 
             // Current TWAP duration
@@ -662,9 +675,12 @@ contract Oracle {
             // console.log("cardinalityNow:", cardinalityNow);
             // console.log("cardinalityNext:", cardinalityNext);
             if (interval[0] == 0) {
-                // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
+                // We get the instant liquidity because TWAP liquidity is not available
                 oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
-                oracleData.avLiquidity = 1;
+                oracleData.avLiquidity = oracleData.uniswapPool.liquidity();
+                oracleData.period = 1;
+                console.log("Instant liquidity:", oracleData.avLiquidity, "for fee tier", fee);
+                console.logInt(oracleData.aggPriceTick);
                 return oracleData;
             }
 
