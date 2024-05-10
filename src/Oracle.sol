@@ -311,6 +311,7 @@ contract Oracle {
      * @notice The order of the tokens does not matter
      */
     function initialize(address tokenA, address tokenB) external {
+        console.log("initialize called");
         (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
 
         // Get oracle vaultState
@@ -327,6 +328,7 @@ contract Oracle {
         // console.log("----CONTRACT intermediate scores----");
         for (uint i = 0; i < uniswapFeeTiers.length; i++) {
             // Retrieve average liquidity
+            // console.log("retrieving fee tier:", uniswapFeeTiers[i].fee);
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
             emit UniswapOracleProbed(
                 tokenA,
@@ -338,6 +340,7 @@ contract Oracle {
                 oracleData.cardinalityToIncrease
             );
 
+            console.log("liquidity is", oracleData.avLiquidity, "for fee tier", uniswapFeeTiers[i].fee);
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
                     We weight the average liquidity by the duration of the TWAP because
@@ -349,7 +352,7 @@ contract Oracle {
                     : _feeTierScore(uint256(oracleData.avLiquidity) * oracleData.period, uniswapFeeTiers[i]);
                 // if (oracleData.period != 0)
                 // console.log("liquidity:", oracleData.avLiquidity, "| period:", oracleData.period);
-                // console.log("CONTRACT tempScore is ", scoreTemp, " for fee ", uniswapFeeTiers[i].fee);
+                // console.log("score is ", scoreTemp, " for fee tier", uniswapFeeTiers[i].fee);
 
                 // Update best score
                 if (scoreTemp > score) {
@@ -380,6 +383,7 @@ contract Oracle {
             bestOracleData.avLiquidity,
             bestOracleData.period
         );
+        console.log("------------------------------");
     }
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
@@ -493,13 +497,21 @@ contract Oracle {
                             This is different than done in initialize() because a fee tier will not be selected until
                             its average liquidity is the best AND the TWAP is fully initialized.
                         */
+                        console.log(
+                            "Liquidity current fee tier",
+                            oracleData.avLiquidity,
+                            "Liquidity probed fee tier",
+                            oracleDataProbed.avLiquidity
+                        );
                         uint256 score = _feeTierScore(oracleData.avLiquidity, oracleState.uniswapFeeTier);
-                        uint256 scoreProbed = oracleDataProbed.period <= 1
-                            ? type(uint256).max // Increase cardinality if it has never been increased
+                        uint256 scoreProbed = oracleDataProbed.period == 0
+                            ? type(uint256).max // When period is 0, average liquidity cannot be estimated, so we force a cardinality increment
                             : _feeTierScore(oracleDataProbed.avLiquidity, uniswapFeeTierProbed);
 
+                        console.log("score", score, "scoreProbed", scoreProbed);
                         if (scoreProbed > score) {
                             // If the probed fee tier is better than the current one, then we increase its cardinality if necessary
+                            console.log("Probed tier cardinalityToIncrease", oracleDataProbed.cardinalityToIncrease);
                             if (oracleDataProbed.cardinalityToIncrease > 0) {
                                 oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
                                     oracleDataProbed.cardinalityToIncrease
@@ -520,7 +532,7 @@ contract Oracle {
                             // If the current tier is still better, then we increase its cardinality if necessary
                             checkCardinalityCurrentFeeTier = true;
                         }
-                    } else if (oracleData.cardinalityToIncrease > 0) {
+                    } else {
                         // If the probed tier is not even initialized, then we increase the cardinality of the current tier if necessary
                         checkCardinalityCurrentFeeTier = true;
                     }
@@ -528,6 +540,12 @@ contract Oracle {
                     checkCardinalityCurrentFeeTier = true;
                 }
 
+                console.log(
+                    "Checking cardinality current fee tier?",
+                    checkCardinalityCurrentFeeTier,
+                    "with cardinality",
+                    oracleData.cardinalityToIncrease
+                );
                 if (checkCardinalityCurrentFeeTier && oracleData.cardinalityToIncrease > 0) {
                     // We increase the cardinality of the current tier if necessary
                     oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
@@ -546,6 +564,7 @@ contract Oracle {
         }
 
         // Invert price if necessary
+        console.log("------------------------------");
         if (collateralToken == token1) return -oracleState.tickPriceX42;
         return oracleState.tickPriceX42;
     }
@@ -604,7 +623,7 @@ contract Oracle {
             int56 tickCumulative_ = tickCumulatives[0];
             uint160 liquidityCumulative_ = liquidityCumulatives[0];
 
-            // Exand arrays to two slots
+            // Expand arrays to two slots
             tickCumulatives = new int56[](2);
             liquidityCumulatives = new uint160[](2);
             tickCumulatives[1] = tickCumulative_;
@@ -633,12 +652,15 @@ contract Oracle {
             }
 
             // Current TWAP duration
+            console.log("block.timestamp", block.timestamp, "blockTimestampOldest:", blockTimestampOldest);
             interval[0] = uint32(block.timestamp - blockTimestampOldest);
 
             // This can only occur if the fee tier has cardinality 1
+            // console.log("fee tier:", fee);
+            // console.log("address", address(oracleData.uniswapPool));
             console.log("interval[0]:", interval[0]);
-            console.log("cardinalityNow:", cardinalityNow);
-            console.log("cardinalityNext:", cardinalityNext);
+            // console.log("cardinalityNow:", cardinalityNow);
+            // console.log("cardinalityNext:", cardinalityNext);
             if (interval[0] == 0) {
                 // We set avLiquidity to 1, so that a fee tier with cardinality 1 is still considered a candidate.
                 oracleData.cardinalityToIncrease = cardinalityNext + CARDINALITY_DELTA;
