@@ -266,7 +266,6 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
                     _preparePoolNoInitialization(uniswapFeeTiers[j].fee);
                 } else {
                     (liquidity[j], poolKey) = _preparePool(uniswapFeeTiers[j].fee, liquidity[j], uint32(period[j]));
-                    if (period[j] == 0) period[j] = 1;
                     if (liquidity[j] == 0) liquidity[j] = 1;
                 }
 
@@ -286,8 +285,9 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
             // console.log("------TEST intermediate scores------");
             for (uint256 i = 0; i < 9; i++) {
                 period[i] = TWAP_DURATION < timeInc[i] ? uint32(TWAP_DURATION) : uint32(timeInc[i]);
+                if (period[i] == 0) period[i] = 1;
 
-                console.log("liquidity:", liquidity[i], "| period:", period[i]);
+                console.log("TEST, params:", uniswapFeeTiers[i].fee, liquidity[i], period[i]);
                 uint256 tempScore;
                 {
                     uint256 aggLiquidity = liquidity[i] * period[i];
@@ -297,7 +297,7 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
                             uint24(uniswapFeeTiers[i].tickSpacing) +
                             1;
                     if (aggLiquidity != 0) {
-                        console.log(tempScore);
+                        console.log("TEST, fee tier:", uniswapFeeTiers[i].fee, ", score:", tempScore);
                     }
                 }
 
@@ -415,15 +415,15 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
         }
 
         /** Price: The uniswap oracle extrapolates the price for the most recent observations by simply assuming
-                it's the same price as the last observation. So it suffices to just skip the duration of the TWAP.
+            it's the same price as the last observation. So it suffices to just skip the duration of the TWAP.
 
-                Liquidity: The uniswap oracle extrapolaes the liquidity for the most recent observations by simply
-                taking the last observation AND assuming the liquidity since the last observation is the value
-                store in the variable 'liquidity'. Notice this is different than the price. So it is important to
-                keep in mind the liquidity at the beginning of the transaction.
+            Liquidity: The uniswap oracle extrapolaes the liquidity for the most recent observations by simply
+            taking the last observation AND assuming the liquidity since the last observation is the value
+            store in the variable 'liquidity'. Notice this is different than the price. So it is important to
+            keep in mind the liquidity at the beginning of the transaction.
 
-                In conclusion, 1 single slot (all oracles are initialized with 1 slot) is enough to test the oracle.
-            */
+            In conclusion, 1 single slot (all oracles are initialized with 1 slot) is enough to test the oracle.
+        */
         skip(duration);
     }
 

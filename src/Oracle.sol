@@ -337,7 +337,7 @@ contract Oracle {
                 oracleData.period,
                 oracleData.cardinalityToIncrease
             );
-            console.log("Fee tier", uniswapFeeTiers[i].fee, oracleData.avLiquidity, oracleData.period);
+            console.log("CONTRACT, params:", uniswapFeeTiers[i].fee, oracleData.avLiquidity, oracleData.period);
 
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
@@ -349,6 +349,7 @@ contract Oracle {
                     uint256(oracleData.avLiquidity) * oracleData.period,
                     uniswapFeeTiers[i]
                 );
+                console.log("CONTRACT, fee tier:", uniswapFeeTiers[i].fee, ", score:", scoreTemp);
 
                 // Update best score
                 if (scoreTemp > score) {
