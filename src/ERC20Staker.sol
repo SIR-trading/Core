@@ -6,19 +6,22 @@ import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 
 /** @notice Solmate mod
-    @dev SIR balance is designed to fit in a 80-bit unsigned integer.
-    @dev ETH balance is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
-    @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current balance. 
+    @dev SIR supply is designed to fit in a 80-bit unsigned integer.
+    @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
+    @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current supply. 
  */
 contract ERC20Staker {
-    error NewAuctionCannotStartYet();
+    error NewAuctionCannotStartYet(uint40 startTime);
     error TokensAlreadyClaimed();
     error AuctionIsNotOver();
     error AuctionIsOver();
     error BidTooLow();
-    error NoDividends();
     error InvalidSigner();
     error PermitDeadlineExpired();
+
+    event AuctionedTokensSentToWinner(address winner, address token, uint256 reward);
+    event AuctionDividendsPaid(uint256 amount);
+    event BidReceived(address bidder, address token, uint96 previousBid, uint96 newBid);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -351,6 +354,8 @@ contract ERC20Staker {
 
         // Return the previous bid
         _WETH.transfer(auction.bidder, auction.bid);
+
+        emit BidReceived(msg.sender, token, auction.bid, newBid);
     }
 
     function collectFeesAndStartAuction(address token) external {
@@ -358,8 +363,8 @@ contract ERC20Staker {
         if (token != address(_WETH)) {
             Auction memory auction = auctions[token];
 
-            if (block.timestamp < auction.startTime + SystemConstants.AUCTION_COOLDOWN)
-                revert NewAuctionCannotStartYet();
+            uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
+            if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet(newStartTime);
 
             // Start a new auction
             auctions[token] = Auction({
@@ -408,7 +413,7 @@ contract ERC20Staker {
 
             // Compute dividends
             uint256 dividends_ = excessWETH + excessETH;
-            if (dividends_ == 0) revert NoDividends();
+            if (dividends_ == 0) return;
 
             // Unwrap WETH dividends to ETH
             _WETH.withdraw(excessWETH);
@@ -423,6 +428,8 @@ contract ERC20Staker {
                 // Update _supply
                 _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
             }
+
+            emit AuctionDividendsPaid(dividends_);
         }
     }
 
@@ -456,5 +463,7 @@ contract ERC20Staker {
             but if it returns a boolean that is false, the transfer actually failed.
          */
         if (data.length > 0 && !abi.decode(data, (bool))) return false;
+
+        emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
     }
 }
