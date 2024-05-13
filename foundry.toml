@@ -10,7 +10,7 @@ fs_permissions = [{ access = "read-write", path = "./"}]
 gas_reports = ["Vault","Oracle"]
 
 [fuzz]
-# seed = "0x1"
+# seed = "0x14"
 # runs = 10000
 
 [rpc_endpoints]
@@ -20,4 +20,4 @@ tarp_testnet = "https://docker-anvil-production-aa2c.up.railway.app/"
 [invariant]
 fail_on_revert = true   # Fail the test if the contract reverts
 runs           = 5   # Number of times that a sequence of function calls is generated and run
-depth          = 20     # Number of function calls made in a given run.
+depth          = 50     # Number of function calls made in a given run.

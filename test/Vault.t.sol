@@ -1804,7 +1804,7 @@ contract VaultHandler is Test, RegimeEnum {
         uint256 amountCollateral;
     }
 
-    uint256 public constant TIME_ADVANCE = 1 days;
+    uint256 public constant TIME_ADVANCE = 5 minutes;
     Regime immutable regime;
 
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
@@ -1844,7 +1844,7 @@ contract VaultHandler is Test, RegimeEnum {
         });
 
     modifier advanceBlock(InputOutput memory inputOutput) {
-        console.log("------------------");
+        console.log("------Advance--Block------");
 
         if (regime != Regime.Any || inputOutput.advanceBlock) {
             blockNumber += TIME_ADVANCE / 12 seconds;
@@ -1875,6 +1875,8 @@ contract VaultHandler is Test, RegimeEnum {
 
         // Check regime
         _checkRegime();
+        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
+        console.log(string.concat("Leverage tier: ", vm.toString(vaultParameters.leverageTier)));
 
         if (regime != Regime.Any || inputOutput.advanceBlock) iterations++;
 
@@ -1920,7 +1922,8 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        console.log("Mint attempt");
+        console.log("------Mint--Attempt------");
+        console.log(inputOutput.amountCollateral, "collateral");
 
         // Sufficient condition to not overflow total collateral
         (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
@@ -1970,6 +1973,7 @@ contract VaultHandler is Test, RegimeEnum {
                 ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
                 : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
 
+            console.log("Max collateral amount", maxCollateralAmount, "reserveLPers", reserves.reserveLPers);
             if (maxCollateralAmount < reserves.reserveLPers) fail("Power zone");
 
             maxCollateralAmount -= reserves.reserveLPers;
@@ -2006,7 +2010,9 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external advanceBlock(inputOutput) {
-        console.log("Burn attempt of", amount, isAPE ? "APE" : "TEA");
+        console.log("------Burn--Attempt------");
+        console.log(amount, isAPE ? "APE" : "TEA");
+
         // User
         user = _idToAddr(inputOutput.userId);
 
@@ -2073,8 +2079,9 @@ contract VaultHandler is Test, RegimeEnum {
                 if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox >= 2) {
                     // Burn
                     vm.startPrank(user);
-                    _checkRegime();
                     console.log("Burning", amount, isAPE ? "of APE" : "of TEA ");
+                    console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
+                    _checkRegime();
                     inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
 
                     // Unwrap ETH
@@ -2281,7 +2288,7 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     }
 
     function setUp() public {
-        vm.writeFile("./gains.log", "");
+        // vm.writeFile("./gains.log", "");
 
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Power);
