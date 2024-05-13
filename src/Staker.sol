@@ -10,7 +10,7 @@ import {IWETH9} from "./interfaces/IWETH9.sol";
     @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
     @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current supply. 
  */
-contract ERC20Staker {
+contract Staker {
     error NewAuctionCannotStartYet(uint40 startTime);
     error TokensAlreadyClaimed();
     error AuctionIsNotOver();
@@ -358,6 +358,7 @@ contract ERC20Staker {
         emit BidReceived(msg.sender, token, auction.bid, newBid);
     }
 
+    /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
     function collectFeesAndStartAuction(address token) external {
         // (W)ETH is the dividend paying token, so we do not start an auction for it.
         if (token != address(_WETH)) {
