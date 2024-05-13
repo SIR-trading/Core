@@ -9,6 +9,7 @@ import {Staker} from "src/Staker.sol";
 contract StakerTest is Test {
     uint256 constant SLOT_SUPPLY = 4;
     uint256 constant SLOT_BALANCES = 7;
+    uint256 constant SLOT_INITIALIZED = 5;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
@@ -59,6 +60,25 @@ contract StakerTest is Test {
         return vm.addr(id);
     }
 
+    function testFail_initializeTwice() public {
+        staker.initialize(address(0));
+    }
+
+    function test_initializeWrongCaller() public {
+        // Reset _initialized to false
+        vm.store(address(staker), bytes32(uint256(SLOT_INITIALIZED)), bytes32(0));
+
+        staker.initialize(address(0));
+    }
+
+    function testFail_initializeWrongCaller() public {
+        // Reset _initialized to false
+        vm.store(address(staker), bytes32(uint256(SLOT_INITIALIZED)), bytes32(0));
+
+        vm.prank(alice);
+        staker.initialize(address(0));
+    }
+
     function test_initialConditions() public {
         assertEq(staker.supply(), 0);
         assertEq(staker.totalSupply(), 0);
@@ -87,9 +107,7 @@ contract StakerTest is Test {
         transferAmount = uint80(_bound(transferAmount, 1, type(uint80).max));
         mintAmount = uint80(_bound(mintAmount, transferAmount, type(uint80).max));
 
-        console.log("here");
         _mint(from, mintAmount);
-        console.log("there");
 
         vm.expectEmit();
         emit Transfer(from, to, transferAmount);
