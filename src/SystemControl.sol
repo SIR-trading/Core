@@ -70,7 +70,7 @@ contract SystemControl is Ownable {
         require(!_initialized && msg.sender == deployer);
 
         vault = Vault(vault_);
-        sir = SIR(sir_);
+        sir = SIR(payable(sir_));
 
         _initialized = true;
     }

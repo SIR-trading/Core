@@ -12,7 +12,7 @@ import {IWETH9} from "./interfaces/IWETH9.sol";
  */
 contract Staker {
     error NewAuctionCannotStartYet(uint40 startTime);
-    error TokensAlreadyClaimed();
+    error NoTokensAvailable();
     error AuctionIsNotOver();
     error AuctionIsOver();
     error BidTooLow();
@@ -20,7 +20,7 @@ contract Staker {
     error PermitDeadlineExpired();
 
     event AuctionedTokensSentToWinner(address winner, address token, uint256 reward);
-    event AuctionDividendsPaid(uint256 amount);
+    event DividendsPaid(uint256 amount);
     event BidReceived(address bidder, address token, uint96 previousBid, uint96 newBid);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -90,27 +90,27 @@ contract Staker {
                             CUSTOM ERC20 LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    // Return transferable SIR
+    // Return transferable (unstaked) SIR
     function balanceOf(address account) external view returns (uint256) {
         return balances[account].balanceOfSIR;
     }
 
-    // Return staked SIR + transferable SIR
+    // Return staked SIR + transferable (unstaked) SIR
     function totalBalanceOf(address account) external view returns (uint256) {
         return stakersParams[account].stake + balances[account].balanceOfSIR;
     }
 
-    // Return transferable SIR
+    // Return transferable SIR only
     function supply() external view returns (uint256) {
         return _supply.balanceOfSIR;
     }
 
-    // Return staked SIR + transferable SIR
+    // Return staked SIR + transferable (unstaked) SIR
     function totalSupply() external view returns (uint256) {
         return stakingParams.stake + _supply.balanceOfSIR;
     }
 
-    // Return supply if all tokens were in circulation (unminted from LPers and contributors, staked, and unstaked)
+    // Return supply if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
     function maxTotalSupply() external view returns (uint256) {
         (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
@@ -330,6 +330,9 @@ contract Staker {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /// @dev Necessary so the contract can unwrap WETH to ETH
+    receive() external payable {}
+
     function bid(address token) external payable {
         Auction memory auction = auctions[token];
 
@@ -397,7 +400,7 @@ contract Staker {
         // Update auction
         auctions[token].winnerPaid = true;
 
-        if (!_payAuctionWinner(token, auction)) revert TokensAlreadyClaimed();
+        if (!_payAuctionWinner(token, auction)) revert NoTokensAvailable();
 
         // Distribute dividends
         _distributeDividends();
@@ -408,7 +411,7 @@ contract Staker {
             // Any excess WETH in the contract will be distributed.
             uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids;
 
-            // Any excess ETH from when stake was 0
+            // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
             uint256 excessETH = address(this).balance - unclaimedETH;
 
@@ -430,7 +433,7 @@ contract Staker {
                 _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
             }
 
-            emit AuctionDividendsPaid(dividends_);
+            emit DividendsPaid(dividends_);
         }
     }
 

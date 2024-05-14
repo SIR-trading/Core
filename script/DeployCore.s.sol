@@ -33,7 +33,7 @@ contract DeployCore is Script {
         console.log("SystemControl deployed at: ", systemControl);
 
         // Deploy SIR
-        address sir = address(new SIR(Addresses.ADDR_WETH));
+        address payable sir = payable(address(new SIR(Addresses.ADDR_WETH)));
         console.log("SIR deployed at: ", sir);
 
         // Deploy Vault
