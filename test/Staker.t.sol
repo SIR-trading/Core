@@ -94,6 +94,16 @@ contract StakerTest is Test {
         assertEq(staker.decimals(), SystemConstants.SIR_DECIMALS);
     }
 
+    function test_599yearsOfSIRIssuance() public {
+        // 2015M SIR per year
+        skip(365 days);
+        assertEq(staker.maxTotalSupply() / 10 ** SystemConstants.SIR_DECIMALS, 2015e6);
+
+        // Make sure we can fit 599 years of SIR issuance
+        skip(598 * 365 days);
+        assertLe(staker.maxTotalSupply(), type(uint80).max);
+    }
+
     function testFuzz_approve(uint256 amount) public {
         vm.prank(alice);
         assertTrue(staker.approve(bob, amount));
