@@ -768,7 +768,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
                     // Bounds for the error
                     assertLe(bobAmount, bobAmountE + 1);
                     uint256 maxErr = uint256(collateralIn - 1) / polFees + 1;
-                    if (maxErr < bobAmountE) assertGe(bobAmount, bobAmountE - maxErr);
+                    assertApproxEqAbs(bobAmount, bobAmountE, maxErr);
                 }
 
                 assertEq(POLAmount, FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, polFees, newCollateralTotalSupply));
@@ -790,18 +790,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             );
             assertLe(bobAmount, bobAmountE);
             uint256 maxErr = collateralIn / (testMintParams.reserveLPers + lpersFee + polFee) + 1;
-            // vm.writeLine(
-            //     "debug.log",
-            //     string.concat(
-            //         "bobAmount: ",
-            //         vm.toString(bobAmount),
-            //         ", bobAmountE: ",
-            //         vm.toString(bobAmountE),
-            //         ", maxErr: ",
-            //         vm.toString(maxErr)
-            //     )
-            // );
-            if (maxErr < bobAmountE) assertGe(bobAmount, bobAmountE - maxErr);
+            assertApproxEqAbs(bobAmount, bobAmountE, maxErr);
         }
 
         return (bobAmount, collectedFee);
@@ -889,9 +878,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             }
 
             assertLe(rewardsBob, rewardsE);
-            // vm.writeLine("maxError.log", vm.toString(rewardsBob));
-            // vm.writeLine("maxError.log", vm.toString(maxErr < rewardsE ? rewardsE - maxErr : 0));
-            assertGe(rewardsBob, maxErr < rewardsE ? rewardsE - maxErr : 0);
+            assertApproxEqAbs(rewardsBob, rewardsE, maxErr);
         }
 
         uint256 rewardsPOL = unclaimedRewards(
