@@ -10,8 +10,10 @@ import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 
 contract StakerTest is Test {
+    uint256 constant SLOT_STAKING_PARAMS = 3;
     uint256 constant SLOT_SUPPLY = 4;
     uint256 constant SLOT_BALANCES = 7;
+    uint256 constant SLOT_STAKERS_PARAMS = 3;
     uint256 constant SLOT_INITIALIZED = 5;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -25,7 +27,7 @@ contract StakerTest is Test {
 
     /// @dev Auxiliary function for minting APE tokens
     function _mint(address account, uint80 amount) private {
-        // Increase total supply
+        // Increase supply
         uint256 slot = uint256(vm.load(address(staker), bytes32(uint256(SLOT_SUPPLY))));
         uint80 balanceOfSIR = uint80(slot) + amount;
         slot >>= 80;
@@ -35,7 +37,7 @@ contract StakerTest is Test {
             bytes32(uint256(SLOT_SUPPLY)),
             bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
         );
-        assertEq(staker.totalSupply(), balanceOfSIR, "Wrong slot used by vm.store");
+        assertEq(staker.supply(), balanceOfSIR, "Wrong supply slot used by vm.store");
 
         // Increase balance
         slot = uint256(vm.load(address(staker), keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES))))));
@@ -47,7 +49,7 @@ contract StakerTest is Test {
             keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES)))),
             bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
         );
-        assertEq(staker.balanceOf(account), balanceOfSIR, "Wrong slot used by vm.store");
+        assertEq(staker.balanceOf(account), balanceOfSIR, "Wrong balance slot used by vm.store");
     }
 
     function setUp() public {
@@ -241,7 +243,7 @@ contract StakerTest is Test {
         uint80 totalSupplyAmount,
         uint80 mintAmount,
         uint80 stakeAmount
-    ) public returns (uint80) {
+    ) public returns (uint80, uint80) {
         address account = _idToAddress(id);
 
         mintAmount = uint80(_bound(mintAmount, 0, totalSupplyAmount));
@@ -256,24 +258,73 @@ contract StakerTest is Test {
         vm.prank(account);
         staker.stake(stakeAmount);
 
-        assertEq(staker.balanceOf(account), mintAmount - stakeAmount);
-        assertEq(staker.totalBalanceOf(account), mintAmount);
-        assertEq(staker.supply(), totalSupplyAmount - stakeAmount);
-        assertEq(staker.totalSupply(), totalSupplyAmount);
+        assertEq(staker.balanceOf(account), mintAmount - stakeAmount, "Wrong balance");
+        assertEq(staker.totalBalanceOf(account), mintAmount, "Wrong total balance");
+        assertEq(staker.supply(), totalSupplyAmount - stakeAmount, "Wrong supply");
+        assertEq(staker.totalSupply(), totalSupplyAmount, "Wrong total supply");
 
-        return stakeAmount;
+        return (mintAmount, stakeAmount);
     }
 
-    function testFuzz_stakeAndGetPreviouslyDonatedETH(
-        uint256 id,
+    function testFuzz_stake2nd(
+        uint256 id1,
+        uint256 id2,
         uint80 totalSupplyAmount,
-        uint80 mintAmount,
-        uint80 stakeAmount,
+        uint80 mintAmount1,
+        uint80 stakeAmount1,
+        uint80 mintAmount2,
+        uint80 stakeAmount2
+    ) public returns (uint80, uint80) {
+        totalSupplyAmount = uint80(_bound(totalSupplyAmount, mintAmount2, type(uint80).max));
+        stakeAmount2 = uint80(_bound(stakeAmount2, 0, mintAmount2));
+
+        address account1 = _idToAddress(id1);
+        address account2 = _idToAddress(id2);
+
+        // 1st staker stakes
+        (mintAmount1, stakeAmount1) = testFuzz_stake(id1, totalSupplyAmount - mintAmount2, mintAmount1, stakeAmount1);
+
+        _mint(account2, mintAmount2);
+
+        vm.expectEmit();
+        emit Staked(account2, stakeAmount2);
+
+        // 2nd staker stakes
+        vm.prank(account2);
+        staker.stake(stakeAmount2);
+
+        if (account1 != account2) {
+            assertEq(staker.balanceOf(account2), mintAmount2 - stakeAmount2, "Wrong balance of account2");
+            assertEq(staker.totalBalanceOf(account2), mintAmount2, "Wrong total balance of account2");
+            assertEq(staker.supply(), totalSupplyAmount - stakeAmount1 - stakeAmount2, "Wrong supply of account2");
+            assertEq(staker.totalSupply(), totalSupplyAmount, "Wrong total supply of account2");
+        } else {
+            assertEq(
+                staker.balanceOf(account2),
+                mintAmount1 + mintAmount2 - stakeAmount1 - stakeAmount2,
+                "Wrong balance"
+            );
+            assertEq(staker.totalBalanceOf(account2), mintAmount1 + mintAmount2, "Wrong total balance of account2");
+            assertEq(staker.supply(), totalSupplyAmount - stakeAmount1 - stakeAmount2, "Wrong supply of account2");
+            assertEq(staker.totalSupply(), totalSupplyAmount, "Wrong total supply of account2");
+        }
+        return (stakeAmount1, stakeAmount2);
+    }
+
+    function testFuzz_stakeAndGetAvailableETH(
+        uint256 id1,
+        uint256 id2,
+        uint80 totalSupplyAmount,
+        uint80 mintAmount1,
+        uint80 stakeAmount1,
+        uint80 mintAmount2,
+        uint80 stakeAmount2,
         uint96 unclaimedWETH,
         uint96 unclaimedETH,
         address randomToken
     ) public {
-        address account = _idToAddress(id);
+        address account1 = _idToAddress(id1);
+        address account2 = _idToAddress(id2);
 
         unclaimedWETH = uint96(_bound(unclaimedWETH, 0, 120e6 * 10 ** 18));
         unclaimedETH = uint96(_bound(unclaimedETH, 0, 120e6 * 10 ** 18));
@@ -286,10 +337,19 @@ contract StakerTest is Test {
         WETH.deposit{value: unclaimedWETH}();
 
         // Stake
-        stakeAmount = testFuzz_stake(id, totalSupplyAmount, mintAmount, stakeAmount);
+        (stakeAmount1, stakeAmount2) = testFuzz_stake2nd(
+            id1,
+            id2,
+            totalSupplyAmount,
+            mintAmount1,
+            stakeAmount1,
+            mintAmount2,
+            stakeAmount2
+        );
 
         // No dividends
-        assertEq(staker.dividends(account), 0);
+        assertEq(staker.dividends(account1), 0);
+        assertEq(staker.dividends(account2), 0);
 
         // This triggers a payment of dividends
         if (unclaimedWETH + unclaimedETH > 0) {
@@ -299,14 +359,31 @@ contract StakerTest is Test {
         staker.collectFeesAndStartAuction(randomToken);
 
         // Donations
-        if (stakeAmount == 0) {
-            assertEq(staker.dividends(account), 0);
-        } else {
-            assertLe(staker.dividends(account), unclaimedWETH + unclaimedETH);
+        if (unclaimedWETH + unclaimedETH == 0 || stakeAmount1 + stakeAmount2 == 0) {
+            assertEq(staker.dividends(account1), 0);
+            assertEq(staker.dividends(account2), 0);
+        } else if (account1 == account2) {
+            assertLe(staker.dividends(account1), unclaimedWETH + unclaimedETH);
             assertApproxEqAbs(
-                staker.dividends(account),
+                staker.dividends(account1),
                 unclaimedWETH + unclaimedETH,
-                ErrorComputation.maxErrorBalance(80, unclaimedWETH + unclaimedETH, 1)
+                ErrorComputation.maxErrorBalance(80, stakeAmount1 + stakeAmount2, 1)
+            );
+        } else {
+            uint256 dividends = (uint256(unclaimedWETH + unclaimedETH) * stakeAmount1) / (stakeAmount1 + stakeAmount2);
+            assertLe(staker.dividends(account1), dividends);
+            assertApproxEqAbs(
+                staker.dividends(account1),
+                dividends,
+                ErrorComputation.maxErrorBalance(80, stakeAmount1, 1)
+            );
+
+            dividends = (uint256(unclaimedWETH + unclaimedETH) * stakeAmount2) / (stakeAmount1 + stakeAmount2);
+            assertLe(staker.dividends(account2), dividends);
+            assertApproxEqAbs(
+                staker.dividends(account2),
+                dividends,
+                ErrorComputation.maxErrorBalance(80, stakeAmount2, 1)
             );
         }
     }
@@ -329,5 +406,98 @@ contract StakerTest is Test {
         vm.expectRevert();
         vm.prank(account);
         staker.stake(stakeAmount);
+    }
+
+    event Unstaked(address indexed staker, uint256 amount);
+
+    function testFuzz_unstake(
+        uint256 id,
+        uint80 totalSupplyAmount,
+        uint80 mintAmount,
+        uint80 stakeAmount,
+        uint80 unstakeAmount,
+        uint96 unclaimedWETH,
+        uint96 unclaimedETH,
+        address randomToken
+    ) public {
+        address account = _idToAddress(id);
+
+        // Stakes
+        (mintAmount, stakeAmount) = testFuzz_stake(id, totalSupplyAmount, mintAmount, stakeAmount);
+        unstakeAmount = uint80(_bound(unstakeAmount, 0, stakeAmount));
+
+        unclaimedWETH = uint96(_bound(unclaimedWETH, 0, 120e6 * 10 ** 18));
+        unclaimedETH = uint96(_bound(unclaimedETH, 0, 120e6 * 10 ** 18));
+
+        // Donate ETH to staker
+        vm.deal(address(staker), unclaimedWETH + unclaimedETH);
+
+        // Wrap ETH to WETH
+        vm.prank(address(staker));
+        WETH.deposit{value: unclaimedWETH}();
+
+        // Trigger a payment of dividends
+        staker.collectFeesAndStartAuction(randomToken);
+
+        // Check dividends
+        console.log("Total dividends are", unclaimedWETH + unclaimedETH);
+        console.log("Dividends are", staker.dividends(account));
+        if (stakeAmount == 0) {
+            assertEq(staker.dividends(account), 0);
+        } else {
+            assertLe(staker.dividends(account), unclaimedWETH + unclaimedETH);
+            assertApproxEqAbs(
+                staker.dividends(account),
+                unclaimedWETH + unclaimedETH,
+                ErrorComputation.maxErrorBalance(80, stakeAmount, 1),
+                "Dividends before unstaking too low"
+            );
+        }
+
+        vm.expectEmit();
+        emit Unstaked(account, unstakeAmount);
+
+        // Unstakes
+        vm.prank(account);
+        staker.unstake(unstakeAmount);
+        console.log("Dividends are", staker.dividends(account));
+
+        assertEq(staker.balanceOf(account), mintAmount - stakeAmount + unstakeAmount, "Wrong balance");
+        assertEq(staker.totalBalanceOf(account), mintAmount, "Wrong total balance");
+        assertEq(staker.supply(), totalSupplyAmount - stakeAmount + unstakeAmount, "Wrong supply");
+        assertEq(staker.totalSupply(), totalSupplyAmount, "Wrong total supply");
+
+        // Check dividends still there
+        if (stakeAmount == 0) {
+            assertEq(staker.dividends(account), 0);
+        } else {
+            assertLe(staker.dividends(account), unclaimedWETH + unclaimedETH);
+            assertApproxEqAbs(
+                staker.dividends(account),
+                unclaimedWETH + unclaimedETH,
+                ErrorComputation.maxErrorBalance(80, stakeAmount, 1),
+                "Dividends after unstaking too low"
+            );
+        }
+    }
+
+    function testFuzz_unstakeExceedsStake(
+        uint256 id,
+        uint80 totalSupplyAmount,
+        uint80 mintAmount,
+        uint80 stakeAmount,
+        uint80 unstakeAmount
+    ) public {
+        address account = _idToAddress(id);
+
+        // Stakes
+        (mintAmount, stakeAmount) = testFuzz_stake(id, totalSupplyAmount, mintAmount, stakeAmount);
+
+        unstakeAmount = uint80(_bound(unstakeAmount, stakeAmount + 1, type(uint80).max));
+
+        // Unstakes
+        vm.prank(account);
+        vm.expectRevert();
+        staker.unstake(unstakeAmount);
     }
 }
