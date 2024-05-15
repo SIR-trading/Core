@@ -7,6 +7,7 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
+import {ErrorComputation} from "./ErrorComputation.sol";
 
 contract StakerTest is Test {
     uint256 constant SLOT_SUPPLY = 4;
@@ -235,7 +236,12 @@ contract StakerTest is Test {
     event Staked(address indexed staker, uint256 amount);
     event DividendsPaid(uint256 amount);
 
-    function testFuzz_stake(uint256 id, uint80 totalSupplyAmount, uint80 mintAmount, uint80 stakeAmount) public {
+    function testFuzz_stake(
+        uint256 id,
+        uint80 totalSupplyAmount,
+        uint80 mintAmount,
+        uint80 stakeAmount
+    ) public returns (uint80) {
         address account = _idToAddress(id);
 
         mintAmount = uint80(_bound(mintAmount, 0, totalSupplyAmount));
@@ -254,9 +260,10 @@ contract StakerTest is Test {
         assertEq(staker.totalBalanceOf(account), mintAmount);
         assertEq(staker.supply(), totalSupplyAmount - stakeAmount);
         assertEq(staker.totalSupply(), totalSupplyAmount);
+
+        return stakeAmount;
     }
 
-    // TEST stake WHEN THERE ARE DIVIDENDS. USE vm.store TO UPDATE cumETHPerSIRx80 AND ADD SOME PURE ETH
     function testFuzz_stakeAndGetPreviouslyDonatedETH(
         uint256 id,
         uint80 totalSupplyAmount,
@@ -279,7 +286,7 @@ contract StakerTest is Test {
         WETH.deposit{value: unclaimedWETH}();
 
         // Stake
-        testFuzz_stake(id, totalSupplyAmount, mintAmount, stakeAmount);
+        stakeAmount = testFuzz_stake(id, totalSupplyAmount, mintAmount, stakeAmount);
 
         // No dividends
         assertEq(staker.dividends(account), 0);
@@ -292,7 +299,16 @@ contract StakerTest is Test {
         staker.collectFeesAndStartAuction(randomToken);
 
         // Donations
-        assertEq(staker.dividends(account), unclaimedWETH + unclaimedETH);
+        if (stakeAmount == 0) {
+            assertEq(staker.dividends(account), 0);
+        } else {
+            assertLe(staker.dividends(account), unclaimedWETH + unclaimedETH);
+            assertApproxEqAbs(
+                staker.dividends(account),
+                unclaimedWETH + unclaimedETH,
+                ErrorComputation.maxErrorBalance(80, unclaimedWETH + unclaimedETH, 1)
+            );
+        }
     }
 
     function testFuzz_stakeExceedsBalance(

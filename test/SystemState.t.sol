@@ -312,7 +312,7 @@ contract SystemStateTest is Test {
         assertApproxEqAbs(
             cumSIRPerTEAx96,
             ((SystemConstants.ISSUANCE_FIRST_3_YEARS * duration) << 96) / teaAmount,
-            ErrorComputation.maxErrorCumSIRPerTEA(1)
+            ErrorComputation.maxErrorCumumlative(1)
         );
 
         // Check rewards for Alice
@@ -321,7 +321,7 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1));
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 1));
         }
 
         // Check no rewards for POL
@@ -356,7 +356,7 @@ contract SystemStateTest is Test {
         assertApproxEqAbs(
             cumSIRPerTEAx96,
             ((SystemConstants.ISSUANCE * duration) << 96) / teaAmount,
-            ErrorComputation.maxErrorCumSIRPerTEA(1)
+            ErrorComputation.maxErrorCumumlative(1)
         );
 
         // Check rewards for Alice
@@ -365,7 +365,7 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 1));
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 1));
         }
 
         // Check rewards for POL
@@ -400,7 +400,7 @@ contract SystemStateTest is Test {
                 durationBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationAfter3Years) << 96) / teaAmount,
-            ErrorComputation.maxErrorCumSIRPerTEA(2)
+            ErrorComputation.maxErrorCumumlative(2)
         );
 
         // Check rewards for Alice
@@ -412,7 +412,7 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2));
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 2));
         }
 
         // Check rewards for POL
@@ -449,7 +449,7 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2));
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 2));
         }
 
         // Check rewards for Bob
@@ -458,7 +458,7 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 3));
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 3));
         }
 
         // Check rewards for POL
@@ -529,7 +529,7 @@ contract SystemStateTest is Test {
                 durationBeforeBurnBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationBeforeBurnAfter3Years) << 96) / teaAmount,
-            ErrorComputation.maxErrorCumSIRPerTEA(3)
+            ErrorComputation.maxErrorCumumlative(3)
         );
 
         // Check rewards for Alice
@@ -541,7 +541,7 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 3));
+            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 3));
         }
 
         // Check rewards for POL
@@ -624,7 +624,7 @@ contract SystemStateTest is Test {
                     SystemConstants.ISSUANCE *
                     durationAfterBurnAfter3Years) << 96) /
                 (teaAmount - teaAmountToBurn),
-            ErrorComputation.maxErrorCumSIRPerTEA(3)
+            ErrorComputation.maxErrorCumumlative(3)
         );
 
         // Check rewards for Alice
@@ -639,8 +639,8 @@ contract SystemStateTest is Test {
             assertGe(
                 unclaimedSIR,
                 unclaimedSIRTheoretical -
-                    ErrorComputation.maxErrorBalanceSIR(teaAmount, 2) -
-                    ErrorComputation.maxErrorBalanceSIR(teaAmount - teaAmountToBurn, 2)
+                    ErrorComputation.maxErrorBalance(96, teaAmount, 2) -
+                    ErrorComputation.maxErrorBalance(96, teaAmount - teaAmountToBurn, 2)
             );
         }
 
@@ -713,7 +713,7 @@ contract SystemStateTest is Test {
                 (durationAliceBefore3Years + durationBobBefore3Years) +
                 SystemConstants.ISSUANCE *
                 (durationAliceAfter3Years + durationBobAfter3Years)) << 96) / teaAmountMint,
-            ErrorComputation.maxErrorCumSIRPerTEA(3)
+            ErrorComputation.maxErrorCumumlative(3)
         );
 
         // Check rewards for Alice
@@ -734,8 +734,8 @@ contract SystemStateTest is Test {
             assertGe(
                 unclaimedSIR,
                 unclaimedSIRTheoretical -
-                    ErrorComputation.maxErrorBalanceSIR(teaAmountMint, 2) -
-                    ErrorComputation.maxErrorBalanceSIR(teaAmountMint - teaAmountTransfer, 2)
+                    ErrorComputation.maxErrorBalance(96, teaAmountMint, 2) -
+                    ErrorComputation.maxErrorBalance(96, teaAmountMint - teaAmountTransfer, 2)
             );
         }
 
@@ -751,7 +751,10 @@ contract SystemStateTest is Test {
         if (unclaimedSIRTheoretical == 0) assertEq(unclaimedSIR, 0);
         else {
             assertLe(unclaimedSIR, unclaimedSIRTheoretical);
-            assertGe(unclaimedSIR, unclaimedSIRTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmountTransfer, 3));
+            assertGe(
+                unclaimedSIR,
+                unclaimedSIRTheoretical - ErrorComputation.maxErrorBalance(96, teaAmountTransfer, 3)
+            );
         }
     }
 
@@ -798,7 +801,7 @@ contract SystemStateTest is Test {
             assertLe(unclaimedSIRAlice, unclaimedSIRAliceTheoretical);
             assertGe(
                 unclaimedSIRAlice,
-                unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalanceSIR(teaAmount, 2)
+                unclaimedSIRAliceTheoretical - ErrorComputation.maxErrorBalance(96, teaAmount, 2)
             );
         }
 
@@ -991,10 +994,10 @@ contract SystemStateHandler is Test {
 
         // Update totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[fromAddr];
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, preBalance, numUpdates);
         numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[toAddr];
         uint256 toBalance = systemState.balanceOf(toAddr, VAULT_ID);
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(toBalance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, toBalance, numUpdates);
 
         // Update indexes
         _numUpdatesCumSIRPerTEAForUser[fromAddr] = _numUpdatesCumSIRPerTEA;
@@ -1018,9 +1021,9 @@ contract SystemStateHandler is Test {
 
         // Update totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[addr];
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, preBalance, numUpdates);
         numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[address(systemState)];
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(vaultPreBalance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, vaultPreBalance, numUpdates);
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[addr] = _numUpdatesCumSIRPerTEA;
@@ -1041,9 +1044,9 @@ contract SystemStateHandler is Test {
 
         // Update totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[addr];
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(preBalance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, preBalance, numUpdates);
         numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[address(systemState)];
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(vaultPreBalance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, vaultPreBalance, numUpdates);
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[addr] = _numUpdatesCumSIRPerTEA;
@@ -1062,7 +1065,7 @@ contract SystemStateHandler is Test {
 
         // Update totalSIRMaxError
         uint256 numUpdates = _numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[addr];
-        _totalSIRMaxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
+        _totalSIRMaxError += ErrorComputation.maxErrorBalance(96, balance, numUpdates);
 
         // Update index
         _numUpdatesCumSIRPerTEAForUser[addr] = _numUpdatesCumSIRPerTEA;
@@ -1099,7 +1102,7 @@ contract SystemStateHandler is Test {
             balance = systemState.balanceOf(_idToAddr(i), VAULT_ID);
             if (balance > 0) {
                 numUpdates = numUpdatesCumSIRPerTEA - _numUpdatesCumSIRPerTEAForUser[_idToAddr(i)];
-                maxError += ErrorComputation.maxErrorBalanceSIR(balance, numUpdates);
+                maxError += ErrorComputation.maxErrorBalance(96, balance, numUpdates);
             }
         }
     }

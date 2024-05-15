@@ -5,6 +5,8 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 
+import "forge-std/console.sol";
+
 /** @notice Solmate mod
     @dev SIR supply is designed to fit in a 80-bit unsigned integer.
     @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
@@ -416,6 +418,7 @@ contract Staker {
             uint256 excessETH = address(this).balance - unclaimedETH;
 
             // Compute dividends
+            console.log("excessWETH:", excessWETH, ", excessETH:", excessETH);
             uint256 dividends_ = excessWETH + excessETH;
             if (dividends_ == 0) return;
 
@@ -423,8 +426,10 @@ contract Staker {
             _WETH.withdraw(excessWETH);
 
             StakingParams memory stakingParams_ = stakingParams;
+            console.log("stake:", stakingParams_.stake);
             if (stakingParams_.stake > 0) {
                 // Update cumETHPerSIRx80
+                console.log("cumETHPerSIRx80:", stakingParams_.cumETHPerSIRx80, ", dividends_:", dividends_);
                 stakingParams.cumETHPerSIRx80 =
                     stakingParams_.cumETHPerSIRx80 +
                     uint176((dividends_ << 80) / stakingParams_.stake);
