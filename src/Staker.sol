@@ -290,10 +290,10 @@ contract Staker {
         }
     }
 
-    function claim() external {
+    function claim() external returns (uint96 dividends_) {
         unchecked {
             StakingParams memory stakingParams_ = stakingParams;
-            uint96 dividends_ = _dividends(balances[msg.sender], stakingParams_, stakersParams[msg.sender]);
+            dividends_ = _dividends(balances[msg.sender], stakingParams_, stakersParams[msg.sender]);
 
             // Null the unclaimed dividends
             balances[msg.sender].unclaimedETH = 0;

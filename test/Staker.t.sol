@@ -67,7 +67,7 @@ contract StakerTest is Test {
 
     function _idToAddress(uint256 id) private pure returns (address) {
         id = _bound(id, 1, 3);
-        return vm.addr(id);
+        return payable(vm.addr(id));
     }
 
     function testFail_initializeTwice() public {
@@ -328,6 +328,7 @@ contract StakerTest is Test {
 
         unclaimedWETH = uint96(_bound(unclaimedWETH, 0, 120e6 * 10 ** 18));
         unclaimedETH = uint96(_bound(unclaimedETH, 0, 120e6 * 10 ** 18));
+        console.log("unclaimed WETH is", unclaimedWETH, "and unclaimed ETH is", unclaimedETH);
 
         // Donate ETH to staker
         vm.deal(address(staker), unclaimedWETH + unclaimedETH);
@@ -350,6 +351,10 @@ contract StakerTest is Test {
         // No dividends
         assertEq(staker.dividends(account1), 0);
         assertEq(staker.dividends(account2), 0);
+        vm.prank(account1);
+        assertEq(staker.claim(), 0);
+        vm.prank(account2);
+        assertEq(staker.claim(), 0);
 
         // This triggers a payment of dividends
         if (unclaimedWETH + unclaimedETH > 0) {
@@ -360,31 +365,51 @@ contract StakerTest is Test {
 
         // Donations
         if (unclaimedWETH + unclaimedETH == 0 || stakeAmount1 + stakeAmount2 == 0) {
-            assertEq(staker.dividends(account1), 0);
-            assertEq(staker.dividends(account2), 0);
+            assertEq(staker.dividends(account1), 0, "Dividends of account1 should be 0");
+            assertEq(staker.dividends(account2), 0, "Dividends of account2 should be 0");
         } else if (account1 == account2) {
-            assertLe(staker.dividends(account1), unclaimedWETH + unclaimedETH);
-            assertApproxEqAbs(
-                staker.dividends(account1),
-                unclaimedWETH + unclaimedETH,
-                ErrorComputation.maxErrorBalance(80, stakeAmount1 + stakeAmount2, 1)
-            );
-        } else {
-            uint256 dividends = (uint256(unclaimedWETH + unclaimedETH) * stakeAmount1) / (stakeAmount1 + stakeAmount2);
-            assertLe(staker.dividends(account1), dividends);
-            assertApproxEqAbs(
-                staker.dividends(account1),
-                dividends,
-                ErrorComputation.maxErrorBalance(80, stakeAmount1, 1)
-            );
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, stakeAmount1 + stakeAmount2, 1);
+            assertLe(staker.dividends(account1), unclaimedWETH + unclaimedETH, "Dividends too high");
+            assertApproxEqAbs(staker.dividends(account1), unclaimedWETH + unclaimedETH, maxError, "Dividends too low");
 
-            dividends = (uint256(unclaimedWETH + unclaimedETH) * stakeAmount2) / (stakeAmount1 + stakeAmount2);
-            assertLe(staker.dividends(account2), dividends);
+            // Claim dividends
+            vm.prank(account1);
             assertApproxEqAbs(
-                staker.dividends(account2),
-                dividends,
-                ErrorComputation.maxErrorBalance(80, stakeAmount2, 1)
+                staker.claim(),
+                unclaimedWETH + unclaimedETH,
+                maxError,
+                "Claimed dividends are incorrect"
             );
+            assertEq(staker.dividends(account1), 0, "Dividends should be 0 after claim");
+            assertApproxEqAbs(account1.balance, unclaimedWETH + unclaimedETH, maxError, "Balance is incorrect");
+            assertApproxEqAbs(address(staker).balance, 0, maxError, "Balance staker is incorrect");
+        } else {
+            // Verify balances of account1
+            uint256 dividends = (uint256(unclaimedWETH + unclaimedETH) * stakeAmount1) / (stakeAmount1 + stakeAmount2);
+            uint256 maxError1 = ErrorComputation.maxErrorBalance(80, stakeAmount1, 1);
+            assertLe(staker.dividends(account1), dividends, "Dividends of account1 too high");
+            assertApproxEqAbs(staker.dividends(account1), dividends, maxError1, "Dividends of account1 too low");
+
+            // Claim dividends of account1
+            vm.prank(account1);
+            assertApproxEqAbs(staker.claim(), dividends, maxError1, "Claimed dividends of account1 are incorrect");
+            assertEq(staker.dividends(account1), 0, "Dividends of account1 should be 0 after claim");
+            assertApproxEqAbs(account1.balance, dividends, maxError1, "Balance of account1 is incorrect");
+
+            // Verify balances of account2
+            dividends = (uint256(unclaimedWETH + unclaimedETH) * stakeAmount2) / (stakeAmount1 + stakeAmount2);
+            uint256 maxError2 = ErrorComputation.maxErrorBalance(80, stakeAmount2, 1);
+            assertLe(staker.dividends(account2), dividends, "Dividends of account2 too high");
+            assertApproxEqAbs(staker.dividends(account2), dividends, maxError2, "Dividends of account2 too low");
+
+            // Claim dividends of account2
+            vm.prank(account2);
+            assertApproxEqAbs(staker.claim(), dividends, maxError2, "Claimed dividends of account2 are incorrect");
+            assertEq(staker.dividends(account1), 0, "Dividends of account2 should be 0 after claim");
+            assertApproxEqAbs(account2.balance, dividends, maxError2, "Balance of account2 is incorrect");
+
+            // Verify balances of staker
+            assertApproxEqAbs(address(staker).balance, 0, maxError1 + maxError2, "Balance staker is incorrect");
         }
     }
 
@@ -471,13 +496,25 @@ contract StakerTest is Test {
         if (stakeAmount == 0) {
             assertEq(staker.dividends(account), 0);
         } else {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, stakeAmount, 1);
             assertLe(staker.dividends(account), unclaimedWETH + unclaimedETH);
             assertApproxEqAbs(
                 staker.dividends(account),
                 unclaimedWETH + unclaimedETH,
-                ErrorComputation.maxErrorBalance(80, stakeAmount, 1),
+                maxError,
                 "Dividends after unstaking too low"
             );
+
+            // Claim dividends
+            vm.prank(account);
+            assertApproxEqAbs(
+                staker.claim(),
+                unclaimedWETH + unclaimedETH,
+                maxError,
+                "Claimed dividends are incorrect"
+            );
+            assertEq(staker.dividends(account), 0, "Dividends should be 0 after claim");
+            assertApproxEqAbs(account.balance, unclaimedWETH + unclaimedETH, maxError, "Balance is incorrect");
         }
     }
 
