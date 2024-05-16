@@ -15,12 +15,15 @@ contract StakerTest is Test {
     uint256 constant SLOT_BALANCES = 7;
     uint256 constant SLOT_STAKERS_PARAMS = 3;
     uint256 constant SLOT_INITIALIZED = 5;
+    uint256 constant SLOT_TOKEN_STATES = 8;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
     Staker staker;
+    address vault;
+
     address alice;
     address bob;
     address charlie;
@@ -57,8 +60,8 @@ contract StakerTest is Test {
 
         staker = new Staker(Addresses.ADDR_WETH);
 
-        Vault vault = new Vault(vm.addr(10), address(staker), vm.addr(12));
-        staker.initialize(address(vault)); // Fake Vault address
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12)));
+        staker.initialize(vault);
 
         alice = vm.addr(1);
         bob = vm.addr(2);
@@ -536,5 +539,38 @@ contract StakerTest is Test {
         vm.prank(account);
         vm.expectRevert();
         staker.unstake(unstakeAmount);
+    }
+
+    function _addTokenFeesToVault(address token, uint112 amount) private {
+        // Increase fees in Vault
+        uint256 slot = uint256(vm.load(vault, keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES))))));
+        uint112 collectedFees = uint112(slot) + amount;
+        slot >>= 112;
+        uint144 total = uint144(slot) + amount;
+        vm.store(
+            vault,
+            keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
+            bytes32(abi.encodePacked(total, collectedFees))
+        );
+
+        (uint112 collectedFees_, ) = Vault(vault).tokenStates(token);
+        assertEq(collectedFees, collectedFees_, "Wrong token states slot used by vm.store");
+    }
+
+    function testFuzz_auctionOfBNB(uint112 fees, uint256 donations) public {
+        // Add fees in vault
+        _addTokenFeesToVault(Addresses.ADDR_BNB, fees);
+        deal(Addresses.ADDR_BNB, vault, fees);
+
+        // Some1 donated tokens to Staker contract
+        donations = uint112(_bound(fees, 0, type(uint256).max - fees));
+        deal(Addresses.ADDR_BNB, address(staker), donations);
+
+        // Start auction
+        if (fees > 0) {
+            vm.expectEmit();
+            emit Transfer(vault, address(staker), fees);
+        }
+        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), fees);
     }
 }

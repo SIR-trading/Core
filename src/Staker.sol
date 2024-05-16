@@ -80,6 +80,9 @@ contract Staker {
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
     }
 
+    /// @dev Necessary so the contract can unwrap WETH to ETH
+    receive() external payable {}
+
     function initialize(address vault_) external {
         require(!_initialized && msg.sender == deployer);
 
@@ -332,9 +335,6 @@ contract Staker {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /// @dev Necessary so the contract can unwrap WETH to ETH
-    receive() external payable {}
-
     function bid(address token) external payable {
         Auction memory auction = auctions[token];
 
@@ -364,7 +364,7 @@ contract Staker {
     }
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
-    function collectFeesAndStartAuction(address token) external {
+    function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
         // (W)ETH is the dividend paying token, so we do not start an auction for it.
         if (token != address(_WETH)) {
             Auction memory auction = auctions[token];
@@ -388,7 +388,7 @@ contract Staker {
         }
 
         // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-        vault.withdrawFees(token);
+        collectedFees = vault.withdrawFees(token);
 
         // Distribute dividends from the previous auction even if paying the previous winner fails
         _distributeDividends();
