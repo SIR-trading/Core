@@ -21,9 +21,10 @@ contract Staker {
     error InvalidSigner();
     error PermitDeadlineExpired();
 
-    event AuctionedTokensSentToWinner(address winner, address token, uint256 reward);
-    event DividendsPaid(uint256 amount);
-    event BidReceived(address bidder, address token, uint96 previousBid, uint96 newBid);
+    event AuctionStarted(address indexed token);
+    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
+    event DividendsPaid(uint256 amountETH);
+    event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -385,6 +386,9 @@ contract Staker {
 
             // We pay the previous winner if it has not been paid yet
             _payAuctionWinner(token, auction);
+
+            // Emit event for the new auction
+            emit AuctionStarted(token);
         }
 
         // Retrieve fees from the vault to be auctioned, or distributed if they are WETH

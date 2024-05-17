@@ -345,7 +345,6 @@ contract Vault is TEA {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // RETURN AMOUNT!!!
     function withdrawFees(address token) external returns (uint112 collectedFees) {
         require(msg.sender == sir);
 
@@ -353,7 +352,7 @@ contract Vault is TEA {
         collectedFees = tokenState.collectedFees;
         if (collectedFees != 0) {
             tokenStates[token] = VaultStructs.TokenState({collectedFees: 0, total: tokenState.total - collectedFees});
-            TransferHelper.safeTransfer(token, msg.sender, collectedFees);
+            TransferHelper.safeTransfer(token, sir, collectedFees);
         }
     }
 
