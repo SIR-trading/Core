@@ -13,7 +13,7 @@ import "forge-std/console.sol";
     @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current supply. 
  */
 contract Staker {
-    error NewAuctionCannotStartYet(uint40 startTime);
+    error NewAuctionCannotStartYet();
     error NoTokenPrize();
     error NoFees();
     error AuctionIsNotOver();
@@ -338,31 +338,39 @@ contract Staker {
     ////////////////////////////////////////////////////////////////*/
 
     function bid(address token) external payable {
-        Auction memory auction = auctions[token];
+        unchecked {
+            Auction memory auction = auctions[token];
 
-        if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
+            // Unchecked because time stamps cannot overflow
+            if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
 
-        // Get the current bid
-        uint96 totalBids_ = totalBids;
-        uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
+            // Get the current bid
+            uint96 totalBids_ = totalBids;
+            uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
 
-        // If the bidder is the current winner, we just increase the bid
-        if (msg.sender == auction.bidder) {
-            auctions[token].bid += newBid;
-            totalBids = totalBids_ + newBid - auction.bid;
-            return;
+            if (msg.sender == auction.bidder) {
+                // If the bidder is the current winner, we just increase the bid
+                totalBids = totalBids_ + newBid;
+                newBid += auction.bid;
+            } else {
+                // Return the previous bid to the previous bidder
+                totalBids = totalBids_ + newBid - auction.bid;
+                _WETH.transfer(auction.bidder, auction.bid);
+            }
+
+            // If the bidder is not the current winner, we check if the bid is higher
+            if (newBid <= auction.bid) revert BidTooLow();
+
+            // Update bidder & bid
+            auctions[token] = Auction({
+                bidder: msg.sender,
+                bid: newBid,
+                startTime: auction.startTime,
+                winnerPaid: false
+            });
+
+            emit BidReceived(msg.sender, token, auction.bid, newBid);
         }
-
-        // If the bidder is not the current winner, we check if the bid is higher
-        if (newBid <= auction.bid) revert BidTooLow();
-
-        // Update bidder & bid
-        auctions[token] = Auction({bidder: msg.sender, bid: newBid, startTime: auction.startTime, winnerPaid: false});
-
-        // Return the previous bid
-        _WETH.transfer(auction.bidder, auction.bid);
-
-        emit BidReceived(msg.sender, token, auction.bid, newBid);
     }
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
@@ -372,7 +380,7 @@ contract Staker {
             Auction memory auction = auctions[token];
 
             uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
-            if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet(newStartTime);
+            if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
 
             // Start a new auction
             auctions[token] = Auction({
