@@ -14,7 +14,8 @@ import "forge-std/console.sol";
  */
 contract Staker {
     error NewAuctionCannotStartYet(uint40 startTime);
-    error NoTokensAvailable();
+    error NoTokenPrize();
+    error NoFees();
     error AuctionIsNotOver();
     error AuctionIsOver();
     error BidTooLow();
@@ -393,6 +394,7 @@ contract Staker {
 
         // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
         collectedFees = vault.withdrawFees(token);
+        if (collectedFees == 0) revert NoFees();
 
         // Distribute dividends from the previous auction even if paying the previous winner fails
         _distributeDividends();
@@ -406,7 +408,7 @@ contract Staker {
         // Update auction
         auctions[token].winnerPaid = true;
 
-        if (!_payAuctionWinner(token, auction)) revert NoTokensAvailable();
+        if (!_payAuctionWinner(token, auction)) revert NoTokenPrize();
 
         // Distribute dividends
         _distributeDividends();
