@@ -625,7 +625,15 @@ contract StakerTest is Test {
 
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     error BidTooLow();
-    error AuctionIsOver();
+    error NoAuction();
+
+    function _assertAuction(Bidder memory bidder_, uint256 timeStamp) private {
+        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_BNB);
+        assertEq(bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
+        assertEq(bid, bidder_.amount, "Wrong bid");
+        assertEq(startTime, timeStamp, "Wrong start time");
+        assertTrue(!winnerPaid, "Winner should not have been paid yet");
+    }
 
     function testFuzz_auctionOfBNB(
         uint112 fees,
@@ -634,15 +642,17 @@ contract StakerTest is Test {
         Bidder memory bidder1,
         Bidder memory bidder2,
         Bidder memory bidder3
-    ) public {
-        fees = testFuzz_startAuctionOfBNB(fees, total, donations);
-        vm.assume(fees > 0);
+    ) public returns (uint256 start, uint112 feesNew) {
+        start = block.timestamp;
+
+        feesNew = testFuzz_startAuctionOfBNB(fees, total, donations);
+        vm.assume(feesNew > 0);
 
         bidder1.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
         bidder2.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
         bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
 
-        // Bidder 1'
+        // Bidder 1
         if (bidder1.amount > 0) {
             _dealWETH(address(staker), bidder1.amount);
             vm.expectEmit();
@@ -652,6 +662,8 @@ contract StakerTest is Test {
         }
         vm.prank(_idToAddress(bidder1.id));
         staker.bid(Addresses.ADDR_BNB);
+        if (bidder1.amount > 0) _assertAuction(bidder1, start);
+        else _assertAuction(Bidder(0, 0), start);
 
         // Bidder 2
         skip(SystemConstants.AUCTION_DURATION - 1);
@@ -680,32 +692,72 @@ contract StakerTest is Test {
         }
         vm.prank(_idToAddress(bidder2.id));
         staker.bid(Addresses.ADDR_BNB);
+        if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
+            if (bidder2.amount > 0) {
+                _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);
+            } else {
+                if (bidder1.amount > 0) _assertAuction(bidder1, start);
+                else _assertAuction(Bidder(0, 0), start);
+            }
+        } else if (bidder2.amount > bidder1.amount) {
+            _assertAuction(bidder2, start);
+        } else {
+            if (bidder1.amount > 0) _assertAuction(bidder1, start);
+            else _assertAuction(Bidder(0, 0), start);
+        }
 
         // Bidder 3 tries to bid after auction is over
         skip(1);
         _dealWETH(address(staker), bidder3.amount);
         vm.prank(_idToAddress(bidder3.id));
-        vm.expectRevert(AuctionIsOver.selector);
+        vm.expectRevert(NoAuction.selector);
         staker.bid(Addresses.ADDR_BNB);
-
-        // ALSO CHECK AUCTION DATA
     }
+
+    // MAKE TEST THAT CHECKS WHAT HAPPENS AFTER AUCTION IS STARTED AGAIN FOR BNB
 
     error NewAuctionCannotStartYet();
 
+    // APPLY THIS TEST AFTER THE AUCTION TEST
     function testFuzz_startAuctionOfBNBTooEarly(
         uint112 fees,
         uint144 total,
         uint256 donations,
-        uint40 timeInterval
+        uint40 timeStamp,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3
     ) public {
-        testFuzz_startAuctionOfBNB(fees, total, donations);
+        (uint256 start, ) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
 
         // 2nd auction too early
-        timeInterval = uint40(_bound(timeInterval, 0, SystemConstants.AUCTION_COOLDOWN - 1));
-        skip(timeInterval);
+        timeStamp = uint40(_bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1));
+        vm.warp(timeStamp);
         vm.expectRevert(NewAuctionCannotStartYet.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
+    }
+
+    function testFuzz_start2ndAuctionOfBNB(
+        uint112 fees,
+        uint144 total,
+        uint256 donations,
+        uint40 timeStamp,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3,
+        uint112 fees2,
+        uint144 total2,
+        uint256 donations2
+    ) public {
+        uint256 start;
+        (start, fees) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
+        vm.assume(fees > 0);
+
+        // 2nd auction too early
+        timeStamp = uint40(_bound(timeStamp, start + SystemConstants.AUCTION_COOLDOWN, type(uint40).max));
+        vm.warp(timeStamp);
+        total2 = uint144(_bound(total2, 0, uint256(type(uint144).max) - total + fees));
+        testFuzz_startAuctionOfBNB(fees2, total2, donations2);
     }
 
     function testFuzz_nonAuctionOfWETH2ndTime(
@@ -723,3 +775,5 @@ contract StakerTest is Test {
         testFuzz_nonAuctionOfWETH(fees2, total2, donations2);
     }
 }
+
+// INVARIANT TEST WITH MULTIPLE TOKENS BEING BID

@@ -17,7 +17,7 @@ contract Staker {
     error NoTokenPrize();
     error NoFees();
     error AuctionIsNotOver();
-    error AuctionIsOver();
+    error NoAuction();
     error BidTooLow();
     error InvalidSigner();
     error PermitDeadlineExpired();
@@ -337,12 +337,12 @@ contract Staker {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function bid(address token) external payable {
+    function bid(address token) external {
         unchecked {
             Auction memory auction = auctions[token];
 
             // Unchecked because time stamps cannot overflow
-            if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
+            if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
 
             // Get the current bid
             uint96 totalBids_ = totalBids;
@@ -375,37 +375,41 @@ contract Staker {
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
     function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
-        // (W)ETH is the dividend paying token, so we do not start an auction for it.
-        if (token != address(_WETH)) {
-            Auction memory auction = auctions[token];
+        unchecked {
+            // (W)ETH is the dividend paying token, so we do not start an auction for it.
+            uint96 totalBids_ = totalBids;
+            if (token != address(_WETH)) {
+                Auction memory auction = auctions[token];
 
-            uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
-            if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
+                uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
+                if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
 
-            // Start a new auction
-            auctions[token] = Auction({
-                bidder: address(0),
-                bid: 0,
-                startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
-                winnerPaid: false
-            });
+                // Start a new auction
+                auctions[token] = Auction({
+                    bidder: address(0),
+                    bid: 0,
+                    startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
+                    winnerPaid: false
+                });
 
-            // Update totalBids
-            totalBids -= auction.bid;
+                // Last bid is converted to dividends
+                totalBids_ -= auction.bid;
+                totalBids = totalBids_;
 
-            // We pay the previous winner if it has not been paid yet
-            _payAuctionWinner(token, auction);
+                // We pay the previous winner if it has not been paid yet
+                _payAuctionWinner(token, auction);
 
-            // Emit event for the new auction
-            emit AuctionStarted(token);
+                // Emit event for the new auction
+                emit AuctionStarted(token);
+            }
+
+            // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
+            collectedFees = vault.withdrawFees(token);
+            if (collectedFees == 0) revert NoFees();
+
+            // Distribute dividends from the previous auction even if paying the previous winner fails
+            _distributeDividends(totalBids_);
         }
-
-        // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-        collectedFees = vault.withdrawFees(token);
-        if (collectedFees == 0) revert NoFees();
-
-        // Distribute dividends from the previous auction even if paying the previous winner fails
-        _distributeDividends();
     }
 
     /// @notice It reverts if the transfer fails and the dividends (WETH) is not distributed, allowing the bidder to try again.
@@ -416,16 +420,20 @@ contract Staker {
         // Update auction
         auctions[token].winnerPaid = true;
 
+        // Last bid is converted to dividends
+        uint96 totalBids_ = totalBids - auction.bid;
+        totalBids = totalBids_;
+
         if (!_payAuctionWinner(token, auction)) revert NoTokenPrize();
 
         // Distribute dividends
-        _distributeDividends();
+        _distributeDividends(totalBids_);
     }
 
-    function _distributeDividends() private {
+    function _distributeDividends(uint96 totalBids_) private {
         unchecked {
             // Any excess WETH in the contract will be distributed.
-            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids;
+            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids_;
 
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
@@ -454,11 +462,13 @@ contract Staker {
     }
 
     /// @dev This function must never revert, instead it returns false.
+    // THIS OPERATION IS NOT HAPPENING HERE: totalBids -= auction.bid;!! THIS IS THE ONLY PLACE WHERE THIS SHOULD HAPPEN
+    // WE UNWRAP THE WETH TO ETH HERE ALWAYS, SO IT SHOULD NEVER FAIL.
     function _payAuctionWinner(address token, Auction memory auction) private returns (bool success) {
         // Bidder already paid
         if (auction.winnerPaid) return false;
 
-        // Only pay if there is a non-0 bid.
+        // Only pay if there is any bid
         if (auction.bid == 0) return false;
 
         /** Obtain reward amount
