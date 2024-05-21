@@ -405,7 +405,9 @@ contract Staker {
 
             // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
             collectedFees = vault.withdrawFees(token);
-            if (collectedFees == 0) revert NoFees();
+
+            // Do not start an auction if there are no fees to collect, unlesss it is WETH
+            if (collectedFees == 0 && token != address(_WETH)) revert NoFees();
 
             // Distribute dividends from the previous auction even if paying the previous winner fails
             _distributeDividends(totalBids_);

@@ -17,7 +17,7 @@ contract StakerTest is Test {
     uint256 constant SLOT_INITIALIZED = 5;
     uint256 constant SLOT_TOKEN_STATES = 8;
 
-    uint256 constant ETH_SUPPLY = 120e6 * 10 ** 18;
+    uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
@@ -325,8 +325,7 @@ contract StakerTest is Test {
         uint80 mintAmount2,
         uint80 stakeAmount2,
         uint96 unclaimedWETH,
-        uint96 unclaimedETH,
-        address randomToken
+        uint96 unclaimedETH
     ) public {
         address account1 = _idToAddress(id1);
         address account2 = _idToAddress(id2);
@@ -366,7 +365,7 @@ contract StakerTest is Test {
             vm.expectEmit();
             emit DividendsPaid(unclaimedWETH + unclaimedETH);
         }
-        staker.collectFeesAndStartAuction(randomToken);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
         // Donations
         if (unclaimedWETH + unclaimedETH == 0 || stakeAmount1 + stakeAmount2 == 0) {
@@ -440,6 +439,11 @@ contract StakerTest is Test {
 
     event Unstaked(address indexed staker, uint256 amount);
 
+    function testFuzz_collectFeesAndStartAuctionNoFees(address token) public {
+        vm.expectRevert(NoFees.selector);
+        staker.collectFeesAndStartAuction(token);
+    }
+
     function testFuzz_unstake(
         uint256 id,
         uint80 totalSupplyAmount,
@@ -447,8 +451,7 @@ contract StakerTest is Test {
         uint80 stakeAmount,
         uint80 unstakeAmount,
         uint96 unclaimedWETH,
-        uint96 unclaimedETH,
-        address randomToken
+        uint96 unclaimedETH
     ) public {
         address account = _idToAddress(id);
 
@@ -467,7 +470,7 @@ contract StakerTest is Test {
         WETH.deposit{value: unclaimedWETH}();
 
         // Trigger a payment of dividends
-        staker.collectFeesAndStartAuction(randomToken);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
         // Check dividends
         console.log("Total dividends are", unclaimedWETH + unclaimedETH);
@@ -543,7 +546,7 @@ contract StakerTest is Test {
         staker.unstake(unstakeAmount);
     }
 
-    function _addTokenFeesToVault(address token, uint112 collectedFees, uint144 total) private {
+    function _incrementFeesVariableInVault(address token, uint112 collectedFees, uint144 total) private {
         // Increase fees in Vault
         uint256 slot = uint256(vm.load(vault, keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES))))));
         collectedFees += uint112(slot);
@@ -568,24 +571,33 @@ contract StakerTest is Test {
 
     error NoFees();
 
-    function testFuzz_nonAuctionOfWETH(uint112 fees, uint144 total, uint256 donations) public returns (uint112) {
-        // Add fees in vault
+    function testFuzz_nonAuctionOfWETH(
+        uint112 fees,
+        uint144 total,
+        uint96 donationsWETH,
+        uint96 donationsETH
+    ) public returns (uint112) {
+        donationsWETH = uint96(_bound(donationsWETH, 0, ETH_SUPPLY));
+        donationsETH = uint96(_bound(donationsETH, 0, ETH_SUPPLY));
+        total = uint144(_bound(total, 0, ETH_SUPPLY));
         fees = uint112(_bound(fees, 0, total));
-        _addTokenFeesToVault(Addresses.ADDR_WETH, fees, total);
+
+        // Add fees in vault
+        _incrementFeesVariableInVault(Addresses.ADDR_WETH, fees, total);
         _dealWETH(vault, total);
 
         // Some1 donated tokens to Staker contract
-        donations = uint112(_bound(fees, 0, type(uint256).max - total));
-        _dealWETH(address(staker), donations);
+        _dealWETH(address(staker), donationsWETH);
+        vm.deal(address(staker), donationsETH);
 
         // Start auction
         if (fees > 0) {
             vm.expectEmit();
             emit Transfer(vault, address(staker), fees);
+        }
+        if (uint256(fees) + donationsWETH + donationsETH > 0) {
             vm.expectEmit();
-            emit DividendsPaid(fees + donations);
-        } else {
-            vm.expectRevert(NoFees.selector);
+            emit DividendsPaid(fees + donationsWETH + donationsETH);
         }
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_WETH), fees);
 
@@ -597,7 +609,7 @@ contract StakerTest is Test {
     function testFuzz_startAuctionOfBNB(uint112 fees, uint144 total, uint256 donations) public returns (uint112) {
         // Add fees in vault
         fees = uint112(_bound(fees, 0, total));
-        _addTokenFeesToVault(Addresses.ADDR_BNB, fees, total);
+        _incrementFeesVariableInVault(Addresses.ADDR_BNB, fees, total);
         deal(Addresses.ADDR_BNB, vault, total);
 
         // Some1 donated tokens to Staker contract
@@ -763,16 +775,18 @@ contract StakerTest is Test {
     function testFuzz_nonAuctionOfWETH2ndTime(
         uint112 fees,
         uint144 total,
-        uint256 donations,
+        uint96 donationsWETH,
+        uint96 donationsETH,
         uint112 fees2,
         uint144 total2,
-        uint256 donations2
+        uint96 donationsWETH2,
+        uint96 donationsETH2
     ) public {
-        fees = testFuzz_nonAuctionOfWETH(fees, total, donations);
+        fees = testFuzz_nonAuctionOfWETH(fees, total, donationsWETH, donationsETH);
 
         // 2nd auction
         total2 = uint144(_bound(total2, 0, uint256(type(uint144).max) - total + fees));
-        testFuzz_nonAuctionOfWETH(fees2, total2, donations2);
+        testFuzz_nonAuctionOfWETH(fees2, total2, donationsWETH2, donationsETH2);
     }
 }
 
