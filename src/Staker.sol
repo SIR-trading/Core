@@ -14,7 +14,7 @@ import "forge-std/console.sol";
  */
 contract Staker {
     error NewAuctionCannotStartYet();
-    error NoTokenPrize();
+    error FailToPayPrize();
     error NoFees();
     error AuctionIsNotOver();
     error NoAuction();
@@ -426,7 +426,7 @@ contract Staker {
         uint96 totalBids_ = totalBids - auction.bid;
         totalBids = totalBids_;
 
-        if (!_payAuctionWinner(token, auction)) revert NoTokenPrize();
+        if (!_payAuctionWinner(token, auction)) revert FailToPayPrize();
 
         // Distribute dividends
         _distributeDividends(totalBids_);
@@ -484,6 +484,7 @@ contract Staker {
 
         // Prize is 0, so the claim is successful but without a transfer
         uint256 tokenAmount = abi.decode(data, (uint256));
+        console.log("BNB amount:", tokenAmount, "with address", token);
         if (tokenAmount == 0) return true;
 
         /** Pay the winner if tokenAmount > 0

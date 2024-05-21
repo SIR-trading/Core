@@ -569,6 +569,13 @@ contract StakerTest is Test {
         WETH.deposit{value: amount}();
     }
 
+    error FailToPayPrize();
+
+    function testFuzz_payAuctionWinnerNoAuction(address token) public {
+        vm.expectRevert(FailToPayPrize.selector);
+        staker.payAuctionWinner(token);
+    }
+
     error NoFees();
 
     function testFuzz_nonAuctionOfWETH(
@@ -604,30 +611,56 @@ contract StakerTest is Test {
         return fees;
     }
 
+    function testFuzz_payAuctionWinnerNotForWETH(
+        uint112 fees,
+        uint144 total,
+        uint96 donationsWETH,
+        uint96 donationsETH
+    ) public {
+        testFuzz_nonAuctionOfWETH(fees, total, donationsWETH, donationsETH);
+        // vm.assume(fees > 0);
+
+        vm.expectRevert(FailToPayPrize.selector);
+        staker.payAuctionWinner(Addresses.ADDR_WETH);
+    }
+
     event AuctionStarted(address indexed token);
 
-    function testFuzz_startAuctionOfBNB(uint112 fees, uint144 total, uint256 donations) public returns (uint112) {
+    function testFuzz_startAuctionOfBNB(
+        uint112 feesBNB,
+        uint144 totalBNB,
+        uint256 donationsBNB
+    ) public returns (uint112, uint256) {
         // Add fees in vault
-        fees = uint112(_bound(fees, 0, total));
-        _incrementFeesVariableInVault(Addresses.ADDR_BNB, fees, total);
-        deal(Addresses.ADDR_BNB, vault, total);
+        feesBNB = uint112(_bound(fees, 0, totalBNB));
+        console.log("Vault: Added fees ", feesBNB, "and total is", totalBNB);
+        _incrementFeesVariableInVault(Addresses.ADDR_BNB, feesBNB, totalBNB);
+        deal(Addresses.ADDR_BNB, vault, totalBNB);
 
         // Some1 donated tokens to Staker contract
-        donations = uint112(_bound(fees, 0, type(uint256).max - total));
-        deal(Addresses.ADDR_BNB, address(staker), donations);
+        donationsBNB = uint112(_bound(feesBNB, 0, type(uint256).max - totalBNB));
+        deal(Addresses.ADDR_BNB, address(staker), donationsBNB);
 
         // Start auction
         vm.expectEmit();
         emit AuctionStarted(Addresses.ADDR_BNB);
-        if (fees > 0) {
+        if (feesBNB > 0) {
             vm.expectEmit();
-            emit Transfer(vault, address(staker), fees);
+            emit Transfer(vault, address(staker), feesBNB);
         } else {
             vm.expectRevert(NoFees.selector);
         }
-        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), fees);
+        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), feesBNB);
 
-        return fees;
+        return (feesBNB, donationsBNB);
+    }
+
+    function testFuzz_payAuctionWinnerNoBids(uint112 feesBNB, uint144 totalBNB, uint256 donationsBNB) public {
+        testFuzz_startAuctionOfBNB(feesBNB, totalBNB, donationsBNB);
+        // vm.assume(fees > 0);
+
+        vm.expectRevert(FailToPayPrize.selector);
+        staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
     struct Bidder {
@@ -648,16 +681,16 @@ contract StakerTest is Test {
     }
 
     function testFuzz_auctionOfBNB(
-        uint112 fees,
-        uint144 total,
-        uint256 donations,
+        uint112 feesBNB,
+        uint144 totalBNB,
+        uint256 donationsBNB,
         Bidder memory bidder1,
         Bidder memory bidder2,
         Bidder memory bidder3
-    ) public returns (uint256 start, uint112 feesNew) {
+    ) public returns (uint256 start, uint112 feesNew, uint256 donationsNew) {
         start = block.timestamp;
 
-        feesNew = testFuzz_startAuctionOfBNB(fees, total, donations);
+        (feesNew, donationsNew) = testFuzz_startAuctionOfBNB(feesBNB, totalBNB, donationsBNB);
         vm.assume(feesNew > 0);
 
         bidder1.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
@@ -667,6 +700,7 @@ contract StakerTest is Test {
         // Bidder 1
         if (bidder1.amount > 0) {
             _dealWETH(address(staker), bidder1.amount);
+            console.log("bidder1 amount is", bidder1.amount);
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder1.id), Addresses.ADDR_BNB, 0, bidder1.amount);
         } else {
@@ -683,6 +717,7 @@ contract StakerTest is Test {
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 // Bidder increases its own bid
+                console.log("bidder1 increments bid by", bidder2.amount);
                 vm.expectEmit();
                 emit BidReceived(
                     _idToAddress(bidder2.id),
@@ -696,6 +731,7 @@ contract StakerTest is Test {
             }
         } else if (bidder2.amount > bidder1.amount) {
             // Bidder2 outbids bidder1
+            console.log("bidder2 amount is", bidder2.amount);
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder2.id), Addresses.ADDR_BNB, bidder1.amount, bidder2.amount);
         } else {
@@ -726,7 +762,41 @@ contract StakerTest is Test {
         staker.bid(Addresses.ADDR_BNB);
     }
 
-    // MAKE TEST THAT CHECKS WHAT HAPPENS AFTER AUCTION IS STARTED AGAIN FOR BNB
+    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
+
+    function testFuzz_payAuctionWinnerBNB(
+        uint112 fees,
+        uint144 total,
+        uint256 donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3
+    ) public {
+        (, fees, donations) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
+        console.log("BNB fees are", fees);
+        console.log("WETH donations are", donations);
+        // vm.assume(fees > 0);
+
+        if (fees == 0 || bidder1.amount + bidder2.amount == 0) {
+            vm.expectRevert(FailToPayPrize.selector);
+        } else {
+            vm.expectEmit();
+            emit AuctionedTokensSentToWinner(
+                bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id),
+                Addresses.ADDR_BNB,
+                fees
+            );
+            vm.expectEmit();
+            emit DividendsPaid(
+                (
+                    _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
+                        ? bidder1.amount + bidder2.amount
+                        : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
+                ) + donations
+            );
+        }
+        staker.payAuctionWinner(Addresses.ADDR_BNB);
+    }
 
     error NewAuctionCannotStartYet();
 
@@ -740,7 +810,7 @@ contract StakerTest is Test {
         Bidder memory bidder2,
         Bidder memory bidder3
     ) public {
-        (uint256 start, ) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
+        (uint256 start, , ) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
 
         // 2nd auction too early
         timeStamp = uint40(_bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1));
@@ -749,27 +819,42 @@ contract StakerTest is Test {
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
     }
 
+    // SOME DONATIONS IN SOME FUNCTIONS ARE NOT WELL SPECIFIED
     function testFuzz_start2ndAuctionOfBNB(
-        uint112 fees,
-        uint144 total,
-        uint256 donations,
+        uint112 feesBNB,
+        uint144 totalBNB,
+        uint256 donationsBNB,
         uint40 timeStamp,
         Bidder memory bidder1,
         Bidder memory bidder2,
         Bidder memory bidder3,
-        uint112 fees2,
-        uint144 total2,
-        uint256 donations2
+        uint96 donationsWETH,
+        uint96 donationsETH,
+        uint112 feesBNB2,
+        uint144 totalBNB2,
+        uint256 donationsBNB2
     ) public {
         uint256 start;
-        (start, fees) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
-        vm.assume(fees > 0);
+        (start, feesBNB, ) = testFuzz_auctionOfBNB(feesBNB, totalBNB, donationsBNB, bidder1, bidder2, bidder3);
+        vm.assume(feesBNB > 0);
+
+        // (W)ETH donations
+        donationsWETH = uint96(_bound(donationsWETH, 0, ETH_SUPPLY));
+        donationsETH = uint96(_bound(donationsETH, 0, ETH_SUPPLY));
+        _incrementFeesVariableInVault(Addresses.ADDR_WETH, fees, total);
+        _dealWETH(vault, total);
+
+        // Some1 donated tokens to Staker contract
+        _dealWETH(address(staker), donationsWETH);
+        vm.deal(address(staker), donationsETH);
 
         // 2nd auction too early
         timeStamp = uint40(_bound(timeStamp, start + SystemConstants.AUCTION_COOLDOWN, type(uint40).max));
         vm.warp(timeStamp);
-        total2 = uint144(_bound(total2, 0, uint256(type(uint144).max) - total + fees));
-        testFuzz_startAuctionOfBNB(fees2, total2, donations2);
+        totalBNB2 = uint144(_bound(totalBNB2, 0, uint256(type(uint144).max) - totalBNB + feesBNB));
+        testFuzz_startAuctionOfBNB(feesBNB2, totalBNB2, donationsBNB2);
+
+        // CHECK WHAT HAPPENS WHEN ALL BIDS ARE 0!!
     }
 
     function testFuzz_nonAuctionOfWETH2ndTime(
@@ -788,6 +873,8 @@ contract StakerTest is Test {
         total2 = uint144(_bound(total2, 0, uint256(type(uint144).max) - total + fees));
         testFuzz_nonAuctionOfWETH(fees2, total2, donationsWETH2, donationsETH2);
     }
+
+    // TESTS ON payAuctionWinner
 }
 
 // INVARIANT TEST WITH MULTIPLE TOKENS BEING BID
