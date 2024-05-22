@@ -449,16 +449,17 @@ contract Staker {
             _WETH.withdraw(excessWETH);
 
             StakingParams memory stakingParams_ = stakingParams;
-            if (stakingParams_.stake > 0) {
-                // Update cumETHPerSIRx80
-                stakingParams.cumETHPerSIRx80 =
-                    stakingParams_.cumETHPerSIRx80 +
-                    uint176((dividends_ << 80) / stakingParams_.stake);
+            if (stakingParams_.stake == 0) return;
 
-                // Update _supply
-                _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
-            }
+            // Update cumETHPerSIRx80
+            stakingParams.cumETHPerSIRx80 =
+                stakingParams_.cumETHPerSIRx80 +
+                uint176((dividends_ << 80) / stakingParams_.stake);
 
+            // Update _supply
+            _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
+
+            // Dividends are considered paid after unclaimedETH is updated
             emit DividendsPaid(dividends_);
         }
     }
