@@ -8,7 +8,7 @@ import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {Vault} from "src/Vault.sol";
 
 contract Initialize1Vault is Script {
-    Vault constant VAULT = Vault(0xCA87833e830652C2ab07E1e03eBa4F2c246D3b58);
+    Vault constant VAULT = Vault(0x9Bb65b12162a51413272d10399282E730822Df44);
 
     function setUp() public {}
 
