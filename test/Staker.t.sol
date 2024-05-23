@@ -689,6 +689,8 @@ contract StakerTest is Test {
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
+    /** FOR BIDS 1 AND 2, MAKE A CONTRACT THAT REVERTS THE TRANSFER IF THE BID FAILS
+     */
     function testFuzz_auctionOfBNB(
         User memory user,
         uint80 totalSupplyAmount,
@@ -763,8 +765,9 @@ contract StakerTest is Test {
             else _assertAuction(Bidder(0, 0), start);
         }
 
-        // Bidder 3 tries to bid after auction is over
+        // Bidder 3 tries to bid after auction is over. It doesn't revert its transfer so it becomes a donation.
         skip(1);
+        console.log("bidder3 amount is", bidder3.amount);
         _dealWETH(address(staker), bidder3.amount);
         vm.prank(_idToAddress(bidder3.id));
         vm.expectRevert(NoAuction.selector);
@@ -782,6 +785,8 @@ contract StakerTest is Test {
     ) public {
         testFuzz_auctionOfBNB(user, totalSupplyAmount, tokenFees, donations, bidder1, bidder2, bidder3);
 
+        console.log("Donations are", donations.donationsWETH, donations.donationsETH);
+        console.log("Staker balance is", user.stakeAmount);
         if (bidder1.amount + bidder2.amount == 0) {
             vm.expectRevert(NoLot.selector);
         } else {
@@ -791,12 +796,16 @@ contract StakerTest is Test {
                 Addresses.ADDR_BNB,
                 tokenFees.fees + tokenFees.donations
             );
-            vm.expectEmit();
-            emit DividendsPaid(
-                _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
-                    ? bidder1.amount + bidder2.amount
-                    : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
-            );
+            if (user.stakeAmount > 0) {
+                vm.expectEmit();
+                emit DividendsPaid(
+                    (
+                        _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
+                            ? bidder1.amount + bidder2.amount
+                            : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
+                    ) + bidder3.amount
+                );
+            }
         }
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }

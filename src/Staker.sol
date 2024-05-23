@@ -450,6 +450,8 @@ contract Staker {
             uint256 excessETH = address(this).balance - unclaimedETH;
 
             // Compute dividends
+            console.log("Excess WETH:", excessWETH, "wei");
+            console.log("Excess ETH:", excessETH, "wei");
             uint256 dividends_ = excessWETH + excessETH;
             if (dividends_ == 0) return true;
 
