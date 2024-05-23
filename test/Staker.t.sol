@@ -560,22 +560,28 @@ contract StakerTest is Test {
         assertEq(collectedFees, collectedFees_, "Wrong token states slot used by vm.store");
     }
 
+    /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
     function _dealWETH(address to, uint256 amount) private {
         vm.deal(to, amount);
         vm.prank(to);
         WETH.deposit{value: amount}();
     }
 
-    error FailToPayPrize();
+    error NoLot();
 
     function testFuzz_payAuctionWinnerNoAuction(address token) public {
-        vm.expectRevert(FailToPayPrize.selector);
+        vm.expectRevert(NoLot.selector);
         staker.payAuctionWinner(token);
     }
 
     error NoFees();
 
-    function testFuzz_nonAuctionOfWETH(TokenFees memory tokenFees, Donations memory donations) public {
+    function testFuzz_nonAuctionOfWETH(
+        TokenFees memory tokenFees,
+        Donations memory donations,
+        User memory user1,
+        uint80 totalSupplyAmount
+    ) public {
         // Set up fees
         tokenFees.donations = 0; // Since token is WETH, tokenFees.donations is redundant with donations.donationsWETH
         _setFees(Addresses.ADDR_WETH, tokenFees);
@@ -583,26 +589,40 @@ contract StakerTest is Test {
         // Set up donations
         _setDonations(donations);
 
-        // Start auction
-        if (tokenFees.fees > 0) {
-            vm.expectEmit();
-            emit Transfer(vault, address(staker), tokenFees.fees);
-            if (donations.donationsWETH + donations.donationsETH > 0) {
-                vm.expectEmit();
-                emit DividendsPaid(tokenFees.fees + donations.donationsWETH + donations.donationsETH);
-            }
-        } else {
+        // Stake
+        testFuzz_stake(user1, totalSupplyAmount);
+
+        bool noFees = uint256(tokenFees.fees) + donations.donationsWETH + donations.donationsETH == 0 ||
+            user1.stakeAmount == 0;
+        if (noFees) {
             vm.expectRevert(NoFees.selector);
+        } else {
+            if (tokenFees.fees > 0) {
+                // Transfer event if there are WETH fees
+                vm.expectEmit();
+                emit Transfer(vault, address(staker), tokenFees.fees);
+            }
+            // DividendsPaid event if there are any WETH fees or (W)ETH donations
+            vm.expectEmit();
+            emit DividendsPaid(uint256(tokenFees.fees) + donations.donationsWETH + donations.donationsETH);
         }
-        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_WETH), tokenFees.fees);
+
+        // Pay WETH fees and donations
+        uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        if (!noFees) assertEq(fees, tokenFees.fees);
     }
 
-    function testFuzz_payAuctionWinnerTooLate(TokenFees memory tokenFees, Donations memory donations) public {
-        testFuzz_nonAuctionOfWETH(tokenFees, donations);
+    function testFuzz_payAuctionWinnerTooLate(
+        TokenFees memory tokenFees,
+        Donations memory donations,
+        User memory user1,
+        uint80 totalSupplyAmount
+    ) public {
+        testFuzz_nonAuctionOfWETH(tokenFees, donations, user1, totalSupplyAmount);
         vm.assume(tokenFees.fees > 0);
 
         // Reverts because prize has already been paid
-        vm.expectRevert(FailToPayPrize.selector);
+        vm.expectRevert(NoLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_WETH);
     }
 
@@ -624,11 +644,13 @@ contract StakerTest is Test {
         if (token == Addresses.ADDR_WETH) tokenFees.total = uint144(_bound(tokenFees.total, 0, ETH_SUPPLY));
         tokenFees.fees = uint112(_bound(tokenFees.fees, 0, tokenFees.total));
         _incrementFeesVariableInVault(token, tokenFees.fees, tokenFees.total);
-        deal(token, vault, tokenFees.total);
+        if (token == Addresses.ADDR_WETH) _dealWETH(vault, tokenFees.total);
+        else deal(token, vault, tokenFees.total);
 
         // Donated tokens to Staker contract
         tokenFees.donations = _bound(tokenFees.donations, 0, type(uint256).max - tokenFees.total);
-        deal(token, address(staker), tokenFees.donations);
+        if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenFees.donations);
+        else deal(token, address(staker), tokenFees.donations);
     }
 
     function _setDonations(Donations memory donations) private {
@@ -688,7 +710,7 @@ contract StakerTest is Test {
         vm.assume(tokenFees.fees > 0);
 
         skip(SystemConstants.AUCTION_DURATION - 1);
-        vm.expectRevert(FailToPayPrize.selector);
+        vm.expectRevert(NoLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
@@ -702,7 +724,7 @@ contract StakerTest is Test {
         vm.assume(tokenFees.fees > 0);
 
         skip(SystemConstants.AUCTION_DURATION);
-        vm.expectRevert(FailToPayPrize.selector);
+        vm.expectRevert(NoLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
@@ -821,7 +843,7 @@ contract StakerTest is Test {
     //     // vm.assume(fees > 0);
 
     //     if (fees == 0 || bidder1.amount + bidder2.amount == 0) {
-    //         vm.expectRevert(FailToPayPrize.selector);
+    //         vm.expectRevert(NoLot.selector);
     //     } else {
     //         vm.expectEmit();
     //         emit AuctionedTokensSentToWinner(

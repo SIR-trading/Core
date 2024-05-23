@@ -14,7 +14,7 @@ import "forge-std/console.sol";
  */
 contract Staker {
     error NewAuctionCannotStartYet();
-    error FailToPayPrize();
+    error NoLot();
     error NoFees();
     error AuctionIsNotOver();
     error NoAuction();
@@ -406,11 +406,19 @@ contract Staker {
             // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
             collectedFees = vault.withdrawFees(token);
 
-            // Do not start an auction if there are no fees to collect, unlesss it is WETH
+            /** For non-WETH tokens, do not start an auction if there are no fees to collect, unlesss it is WETH
+                For WETH, we distribute the fees immediately as dividends.
+             */
             if (collectedFees == 0 && token != address(_WETH)) revert NoFees();
 
             // Distribute dividends from the previous auction even if paying the previous winner fails
-            _distributeDividends(totalBids_);
+            bool noDividends = _distributeDividends(totalBids_);
+
+            /** For non-WETH tokens, it is possible it was a non-sale auction, but we don't want to revert because want to be able to start a new auction.
+                For WETH, there are no auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
+                    No dividends => no fees.
+             */
+            if (noDividends && token == address(_WETH)) revert NoFees();
         }
     }
 
@@ -426,13 +434,13 @@ contract Staker {
         uint96 totalBids_ = totalBids - auction.bid;
         totalBids = totalBids_;
 
-        if (!_payAuctionWinner(token, auction)) revert FailToPayPrize();
+        if (!_payAuctionWinner(token, auction)) revert NoLot();
 
-        // Distribute dividends
+        // Distribute dividends.
         _distributeDividends(totalBids_);
     }
 
-    function _distributeDividends(uint96 totalBids_) private {
+    function _distributeDividends(uint96 totalBids_) private returns (bool noDividends) {
         unchecked {
             // Any excess WETH in the contract will be distributed.
             uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids_;
@@ -443,13 +451,13 @@ contract Staker {
 
             // Compute dividends
             uint256 dividends_ = excessWETH + excessETH;
-            if (dividends_ == 0) return;
+            if (dividends_ == 0) return true;
 
             // Unwrap WETH dividends to ETH
             _WETH.withdraw(excessWETH);
 
             StakingParams memory stakingParams_ = stakingParams;
-            if (stakingParams_.stake == 0) return;
+            if (stakingParams_.stake == 0) return true;
 
             // Update cumETHPerSIRx80
             stakingParams.cumETHPerSIRx80 =
