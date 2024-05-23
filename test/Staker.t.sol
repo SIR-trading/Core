@@ -789,17 +789,13 @@ contract StakerTest is Test {
             emit AuctionedTokensSentToWinner(
                 bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id),
                 Addresses.ADDR_BNB,
-                tokenFees.fees
+                tokenFees.fees + tokenFees.donations
             );
             vm.expectEmit();
             emit DividendsPaid(
-                (
-                    _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
-                        ? bidder1.amount + bidder2.amount
-                        : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
-                ) +
-                    donations.donationsWETH +
-                    donations.donationsETH
+                _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
+                    ? bidder1.amount + bidder2.amount
+                    : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
             );
         }
         staker.payAuctionWinner(Addresses.ADDR_BNB);

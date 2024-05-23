@@ -473,13 +473,12 @@ contract Staker {
     }
 
     /// @dev This function must never revert, instead it returns false.
-    // THIS OPERATION IS NOT HAPPENING HERE: totalBids -= auction.bid;!! THIS IS THE ONLY PLACE WHERE THIS SHOULD HAPPEN
-    // WE UNWRAP THE WETH TO ETH HERE ALWAYS, SO IT SHOULD NEVER FAIL.
     function _payAuctionWinner(address token, Auction memory auction) private returns (bool success) {
         // Bidder already paid
         if (auction.winnerPaid) return false;
 
         // Only pay if there is any bid
+        console.log("Highest bid:", auction.bid, "wei");
         if (auction.bid == 0) return false;
 
         /** Obtain reward amount
@@ -494,6 +493,7 @@ contract Staker {
         // Prize is 0, so the claim is successful but without a transfer
         uint256 tokenAmount = abi.decode(data, (uint256));
         console.log("BNB amount:", tokenAmount, "with address", token);
+        console.log("Prize:", tokenAmount, "BNB");
         if (tokenAmount == 0) return true;
 
         /** Pay the winner if tokenAmount > 0
@@ -507,5 +507,6 @@ contract Staker {
         if (data.length > 0 && !abi.decode(data, (bool))) return false;
 
         emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
+        return true;
     }
 }
