@@ -15,7 +15,7 @@ gas_reports = ["Vault","Oracle"]
 
 [rpc_endpoints]
 mainnet = "https://mainnet.infura.io/v3/${RPC_MAINNET}"
-tarp_testnet = "https://docker-anvil-production-aa2c.up.railway.app/"
+tarp_testnet = "https://docker-anvil-production-8d23.up.railway.app/"
 
 [invariant]
 fail_on_revert = true   # Fail the test if the contract reverts

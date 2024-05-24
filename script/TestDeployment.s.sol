@@ -9,7 +9,7 @@ import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {Vault} from "src/Vault.sol";
 
 contract Initialize1Vault is Script {
-    Vault constant VAULT = Vault(0x9Bb65b12162a51413272d10399282E730822Df44);
+    Vault constant VAULT = Vault(0x2f321ed425c82E74925488139e1556f9B76a2551);
 
     function setUp() public {}
 
@@ -18,13 +18,17 @@ contract Initialize1Vault is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         console.log("Vault bytecode length:", address(VAULT).code.length);
-        console.log("Number of vaults: ", VAULT.numberOfVaults());
 
-        // // Check 1st vault
-        // (address debtToken, address collateralToken, int8 leverageTier) = VAULT.paramsById(0);
-        // console.log("debtToken: ", debtToken);
-        // console.log("collateralToken: ", collateralToken);
-        // console.log("leverageTier: ", vm.toString(leverageTier));
+        uint256 Nvaults = VAULT.numberOfVaults();
+        console.log("Number of vaults: ", Nvaults);
+
+        // Check 1st vault
+        for (uint256 i = 1; i <= Nvaults; i++) {
+            (address debtToken, address collateralToken, int8 leverageTier) = VAULT.paramsById(i);
+            console.log("debtToken: ", debtToken);
+            console.log("collateralToken: ", collateralToken);
+            console.log("leverageTier: ", vm.toString(leverageTier));
+        }
 
         vm.stopBroadcast();
     }
