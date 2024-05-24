@@ -240,6 +240,8 @@ contract StakerTest is Test {
         staker.transferFrom(bob, alice, transferAmount);
     }
 
+    // MISSING MORE ERC20 TESTS!!!!!!!!!!!!
+
     /////////////////////////////////////////////////////////
     /////////////////// STAKING // TESTS ///////////////////
     ///////////////////////////////////////////////////////
@@ -682,6 +684,41 @@ contract StakerTest is Test {
         console.log("Staker ETH balance is", address(staker).balance);
     }
 
+    function testFuzz_auctionOfWETHFails(
+        User memory user,
+        uint80 totalSupplyAmount,
+        TokenFees memory tokenFees,
+        Donations memory donations
+    ) public {
+        // User stakes
+        testFuzz_stake(user, totalSupplyAmount);
+        vm.assume(user.stakeAmount > 0);
+
+        // Set up fees
+        tokenFees.donations = 0; // Since token is WETH, tokenFees.donations is redundant with donations.donationsWETH
+        _setFees(Addresses.ADDR_WETH, tokenFees);
+        vm.assume(tokenFees.fees + donations.donationsWETH + donations.donationsETH > 0);
+
+        // Set up donations
+        _setDonations(donations);
+
+        // Start auction?
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+
+        // No auction
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_WETH);
+
+        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_WETH);
+        assertEq(bidder, address(0), "Bidder should be 0");
+        assertEq(bid, 0, "Bid should be 0");
+        assertEq(startTime, 0, "Start time should be 0");
+        assertEq(winnerPaid, false, "Winner should not be paid");
+
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_WETH);
+    }
+
     function testFuzz_startAuctionOfBNBNoFees(
         User memory user,
         uint80 totalSupplyAmount,
@@ -880,23 +917,6 @@ contract StakerTest is Test {
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
     }
 
-    // function testFuzz_nonAuctionOfWETH2ndTime(
-    //     uint112 fees,
-    //     uint144 total,
-    //     uint96 donationsWETH,
-    //     uint96 donationsETH,
-    //     uint112 fees2,
-    //     uint144 total2,
-    //     uint96 donationsWETH2,
-    //     uint96 donationsETH2
-    // ) public {
-    // fees = testFuzz_nonAuctionOfWETH(fees, total, donationsWETH, donationsETH);
-
-    // // 2nd auction
-    // total2 = uint144(_bound(total2, 0, uint256(type(uint144).max) - total + fees));
-    // testFuzz_nonAuctionOfWETH(fees2, total2, donationsWETH2, donationsETH2);
-    // }
-
     // TESTS ON payAuctionWinner
 
     ////////////////////////////////////////////////////////////////////////
@@ -945,11 +965,8 @@ contract StakerTest is Test {
 
         // Donated tokens to Staker contract
         tokenFees.donations = _bound(tokenFees.donations, 0, type(uint256).max - tokenFees.total);
-        console.log("here");
-        console.log(token, address(staker), tokenFees.donations);
         if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenFees.donations);
         else _dealToken(token, address(staker), tokenFees.donations);
-        console.log("there");
     }
 
     function _setDonations(Donations memory donations) private {

@@ -380,8 +380,6 @@ contract Staker {
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
     function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
         unchecked {
-            console.log("----------------- COLLECT FEES -----------------");
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalBids_ = totalBids;
             if (token != address(_WETH)) {
@@ -425,7 +423,6 @@ contract Staker {
                     No dividends => no fees.
              */
             if (noDividends && token == address(_WETH)) revert NoFeesCollectedYet();
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
         }
     }
 
@@ -454,8 +451,8 @@ contract Staker {
 
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", unclaimedETH);
             uint256 excessETH = address(this).balance - unclaimedETH;
+            console.log("excessWETH", excessWETH, ", excessETH", excessETH);
 
             // Compute dividends
             uint256 dividends_ = excessWETH + excessETH;
