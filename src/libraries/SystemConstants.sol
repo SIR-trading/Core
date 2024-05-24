@@ -7,7 +7,7 @@ library SystemConstants {
     /** SIR Token Issuance Rate
         If we want to issue 2,015,000,000 SIR per year, this implies an issuance rate of 63.9 SIR/s.
      */
-    uint72 internal constant ISSUANCE = uint72(2015000000 * 10 ** SIR_DECIMALS) / 365 days; // [sir/s]
+    uint72 internal constant ISSUANCE = uint72(2015e6 * 10 ** SIR_DECIMALS - 1) / 365 days + 1; // [sir/s]
 
     // During the first 3 years, 20% of the emissions are diverged to contributors.
     uint72 internal constant ISSUANCE_FIRST_3_YEARS = (ISSUANCE * 8) / 10;

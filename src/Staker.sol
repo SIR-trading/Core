@@ -5,20 +5,27 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 
+import "forge-std/console.sol";
+
 /** @notice Solmate mod
-    @dev SIR balance is designed to fit in a 80-bit unsigned integer.
-    @dev ETH balance is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
-    @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current balance. 
+    @dev SIR supply is designed to fit in a 80-bit unsigned integer.
+    @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
+    @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current supply. 
  */
-contract ERC20Staker {
+contract Staker {
     error NewAuctionCannotStartYet();
-    error TokensAlreadyClaimed();
+    error NoLot();
+    error NoFees();
     error AuctionIsNotOver();
-    error AuctionIsOver();
+    error NoAuction();
     error BidTooLow();
-    error NoDividends();
     error InvalidSigner();
     error PermitDeadlineExpired();
+
+    event AuctionStarted(address indexed token);
+    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
+    event DividendsPaid(uint256 amountETH);
+    event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -75,6 +82,9 @@ contract ERC20Staker {
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
     }
 
+    /// @dev Necessary so the contract can unwrap WETH to ETH
+    receive() external payable {}
+
     function initialize(address vault_) external {
         require(!_initialized && msg.sender == deployer);
 
@@ -87,27 +97,27 @@ contract ERC20Staker {
                             CUSTOM ERC20 LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    // Return transferable SIR
+    // Return transferable (unstaked) SIR
     function balanceOf(address account) external view returns (uint256) {
         return balances[account].balanceOfSIR;
     }
 
-    // Return staked SIR + transferable SIR
+    // Return staked SIR + transferable (unstaked) SIR
     function totalBalanceOf(address account) external view returns (uint256) {
         return stakersParams[account].stake + balances[account].balanceOfSIR;
     }
 
-    // Return transferable SIR
+    // Return transferable SIR only
     function supply() external view returns (uint256) {
         return _supply.balanceOfSIR;
     }
 
-    // Return staked SIR + transferable SIR
+    // Return staked SIR + transferable (unstaked) SIR
     function totalSupply() external view returns (uint256) {
         return stakingParams.stake + _supply.balanceOfSIR;
     }
 
-    // Return supply if all tokens were in circulation (unminted from LPers and contributors, staked, and unstaked)
+    // Return supply if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
     function maxTotalSupply() external view returns (uint256) {
         (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
@@ -285,10 +295,10 @@ contract ERC20Staker {
         }
     }
 
-    function claim() external {
+    function claim() external returns (uint96 dividends_) {
         unchecked {
             StakingParams memory stakingParams_ = stakingParams;
-            uint96 dividends_ = _dividends(balances[msg.sender], stakingParams_, stakersParams[msg.sender]);
+            dividends_ = _dividends(balances[msg.sender], stakingParams_, stakersParams[msg.sender]);
 
             // Null the unclaimed dividends
             balances[msg.sender].unclaimedETH = 0;
@@ -327,60 +337,96 @@ contract ERC20Staker {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function bid(address token) external payable {
-        Auction memory auction = auctions[token];
-
-        if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsOver();
-
-        // Get the current bid
-        uint96 totalBids_ = totalBids;
-        uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
-
-        // If the bidder is the current winner, we just increase the bid
-        if (msg.sender == auction.bidder) {
-            auctions[token].bid += newBid;
-            totalBids = totalBids_ + newBid - auction.bid;
-            return;
-        }
-
-        // If the bidder is not the current winner, we check if the bid is higher
-        if (newBid <= auction.bid) revert BidTooLow();
-
-        // Update bidder & bid
-        auctions[token] = Auction({bidder: msg.sender, bid: newBid, startTime: auction.startTime, winnerPaid: false});
-
-        // Return the previous bid
-        _WETH.transfer(auction.bidder, auction.bid);
-    }
-
-    function collectFeesAndStartAuction(address token) external {
-        // (W)ETH is the dividend paying token, so we do not start an auction for it.
-        if (token != address(_WETH)) {
+    function bid(address token) external {
+        unchecked {
+            console.log("----------------- BID -----------------");
             Auction memory auction = auctions[token];
 
-            if (block.timestamp < auction.startTime + SystemConstants.AUCTION_COOLDOWN)
-                revert NewAuctionCannotStartYet();
+            // Unchecked because time stamps cannot overflow
+            if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
 
-            // Start a new auction
+            // Get the current bid
+            uint96 totalBids_ = totalBids;
+            uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
+
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+            if (msg.sender == auction.bidder) {
+                // If the bidder is the current winner, we just increase the bid
+                totalBids = totalBids_ + newBid;
+                newBid += auction.bid;
+            } else {
+                // Return the previous bid to the previous bidder
+                totalBids = totalBids_ + newBid - auction.bid;
+                _WETH.transfer(auction.bidder, auction.bid);
+            }
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+
+            // If the bidder is not the current winner, we check if the bid is higher
+            if (newBid <= auction.bid) revert BidTooLow();
+
+            // Update bidder & bid
             auctions[token] = Auction({
-                bidder: address(0),
-                bid: 0,
-                startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
+                bidder: msg.sender,
+                bid: newBid,
+                startTime: auction.startTime,
                 winnerPaid: false
             });
 
-            // Update totalBids
-            totalBids -= auction.bid;
-
-            // We pay the previous winner if it has not been paid yet
-            _payAuctionWinner(token, auction);
+            emit BidReceived(msg.sender, token, auction.bid, newBid);
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
         }
+    }
 
-        // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-        vault.withdrawFees(token);
+    /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
+    function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
+        unchecked {
+            console.log("----------------- COLLECT FEES -----------------");
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+            // (W)ETH is the dividend paying token, so we do not start an auction for it.
+            uint96 totalBids_ = totalBids;
+            if (token != address(_WETH)) {
+                Auction memory auction = auctions[token];
 
-        // Distribute dividends from the previous auction even if paying the previous winner fails
-        _distributeDividends();
+                uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
+                if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
+
+                // Start a new auction
+                auctions[token] = Auction({
+                    bidder: address(0),
+                    bid: 0,
+                    startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
+                    winnerPaid: false
+                });
+
+                // Last bid is converted to dividends
+                totalBids_ -= auction.bid;
+                totalBids = totalBids_;
+
+                // We pay the previous winner if it has not been paid yet
+                _payAuctionWinner(token, auction);
+
+                // Emit event for the new auction
+                emit AuctionStarted(token);
+            }
+
+            // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
+            collectedFees = vault.withdrawFees(token);
+
+            /** For non-WETH tokens, do not start an auction if there are no fees to collect, unlesss it is WETH
+                For WETH, we distribute the fees immediately as dividends.
+             */
+            if (collectedFees == 0 && token != address(_WETH)) revert NoFees();
+
+            // Distribute dividends from the previous auction even if paying the previous winner fails
+            bool noDividends = _distributeDividends(totalBids_);
+
+            /** For non-WETH tokens, it is possible it was a non-sale auction, but we don't want to revert because want to be able to start a new auction.
+                For WETH, there are no auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
+                    No dividends => no fees.
+             */
+            if (noDividends && token == address(_WETH)) revert NoFees();
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+        }
     }
 
     /// @notice It reverts if the transfer fails and the dividends (WETH) is not distributed, allowing the bidder to try again.
@@ -391,38 +437,46 @@ contract ERC20Staker {
         // Update auction
         auctions[token].winnerPaid = true;
 
-        if (!_payAuctionWinner(token, auction)) revert TokensAlreadyClaimed();
+        // Last bid is converted to dividends
+        uint96 totalBids_ = totalBids - auction.bid;
+        totalBids = totalBids_;
 
-        // Distribute dividends
-        _distributeDividends();
+        if (!_payAuctionWinner(token, auction)) revert NoLot();
+
+        // Distribute dividends.
+        _distributeDividends(totalBids_);
     }
 
-    function _distributeDividends() private {
+    function _distributeDividends(uint96 totalBids_) private returns (bool noDividends) {
         unchecked {
             // Any excess WETH in the contract will be distributed.
-            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids;
+            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids_;
 
-            // Any excess ETH from when stake was 0
+            // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", unclaimedETH);
             uint256 excessETH = address(this).balance - unclaimedETH;
 
             // Compute dividends
             uint256 dividends_ = excessWETH + excessETH;
-            if (dividends_ == 0) revert NoDividends();
+            if (dividends_ == 0) return true;
 
             // Unwrap WETH dividends to ETH
             _WETH.withdraw(excessWETH);
 
             StakingParams memory stakingParams_ = stakingParams;
-            if (stakingParams_.stake > 0) {
-                // Update cumETHPerSIRx80
-                stakingParams.cumETHPerSIRx80 =
-                    stakingParams_.cumETHPerSIRx80 +
-                    uint176((dividends_ << 80) / stakingParams_.stake);
+            if (stakingParams_.stake == 0) return true;
 
-                // Update _supply
-                _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
-            }
+            // Update cumETHPerSIRx80
+            stakingParams.cumETHPerSIRx80 =
+                stakingParams_.cumETHPerSIRx80 +
+                uint176((dividends_ << 80) / stakingParams_.stake);
+
+            // Update _supply
+            _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
+
+            // Dividends are considered paid after unclaimedETH is updated
+            emit DividendsPaid(dividends_);
         }
     }
 
@@ -431,7 +485,7 @@ contract ERC20Staker {
         // Bidder already paid
         if (auction.winnerPaid) return false;
 
-        // Only pay if there is a non-0 bid.
+        // Only pay if there is any bid
         if (auction.bid == 0) return false;
 
         /** Obtain reward amount
@@ -456,5 +510,10 @@ contract ERC20Staker {
             but if it returns a boolean that is false, the transfer actually failed.
          */
         if (data.length > 0 && !abi.decode(data, (bool))) return false;
+
+        emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
+        return true;
     }
+
+    // DO NOT JUST TEST BNB BUT ALSO OTHER TOKENS
 }

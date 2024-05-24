@@ -4,13 +4,13 @@ pragma solidity ^0.8.0;
 // Contracts
 import {Vault} from "./Vault.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
-import {ERC20Staker} from "./ERC20Staker.sol";
+import {Staker} from "./Staker.sol";
 
 // Contracts
-contract SIR is ERC20Staker {
+contract SIR is Staker {
     mapping(address => uint40) internal tsLastMint;
 
-    constructor(address weth) ERC20Staker(weth) {}
+    constructor(address weth) Staker(weth) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
