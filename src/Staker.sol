@@ -339,6 +339,7 @@ contract Staker {
 
     function bid(address token) external {
         unchecked {
+            console.log("----------------- BID -----------------");
             Auction memory auction = auctions[token];
 
             // Unchecked because time stamps cannot overflow
@@ -348,6 +349,7 @@ contract Staker {
             uint96 totalBids_ = totalBids;
             uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
 
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
                 totalBids = totalBids_ + newBid;
@@ -357,6 +359,7 @@ contract Staker {
                 totalBids = totalBids_ + newBid - auction.bid;
                 _WETH.transfer(auction.bidder, auction.bid);
             }
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
 
             // If the bidder is not the current winner, we check if the bid is higher
             if (newBid <= auction.bid) revert BidTooLow();
@@ -370,12 +373,15 @@ contract Staker {
             });
 
             emit BidReceived(msg.sender, token, auction.bid, newBid);
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
         }
     }
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
     function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
         unchecked {
+            console.log("----------------- COLLECT FEES -----------------");
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalBids_ = totalBids;
             if (token != address(_WETH)) {
@@ -419,6 +425,7 @@ contract Staker {
                     No dividends => no fees.
              */
             if (noDividends && token == address(_WETH)) revert NoFees();
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
         }
     }
 
@@ -447,11 +454,10 @@ contract Staker {
 
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
+            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", unclaimedETH);
             uint256 excessETH = address(this).balance - unclaimedETH;
 
             // Compute dividends
-            console.log("Excess WETH:", excessWETH, "wei");
-            console.log("Excess ETH:", excessETH, "wei");
             uint256 dividends_ = excessWETH + excessETH;
             if (dividends_ == 0) return true;
 
@@ -480,7 +486,6 @@ contract Staker {
         if (auction.winnerPaid) return false;
 
         // Only pay if there is any bid
-        console.log("Highest bid:", auction.bid, "wei");
         if (auction.bid == 0) return false;
 
         /** Obtain reward amount
@@ -494,8 +499,6 @@ contract Staker {
 
         // Prize is 0, so the claim is successful but without a transfer
         uint256 tokenAmount = abi.decode(data, (uint256));
-        console.log("BNB amount:", tokenAmount, "with address", token);
-        console.log("Prize:", tokenAmount, "BNB");
         if (tokenAmount == 0) return true;
 
         /** Pay the winner if tokenAmount > 0
@@ -511,4 +514,6 @@ contract Staker {
         emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
         return true;
     }
+
+    // DO NOT JUST TEST BNB BUT ALSO OTHER TOKENS
 }

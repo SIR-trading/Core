@@ -8,6 +8,7 @@ import {Vault} from "src/Vault.sol";
 import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
+import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
 contract StakerTest is Test {
     error NoFees();
@@ -520,6 +521,7 @@ contract StakerTest is Test {
         address account = _idToAddress(user.id);
 
         // Stakes
+        user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
         testFuzz_stake(user, totalSupplyAmount);
         unstakeAmount = uint80(_bound(unstakeAmount, user.stakeAmount + 1, type(uint80).max));
 
@@ -595,6 +597,44 @@ contract StakerTest is Test {
         if (!noFees) assertEq(fees, tokenFees.fees);
     }
 
+    function testFuzz_nonAuctionOfWETH2ndTime(
+        TokenFees memory tokenFees,
+        Donations memory donations,
+        User memory user,
+        uint80 totalSupplyAmount,
+        uint40 timeSkip,
+        TokenFees memory tokenFees2,
+        Donations memory donations2
+    ) public {
+        testFuzz_nonAuctionOfWETH(tokenFees, donations, user, totalSupplyAmount);
+
+        // Set up fees
+        tokenFees2.donations = 0; // Since token is WETH, tokenFees.donations is redundant with donations.donationsWETH
+        _setFees(Addresses.ADDR_WETH, tokenFees2);
+
+        // Set up donations
+        _setDonations(donations2);
+
+        // 2nd auction
+        skip(timeSkip);
+        bool noFees = uint256(tokenFees2.fees) + donations2.donationsWETH + donations2.donationsETH == 0 ||
+            user.stakeAmount == 0;
+        if (noFees) {
+            vm.expectRevert(NoFees.selector);
+        } else {
+            if (tokenFees2.fees > 0) {
+                // Transfer event if there are WETH fees
+                vm.expectEmit();
+                emit Transfer(vault, address(staker), tokenFees2.fees);
+            }
+            // DividendsPaid event if there are any WETH fees or (W)ETH donations
+            vm.expectEmit();
+            emit DividendsPaid(uint256(tokenFees2.fees) + donations2.donationsWETH + donations2.donationsETH);
+        }
+        uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        if (!noFees) assertEq(fees, tokenFees2.fees);
+    }
+
     function testFuzz_auctionWinnerAlreadyPaid(
         TokenFees memory tokenFees,
         Donations memory donations,
@@ -637,7 +677,9 @@ contract StakerTest is Test {
             vm.expectEmit();
             emit DividendsPaid(donations.donationsETH + donations.donationsWETH);
         }
+        console.log("Staker ETH balance is", address(staker).balance);
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenFees.fees);
+        console.log("Staker ETH balance is", address(staker).balance);
     }
 
     function testFuzz_startAuctionOfBNBNoFees(
@@ -689,8 +731,6 @@ contract StakerTest is Test {
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
-    /** FOR BIDS 1 AND 2, MAKE A CONTRACT THAT REVERTS THE TRANSFER IF THE BID FAILS
-     */
     function testFuzz_auctionOfBNB(
         User memory user,
         uint80 totalSupplyAmount,
@@ -699,8 +739,8 @@ contract StakerTest is Test {
         Bidder memory bidder1,
         Bidder memory bidder2,
         Bidder memory bidder3
-    ) public {
-        uint256 start = block.timestamp;
+    ) public returns (uint256 start) {
+        start = block.timestamp;
 
         testFuzz_startAuctionOfBNB(user, totalSupplyAmount, tokenFees, donations);
 
@@ -710,21 +750,24 @@ contract StakerTest is Test {
 
         // Bidder 1
         if (bidder1.amount > 0) {
-            _dealWETH(address(staker), bidder1.amount);
+            // _dealWETH(address(staker), bidder1.amount);
             console.log("bidder1 amount is", bidder1.amount);
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder1.id), Addresses.ADDR_BNB, 0, bidder1.amount);
         } else {
             vm.expectRevert(BidTooLow.selector);
         }
-        vm.prank(_idToAddress(bidder1.id));
-        staker.bid(Addresses.ADDR_BNB);
+        console.log("Staker ETH balance is", address(staker).balance);
+        new DepositAndMint(staker, Addresses.ADDR_BNB, _idToAddress(bidder1.id), bidder1.amount);
+        console.log("Staker ETH balance is", address(staker).balance);
+        // vm.prank(_idToAddress(bidder1.id));
+        // staker.bid(Addresses.ADDR_BNB);
         if (bidder1.amount > 0) _assertAuction(bidder1, start);
         else _assertAuction(Bidder(0, 0), start);
 
         // Bidder 2
         skip(SystemConstants.AUCTION_DURATION - 1);
-        _dealWETH(address(staker), bidder2.amount);
+        // _dealWETH(address(staker), bidder2.amount);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 // Bidder increases its own bid
@@ -749,8 +792,10 @@ contract StakerTest is Test {
             // Bidder2 fails to outbid bidder1
             vm.expectRevert(BidTooLow.selector);
         }
-        vm.prank(_idToAddress(bidder2.id));
-        staker.bid(Addresses.ADDR_BNB);
+        new DepositAndMint(staker, Addresses.ADDR_BNB, _idToAddress(bidder2.id), bidder2.amount);
+        console.log("Staker ETH balance is", address(staker).balance);
+        // vm.prank(_idToAddress(bidder2.id));
+        // staker.bid(Addresses.ADDR_BNB);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);
@@ -783,10 +828,12 @@ contract StakerTest is Test {
         Bidder memory bidder2,
         Bidder memory bidder3
     ) public {
+        console.log("Staker ETH balance is", address(staker).balance);
         testFuzz_auctionOfBNB(user, totalSupplyAmount, tokenFees, donations, bidder1, bidder2, bidder3);
 
         console.log("Donations are", donations.donationsWETH, donations.donationsETH);
         console.log("Staker balance is", user.stakeAmount);
+        console.log("Staker ETH balance is", address(staker).balance);
         if (bidder1.amount + bidder2.amount == 0) {
             vm.expectRevert(NoLot.selector);
         } else {
@@ -798,6 +845,8 @@ contract StakerTest is Test {
             );
             if (user.stakeAmount > 0) {
                 vm.expectEmit();
+                console.log(_idToAddress(bidder1.id), _idToAddress(bidder2.id));
+                console.log(bidder1.amount, bidder2.amount, bidder3.amount);
                 emit DividendsPaid(
                     (
                         _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
@@ -807,65 +856,29 @@ contract StakerTest is Test {
                 );
             }
         }
+        console.log("Staker ETH balance is", address(staker).balance);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
+        console.log("Staker ETH balance is", address(staker).balance);
     }
 
-    // // APPLY THIS TEST AFTER THE AUCTION TEST
-    // function testFuzz_startAuctionOfBNBTooEarly(
-    //     uint112 fees,
-    //     uint144 total,
-    //     uint256 donations,
-    //     uint40 timeStamp,
-    //     Bidder memory bidder1,
-    //     Bidder memory bidder2,
-    //     Bidder memory bidder3
-    // ) public {
-    //     (uint256 start, , ) = testFuzz_auctionOfBNB(fees, total, donations, bidder1, bidder2, bidder3);
+    function testFuzz_start2ndAuctionOfBNBTooEarly(
+        User memory user,
+        uint80 totalSupplyAmount,
+        TokenFees memory tokenFees,
+        Donations memory donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3,
+        uint256 timeStamp
+    ) public {
+        uint256 start = testFuzz_auctionOfBNB(user, totalSupplyAmount, tokenFees, donations, bidder1, bidder2, bidder3);
 
-    //     // 2nd auction too early
-    //     timeStamp = uint40(_bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1));
-    //     vm.warp(timeStamp);
-    //     vm.expectRevert(NewAuctionCannotStartYet.selector);
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
-    // }
-
-    // // SOME DONATIONS IN SOME FUNCTIONS ARE NOT WELL SPECIFIED
-    // function testFuzz_start2ndAuctionOfBNB(
-    //     uint112 feesBNB,
-    //     uint144 totalBNB,
-    //     uint256 donationsBNB,
-    //     uint40 timeStamp,
-    //     Bidder memory bidder1,
-    //     Bidder memory bidder2,
-    //     Bidder memory bidder3,
-    //     uint96 donationsWETH,
-    //     uint96 donationsETH,
-    //     uint112 feesBNB2,
-    //     uint144 totalBNB2,
-    //     uint256 donationsBNB2
-    // ) public {
-    //     uint256 start;
-    //     (start, feesBNB, ) = testFuzz_auctionOfBNB(feesBNB, totalBNB, donationsBNB, bidder1, bidder2, bidder3);
-    //     vm.assume(feesBNB > 0);
-
-    //     // (W)ETH donations
-    //     donationsWETH = uint96(_bound(donationsWETH, 0, ETH_SUPPLY));
-    //     donationsETH = uint96(_bound(donationsETH, 0, ETH_SUPPLY));
-    //     _incrementFeesVariableInVault(Addresses.ADDR_WETH, fees, total);
-    //     _dealWETH(vault, total);
-
-    //     // Some1 donated tokens to Staker contract
-    //     _dealWETH(address(staker), donationsWETH);
-    //     vm.deal(address(staker), donationsETH);
-
-    //     // 2nd auction too early
-    //     timeStamp = uint40(_bound(timeStamp, start + SystemConstants.AUCTION_COOLDOWN, type(uint40).max));
-    //     vm.warp(timeStamp);
-    //     totalBNB2 = uint144(_bound(totalBNB2, 0, uint256(type(uint144).max) - totalBNB + feesBNB));
-    //     testFuzz_startAuctionOfBNB(feesBNB2, totalBNB2, donationsBNB2);
-
-    //     // CHECK WHAT HAPPENS WHEN ALL BIDS ARE 0!!
-    // }
+        // 2nd auction too early
+        timeStamp = _bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1);
+        vm.warp(timeStamp);
+        vm.expectRevert(NewAuctionCannotStartYet.selector);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
+    }
 
     // function testFuzz_nonAuctionOfWETH2ndTime(
     //     uint112 fees,
@@ -928,12 +941,15 @@ contract StakerTest is Test {
         tokenFees.fees = uint112(_bound(tokenFees.fees, 0, tokenFees.total));
         _incrementFeesVariableInVault(token, tokenFees.fees, tokenFees.total);
         if (token == Addresses.ADDR_WETH) _dealWETH(vault, tokenFees.total);
-        else deal(token, vault, tokenFees.total);
+        else _dealToken(token, vault, tokenFees.total);
 
         // Donated tokens to Staker contract
         tokenFees.donations = _bound(tokenFees.donations, 0, type(uint256).max - tokenFees.total);
+        console.log("here");
+        console.log(token, address(staker), tokenFees.donations);
         if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenFees.donations);
-        else deal(token, address(staker), tokenFees.donations);
+        else _dealToken(token, address(staker), tokenFees.donations);
+        console.log("there");
     }
 
     function _setDonations(Donations memory donations) private {
@@ -942,7 +958,7 @@ contract StakerTest is Test {
 
         // Donated (W)ETH to Staker contract
         _dealWETH(address(staker), donations.donationsWETH);
-        vm.deal(address(staker), donations.donationsETH);
+        _dealETH(address(staker), donations.donationsETH);
     }
 
     function _incrementFeesVariableInVault(address token, uint112 collectedFees, uint144 total) private {
@@ -964,9 +980,25 @@ contract StakerTest is Test {
 
     /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
     function _dealWETH(address to, uint256 amount) private {
-        vm.deal(to, amount);
-        vm.prank(to);
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
         WETH.deposit{value: amount}();
+        vm.prank(vm.addr(2));
+        WETH.transfer(address(to), amount);
+    }
+
+    function _dealETH(address to, uint256 amount) private {
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        payable(address(to)).transfer(amount);
+    }
+
+    function _dealToken(address token, address to, uint256 amount) private {
+        if (amount == 0) return;
+        deal(token, vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        IERC20(token).approve(address(this), amount);
+        IERC20(token).transferFrom(vm.addr(2), to, amount); // I used transferFrom instead of transfer because of the weird BNB non-standard quirks
     }
 
     function _assertAuction(Bidder memory bidder_, uint256 timeStamp) private {
@@ -975,6 +1007,21 @@ contract StakerTest is Test {
         assertEq(bid, bidder_.amount, "Wrong bid");
         assertEq(startTime, timeStamp, "Wrong start time");
         assertTrue(!winnerPaid, "Winner should not have been paid yet");
+    }
+}
+
+// This contract atomically combines a deposit of WETH and a bid for an auction
+contract DepositAndMint is Test {
+    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+
+    constructor(Staker staker, address token, address depositer, uint96 amount) {
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        WETH.deposit{value: amount}();
+        vm.prank(vm.addr(2));
+        WETH.transfer(address(staker), amount);
+        vm.prank(depositer);
+        staker.bid(token);
     }
 }
 
