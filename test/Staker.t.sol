@@ -11,8 +11,8 @@ import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
 contract StakerTest is Test {
-    error NoFees();
-    error NoLot();
+    error NoFeesCollectedYet();
+    error NoAuctionLot();
     error AuctionIsNotOver();
     error BidTooLow();
     error NoAuction();
@@ -341,7 +341,7 @@ contract StakerTest is Test {
             vm.expectEmit();
             emit DividendsPaid(donations.donationsWETH + donations.donationsETH);
         } else {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -428,7 +428,7 @@ contract StakerTest is Test {
     }
 
     function testFuzz_collectFeesAndStartAuctionNoFees(address token) public {
-        vm.expectRevert(NoFees.selector);
+        vm.expectRevert(NoFeesCollectedYet.selector);
         staker.collectFeesAndStartAuction(token);
     }
 
@@ -453,7 +453,7 @@ contract StakerTest is Test {
             vm.expectEmit();
             emit DividendsPaid(donations.donationsWETH + donations.donationsETH);
         } else {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -557,7 +557,7 @@ contract StakerTest is Test {
     ///////////////////////////////////////////////////////
 
     function testFuzz_payAuctionWinnerNoAuction(address token) public {
-        vm.expectRevert(NoLot.selector);
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(token);
     }
 
@@ -580,7 +580,7 @@ contract StakerTest is Test {
         bool noFees = uint256(tokenFees.fees) + donations.donationsWETH + donations.donationsETH == 0 ||
             user.stakeAmount == 0;
         if (noFees) {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         } else {
             if (tokenFees.fees > 0) {
                 // Transfer event if there are WETH fees
@@ -620,7 +620,7 @@ contract StakerTest is Test {
         bool noFees = uint256(tokenFees2.fees) + donations2.donationsWETH + donations2.donationsETH == 0 ||
             user.stakeAmount == 0;
         if (noFees) {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         } else {
             if (tokenFees2.fees > 0) {
                 // Transfer event if there are WETH fees
@@ -645,10 +645,10 @@ contract StakerTest is Test {
         vm.assume(tokenFees.fees > 0);
 
         // Reverts because prize has already been paid
-        vm.expectRevert(NoLot.selector);
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_WETH);
 
-        vm.expectRevert(NoFees.selector);
+        vm.expectRevert(NoFeesCollectedYet.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
     }
 
@@ -699,7 +699,7 @@ contract StakerTest is Test {
         _setDonations(donations);
 
         // Start auction
-        vm.expectRevert(NoFees.selector);
+        vm.expectRevert(NoFeesCollectedYet.selector);
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenFees.fees);
     }
 
@@ -727,7 +727,7 @@ contract StakerTest is Test {
         vm.assume(tokenFees.fees > 0);
 
         skip(SystemConstants.AUCTION_DURATION);
-        vm.expectRevert(NoLot.selector);
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
@@ -835,7 +835,7 @@ contract StakerTest is Test {
         console.log("Staker balance is", user.stakeAmount);
         console.log("Staker ETH balance is", address(staker).balance);
         if (bidder1.amount + bidder2.amount == 0) {
-            vm.expectRevert(NoLot.selector);
+            vm.expectRevert(NoAuctionLot.selector);
         } else {
             vm.expectEmit();
             emit AuctionedTokensSentToWinner(
