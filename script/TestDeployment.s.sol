@@ -8,8 +8,8 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {Vault} from "src/Vault.sol";
 
-contract Initialize1Vault is Script {
-    Vault constant VAULT = Vault(0x2f321ed425c82E74925488139e1556f9B76a2551);
+contract TestCore is Script {
+    Vault constant VAULT = Vault(0x41219a0a9C0b86ED81933c788a6B63Dfef8f17eE);
 
     function setUp() public {}
 
@@ -24,6 +24,7 @@ contract Initialize1Vault is Script {
 
         // Check 1st vault
         for (uint256 i = 1; i <= Nvaults; i++) {
+            console.log("------ Vault ID: ", i, " ------");
             (address debtToken, address collateralToken, int8 leverageTier) = VAULT.paramsById(i);
             console.log("debtToken: ", debtToken);
             console.log("collateralToken: ", collateralToken);
