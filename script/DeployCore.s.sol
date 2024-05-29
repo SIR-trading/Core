@@ -8,6 +8,7 @@ import {Oracle} from "src/Oracle.sol";
 import {SystemControl} from "src/SystemControl.sol";
 import {SIR} from "src/SIR.sol";
 import {Vault} from "src/Vault.sol";
+import {APE} from "src/APE.sol";
 
 contract DeployCore is Script {
     function setUp() public {}
@@ -47,6 +48,9 @@ contract DeployCore is Script {
         // Initialize SystemControl
         SystemControl(systemControl).initialize(vault, sir);
         console.log("SystemControl initialized.");
+
+        console.log("Hash of APE's contract creation code:");
+        console.logBytes32(keccak256(type(APE).creationCode));
 
         vm.stopBroadcast();
     }
