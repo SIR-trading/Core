@@ -511,6 +511,4 @@ contract Staker {
         emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
         return true;
     }
-
-    // DO NOT JUST TEST BNB BUT ALSO OTHER TOKENS
 }
