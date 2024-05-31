@@ -14,8 +14,8 @@ import "forge-std/console.sol";
  */
 contract Staker {
     error NewAuctionCannotStartYet();
-    error NoLot();
-    error NoFees();
+    error NoAuctionLot();
+    error NoFeesCollectedYet();
     error AuctionIsNotOver();
     error NoAuction();
     error BidTooLow();
@@ -380,8 +380,6 @@ contract Staker {
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
     function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
         unchecked {
-            console.log("----------------- COLLECT FEES -----------------");
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalBids_ = totalBids;
             if (token != address(_WETH)) {
@@ -415,7 +413,7 @@ contract Staker {
             /** For non-WETH tokens, do not start an auction if there are no fees to collect, unlesss it is WETH
                 For WETH, we distribute the fees immediately as dividends.
              */
-            if (collectedFees == 0 && token != address(_WETH)) revert NoFees();
+            if (collectedFees == 0 && token != address(_WETH)) revert NoFeesCollectedYet();
 
             // Distribute dividends from the previous auction even if paying the previous winner fails
             bool noDividends = _distributeDividends(totalBids_);
@@ -424,8 +422,7 @@ contract Staker {
                 For WETH, there are no auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
                     No dividends => no fees.
              */
-            if (noDividends && token == address(_WETH)) revert NoFees();
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+            if (noDividends && token == address(_WETH)) revert NoFeesCollectedYet();
         }
     }
 
@@ -441,7 +438,7 @@ contract Staker {
         uint96 totalBids_ = totalBids - auction.bid;
         totalBids = totalBids_;
 
-        if (!_payAuctionWinner(token, auction)) revert NoLot();
+        if (!_payAuctionWinner(token, auction)) revert NoAuctionLot();
 
         // Distribute dividends.
         _distributeDividends(totalBids_);
@@ -454,8 +451,8 @@ contract Staker {
 
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", unclaimedETH);
             uint256 excessETH = address(this).balance - unclaimedETH;
+            console.log("excessWETH", excessWETH, ", excessETH", excessETH);
 
             // Compute dividends
             uint256 dividends_ = excessWETH + excessETH;
@@ -514,6 +511,4 @@ contract Staker {
         emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
         return true;
     }
-
-    // DO NOT JUST TEST BNB BUT ALSO OTHER TOKENS
 }

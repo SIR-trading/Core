@@ -10,31 +10,7 @@ import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 
-contract StakerTest is Test {
-    error NoFees();
-    error NoLot();
-    error AuctionIsNotOver();
-    error BidTooLow();
-    error NoAuction();
-    error NewAuctionCannotStartYet();
-
-    uint256 constant SLOT_STAKING_PARAMS = 3;
-    uint256 constant SLOT_SUPPLY = 4;
-    uint256 constant SLOT_BALANCES = 7;
-    uint256 constant SLOT_STAKERS_PARAMS = 3;
-    uint256 constant SLOT_INITIALIZED = 5;
-    uint256 constant SLOT_TOKEN_STATES = 8;
-
-    uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
-
-    event Transfer(address indexed from, address indexed to, uint256 amount);
-    event Staked(address indexed staker, uint256 amount);
-    event DividendsPaid(uint256 amount);
-    event Unstaked(address indexed staker, uint256 amount);
-    event AuctionStarted(address indexed token);
-    event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
-    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
-
+contract Auxiliary is Test {
     struct Bidder {
         uint256 id;
         uint96 amount;
@@ -51,16 +27,160 @@ contract StakerTest is Test {
         uint96 donationsWETH;
     }
 
+    uint256 constant SLOT_STAKING_PARAMS = 3;
+    uint256 constant SLOT_SUPPLY = 4;
+    uint256 constant SLOT_BALANCES = 7;
+    uint256 constant SLOT_STAKERS_PARAMS = 3;
+    uint256 constant SLOT_INITIALIZED = 5;
+    uint256 constant SLOT_TOKEN_STATES = 8;
+
+    uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
+
+    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+
+    Staker public staker;
+    address public vault;
+
+    /// @dev Auxiliary function for minting SIR tokens
+    function _mint(address account, uint80 amount) internal {
+        // Increase supply
+        uint256 slot = uint256(vm.load(address(staker), bytes32(uint256(SLOT_SUPPLY))));
+        uint80 balanceOfSIR = uint80(slot) + amount;
+        slot >>= 80;
+        uint96 unclaimedETH = uint96(slot);
+        vm.store(
+            address(staker),
+            bytes32(uint256(SLOT_SUPPLY)),
+            bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
+        );
+        assertEq(staker.supply(), balanceOfSIR, "Wrong supply slot used by vm.store");
+
+        // Increase balance
+        slot = uint256(vm.load(address(staker), keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES))))));
+        balanceOfSIR = uint80(slot) + amount;
+        slot >>= 80;
+        unclaimedETH = uint96(slot);
+        vm.store(
+            address(staker),
+            keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES)))),
+            bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
+        );
+        assertEq(staker.balanceOf(account), balanceOfSIR, "Wrong balance slot used by vm.store");
+    }
+
+    function _idToAddress(uint256 id) internal pure returns (address) {
+        id = _bound(id, 1, 3);
+        return payable(vm.addr(id));
+    }
+
+    function _setFees(address token, TokenFees memory tokenFees) internal {
+        // Add fees in vault
+        if (token == Addresses.ADDR_WETH) tokenFees.total = uint144(_bound(tokenFees.total, 0, ETH_SUPPLY));
+        tokenFees.fees = uint112(_bound(tokenFees.fees, 0, tokenFees.total));
+        _incrementFeesVariableInVault(token, tokenFees.fees, tokenFees.total);
+        if (token == Addresses.ADDR_WETH) _dealWETH(vault, tokenFees.total);
+        else _dealToken(token, vault, tokenFees.total);
+
+        // Donated tokens to Staker contract
+        tokenFees.donations = _bound(tokenFees.donations, 0, type(uint256).max - tokenFees.total);
+        if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenFees.donations);
+        else _dealToken(token, address(staker), tokenFees.donations);
+    }
+
+    function _setDonations(Donations memory donations) internal {
+        donations.donationsWETH = uint96(_bound(donations.donationsWETH, 0, ETH_SUPPLY));
+        donations.donationsETH = uint96(_bound(donations.donationsETH, 0, ETH_SUPPLY));
+
+        // Donated (W)ETH to Staker contract
+        _dealWETH(address(staker), donations.donationsWETH);
+        _dealETH(address(staker), donations.donationsETH);
+    }
+
+    function _incrementFeesVariableInVault(address token, uint112 collectedFees, uint144 total) internal {
+        // Increase fees in Vault
+        uint256 slot = uint256(vm.load(vault, keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES))))));
+        collectedFees += uint112(slot);
+        slot >>= 112;
+        total += uint144(slot);
+        assert(total >= collectedFees);
+        vm.store(
+            vault,
+            keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
+            bytes32(abi.encodePacked(total, collectedFees))
+        );
+
+        (uint112 collectedFees_, ) = Vault(vault).tokenStates(token);
+        assertEq(collectedFees, collectedFees_, "Wrong token states slot used by vm.store");
+    }
+
+    /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
+    function _dealWETH(address to, uint256 amount) internal {
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        WETH.deposit{value: amount}();
+        vm.prank(vm.addr(2));
+        WETH.transfer(address(to), amount);
+    }
+
+    function _dealETH(address to, uint256 amount) internal {
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        payable(address(to)).transfer(amount);
+    }
+
+    function _dealToken(address token, address to, uint256 amount) internal {
+        if (amount == 0) return;
+        deal(token, vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        IERC20(token).approve(address(this), amount);
+        IERC20(token).transferFrom(vm.addr(2), to, amount); // I used transferFrom instead of transfer because of the weird BNB non-standard quirks
+    }
+
+    function _assertAuction(Bidder memory bidder_, uint256 timeStamp) internal {
+        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_BNB);
+        assertEq(bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
+        assertEq(bid, bidder_.amount, "Wrong bid");
+        assertEq(startTime, timeStamp, "Wrong start time");
+        assertTrue(!winnerPaid, "Winner should not have been paid yet");
+    }
+}
+
+// This contract atomically combines a deposit of WETH and a bid for an auction
+contract DepositAndBid is Test {
+    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+
+    constructor(Staker staker, address token, address depositer, uint96 amount) {
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        WETH.deposit{value: amount}();
+        vm.prank(vm.addr(2));
+        WETH.transfer(address(staker), amount);
+        vm.prank(depositer);
+        staker.bid(token);
+    }
+}
+
+contract StakerTest is Auxiliary {
+    error NoFeesCollectedYet();
+    error NoAuctionLot();
+    error AuctionIsNotOver();
+    error BidTooLow();
+    error NoAuction();
+    error NewAuctionCannotStartYet();
+
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Staked(address indexed staker, uint256 amount);
+    event DividendsPaid(uint256 amount);
+    event Unstaked(address indexed staker, uint256 amount);
+    event AuctionStarted(address indexed token);
+    event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
+    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
+
     struct User {
         uint256 id;
         uint80 mintAmount;
         uint80 stakeAmount;
     }
-
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
-
-    Staker staker;
-    address vault;
 
     address alice;
     address bob;
@@ -341,7 +461,7 @@ contract StakerTest is Test {
             vm.expectEmit();
             emit DividendsPaid(donations.donationsWETH + donations.donationsETH);
         } else {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -428,7 +548,7 @@ contract StakerTest is Test {
     }
 
     function testFuzz_collectFeesAndStartAuctionNoFees(address token) public {
-        vm.expectRevert(NoFees.selector);
+        vm.expectRevert(NoFeesCollectedYet.selector);
         staker.collectFeesAndStartAuction(token);
     }
 
@@ -453,7 +573,7 @@ contract StakerTest is Test {
             vm.expectEmit();
             emit DividendsPaid(donations.donationsWETH + donations.donationsETH);
         } else {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -557,7 +677,7 @@ contract StakerTest is Test {
     ///////////////////////////////////////////////////////
 
     function testFuzz_payAuctionWinnerNoAuction(address token) public {
-        vm.expectRevert(NoLot.selector);
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(token);
     }
 
@@ -580,7 +700,7 @@ contract StakerTest is Test {
         bool noFees = uint256(tokenFees.fees) + donations.donationsWETH + donations.donationsETH == 0 ||
             user.stakeAmount == 0;
         if (noFees) {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         } else {
             if (tokenFees.fees > 0) {
                 // Transfer event if there are WETH fees
@@ -620,7 +740,7 @@ contract StakerTest is Test {
         bool noFees = uint256(tokenFees2.fees) + donations2.donationsWETH + donations2.donationsETH == 0 ||
             user.stakeAmount == 0;
         if (noFees) {
-            vm.expectRevert(NoFees.selector);
+            vm.expectRevert(NoFeesCollectedYet.selector);
         } else {
             if (tokenFees2.fees > 0) {
                 // Transfer event if there are WETH fees
@@ -645,10 +765,10 @@ contract StakerTest is Test {
         vm.assume(tokenFees.fees > 0);
 
         // Reverts because prize has already been paid
-        vm.expectRevert(NoLot.selector);
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_WETH);
 
-        vm.expectRevert(NoFees.selector);
+        vm.expectRevert(NoFeesCollectedYet.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
     }
 
@@ -682,6 +802,41 @@ contract StakerTest is Test {
         console.log("Staker ETH balance is", address(staker).balance);
     }
 
+    function testFuzz_auctionOfWETHFails(
+        User memory user,
+        uint80 totalSupplyAmount,
+        TokenFees memory tokenFees,
+        Donations memory donations
+    ) public {
+        // User stakes
+        testFuzz_stake(user, totalSupplyAmount);
+        vm.assume(user.stakeAmount > 0);
+
+        // Set up fees
+        tokenFees.donations = 0; // Since token is WETH, tokenFees.donations is redundant with donations.donationsWETH
+        _setFees(Addresses.ADDR_WETH, tokenFees);
+        vm.assume(tokenFees.fees + donations.donationsWETH + donations.donationsETH > 0);
+
+        // Set up donations
+        _setDonations(donations);
+
+        // Start auction?
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+
+        // No auction
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_WETH);
+
+        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_WETH);
+        assertEq(bidder, address(0), "Bidder should be 0");
+        assertEq(bid, 0, "Bid should be 0");
+        assertEq(startTime, 0, "Start time should be 0");
+        assertEq(winnerPaid, false, "Winner should not be paid");
+
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_WETH);
+    }
+
     function testFuzz_startAuctionOfBNBNoFees(
         User memory user,
         uint80 totalSupplyAmount,
@@ -699,7 +854,7 @@ contract StakerTest is Test {
         _setDonations(donations);
 
         // Start auction
-        vm.expectRevert(NoFees.selector);
+        vm.expectRevert(NoFeesCollectedYet.selector);
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenFees.fees);
     }
 
@@ -727,7 +882,7 @@ contract StakerTest is Test {
         vm.assume(tokenFees.fees > 0);
 
         skip(SystemConstants.AUCTION_DURATION);
-        vm.expectRevert(NoLot.selector);
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 
@@ -758,7 +913,7 @@ contract StakerTest is Test {
             vm.expectRevert(BidTooLow.selector);
         }
         console.log("Staker ETH balance is", address(staker).balance);
-        new DepositAndMint(staker, Addresses.ADDR_BNB, _idToAddress(bidder1.id), bidder1.amount);
+        new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder1.id), bidder1.amount);
         console.log("Staker ETH balance is", address(staker).balance);
         // vm.prank(_idToAddress(bidder1.id));
         // staker.bid(Addresses.ADDR_BNB);
@@ -792,7 +947,7 @@ contract StakerTest is Test {
             // Bidder2 fails to outbid bidder1
             vm.expectRevert(BidTooLow.selector);
         }
-        new DepositAndMint(staker, Addresses.ADDR_BNB, _idToAddress(bidder2.id), bidder2.amount);
+        new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder2.id), bidder2.amount);
         console.log("Staker ETH balance is", address(staker).balance);
         // vm.prank(_idToAddress(bidder2.id));
         // staker.bid(Addresses.ADDR_BNB);
@@ -835,7 +990,7 @@ contract StakerTest is Test {
         console.log("Staker balance is", user.stakeAmount);
         console.log("Staker ETH balance is", address(staker).balance);
         if (bidder1.amount + bidder2.amount == 0) {
-            vm.expectRevert(NoLot.selector);
+            vm.expectRevert(NoAuctionLot.selector);
         } else {
             vm.expectEmit();
             emit AuctionedTokensSentToWinner(
@@ -861,6 +1016,20 @@ contract StakerTest is Test {
         console.log("Staker ETH balance is", address(staker).balance);
     }
 
+    function testFuzz_payAuctionWinnerWETH(
+        User memory user,
+        uint80 totalSupplyAmount,
+        TokenFees memory tokenFees,
+        Donations memory donations
+    ) public {
+        testFuzz_auctionOfWETHFails(user, totalSupplyAmount, tokenFees, donations);
+
+        skip(SystemConstants.AUCTION_DURATION + 1);
+
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.payAuctionWinner(Addresses.ADDR_BNB);
+    }
+
     function testFuzz_start2ndAuctionOfBNBTooEarly(
         User memory user,
         uint80 totalSupplyAmount,
@@ -879,150 +1048,183 @@ contract StakerTest is Test {
         vm.expectRevert(NewAuctionCannotStartYet.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
     }
-
-    // function testFuzz_nonAuctionOfWETH2ndTime(
-    //     uint112 fees,
-    //     uint144 total,
-    //     uint96 donationsWETH,
-    //     uint96 donationsETH,
-    //     uint112 fees2,
-    //     uint144 total2,
-    //     uint96 donationsWETH2,
-    //     uint96 donationsETH2
-    // ) public {
-    // fees = testFuzz_nonAuctionOfWETH(fees, total, donationsWETH, donationsETH);
-
-    // // 2nd auction
-    // total2 = uint144(_bound(total2, 0, uint256(type(uint144).max) - total + fees));
-    // testFuzz_nonAuctionOfWETH(fees2, total2, donationsWETH2, donationsETH2);
-    // }
-
-    // TESTS ON payAuctionWinner
-
-    ////////////////////////////////////////////////////////////////////////
-    /////////////// P R I V A T E ////// F U N C T I O N S ////////////////
-    //////////////////////////////////////////////////////////////////////
-
-    /// @dev Auxiliary function for minting APE tokens
-    function _mint(address account, uint80 amount) private {
-        // Increase supply
-        uint256 slot = uint256(vm.load(address(staker), bytes32(uint256(SLOT_SUPPLY))));
-        uint80 balanceOfSIR = uint80(slot) + amount;
-        slot >>= 80;
-        uint96 unclaimedETH = uint96(slot);
-        vm.store(
-            address(staker),
-            bytes32(uint256(SLOT_SUPPLY)),
-            bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
-        );
-        assertEq(staker.supply(), balanceOfSIR, "Wrong supply slot used by vm.store");
-
-        // Increase balance
-        slot = uint256(vm.load(address(staker), keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES))))));
-        balanceOfSIR = uint80(slot) + amount;
-        slot >>= 80;
-        unclaimedETH = uint96(slot);
-        vm.store(
-            address(staker),
-            keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES)))),
-            bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
-        );
-        assertEq(staker.balanceOf(account), balanceOfSIR, "Wrong balance slot used by vm.store");
-    }
-
-    function _idToAddress(uint256 id) private pure returns (address) {
-        id = _bound(id, 1, 3);
-        return payable(vm.addr(id));
-    }
-
-    function _setFees(address token, TokenFees memory tokenFees) private {
-        // Add fees in vault
-        if (token == Addresses.ADDR_WETH) tokenFees.total = uint144(_bound(tokenFees.total, 0, ETH_SUPPLY));
-        tokenFees.fees = uint112(_bound(tokenFees.fees, 0, tokenFees.total));
-        _incrementFeesVariableInVault(token, tokenFees.fees, tokenFees.total);
-        if (token == Addresses.ADDR_WETH) _dealWETH(vault, tokenFees.total);
-        else _dealToken(token, vault, tokenFees.total);
-
-        // Donated tokens to Staker contract
-        tokenFees.donations = _bound(tokenFees.donations, 0, type(uint256).max - tokenFees.total);
-        console.log("here");
-        console.log(token, address(staker), tokenFees.donations);
-        if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenFees.donations);
-        else _dealToken(token, address(staker), tokenFees.donations);
-        console.log("there");
-    }
-
-    function _setDonations(Donations memory donations) private {
-        donations.donationsWETH = uint96(_bound(donations.donationsWETH, 0, ETH_SUPPLY));
-        donations.donationsETH = uint96(_bound(donations.donationsETH, 0, ETH_SUPPLY));
-
-        // Donated (W)ETH to Staker contract
-        _dealWETH(address(staker), donations.donationsWETH);
-        _dealETH(address(staker), donations.donationsETH);
-    }
-
-    function _incrementFeesVariableInVault(address token, uint112 collectedFees, uint144 total) private {
-        // Increase fees in Vault
-        uint256 slot = uint256(vm.load(vault, keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES))))));
-        collectedFees += uint112(slot);
-        slot >>= 112;
-        total += uint144(slot);
-        assert(total >= collectedFees);
-        vm.store(
-            vault,
-            keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
-            bytes32(abi.encodePacked(total, collectedFees))
-        );
-
-        (uint112 collectedFees_, ) = Vault(vault).tokenStates(token);
-        assertEq(collectedFees, collectedFees_, "Wrong token states slot used by vm.store");
-    }
-
-    /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
-    function _dealWETH(address to, uint256 amount) private {
-        vm.deal(vm.addr(2), amount);
-        vm.prank(vm.addr(2));
-        WETH.deposit{value: amount}();
-        vm.prank(vm.addr(2));
-        WETH.transfer(address(to), amount);
-    }
-
-    function _dealETH(address to, uint256 amount) private {
-        vm.deal(vm.addr(2), amount);
-        vm.prank(vm.addr(2));
-        payable(address(to)).transfer(amount);
-    }
-
-    function _dealToken(address token, address to, uint256 amount) private {
-        if (amount == 0) return;
-        deal(token, vm.addr(2), amount);
-        vm.prank(vm.addr(2));
-        IERC20(token).approve(address(this), amount);
-        IERC20(token).transferFrom(vm.addr(2), to, amount); // I used transferFrom instead of transfer because of the weird BNB non-standard quirks
-    }
-
-    function _assertAuction(Bidder memory bidder_, uint256 timeStamp) private {
-        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_BNB);
-        assertEq(bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
-        assertEq(bid, bidder_.amount, "Wrong bid");
-        assertEq(startTime, timeStamp, "Wrong start time");
-        assertTrue(!winnerPaid, "Winner should not have been paid yet");
-    }
-}
-
-// This contract atomically combines a deposit of WETH and a bid for an auction
-contract DepositAndMint is Test {
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
-
-    constructor(Staker staker, address token, address depositer, uint96 amount) {
-        vm.deal(vm.addr(2), amount);
-        vm.prank(vm.addr(2));
-        WETH.deposit{value: amount}();
-        vm.prank(vm.addr(2));
-        WETH.transfer(address(staker), amount);
-        vm.prank(depositer);
-        staker.bid(token);
-    }
 }
 
 // INVARIANT TEST WITH MULTIPLE TOKENS BEING BID
+
+contract StakerHandler is Auxiliary {
+    address constant COLLATERAL1 = Addresses.ADDR_WETH;
+    address constant COLLATERAL2 = Addresses.ADDR_BNB;
+
+    address public user1 = _idToAddress(1);
+    address public user2 = _idToAddress(2);
+    address public user3 = _idToAddress(3);
+
+    uint256 public currentTime;
+
+    constructor() {
+        vm.writeFile("./InvariantStaker.log", "");
+        currentTime = 1694616791;
+
+        staker = new Staker(Addresses.ADDR_WETH);
+
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12)));
+        staker.initialize(vault);
+    }
+
+    modifier advanceTime(uint256 timeSkip) {
+        timeSkip = _bound(timeSkip, 0, 10 hours);
+        currentTime += timeSkip;
+        vm.warp(currentTime);
+        _;
+    }
+
+    function stake(uint256 timeSkip, uint256 userId, uint80 amount) external advanceTime(timeSkip) {
+        address user = _idToAddress(userId);
+
+        // SIR cannot exceed type(uint80).max
+        uint80 balanceOfUser = uint80(staker.balanceOf(user));
+        amount = uint80(_bound(amount, 0, type(uint80).max - staker.totalSupply() + balanceOfUser));
+        vm.writeLine(
+            "./InvariantStaker.log",
+            string.concat("User ", vm.toString(user), " stakes ", vm.toString(amount), " SIR")
+        );
+
+        // Mint SIR
+        if (amount > balanceOfUser) _mint(user, amount - balanceOfUser);
+
+        // Stake SIR
+        vm.prank(user);
+        staker.stake(amount);
+    }
+
+    function unstake(uint256 timeSkip, uint256 userId, uint80 amount) external advanceTime(timeSkip) {
+        address user = _idToAddress(userId);
+
+        // Cannot unstake more than what is staked
+        uint256 stakeBalanceOfUser = staker.totalBalanceOf(user) - staker.balanceOf(user);
+        amount = uint80(_bound(amount, 0, stakeBalanceOfUser));
+        vm.writeLine(
+            "./InvariantStaker.log",
+            string.concat("User ", vm.toString(user), " UNstakes ", vm.toString(amount), " SIR")
+        );
+
+        // Unstake SIR
+        vm.prank(user);
+        staker.unstake(amount);
+    }
+
+    function claim(uint256 timeSkip, uint256 userId) external advanceTime(timeSkip) {
+        address user = _idToAddress(userId);
+
+        // Claim dividends
+        vm.prank(user);
+        uint96 dividends = staker.claim();
+
+        vm.writeLine(
+            "./InvariantStaker.log",
+            string.concat("User ", vm.toString(user), " claims ", vm.toString(dividends), " ETH")
+        );
+    }
+
+    function bid(
+        uint256 timeSkip,
+        uint256 userId,
+        bool collateralSelect,
+        uint96 amount
+    ) external advanceTime(timeSkip) {
+        address user = _idToAddress(userId);
+        address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
+
+        // Bid
+        amount = uint96(_bound(amount, 0, ETH_SUPPLY));
+        vm.writeLine(
+            "./InvariantStaker.log",
+            string.concat(
+                "User ",
+                vm.toString(user),
+                " bids ",
+                vm.toString(collateral),
+                " collateral with ",
+                vm.toString(amount),
+                " ETH"
+            )
+        );
+        new DepositAndBid(staker, collateral, user, amount);
+    }
+
+    function collectFeesAndStartAuction(
+        uint256 timeSkip,
+        TokenFees memory tokenFees,
+        bool collateralSelect
+    ) external advanceTime(timeSkip) {
+        address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
+        vm.writeLine(
+            "./InvariantStaker.log",
+            string.concat("Collects fees for ", vm.toString(collateral), " and starts auction")
+        );
+
+        // Set fees in vault
+        _setFees(collateral, tokenFees);
+
+        // Collect fees and start auction
+        staker.collectFeesAndStartAuction(collateral);
+    }
+
+    function payAuctionWinner(uint256 timeSkip, bool collateralSelect) external advanceTime(timeSkip) {
+        address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
+        vm.writeLine("./InvariantStaker.log", string.concat("Pays winner of ", vm.toString(collateral), " auction"));
+
+        // Pay auction winner
+        staker.payAuctionWinner(collateral);
+    }
+
+    function donate(uint256 timeSkip, Donations memory donations) external advanceTime(timeSkip) {
+        // Set donations in vault
+        _setDonations(donations);
+
+        vm.writeLine(
+            "./InvariantStaker.log",
+            string.concat(
+                "Donations: ",
+                vm.toString(donations.donationsETH),
+                " ETH and ",
+                vm.toString(donations.donationsWETH),
+                " WETH"
+            )
+        );
+    }
+}
+
+contract StakerInvariantTest is Test {
+    StakerHandler stakerHandler;
+    Staker staker;
+
+    function setUp() external {
+        vm.createSelectFork("mainnet", 18128102);
+
+        stakerHandler = new StakerHandler();
+        staker = Staker(stakerHandler.staker());
+
+        bytes4[] memory selectors = new bytes4[](7);
+        selectors[0] = stakerHandler.stake.selector;
+        selectors[1] = stakerHandler.unstake.selector;
+        selectors[2] = stakerHandler.claim.selector;
+        selectors[3] = stakerHandler.bid.selector;
+        selectors[4] = stakerHandler.collectFeesAndStartAuction.selector;
+        selectors[5] = stakerHandler.payAuctionWinner.selector;
+        selectors[6] = stakerHandler.donate.selector;
+        targetSelector(FuzzSelector({addr: address(stakerHandler), selectors: selectors}));
+    }
+
+    /// forge-config: default.invariant.fail-on-revert = false
+    function invariant_stakerBalances() public {
+        assertGe(
+            address(staker).balance,
+            staker.dividends(stakerHandler.user1()) +
+                staker.dividends(stakerHandler.user2()) +
+                staker.dividends(stakerHandler.user3()),
+            "Staker's balance should be at least the sum of all dividends"
+        );
+    }
+}
