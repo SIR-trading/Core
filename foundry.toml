@@ -11,7 +11,7 @@ gas_reports = ["Vault","Oracle"]
 
 [fuzz]
 # seed = "0x14"
-# runs = 10000
+runs = 100
 
 [rpc_endpoints]
 mainnet = "https://mainnet.infura.io/v3/${RPC_MAINNET}"

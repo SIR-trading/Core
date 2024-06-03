@@ -9,6 +9,7 @@ import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {TransferHelper} from "src/libraries/TransferHelper.sol";
 
 contract Auxiliary is Test {
     struct Bidder {
@@ -132,8 +133,7 @@ contract Auxiliary is Test {
         if (amount == 0) return;
         deal(token, vm.addr(2), amount);
         vm.prank(vm.addr(2));
-        IERC20(token).approve(address(this), amount);
-        IERC20(token).transferFrom(vm.addr(2), to, amount); // I used transferFrom instead of transfer because of the weird BNB non-standard quirks
+        TransferHelper.safeTransfer(token, to, amount);
     }
 
     function _assertAuction(Bidder memory bidder_, uint256 timeStamp) internal {

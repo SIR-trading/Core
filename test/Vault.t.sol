@@ -17,6 +17,7 @@ import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
+import {TransferHelper} from "src/libraries/TransferHelper.sol";
 
 import "forge-std/Test.sol";
 
@@ -1000,6 +1001,8 @@ contract VaultTest is Test {
         }
     }
 
+    // MUST TEST withdrawFees AND withdrawToSaveSystem!!
+
     /////////////////////////////////////////////////////////////////////////
 
     function assertInPowerZone(
@@ -1695,6 +1698,227 @@ contract VaultTest is Test {
     }
 }
 
+contract VaultControlTest is Test {
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+
+    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+
+    uint256 constant SLOT_TOKEN_STATES = 8;
+    uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
+
+    address public systemControl = vm.addr(1);
+    address public sir = vm.addr(2);
+
+    Vault public vault;
+
+    struct TokenFees {
+        uint112 fees;
+        uint144 total;
+        uint256 donations;
+    }
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy vault
+        vault = new Vault(systemControl, sir, vm.addr(3));
+    }
+
+    function testFuzz_withdrawFeesFailsCuzNotSIR(address user, TokenFees memory tokenFees) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_WETH, tokenFees);
+
+        // Withdraw WETH
+        vm.expectRevert();
+        vm.prank(user);
+        vault.withdrawFees(Addresses.ADDR_WETH);
+    }
+
+    function testFuzz_withdrawWETH(TokenFees memory tokenFees) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_WETH, tokenFees);
+
+        // Withdraw WETH
+        if (tokenFees.fees != 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), sir, tokenFees.fees);
+        }
+        vm.prank(sir);
+        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_WETH);
+
+        // Assert balances
+        assertEq(collectedFees, tokenFees.fees);
+        assertEq(WETH.balanceOf(sir), tokenFees.fees);
+        assertEq(WETH.balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+    }
+
+    function testFuzz_withdrawBNB(TokenFees memory tokenFees) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_BNB, tokenFees);
+
+        // Withdraw BNB
+        if (tokenFees.fees != 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), sir, tokenFees.fees);
+        }
+        vm.prank(sir);
+        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_BNB);
+
+        // Assert balances
+        assertEq(collectedFees, tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(sir), tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+    }
+
+    function testFuzz_withdrawUSDT(TokenFees memory tokenFees) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_USDT, tokenFees);
+
+        // Withdraw USDT
+        if (tokenFees.fees != 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), sir, tokenFees.fees);
+        }
+        vm.prank(sir);
+        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_USDT);
+
+        // Assert balances
+        assertEq(collectedFees, tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(sir), tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+    }
+
+    function testFuzz_withdrawUSDC(TokenFees memory tokenFees) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_USDC, tokenFees);
+
+        // Withdraw USDC
+        if (tokenFees.fees != 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), sir, tokenFees.fees);
+        }
+        vm.prank(sir);
+        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_USDC);
+
+        // Assert balances
+        assertEq(collectedFees, tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(sir), tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+    }
+
+    function testFuzz_withdrawToSaveSystemFailsCuzNotSystemControl(
+        address user,
+        TokenFees memory tokenFeesWETH,
+        TokenFees memory tokenFeesBNB,
+        TokenFees memory tokenFeesUSDT,
+        TokenFees memory tokenFeesUSDC
+    ) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
+        _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
+        _setFees(Addresses.ADDR_USDT, tokenFeesUSDT);
+        _setFees(Addresses.ADDR_USDC, tokenFeesUSDC);
+
+        // Use the encoded calldata in a low-level call or another contract interaction
+        address[] memory tokens = new address[](4);
+        tokens[0] = Addresses.ADDR_WETH;
+        tokens[1] = Addresses.ADDR_BNB;
+        tokens[2] = Addresses.ADDR_USDT;
+        tokens[3] = Addresses.ADDR_USDC;
+        bytes memory encodedCalldata = abi.encodeWithSignature(
+            "withdrawToSaveSystem(address[],address)",
+            tokens,
+            address(this)
+        );
+
+        // Fails to save system
+        vm.prank(user);
+        (bool success, ) = address(vault).call(encodedCalldata);
+        assertTrue(!success, "call did not fail");
+    }
+
+    function testFuzz_withdrawToSaveSystem(
+        address to,
+        TokenFees memory tokenFeesWETH,
+        TokenFees memory tokenFeesBNB,
+        TokenFees memory tokenFeesUSDT,
+        TokenFees memory tokenFeesUSDC
+    ) public {
+        // Add fees to vault
+        _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
+        _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
+        _setFees(Addresses.ADDR_USDT, tokenFeesUSDT);
+        _setFees(Addresses.ADDR_USDC, tokenFeesUSDC);
+
+        // Use the encoded calldata in a low-level call or another contract interaction
+        address[] memory tokens = new address[](4);
+        tokens[0] = Addresses.ADDR_WETH;
+        tokens[1] = Addresses.ADDR_BNB;
+        tokens[2] = Addresses.ADDR_USDT;
+        tokens[3] = Addresses.ADDR_USDC;
+        bytes memory encodedCalldata = abi.encodeWithSignature("withdrawToSaveSystem(address[],address)", tokens, to);
+        vm.prank(systemControl);
+        (bool success, bytes memory returnData) = address(vault).call(encodedCalldata);
+        assertTrue(success, "call failed");
+
+        // Decode the returned data
+        uint256[] memory amounts = abi.decode(returnData, (uint256[]));
+
+        // Assert balances
+        assertEq(amounts[0], tokenFeesWETH.total, "Wrong amounts[0]");
+        assertEq(amounts[1], tokenFeesBNB.total, "Wrong amounts[1]");
+        assertEq(amounts[2], tokenFeesUSDT.total, "Wrong amounts[2]");
+        assertEq(amounts[3], tokenFeesUSDC.total, "Wrong amounts[3]");
+        assertEq(WETH.balanceOf(to), tokenFeesWETH.total, "Wrong WETH balance");
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(to), tokenFeesBNB.total, "Wrong BNB balance");
+        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(to), tokenFeesUSDT.total, "Wrong USDT balance");
+        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(to), tokenFeesUSDC.total, "Wrong USDC balance");
+    }
+
+    //////////////////////////////////////////////////////////////////
+
+    function _setFees(address token, TokenFees memory tokenFees) internal {
+        // Add fees in vault
+        if (token == Addresses.ADDR_WETH) tokenFees.total = uint144(_bound(tokenFees.total, 0, ETH_SUPPLY));
+        tokenFees.fees = uint112(_bound(tokenFees.fees, 0, tokenFees.total));
+
+        // Increase fees in Vault
+        uint256 slot = uint256(
+            vm.load(address(vault), keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))))
+        );
+        tokenFees.fees += uint112(slot);
+        slot >>= 112;
+        tokenFees.total += uint144(slot);
+        assert(tokenFees.total >= tokenFees.fees);
+        vm.store(
+            address(vault),
+            keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
+            bytes32(abi.encodePacked(tokenFees.total, tokenFees.fees))
+        );
+
+        (uint112 fees_, ) = vault.tokenStates(token);
+        assertEq(tokenFees.fees, fees_, "Wrong token states slot used by vm.store");
+
+        if (token == Addresses.ADDR_WETH) _dealWETH(address(vault), tokenFees.total);
+        else _dealToken(token, address(vault), tokenFees.total);
+    }
+
+    function _dealWETH(address to, uint256 amount) internal {
+        vm.deal(vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        WETH.deposit{value: amount}();
+        vm.prank(vm.addr(2));
+        WETH.transfer(address(to), amount);
+    }
+
+    function _dealToken(address token, address to, uint256 amount) internal {
+        if (amount == 0) return;
+        deal(token, vm.addr(2), amount);
+        vm.prank(vm.addr(2));
+        TransferHelper.safeTransfer(token, to, amount);
+    }
+}
+
 contract VaultGasTest is Test, ERC1155TokenReceiver {
     uint256 public constant TIME_ADVANCE = 1 days;
     uint256 public constant BLOCK_NUMBER_START = 18128102;
@@ -2385,5 +2609,3 @@ contract SaturationInvariantTest is Test, RegimeEnum {
         assertEq(reserveApes + reserveLPers, total - collectedFees, "Total collateral minus fees is wrong");
     }
 }
-
-// MUST TEST withdrawFees AND withdrawToSaveSystem!!
