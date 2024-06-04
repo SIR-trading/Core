@@ -1717,6 +1717,20 @@ contract VaultControlTest is Test {
         uint256 donations;
     }
 
+    struct BuggyERC20 {
+        bool balanceOfReverts;
+        bool balanceOfReturnsWrongLength;
+        bool transferReverts;
+        bool transferReturnsFalse;
+    }
+
+    struct Balances4Tokens {
+        uint256 balanceOfWETH;
+        uint256 balanceOfBNB;
+        uint256 balanceOfUSDT;
+        uint256 balanceOfUSDC;
+    }
+
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
@@ -1844,6 +1858,8 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesUSDT,
         TokenFees memory tokenFeesUSDC
     ) public {
+        Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
+
         // Add fees to vault
         _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
         _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
@@ -1869,13 +1885,163 @@ contract VaultControlTest is Test {
         assertEq(amounts[1], tokenFeesBNB.total, "Wrong amounts[1]");
         assertEq(amounts[2], tokenFeesUSDT.total, "Wrong amounts[2]");
         assertEq(amounts[3], tokenFeesUSDC.total, "Wrong amounts[3]");
-        assertEq(WETH.balanceOf(to), tokenFeesWETH.total, "Wrong WETH balance");
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(to), tokenFeesBNB.total, "Wrong BNB balance");
-        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(to), tokenFeesUSDT.total, "Wrong USDT balance");
-        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(to), tokenFeesUSDC.total, "Wrong USDC balance");
+
+        Balances4Tokens memory balances4Tokens = _computeBalances(to);
+        assertEq(
+            balances4Tokens.balanceOfWETH - preBalances4Tokens.balanceOfWETH,
+            tokenFeesWETH.total,
+            "Wrong WETH balance"
+        );
+        assertEq(
+            balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
+            tokenFeesBNB.total,
+            "Wrong BNB balance"
+        );
+        assertEq(
+            balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
+            tokenFeesUSDT.total,
+            "Wrong USDT balance"
+        );
+        assertEq(
+            balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
+            tokenFeesUSDC.total,
+            "Wrong USDC balance"
+        );
+    }
+
+    function testFuzz_withdrawToSaveSystemBuggyERC20(
+        address to,
+        TokenFees memory tokenFeesWETH,
+        BuggyERC20 calldata buggyWETH,
+        TokenFees memory tokenFeesBNB,
+        BuggyERC20 calldata buggyBNB,
+        TokenFees memory tokenFeesUSDT,
+        BuggyERC20 calldata buggyUSDT,
+        TokenFees memory tokenFeesUSDC,
+        BuggyERC20 calldata buggyUSDC
+    ) public {
+        Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
+
+        // Add fees to vault
+        _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
+        _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
+        _setFees(Addresses.ADDR_USDT, tokenFeesUSDT);
+        _setFees(Addresses.ADDR_USDC, tokenFeesUSDC);
+
+        // Modify ERC20 behavior
+        _modifyERC20(Addresses.ADDR_WETH, tokenFeesWETH, buggyWETH);
+        _modifyERC20(Addresses.ADDR_BNB, tokenFeesBNB, buggyBNB);
+        _modifyERC20(Addresses.ADDR_USDT, tokenFeesUSDT, buggyUSDT);
+        _modifyERC20(Addresses.ADDR_USDC, tokenFeesUSDC, buggyUSDC);
+
+        // Use the encoded calldata in a low-level call or another contract interaction
+        uint256[] memory amounts;
+        {
+            address[] memory tokens = new address[](4);
+            tokens[0] = Addresses.ADDR_WETH;
+            tokens[1] = Addresses.ADDR_BNB;
+            tokens[2] = Addresses.ADDR_USDT;
+            tokens[3] = Addresses.ADDR_USDC;
+
+            bytes memory encodedCalldata = abi.encodeWithSignature(
+                "withdrawToSaveSystem(address[],address)",
+                tokens,
+                to
+            );
+
+            vm.prank(systemControl);
+            (bool success, bytes memory returnData) = address(vault).call(encodedCalldata);
+            assertTrue(success, "call failed");
+
+            // Decode the returned data
+            amounts = abi.decode(returnData, (uint256[]));
+        }
+
+        // Set amounts to 0 if buggy ERC20
+        if (
+            buggyWETH.balanceOfReverts ||
+            buggyWETH.balanceOfReturnsWrongLength ||
+            buggyWETH.transferReverts ||
+            buggyWETH.transferReturnsFalse
+        ) tokenFeesWETH.total = 0;
+        if (
+            buggyBNB.balanceOfReverts ||
+            buggyBNB.balanceOfReturnsWrongLength ||
+            buggyBNB.transferReverts ||
+            buggyBNB.transferReturnsFalse
+        ) tokenFeesBNB.total = 0;
+        if (
+            buggyUSDT.balanceOfReverts ||
+            buggyUSDT.balanceOfReturnsWrongLength ||
+            buggyUSDT.transferReverts ||
+            buggyUSDT.transferReturnsFalse
+        ) tokenFeesUSDT.total = 0;
+        if (
+            buggyUSDC.balanceOfReverts ||
+            buggyUSDC.balanceOfReturnsWrongLength ||
+            buggyUSDC.transferReverts ||
+            buggyUSDC.transferReturnsFalse
+        ) tokenFeesUSDC.total = 0;
+
+        // Assert balances
+        vm.clearMockedCalls();
+        assertEq(amounts[0], tokenFeesWETH.total, "Wrong amounts[0]");
+        assertEq(amounts[1], tokenFeesBNB.total, "Wrong amounts[1]");
+        assertEq(amounts[2], tokenFeesUSDT.total, "Wrong amounts[2]");
+        assertEq(amounts[3], tokenFeesUSDC.total, "Wrong amounts[3]");
+
+        Balances4Tokens memory balances4Tokens = _computeBalances(to);
+        assertEq(
+            balances4Tokens.balanceOfWETH - preBalances4Tokens.balanceOfWETH,
+            tokenFeesWETH.total,
+            "Wrong WETH balance"
+        );
+        assertEq(
+            balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
+            tokenFeesBNB.total,
+            "Wrong BNB balance"
+        );
+        assertEq(
+            balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
+            tokenFeesUSDT.total,
+            "Wrong USDT balance"
+        );
+        assertEq(
+            balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
+            tokenFeesUSDC.total,
+            "Wrong USDC balance"
+        );
     }
 
     //////////////////////////////////////////////////////////////////
+
+    function _computeBalances(address to) private view returns (Balances4Tokens memory) {
+        return
+            Balances4Tokens({
+                balanceOfWETH: WETH.balanceOf(to),
+                balanceOfBNB: IERC20(Addresses.ADDR_BNB).balanceOf(to),
+                balanceOfUSDT: IERC20(Addresses.ADDR_USDT).balanceOf(to),
+                balanceOfUSDC: IERC20(Addresses.ADDR_USDC).balanceOf(to)
+            });
+    }
+
+    function _modifyERC20(address token, TokenFees memory tokenFees, BuggyERC20 calldata buggy) internal {
+        if (buggy.balanceOfReverts) {
+            vm.mockCallRevert(token, abi.encodeWithSelector(IERC20.balanceOf.selector, address(vault)), "");
+        } else if (buggy.balanceOfReturnsWrongLength) {
+            vm.mockCall(
+                token,
+                abi.encodeWithSelector(IERC20.balanceOf.selector, address(vault)),
+                abi.encode(uint8(1), uint256(tokenFees.total)) // Longer than 1 word
+            );
+        }
+
+        if (buggy.transferReverts) {
+            vm.mockCallRevert(token, abi.encodeWithSelector(IERC20.transfer.selector), "");
+        } else if (buggy.transferReturnsFalse) {
+            vm.mockCall(token, abi.encodeWithSelector(IERC20.transfer.selector), abi.encode(false));
+        }
+    }
 
     function _setFees(address token, TokenFees memory tokenFees) internal {
         // Add fees in vault

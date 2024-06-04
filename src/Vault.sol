@@ -370,15 +370,17 @@ contract Vault is TEA {
         for (uint256 i = 0; i < tokens.length; i++) {
             // We use the low-level call because we want to continue with the next token if balanceOf reverts
             (success, data) = tokens[i].call(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+
+            // Data length is always a multiple of 32 bytes
             if (success && data.length == 32) {
                 amounts[i] = abi.decode(data, (uint256));
-                console.log("Amount for", tokens[i], "is", amounts[i]);
+
                 if (amounts[i] > 0) {
                     (success, data) = tokens[i].call(abi.encodeWithSelector(IERC20.transfer.selector, to, amounts[i]));
+
                     // If the transfer failed, set the amount of transfered tokens back to 0
-                    if (!(success && (data.length == 0 || abi.decode(data, (bool))))) {
-                        amounts[i] = 0;
-                    }
+                    success = success && (data.length == 0 || abi.decode(data, (bool)));
+                    if (!success) amounts[i] = 0;
                 }
             }
         }
