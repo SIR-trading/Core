@@ -8,7 +8,7 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {Vault} from "src/Vault.sol";
 
-contract TestCore is Script {
+contract FindAllVaults is Script {
     Vault constant VAULT = Vault(0x41219a0a9C0b86ED81933c788a6B63Dfef8f17eE);
 
     function setUp() public {}
