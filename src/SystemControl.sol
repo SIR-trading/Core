@@ -57,7 +57,7 @@ contract SystemControl is Ownable {
         If the vaults were in an unknown order, it maybe be problem because the hash would change.
         So by default the vaults must be ordered in increasing order.
 
-        The default value is the hash of an empty array.
+        The starting value is the hash of an empty array.
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
