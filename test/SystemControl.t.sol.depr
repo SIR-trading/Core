@@ -11,13 +11,16 @@ import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
 
 contract SystemControlTest is Test {
+    SystemControl public systemControl;
+
     function setUp() {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy Oracle
         address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
-        console.log("Oracle deployed at: ", oracle);
 
         // Deploy SystemControl
-        address systemControl = address(new SystemControl());
-        console.log("SystemControl deployed at: ", systemControl);
+        systemControl = new SystemControl();
 
         // Deploy SIR
         address payable sir = payable(address(new SIR(Addresses.ADDR_WETH)));
