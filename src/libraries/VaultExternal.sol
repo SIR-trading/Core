@@ -22,7 +22,8 @@ library VaultExternal {
         address indexed debtToken,
         address indexed collateralToken,
         int8 indexed leverageTier,
-        uint256 vaultId
+        uint256 vaultId,
+        address ape
     );
 
     // Deploy APE token
@@ -64,12 +65,18 @@ library VaultExternal {
         transientTokenParameters.decimals = APE(vaultParams.collateralToken).decimals();
 
         // Deploy APE
-        new APE{salt: bytes32(vaultId)}();
+        address ape = address(new APE{salt: bytes32(vaultId)}());
 
         // Save vaultId
         vaultState.vaultId = uint48(vaultId);
 
-        emit VaultInitialized(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier, vaultId);
+        emit VaultInitialized(
+            vaultParams.debtToken,
+            vaultParams.collateralToken,
+            vaultParams.leverageTier,
+            vaultId,
+            ape
+        );
     }
 
     function teaURI(
@@ -125,9 +132,9 @@ library VaultExternal {
                     APE(vaultParams.collateralToken).symbol(),
                     "/",
                     APE(vaultParams.debtToken).symbol(),
-                    " with x",
+                    " with ",
                     leverageStr,
-                    " leverage"
+                    "x leverage"
                 )
             );
     }

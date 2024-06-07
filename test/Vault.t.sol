@@ -30,7 +30,8 @@ contract VaultInitializeTest is Test {
         address indexed debtToken,
         address indexed collateralToken,
         int8 indexed leverageTier,
-        uint256 vaultId
+        uint256 vaultId,
+        address ape
     );
 
     address public systemControl = vm.addr(1);
@@ -58,7 +59,7 @@ contract VaultInitializeTest is Test {
         vault.paramsById(1);
 
         vm.expectEmit();
-        emit VaultInitialized(debtToken, collateralToken, leverageTier, 1);
+        emit VaultInitialized(debtToken, collateralToken, leverageTier, 1, SaltedAddress.getAddress(address(vault), 1));
         vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
 
         (uint144 reserve, int64 tickPriceSatX42, uint48 vaultId) = vault.vaultStates(
@@ -79,7 +80,7 @@ contract VaultInitializeTest is Test {
         vault.paramsById(2);
 
         vm.expectEmit();
-        emit VaultInitialized(collateralToken, debtToken, leverageTier, 2);
+        emit VaultInitialized(collateralToken, debtToken, leverageTier, 2, SaltedAddress.getAddress(address(vault), 2));
         vault.initialize(VaultStructs.VaultParameters(collateralToken, debtToken, leverageTier));
 
         (reserve, tickPriceSatX42, vaultId) = vault.vaultStates(collateralToken, debtToken, leverageTier);

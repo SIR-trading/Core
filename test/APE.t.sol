@@ -62,7 +62,7 @@ contract APETest is Test {
         )
     {
         tokenParameters = VaultStructs.TokenParameters({
-            name: "Tokenized ETH/USDC with x1.25 leverage",
+            name: "Tokenized ETH/USDC with 1.25x leverage",
             symbol: "APE-42",
             decimals: 18
         });
@@ -93,7 +93,7 @@ contract APETest is Test {
         assertEq(ape.debtToken(), Addresses.ADDR_USDC);
         assertEq(ape.collateralToken(), Addresses.ADDR_WETH);
         assertEq(ape.leverageTier(), LEVERAGE_TIER);
-        assertEq(ape.name(), "Tokenized ETH/USDC with x1.25 leverage");
+        assertEq(ape.name(), "Tokenized ETH/USDC with 1.25x leverage");
         assertEq(ape.symbol(), "APE-42");
         assertEq(ape.decimals(), 18);
     }
@@ -573,7 +573,7 @@ contract APEHandler is Test {
         )
     {
         tokenParameters = VaultStructs.TokenParameters({
-            name: "Tokenized ETH/USDC with x1.25 leverage",
+            name: "Tokenized ETH/USDC with 1.25x leverage",
             symbol: "APE-42",
             decimals: 18
         });

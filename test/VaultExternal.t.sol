@@ -24,7 +24,8 @@ contract VaultExternalTest is Test {
         address indexed debtToken,
         address indexed collateralToken,
         int8 indexed leverageTier,
-        uint256 vaultId
+        uint256 vaultId,
+        address ape
     );
 
     VaultStructs.VaultParameters[] paramsById;
@@ -126,7 +127,13 @@ contract VaultExternalTest is Test {
         leverageTier = -3;
         for (; vaultId < VAULT_ID + 6; vaultId++) {
             vm.expectEmit();
-            emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
+            emit VaultInitialized(
+                Addresses.ADDR_USDC,
+                Addresses.ADDR_WETH,
+                leverageTier,
+                vaultId,
+                SaltedAddress.getAddress(address(this), vaultId)
+            );
             VaultExternal.deploy(
                 oracle,
                 vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
