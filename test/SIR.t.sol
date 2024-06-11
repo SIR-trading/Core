@@ -5,27 +5,32 @@ import "forge-std/Test.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
-import {Staker} from "src/Staker.sol";
+import {SIR} from "src/SIR.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
 
 contract SIRTest is Test {
-    address alice;
-    address bob;
-    address charlie;
+    SIR public sir;
+
+    address alice = vm.addr(1);
+    address bob = vm.addr(2);
+    address charlie = vm.addr(3);
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
-        staker = new Staker(Addresses.ADDR_WETH);
+        // Deploy Oracle
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
-        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12)));
-        staker.initialize(vault);
+        // Deploy SIR
+        sir = new SIR(Addresses.ADDR_WETH);
 
-        alice = vm.addr(1);
-        bob = vm.addr(2);
-        charlie = vm.addr(3);
+        // Deploy Vault
+        vault = address(new Vault(vm.addr(10), address(staker), oracle));
+
+        // Initialize SIR
+        sir.initialize(vault);
     }
 }

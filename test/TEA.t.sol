@@ -864,11 +864,11 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
                     uint256 tsStart = tsBalance[i];
                     uint256 tsEnd = i == tsBalance.length - 1 ? tsCheck : tsBalance[i + 1];
                     if (tsStart <= ts3Years && tsEnd >= ts3Years) {
-                        rewardsE += SystemConstants.ISSUANCE_FIRST_3_YEARS * (ts3Years - tsStart);
+                        rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (ts3Years - tsStart);
                         rewardsE += SystemConstants.ISSUANCE * (tsEnd - ts3Years);
                         maxErr += ErrorComputation.maxErrorBalance(96, bobBalance[i], 2);
                     } else if (tsStart <= ts3Years && tsEnd <= ts3Years) {
-                        rewardsE += SystemConstants.ISSUANCE_FIRST_3_YEARS * (tsEnd - tsStart);
+                        rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (tsEnd - tsStart);
                         maxErr += ErrorComputation.maxErrorBalance(96, bobBalance[i], 1);
                     } else {
                         rewardsE += SystemConstants.ISSUANCE * (tsEnd - tsStart);
