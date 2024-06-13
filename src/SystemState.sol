@@ -67,8 +67,8 @@ abstract contract SystemState is SystemControlAccess {
         // SIR is issued as soon as the protocol is deployed
         systemParams = VaultStructs.SystemParameters({
             tsIssuanceStart: uint40(block.timestamp),
-            baseFee: 5000, // Test start base fee with 50% base on analysis from SQUEETH
-            lpFee: 2248, // 22.48% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
+            baseFee: 4000, // Test start base fee with 40%. At 1.5 leverage tier, the price has to double for apes to be in profit.
+            lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
             mintingStopped: false,
             cumTax: 0
         });
