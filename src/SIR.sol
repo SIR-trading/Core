@@ -7,6 +7,8 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Contributors} from "./libraries/Contributors.sol";
 import {Staker} from "./Staker.sol";
 
+import "forge-std/console.sol";
+
 // Contracts
 contract SIR is Staker {
     mapping(address => uint40) internal tsLastMint;
@@ -19,6 +21,12 @@ contract SIR is Staker {
 
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
+            // Get the contributor's allocation
+            uint256 allocation = Contributors.getAllocation(contributor);
+
+            // No allocation, no rewards
+            if (allocation == 0) return 0;
+
             // First issuance date
             (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
@@ -28,31 +36,21 @@ contract SIR is Staker {
             // Get last mint time stamp
             uint256 tsLastMint_ = tsLastMint[contributor];
 
-            // If issuance has not been stored
-            uint256 issuance;
-            if (tsLastMint_ == 0) {
-                // Get the contributor's allocation
-                uint256 allocation = Contributors.getAllocation(contributor);
+            // Contributor has already claimed all rewards
+            if (tsLastMint_ >= tsIssuanceEnd) return 0;
 
-                // No allocation, no rewards
-                if (allocation == 0) return 0;
+            // If tsLastMint[contributor] had never been set
+            if (tsLastMint_ == 0) tsLastMint_ = tsIssuanceStart;
 
-                // Calculate the contributor's issuance
-                issuance =
-                    (allocation * (SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) /
-                    type(uint56).max;
-
-                // Update issuance time stamp
-                tsLastMint_ = tsIssuanceStart;
-            } else if (tsLastMint_ >= tsIssuanceEnd) {
-                // Contributor has already claimed all rewards
-                return 0;
-            }
+            // Calculate the contributor's issuance
+            uint256 issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) /
+                type(uint56).max;
 
             // Update unclaimed rewards
             uint256 tsNow = block.timestamp >= tsIssuanceEnd ? tsIssuanceEnd : block.timestamp;
 
             // Return unclaimed rewards
+            console.log("contributorUnclaimedSIR - tsNow:", tsNow, ", tsLastMint_:", tsLastMint_);
             return uint80(issuance * (tsNow - tsLastMint_));
         }
     }
