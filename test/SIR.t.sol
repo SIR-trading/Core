@@ -104,7 +104,7 @@ contract ContributorsTest is Test {
             console.log(aggContributions);
         }
 
-        assertEq(aggContributions, type(uint56).max);
+        assertEq(aggContributions, type(uint56).max); // This works for now but most likely it needs some error tolerance.
     }
 
     function testFuzz_fakeContributorMint(address contributor, uint32 timeSkip) public {

@@ -57,7 +57,7 @@ console.log(`Total allocation: ${totalAllocation * 100}%`);
 const typeMax = 0xffffffffffffff; // type(uint56).max
 const scaledAllocations = allAllocations.map(({ contributor, allocation }) => ({
     contributor,
-    allocation: Math.round((allocation * typeMax) / totalAllocation).toString()
+    allocation: Math.floor((allocation * typeMax) / totalAllocation).toString()
 }));
 
 // Generate Solidity library
