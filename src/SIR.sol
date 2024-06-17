@@ -50,7 +50,6 @@ contract SIR is Staker {
             uint256 tsNow = block.timestamp >= tsIssuanceEnd ? tsIssuanceEnd : block.timestamp;
 
             // Return unclaimed rewards
-            console.log("contributorUnclaimedSIR - tsNow:", tsNow, ", tsLastMint_:", tsLastMint_);
             return uint80(issuance * (tsNow - tsLastMint_));
         }
     }

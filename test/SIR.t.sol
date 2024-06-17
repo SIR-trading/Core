@@ -7,6 +7,7 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {SIR} from "src/SIR.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
+import {Contributors} from "src/libraries/Contributors.sol";
 
 contract ContributorsTest is Test {
     struct ContributorFR {
@@ -21,6 +22,11 @@ contract ContributorsTest is Test {
     }
 
     uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
+    uint256 constant FUNDRAISING_PERCENTAGE = 10; // 10% of the issuance reserved for fundraising
+    uint256 constant BC_BOOST = 5; // [%] 5% boost per BC
+    uint256 constant MAX_NUM_BC = 6; // Maximum number of BCs for boost
+
+    uint256 fundraisingTotal = 0;
 
     SIR public sir;
 
@@ -50,13 +56,14 @@ contract ContributorsTest is Test {
         bytes memory data = vm.parseJson(json);
         ContributorFR[] memory contributorsFR_ = abi.decode(data, (ContributorFR[]));
         for (uint256 i = 0; i < contributorsFR_.length; i++) {
+            // Sum total fundraising
+            fundraisingTotal += contributorsFR_[i].contribution;
+
+            // Limit the number of BCs
+            if (contributorsFR_[i].numBC > MAX_NUM_BC) contributorsFR_[i].numBC = MAX_NUM_BC;
+
+            // Add the contributor if the contribution is greater than 0
             if (contributorsFR_[i].contribution > 0) {
-                // console.log(
-                //     "Contributor: ",
-                //     contributorsFR_[i].addr,
-                //     " Contribution: ",
-                //     contributorsFR_[i].contribution
-                // );
                 contributorsFR.push(contributorsFR_[i]);
 
                 // Indicate that the contributors exist
@@ -84,6 +91,22 @@ contract ContributorsTest is Test {
         }
     }
 
+    function test_getAllocation() public {
+        uint256 aggContributions = 0;
+
+        for (uint256 i = 0; i < contributorsFR.length; i++) {
+            aggContributions += Contributors.getAllocation(contributorsFR[i].addr);
+            console.log(aggContributions);
+        }
+
+        for (uint256 i = 0; i < contributorsPreMainnet.length; i++) {
+            aggContributions += Contributors.getAllocation(contributorsPreMainnet[i].addr);
+            console.log(aggContributions);
+        }
+
+        assertEq(aggContributions, type(uint56).max);
+    }
+
     function testFuzz_fakeContributorMint(address contributor, uint32 timeSkip) public {
         vm.assume(!existsContributor[contributor]);
 
@@ -99,19 +122,41 @@ contract ContributorsTest is Test {
         sir.contributorMint();
     }
 
-    // function testFuzz_funraisingContributorMint(uint256 contributor, uint32 timeSkip) public {
+    // function testFuzz_funraisingContributorMint(uint256 contributor, uint32 timeSkip, uint32 timeSkip2) public {
     //     ContributorFR memory contributorFR = _getContributorFR(contributor);
 
     //     // Skip time
     //     skip(timeSkip);
 
-    //     // Fake contributor mint
-    //     assertEq(sir.contributorUnclaimedSIR(contributor), contributorFR.contributor);
+    //     // Issuance
+    //     uint256 issuance = (((contributorFR.contribution * SystemConstants.ISSUANCE) * FUNDRAISING_PERCENTAGE) *
+    //         (100 + BC_BOOST * contributorFR.numBC)) / (fundraisingTotal * (100 ^ 2));
 
-    //     // Attempt to mint
-    //     vm.prank(contributor);
-    //     vm.expectRevert();
-    //     sir.contributorMint();
+    //     // Contributor's rewards
+    //     uint256 rewards = issuance * (timeSkip <= THREE_YEARS ? timeSkip : THREE_YEARS);
+    //     assertEq(sir.contributorUnclaimedSIR(contributorFR.addr), rewards);
+
+    //     // Mint contributor's rewards
+    //     vm.prank(contributorFR.addr);
+    //     if (timeSkip == 0) vm.expectRevert();
+    //     uint256 rewards_ = sir.contributorMint();
+
+    //     // Assert rewards
+    //     assertEq(rewards_, rewards);
+    //     assertEq(sir.contributorUnclaimedSIR(contributorFR.addr), 0);
+
+    //     // Skip time
+    //     skip(timeSkip2);
+
+    //     // Contributor's rewards
+    //     rewards =
+    //         issuance *
+    //         (
+    //             uint256(timeSkip) + timeSkip2 <= THREE_YEARS
+    //                 ? timeSkip2
+    //                 : (timeSkip <= THREE_YEARS ? THREE_YEARS - timeSkip : 0)
+    //         );
+    //     assertEq(sir.contributorUnclaimedSIR(contributorFR.addr), rewards);
     // }
 
     function testFuzz_preMainnetContributorMint(uint256 contributor, uint32 timeSkip, uint32 timeSkip2) public {
@@ -140,9 +185,6 @@ contract ContributorsTest is Test {
         skip(timeSkip2);
 
         // Contributor's rewards
-        console.log("Time Skip 1, days: ", timeSkip / 60 / 60 / 24);
-        console.log("Time Skip 2, days: ", timeSkip2 / 60 / 60 / 24);
-        console.log(timeSkip, timeSkip2);
         rewards =
             issuance *
             (

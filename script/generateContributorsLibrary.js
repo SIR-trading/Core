@@ -11,9 +11,11 @@ const fundraisingData = JSON.parse(fs.readFileSync(fundraisingPath, "utf8"));
 // Constants
 const TOTAL_PREMAINNET_ALLOCATION = 20000; // 10% of total issuance to pre-mainnet contributors + 10% to a treasury
 const FUNDRAISING_PERCENTAGE = 10; // 10% of the total issuance at least
+const BC_BOOST = 0.05; // 5% boost per BC
+const MAX_NUM_BC = 6; // Maximum number of BCs for boost
 
 // Calculate total contribution sum for fundraising goal
-const FUNDRAISING_GOAL = fundraisingData.reduce((sum, { contribution }) => sum + contribution, 0);
+const FUNDRAISING_TOTAL = fundraisingData.reduce((sum, { contribution }) => sum + contribution, 0);
 
 // Calculate total allocation for pre-mainnet contributors
 const totalPreMainnetAllocation = preMainnetData.reduce((sum, { allocation }) => sum + allocation, 0);
@@ -25,12 +27,8 @@ if (totalPreMainnetAllocation !== TOTAL_PREMAINNET_ALLOCATION) {
 
 // Calculate total allocation for fundraising contributors
 const fundraisingAllocations = fundraisingData.map(({ contributor, contribution, num_bc }) => {
-    const baseAllocation = (contribution / FUNDRAISING_GOAL) * (FUNDRAISING_PERCENTAGE / 100);
-    let boost = 1 + 0.05 * num_bc;
-    if (boost > 1.3) {
-        // Cap the boost at 30%
-        boost = 1.3;
-    }
+    const baseAllocation = (contribution / FUNDRAISING_TOTAL) * (FUNDRAISING_PERCENTAGE / 100);
+    let boost = 1 + BC_BOOST * Math.min(num_bc, MAX_NUM_BC);
     return {
         contributor,
         allocation: baseAllocation * boost
