@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
+import {Oracle} from "src/Oracle.sol";
 import {SIR} from "src/SIR.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {Contributors} from "src/libraries/Contributors.sol";
+import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
+import {ErrorComputation} from "./ErrorComputation.sol";
+
+import "forge-std/Test.sol";
 
 contract ContributorsTest is Test {
     struct ContributorFR {
@@ -29,10 +34,6 @@ contract ContributorsTest is Test {
     uint256 fundraisingTotal = 0;
 
     SIR public sir;
-
-    address alice = vm.addr(1);
-    address bob = vm.addr(2);
-    address charlie = vm.addr(3);
 
     ContributorFR[] contributorsFR;
     ContributorPreMainnet[] contributorsPreMainnet;
@@ -197,5 +198,169 @@ contract ContributorsTest is Test {
 
     function _getContributorPreMainnet(uint256 index) internal view returns (ContributorPreMainnet memory) {
         return contributorsPreMainnet[_bound(index, 0, contributorsPreMainnet.length - 1)];
+    }
+}
+
+contract GentlemenTest is Test {
+    uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
+
+    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+
+    SIR public sir;
+    Vault public vault;
+
+    address alice = vm.addr(1);
+    uint256 teaBalanceOfAlice;
+
+    VaultStructs.VaultParameters vaultParameters =
+        VaultStructs.VaultParameters({
+            debtToken: Addresses.ADDR_USDT,
+            collateralToken: Addresses.ADDR_WETH,
+            leverageTier: -1
+        });
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy oracle
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+
+        // Deploy SIR
+        sir = new SIR(Addresses.ADDR_WETH);
+
+        // Deploy Vault
+        vault = new Vault(vm.addr(10), address(sir), oracle);
+
+        // Initialize SIR
+        sir.initialize(address(vault));
+
+        // Initialize vault
+        vault.initialize(vaultParameters);
+
+        // Set 1 vault to receive all the SIR rewards
+        uint48[] memory oldVaults = new uint48[](0);
+        uint48[] memory newVaults = new uint48[](1);
+        newVaults[0] = 1;
+        uint8[] memory newTaxes = new uint8[](1);
+        newTaxes[0] = 1;
+        vm.prank(vm.addr(10));
+        vault.updateVaults(oldVaults, newVaults, newTaxes, 1);
+
+        // First gentleman deposits 1 WETH
+        _dealWETH(alice, 1 ether);
+        vm.prank(alice);
+        WETH.transfer(address(vault), 1 ether);
+
+        // Alice mints TEA
+        vm.prank(alice);
+        teaBalanceOfAlice = vault.mint(false, vaultParameters);
+    }
+
+    function testFuzz_fakeLPerMint(address lper, uint32 timeSkip) public {
+        vm.assume(lper != alice);
+
+        // Skip time
+        skip(timeSkip);
+
+        // Attempt to mint
+        vm.prank(lper);
+        vm.expectRevert();
+        sir.lPerMint(1);
+    }
+
+    function testFuzz_fakeVaultLPerMint(uint256 vaultId, uint32 timeSkip) public {
+        vm.assume(vaultId != 1);
+
+        // Skip time
+        skip(timeSkip);
+
+        // Attempt to mint
+        vm.prank(alice);
+        vm.expectRevert();
+        sir.lPerMint(vaultId);
+    }
+
+    function testFuzz_lPerMint(uint32 timeSkip, uint32 timeSkip2, uint32 timeSkip3) public {
+        timeSkip = uint32(_bound(timeSkip, 1, type(uint32).max));
+        timeSkip2 = uint32(_bound(timeSkip2, 1, type(uint32).max));
+        timeSkip3 = uint32(_bound(timeSkip3, 1, type(uint32).max));
+
+        // Skip time
+        skip(timeSkip);
+
+        // Attempt to mint
+        vm.prank(alice);
+        uint80 rewards = sir.lPerMint(1);
+
+        // Expected rewards
+        uint256 rewards_;
+        if (timeSkip <= THREE_YEARS) {
+            rewards_ = SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * timeSkip;
+        } else {
+            rewards_ =
+                SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
+                THREE_YEARS +
+                SystemConstants.ISSUANCE *
+                (timeSkip - THREE_YEARS);
+        }
+
+        // Assert rewards
+        assertApproxEqAbs(
+            rewards,
+            rewards_,
+            ErrorComputation.maxErrorBalance(96, teaBalanceOfAlice, 1),
+            "Rewards mismatch after 1 skip"
+        );
+
+        // No more rewards
+        vm.prank(alice);
+        vm.expectRevert();
+        sir.lPerMint(1);
+
+        // Skip time
+        skip(timeSkip2);
+
+        // Attempt to mint
+        vm.prank(alice);
+        rewards += sir.lPerMint(1);
+
+        // Expected rewards
+        if (uint256(timeSkip) + timeSkip2 <= THREE_YEARS) {
+            rewards_ = SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (uint256(timeSkip) + timeSkip2);
+        } else {
+            rewards_ =
+                SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
+                THREE_YEARS +
+                SystemConstants.ISSUANCE *
+                (uint256(timeSkip) + timeSkip2 - THREE_YEARS);
+        }
+
+        // Assert rewards
+        assertApproxEqAbs(
+            rewards,
+            rewards_,
+            ErrorComputation.maxErrorBalance(96, teaBalanceOfAlice, 1) + 1,
+            "Rewards mismatch after 2 skips"
+        );
+
+        // Burn TEA
+        vm.prank(alice);
+        vault.burn(false, vaultParameters, teaBalanceOfAlice);
+
+        // Skip time
+        skip(timeSkip3);
+
+        // Attempt to mint
+        vm.prank(alice);
+        vm.expectRevert();
+        sir.lPerMint(1);
+    }
+
+    function _dealWETH(address to, uint256 amount) internal {
+        vm.deal(vm.addr(101), amount);
+        vm.prank(vm.addr(101));
+        WETH.deposit{value: amount}();
+        vm.prank(vm.addr(101));
+        WETH.transfer(address(to), amount);
     }
 }
