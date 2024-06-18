@@ -14,7 +14,7 @@ import {Ownable} from "openzeppelin/access/Ownable.sol";
 contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
-    /** Flow chart of the system 4 possible vaultStates:
+    /** Flow chart of the system 4 possible states:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
         +---------------+      +---------------+       +---------------+      +---------------+
@@ -39,12 +39,11 @@ contract SystemControl is Ownable {
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
-    address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
+    uint256 private _sumTaxesToTreasury;
+
     Vault public vault;
     SIR public sir;
     bool private _initialized = false;
-
-    uint256 private _sumTaxesToTreasury;
 
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
     uint40 public tsStatusChanged; // Timestamp when the status last changed
@@ -58,16 +57,12 @@ contract SystemControl is Ownable {
         If the vaults were in an unknown order, it maybe be problem because the hash would change.
         So by default the vaults must be ordered in increasing order.
 
-        The default value is the hash of an empty array.
+        The starting value is the hash of an empty array.
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor() {
-        deployer = msg.sender;
-    }
-
     function initialize(address vault_, address sir_) external {
-        require(!_initialized && msg.sender == deployer);
+        require(!_initialized && msg.sender == owner());
 
         vault = Vault(vault_);
         sir = SIR(payable(sir_));

@@ -15,6 +15,7 @@ This is to save the TVL if the oracle is buggy and reverts.
 -   Add donate() function which basically transfer TEA to Vault
 -   Function that returns the amount of TEA and amount in the reserve LP.
 -   Function that returns the amount of APE and amount in the reserve of apes.
+-   Add getLPerCurrentAllocation and getLPerContributorAllocation which returns current issuance
 
 # Core
 

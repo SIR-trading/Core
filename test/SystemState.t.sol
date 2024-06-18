@@ -311,13 +311,13 @@ contract SystemStateTest is Test {
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS * duration) << 96) / teaAmount,
+            ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * duration) << 96) / teaAmount,
             ErrorComputation.maxErrorCumumlative(1)
         );
 
         // Check rewards for Alice
         uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS * duration;
+        uint256 unclaimedSIRTheoretical = SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * duration;
 
         assertLe(unclaimedSIR, unclaimedSIRTheoretical);
         assertApproxEqAbs(unclaimedSIR, unclaimedSIRTheoretical, ErrorComputation.maxErrorBalance(96, teaAmount, 1));
@@ -392,7 +392,7 @@ contract SystemStateTest is Test {
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                 durationBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationAfter3Years) << 96) / teaAmount,
@@ -401,7 +401,7 @@ contract SystemStateTest is Test {
 
         // Check rewards for Alice
         uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
+        uint256 unclaimedSIRTheoretical = SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
             durationBefore3Years +
             SystemConstants.ISSUANCE *
             durationAfter3Years;
@@ -438,8 +438,9 @@ contract SystemStateTest is Test {
 
         // Check rewards for Alice
         uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = uint256(SystemConstants.ISSUANCE_FIRST_3_YEARS + SystemConstants.ISSUANCE) *
-            SystemConstants.THREE_YEARS;
+        uint256 unclaimedSIRTheoretical = uint256(
+            SystemConstants.LP_ISSUANCE_FIRST_3_YEARS + SystemConstants.ISSUANCE
+        ) * SystemConstants.THREE_YEARS;
 
         assertLe(unclaimedSIR, unclaimedSIRTheoretical);
         assertApproxEqAbs(unclaimedSIR, unclaimedSIRTheoretical, ErrorComputation.maxErrorBalance(96, teaAmount, 2));
@@ -515,7 +516,7 @@ contract SystemStateTest is Test {
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                 durationBeforeBurnBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationBeforeBurnAfter3Years) << 96) / teaAmount,
@@ -524,7 +525,7 @@ contract SystemStateTest is Test {
 
         // Check rewards for Alice
         uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = SystemConstants.ISSUANCE_FIRST_3_YEARS *
+        uint256 unclaimedSIRTheoretical = SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
             durationBeforeBurnBefore3Years +
             SystemConstants.ISSUANCE *
             durationBeforeBurnAfter3Years;
@@ -609,12 +610,12 @@ contract SystemStateTest is Test {
             // Check cumulative SIR per TEA
             assertApproxEqAbs(
                 cumSIRPerTEAx96,
-                ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+                ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                     durationBeforeBurnBefore3Years +
                     SystemConstants.ISSUANCE *
                     durationBeforeBurnAfter3Years) << 96) /
                     teaAmount +
-                    ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+                    ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                         durationAfterBurnBefore3Years +
                         SystemConstants.ISSUANCE *
                         durationAfterBurnAfter3Years) << 96) /
@@ -625,7 +626,7 @@ contract SystemStateTest is Test {
             // Check rewards for Alice
             unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
             unclaimedSIRTheoretical =
-                SystemConstants.ISSUANCE_FIRST_3_YEARS *
+                SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                 (durationBeforeBurnBefore3Years + durationAfterBurnBefore3Years) +
                 SystemConstants.ISSUANCE *
                 (durationBeforeBurnAfter3Years + durationAfterBurnAfter3Years);
@@ -704,7 +705,7 @@ contract SystemStateTest is Test {
         // Check cumulative SIR per TEA
         assertApproxEqAbs(
             cumSIRPerTEAx96,
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                 (durationAliceBefore3Years + durationBobBefore3Years) +
                 SystemConstants.ISSUANCE *
                 (durationAliceAfter3Years + durationBobAfter3Years)) << 96) / teaAmountMint,
@@ -713,11 +714,11 @@ contract SystemStateTest is Test {
 
         // Check rewards for Alice
         uint144 unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, alice);
-        uint256 unclaimedSIRTheoretical = (SystemConstants.ISSUANCE_FIRST_3_YEARS *
+        uint256 unclaimedSIRTheoretical = (SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
             durationAliceBefore3Years +
             SystemConstants.ISSUANCE *
             durationAliceAfter3Years) +
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                 durationBobBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationBobAfter3Years) * (teaAmountMint - teaAmountTransfer)) /
@@ -734,7 +735,7 @@ contract SystemStateTest is Test {
         // Check rewards for Bob
         unclaimedSIR = systemState.unclaimedRewards(VAULT_ID, bob);
         unclaimedSIRTheoretical =
-            ((SystemConstants.ISSUANCE_FIRST_3_YEARS *
+            ((SystemConstants.LP_ISSUANCE_FIRST_3_YEARS *
                 durationBobBefore3Years +
                 SystemConstants.ISSUANCE *
                 durationBobAfter3Years) * teaAmountTransfer) /
@@ -782,7 +783,7 @@ contract SystemStateTest is Test {
         }
 
         uint256 unclaimedSIRAliceTheoretical = (durationBefore3Years *
-            SystemConstants.ISSUANCE_FIRST_3_YEARS +
+            SystemConstants.LP_ISSUANCE_FIRST_3_YEARS +
             durationAfter3Years *
             SystemConstants.ISSUANCE);
 
@@ -1060,7 +1061,7 @@ contract SystemStateHandler is Test {
     }
 
     function issuanceFirst3Years() external pure returns (uint256) {
-        return SystemConstants.ISSUANCE_FIRST_3_YEARS;
+        return SystemConstants.LP_ISSUANCE_FIRST_3_YEARS;
     }
 
     function issuanceAfter3Years() external pure returns (uint256) {

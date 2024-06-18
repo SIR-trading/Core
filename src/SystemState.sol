@@ -115,7 +115,7 @@ abstract contract SystemState is SystemControlAccess {
                 // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
                 uint40 ts3Years = systemParams_.tsIssuanceStart + SystemConstants.THREE_YEARS;
                 if (tsStart < ts3Years) {
-                    uint256 issuance = (uint256(SystemConstants.ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
+                    uint256 issuance = (uint256(SystemConstants.LP_ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
                         systemParams_.cumTax;
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumSIRPerTEAx96 += uint176(

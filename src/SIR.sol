@@ -4,7 +4,10 @@ pragma solidity ^0.8.0;
 // Contracts
 import {Vault} from "./Vault.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
+import {Contributors} from "./libraries/Contributors.sol";
 import {Staker} from "./Staker.sol";
+
+import "forge-std/console.sol";
 
 // Contracts
 contract SIR is Staker {
@@ -18,6 +21,12 @@ contract SIR is Staker {
 
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
+            // Get the contributor's allocation
+            uint256 allocation = Contributors.getAllocation(contributor);
+
+            // No allocation, no rewards
+            if (allocation == 0) return 0;
+
             // First issuance date
             (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
 
@@ -27,24 +36,15 @@ contract SIR is Staker {
             // Get last mint time stamp
             uint256 tsLastMint_ = tsLastMint[contributor];
 
-            // If issuance has not been stored
-            uint256 issuance;
-            if (tsLastMint_ == 0) {
-                // Get the contributor's allocation
-                uint256 allocation = _getContributorAllocation(contributor);
+            // Contributor has already claimed all rewards
+            if (tsLastMint_ >= tsIssuanceEnd) return 0;
 
-                // No allocation, no rewards
-                if (allocation == 0) return 0;
+            // If tsLastMint[contributor] had never been set
+            if (tsLastMint_ == 0) tsLastMint_ = tsIssuanceStart;
 
-                // Calculate the contributor's issuance
-                issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.ISSUANCE_FIRST_3_YEARS)) / 10000;
-
-                // Update issuance time stamp
-                tsLastMint_ = tsIssuanceStart;
-            } else if (tsLastMint_ >= tsIssuanceEnd) {
-                // Contributor has already claimed all rewards
-                return 0;
-            }
+            // Calculate the contributor's issuance
+            uint256 issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) /
+                type(uint56).max;
 
             // Update unclaimed rewards
             uint256 tsNow = block.timestamp >= tsIssuanceEnd ? tsIssuanceEnd : block.timestamp;
@@ -82,16 +82,4 @@ contract SIR is Staker {
     /*//////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
-
-    /** @dev TO CHANGE BEFORE DEPLOYMENT.
-        @dev These are just example addresses. The real addresses and their issuances need to be hardcoded before deployment.
-        @dev Function returns an integer with max value of 10000.
-        @dev The sum of all contributors' allocations must be less than or equal to 10000.
-     */
-    function _getContributorAllocation(address contributor) private pure returns (uint256) {
-        if (contributor == 0x7EE4a8493Da53686dDF4FD2F359a7D00610CE370) return 100;
-        else if (contributor == 0x95222290DD7278Aa3Ddd389Cc1E1d165CC4BAfe5) return 1000;
-
-        return 0;
-    }
 }
