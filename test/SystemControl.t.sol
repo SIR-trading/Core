@@ -43,20 +43,29 @@ contract SystemControlInitializationTest is Test {
         // Initialize SystemControl
         vm.prank(caller);
         vm.expectRevert();
-        systemControl.initialize(vault, sir);
+        systemControl.initialize(vault);
     }
 
     function test_alreadyInitialized() public {
         // Initialize SystemControl
-        systemControl.initialize(vault, sir);
+        systemControl.initialize(vault);
 
         // Initialize SystemControl again
         vm.expectRevert();
-        systemControl.initialize(vault, sir);
+        systemControl.initialize(vault);
     }
 }
 
 contract SystemControlTest is Test {
+    enum SystemStatus {
+        Unstoppable,
+        TrainingWheels,
+        Emergency,
+        Shutdown
+    }
+    event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
+    error WrongStatus();
+
     address payable sir;
     address public vault;
     SystemControl public systemControl;
@@ -80,7 +89,7 @@ contract SystemControlTest is Test {
         SIR(sir).initialize(vault);
 
         // Initialize SystemControl
-        systemControl.initialize(vault, sir);
+        systemControl.initialize(vault);
     }
 
     function testFuzz_exitBetaWrongCaller(address caller) public {
@@ -90,15 +99,23 @@ contract SystemControlTest is Test {
         vm.prank(caller);
         vm.expectRevert();
         systemControl.exitBeta();
+
+        // Check if Beta is still active
+        assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.TrainingWheels));
     }
 
-    enum SystemStatus {
-        Unstoppable,
-        TrainingWheels,
-        Emergency,
-        Shutdown
+    function test_exitBetaWrongState() public {
+        // CHANGE TO WRONG STATE
+        // // Change to TrainingWheels
+        // systemControl.haultMinting();
+
+        // Attempt to exit Beta
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.exitBeta();
+
+        // Check if Beta is still active
+        assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.TrainingWheels));
     }
-    event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
 
     function test_exitBeta() public {
         // Exit Beta
@@ -110,16 +127,28 @@ contract SystemControlTest is Test {
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Unstoppable));
     }
 
-    error WrongStatus();
-
-    // function test_exitBetaWrongState() public {
-    //     // Change to TrainingWheels
-    //     systemControl.haultMinting();
-
-    //     // Attempt to exit Beta
-    //     vm.expectRevert(WrongStatus.selector);
-    //     systemControl.exitBeta();
-
-    //     //
-    // }
+    function _setState(SystemStatus systemStatus) private {
+        // // Increase supply
+        // uint256 slot = uint256(vm.load(address(staker), bytes32(uint256(SLOT_SUPPLY))));
+        // uint80 balanceOfSIR = uint80(slot) + amount;
+        // slot >>= 80;
+        // uint96 unclaimedETH = uint96(slot);
+        // vm.store(
+        //     address(staker),
+        //     bytes32(uint256(SLOT_SUPPLY)),
+        //     bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
+        // );
+        // assertEq(staker.supply(), balanceOfSIR, "Wrong supply slot used by vm.store");
+        // // Increase balance
+        // slot = uint256(vm.load(address(staker), keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES))))));
+        // balanceOfSIR = uint80(slot) + amount;
+        // slot >>= 80;
+        // unclaimedETH = uint96(slot);
+        // vm.store(
+        //     address(staker),
+        //     keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES)))),
+        //     bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
+        // );
+        // assertEq(staker.balanceOf(account), balanceOfSIR, "Wrong balance slot used by vm.store");
+    }
 }

@@ -39,10 +39,7 @@ contract SystemControl is Ownable {
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
-    uint256 private _sumTaxesToTreasury;
-
     Vault public vault;
-    SIR public sir;
     bool private _initialized = false;
 
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
@@ -61,11 +58,10 @@ contract SystemControl is Ownable {
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    function initialize(address vault_, address sir_) external {
+    function initialize(address vault_) external {
         require(!_initialized && msg.sender == owner());
 
         vault = Vault(vault_);
-        sir = SIR(payable(sir_));
 
         _initialized = true;
     }
