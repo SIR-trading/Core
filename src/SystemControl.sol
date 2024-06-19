@@ -79,6 +79,9 @@ contract SystemControl is Ownable {
      */
     function exitBeta() external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+
+        // Change status
+        systemStatus = SystemStatus.Unstoppable;
         tsStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Unstoppable);
@@ -86,6 +89,9 @@ contract SystemControl is Ownable {
 
     function haultMinting() external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+
+        // Change status
+        systemStatus = SystemStatus.Emergency;
         tsStatusChanged = uint40(block.timestamp);
 
         // Retrieve parameters
@@ -104,6 +110,9 @@ contract SystemControl is Ownable {
 
     function resumeMinting() external onlyOwner {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
+
+        // Change status
+        systemStatus = SystemStatus.TrainingWheels;
         tsStatusChanged = uint40(block.timestamp);
 
         // Restore fees
@@ -121,6 +130,9 @@ contract SystemControl is Ownable {
 
         // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
         if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownWithdrawalDelayNotPassed();
+
+        // Change status
+        systemStatus = SystemStatus.Shutdown;
         tsStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.Shutdown);
