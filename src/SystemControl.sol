@@ -34,7 +34,7 @@ contract SystemControl is Ownable {
 
     error FeeCannotBeZero();
     error WrongStatus();
-    error ShutdownWithdrawalDelayNotPassed();
+    error ShutdownTooEarly();
     error ArraysLengthMismatch();
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
@@ -125,28 +125,13 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
 
         // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
-        if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownWithdrawalDelayNotPassed();
+        if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownTooEarly();
 
         // Change status
         systemStatus = SystemStatus.Shutdown;
         tsStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.Shutdown);
-    }
-
-    /*///////////////////////////////////////////////////////////////
-                        WITHDRAWAL FUNCTIONS
-    ///////////////////////////////////////////////////////////////*/
-
-    /// @notice Save the remaining funds that have not been withdrawn from the vaults
-    function saveFunds(address[] calldata tokens, address to) external onlyOwner {
-        if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
-
-        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
-
-        for (uint256 i = 0; i < tokens.length; ++i) {
-            emit FundsWithdrawn(tokens[i], amounts[i]);
-        }
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -207,5 +192,20 @@ contract SystemControl is Ownable {
 
         // Update hash of active vaults
         hashActiveVaults == keccak256(abi.encodePacked(newVaults));
+    }
+
+    /*///////////////////////////////////////////////////////////////
+                        WITHDRAWAL FUNCTIONS
+    ///////////////////////////////////////////////////////////////*/
+
+    /// @notice Save the remaining funds that have not been withdrawn from the vaults
+    function saveFunds(address[] calldata tokens, address to) external onlyOwner {
+        if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
+
+        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
+
+        for (uint256 i = 0; i < tokens.length; ++i) {
+            emit FundsWithdrawn(tokens[i], amounts[i]);
+        }
     }
 }
