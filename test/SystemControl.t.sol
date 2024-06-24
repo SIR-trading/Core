@@ -458,14 +458,78 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     function testFuzz_setBaseFee(uint16 baseFee) public {
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
 
+        // Retrieve current lp fee
+        (, , uint16 lpFee, , ) = vault.systemParams();
+
         // Set base fee
         vm.expectEmit();
         emit NewBaseFee(baseFee);
         systemControl.setBaseFee(baseFee);
 
         // Check if base fee is set correctly
-        (, uint16 baseFee_, , , ) = vault.systemParams();
+        (, uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
         assertEq(baseFee_, baseFee, "baseFee not set correctly");
+        assertEq(lpFee_, lpFee, "lpFee not changed");
+    }
+
+    function testFuzz_setLpFeeWrongCaller(address caller, uint16 lpFee) public {
+        vm.assume(caller != address(this));
+        lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
+
+        // Set base fee
+        vm.prank(caller);
+        vm.expectRevert();
+        systemControl.setLPFee(lpFee);
+    }
+
+    function testFuzz_setLpFeeWrongState(uint16 lpFee) public {
+        lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
+
+        // Set state to Unstoppable
+        _setState(SystemStatus.Unstoppable);
+
+        // Attempt to set lp fee
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setLPFee(lpFee);
+
+        // Set state to Emergency
+        _setState(SystemStatus.Emergency);
+
+        // Attempt to set lp fee
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setLPFee(lpFee);
+
+        // Set state to Shutdown
+        _setState(SystemStatus.Shutdown);
+
+        // Attempt to set lp fee
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setLPFee(lpFee);
+    }
+
+    function test_setLpFeeToZero() public {
+        // Set lp fee to 0
+        vm.expectRevert(FeeCannotBeZero.selector);
+        systemControl.setLPFee(0);
+    }
+
+    event NewLPFee(uint16 lpFee);
+
+    function testFuzz_setLpFee(uint16 lpFee) public {
+        lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
+
+        // Retrieve current base fee
+        (, uint16 baseFee, , , ) = vault.systemParams();
+
+        // Set lp fee
+        vm.expectEmit();
+        emit NewLPFee(lpFee);
+        systemControl.setLPFee(lpFee);
+
+        // Check if lp fee is set correctly
+        (, uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
+        assertEq(baseFee_, baseFee, "baseFee not changed");
+        assertEq(lpFee_, lpFee, "lpFee not set correctly");
     }
 
     /////////////////////////////////////////////////////////////////
