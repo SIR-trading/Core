@@ -410,6 +410,64 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         vault.burn(false, vaultParameters, amountTea);
     }
 
+    function testFuzz_setBaseFeeWrongCaller(address caller, uint16 baseFee) public {
+        vm.assume(caller != address(this));
+        baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
+
+        // Set base fee
+        vm.prank(caller);
+        vm.expectRevert();
+        systemControl.setBaseFee(baseFee);
+    }
+
+    function testFuzz_setBaseFeeWrongState(uint16 baseFee) public {
+        baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
+
+        // Set state to Unstoppable
+        _setState(SystemStatus.Unstoppable);
+
+        // Attempt to set base fee
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setBaseFee(baseFee);
+
+        // Set state to Emergency
+        _setState(SystemStatus.Emergency);
+
+        // Attempt to set base fee
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setBaseFee(baseFee);
+
+        // Set state to Shutdown
+        _setState(SystemStatus.Shutdown);
+
+        // Attempt to set base fee
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setBaseFee(baseFee);
+    }
+
+    error FeeCannotBeZero();
+
+    function test_setBaseFeeToZero() public {
+        // Set base fee to 0
+        vm.expectRevert(FeeCannotBeZero.selector);
+        systemControl.setBaseFee(0);
+    }
+
+    event NewBaseFee(uint16 baseFee);
+
+    function testFuzz_setBaseFee(uint16 baseFee) public {
+        baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
+
+        // Set base fee
+        vm.expectEmit();
+        emit NewBaseFee(baseFee);
+        systemControl.setBaseFee(baseFee);
+
+        // Check if base fee is set correctly
+        (, uint16 baseFee_, , , ) = vault.systemParams();
+        assertEq(baseFee_, baseFee, "baseFee not set correctly");
+    }
+
     /////////////////////////////////////////////////////////////////
     ///////////////////  PRIVATE  //  FUNCTIONS  ///////////////////
     ///////////////////////////////////////////////////////////////
