@@ -11,6 +11,8 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
+import "forge-std/console.sol";
+
 contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
@@ -164,6 +166,10 @@ contract SystemControl is Ownable {
         emit NewLPFee(lpFee_);
     }
 
+    /** @notice It will not fail even if the newVaults do not exist.
+        @notice The implicit limit on the # of newVaults is 65025,
+        @notice which comes from the act that the sum of squared taxes must be smaller than (2^8-1)^2.
+     */
     function updateVaultsIssuances(
         uint48[] calldata oldVaults,
         uint48[] calldata newVaults,
@@ -173,25 +179,33 @@ contract SystemControl is Ownable {
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
 
         // Check the array of old vaults is correct
+        console.log("Hash in smart contract:");
+        console.logBytes32(hashActiveVaults);
+        console.log("Hash old vaults:");
+        console.logBytes32(keccak256(abi.encodePacked(oldVaults)));
         if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
 
         // Aggregate taxes and squared taxes
         uint16 cumTax;
         uint256 cumSquaredTaxes;
         for (uint256 i = 0; i < lenNewVaults; ++i) {
+            if (newTaxes[i] == 0) revert FeeCannotBeZero();
             cumTax += newTaxes[i];
             cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
             if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongOrderOfVaults();
         }
 
         // Condition on squares
+        console.log(cumSquaredTaxes, "<=", uint256(type(uint8).max) ** 2, "?");
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
         vault.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
 
         // Update hash of active vaults
-        hashActiveVaults == keccak256(abi.encodePacked(newVaults));
+        hashActiveVaults = keccak256(abi.encodePacked(newVaults));
+        console.log("Hash new vaults:");
+        console.logBytes32(hashActiveVaults);
     }
 
     /*///////////////////////////////////////////////////////////////

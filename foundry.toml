@@ -10,7 +10,7 @@ fs_permissions = [{ access = "read-write", path = "./"}]
 gas_reports = ["Vault","Oracle"]
 
 [fuzz]
-seed = "0x17"
+# seed = "0x10"
 runs = 100
 
 [rpc_endpoints]

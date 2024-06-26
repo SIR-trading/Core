@@ -59,6 +59,10 @@ contract SystemControlInitializationTest is Test {
 }
 
 contract SystemControlTest is ERC1155TokenReceiver, Test {
+    error FeeCannotBeZero();
+    event NewBaseFee(uint16 baseFee);
+    event NewLPFee(uint16 lpFee);
+
     uint256 constant SLOT_SYSTEM_STATUS = 1;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
 
@@ -84,8 +88,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     Vault public vault;
     SystemControl public systemControl;
 
+    mapping(uint48 => bool) private _seen;
+
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
+        // vm.writeFile("./numNewVaults.log", "");
 
         // Deploy Oracle
         address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
@@ -445,15 +452,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.setBaseFee(baseFee);
     }
 
-    error FeeCannotBeZero();
-
     function test_setBaseFeeToZero() public {
         // Set base fee to 0
         vm.expectRevert(FeeCannotBeZero.selector);
         systemControl.setBaseFee(0);
     }
-
-    event NewBaseFee(uint16 baseFee);
 
     function testFuzz_setBaseFee(uint16 baseFee) public {
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
@@ -513,8 +516,6 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.setLPFee(0);
     }
 
-    event NewLPFee(uint16 lpFee);
-
     function testFuzz_setLpFee(uint16 lpFee) public {
         lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
 
@@ -532,9 +533,218 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(lpFee_, lpFee, "lpFee not set correctly");
     }
 
+    function testFuzz_updateVaultsIssuancesFirstTime(
+        uint48[] memory newVaults,
+        uint8[] memory taxes
+    ) public returns (uint48[] memory) {
+        // Remove repeated vaults
+        newVaults = _removeDuplicates(newVaults);
+
+        // Number of new vaults
+        uint256 numNewVaults = newVaults.length < taxes.length ? newVaults.length : taxes.length;
+        numNewVaults = _bound(numNewVaults, 0, uint256(type(uint8).max) ** 2);
+
+        // Equalize lengths of newVaults and taxes
+        assembly {
+            mstore(newVaults, numNewVaults)
+            mstore(taxes, numNewVaults)
+        }
+
+        // Sort newVaults
+        if (numNewVaults > 1) _quickSort(newVaults, 0, int(numNewVaults - 1));
+
+        // Cumulative squared tax
+        uint256 cumSquaredTaxes;
+        for (uint256 i = 0; i < numNewVaults; ++i) {
+            if (taxes[i] == 0) taxes[i] = 1;
+            cumSquaredTaxes += uint256(taxes[i]) ** 2;
+        }
+
+        // Check if cumSquaredTaxes exceeds max value
+        uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
+        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint256 decrement;
+            for (uint256 i = 0; i < numNewVaults; ++i) {
+                // Scale down taxes
+                taxes[i] *= uint8(type(uint8).max / sqrtCumSquaredTaxes);
+                if (taxes[i] == 0) {
+                    taxes[i] = 1;
+                    decrement++;
+                } else if (decrement > 0) {
+                    uint8 dec = taxes[i] - 1 < decrement ? taxes[i] - 1 : uint8(decrement);
+                    taxes[i] -= dec;
+                    decrement -= dec;
+                }
+            }
+        }
+
+        // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
+
+        // Update vaults issuances
+        console.log("Hash old vaults passed to function:");
+        console.logBytes32(keccak256(abi.encodePacked(new uint48[](0))));
+        systemControl.updateVaultsIssuances(new uint48[](0), newVaults, taxes);
+
+        return newVaults;
+    }
+
+    function testFuzz_updateVaultsIssuances(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
+    ) public {
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
+        // Remove repeated vaults
+        newVaults = _removeDuplicates(newVaults);
+
+        // Number of new vaults
+        uint256 numNewVaults = newVaults.length < newTaxes.length ? newVaults.length : newTaxes.length;
+        numNewVaults = _bound(numNewVaults, 0, uint256(type(uint8).max) ** 2);
+
+        // Equalize lengths of newVaults and taxes
+        assembly {
+            mstore(newVaults, numNewVaults)
+            mstore(newTaxes, numNewVaults)
+        }
+
+        // Sort newVaults
+        if (numNewVaults > 1) _quickSort(newVaults, 0, int(numNewVaults - 1));
+        // for (uint256 i = 1; i < numNewVaults; ++i) {
+        //     console.log("newVaults[", i, "]", newVaults[i]);
+        // }
+
+        // Cumulative squared tax
+        uint256 cumSquaredTaxes;
+        for (uint256 i = 0; i < numNewVaults; ++i) {
+            if (newTaxes[i] == 0) newTaxes[i] = 1;
+            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+        }
+        // console.log(cumSquaredTaxes, "<=", uint256(type(uint8).max) ** 2, "?");
+
+        // Check if cumSquaredTaxes exceeds max value
+        uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
+        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint256 decrement;
+            cumSquaredTaxes = 0;
+            for (uint256 i = 0; i < numNewVaults; ++i) {
+                // Scale down taxes
+                newTaxes[i] = uint8((uint256(newTaxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
+                if (newTaxes[i] == 0) {
+                    newTaxes[i] = 1;
+                    decrement++;
+                } else if (decrement > 0) {
+                    uint8 dec = newTaxes[i] - 1 < decrement ? newTaxes[i] - 1 : uint8(decrement);
+                    newTaxes[i] -= dec;
+                    decrement -= dec;
+                }
+                cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            }
+        }
+        // console.log(cumSquaredTaxes, "<=", uint256(type(uint8).max) ** 2, "?");
+
+        // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
+
+        // Update vaults issuances
+        // console.log("updateVaultsIssuances 2nd time");
+        console.log("Hash old vaults passed to function:");
+        console.logBytes32(keccak256(abi.encodePacked(oldVaults)));
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
+        // console.log("updateVaultsIssuances 2nd time done");
+    }
+
     /////////////////////////////////////////////////////////////////
     ///////////////////  PRIVATE  //  FUNCTIONS  ///////////////////
     ///////////////////////////////////////////////////////////////
+
+    function _removeDuplicates(uint48[] memory input) private returns (uint48[] memory) {
+        if (input.length == 0) {
+            return input;
+        }
+
+        uint uniqueCount = 0;
+        for (uint i = 0; i < input.length; i++) {
+            if (!_seen[input[i]]) {
+                _seen[input[i]] = true;
+                uniqueCount++;
+            }
+        }
+
+        uint48[] memory uniqueArray = new uint48[](uniqueCount);
+        uint index = 0;
+
+        for (uint i = 0; i < input.length; i++) {
+            if (_seen[input[i]]) {
+                uniqueArray[index++] = input[i];
+                _seen[input[i]] = false;
+            }
+        }
+
+        return uniqueArray;
+    }
+
+    function _quickSort(uint48[] memory arr, int left, int right) private pure {
+        int i = left;
+        int j = right;
+        if (i == j) return;
+        uint48 pivot = arr[uint(left + (right - left) / 2)];
+        while (i <= j) {
+            while (arr[uint(i)] < pivot) i++;
+            while (pivot < arr[uint(j)]) j--;
+            if (i <= j) {
+                (arr[uint(i)], arr[uint(j)]) = (arr[uint(j)], arr[uint(i)]);
+                i++;
+                j--;
+            }
+        }
+        if (left < j) _quickSort(arr, left, j);
+        if (i < right) _quickSort(arr, i, right);
+    }
+
+    function _sqrt(uint256 x) private pure returns (uint128) {
+        if (x == 0) return 0;
+        else {
+            uint256 xx = x;
+            uint256 r = 1;
+            if (xx >= 0x100000000000000000000000000000000) {
+                xx >>= 128;
+                r <<= 64;
+            }
+            if (xx >= 0x10000000000000000) {
+                xx >>= 64;
+                r <<= 32;
+            }
+            if (xx >= 0x100000000) {
+                xx >>= 32;
+                r <<= 16;
+            }
+            if (xx >= 0x10000) {
+                xx >>= 16;
+                r <<= 8;
+            }
+            if (xx >= 0x100) {
+                xx >>= 8;
+                r <<= 4;
+            }
+            if (xx >= 0x10) {
+                xx >>= 4;
+                r <<= 2;
+            }
+            if (xx >= 0x8) {
+                r <<= 1;
+            }
+            r = (r + x / r) >> 1;
+            r = (r + x / r) >> 1;
+            r = (r + x / r) >> 1;
+            r = (r + x / r) >> 1;
+            r = (r + x / r) >> 1;
+            r = (r + x / r) >> 1;
+            r = (r + x / r) >> 1;
+            uint256 r1 = x / r;
+            return uint128(r < r1 ? r : r1);
+        }
+    }
 
     function _initializeVault() private {
         // Initialize vault
