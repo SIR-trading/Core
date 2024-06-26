@@ -561,12 +561,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         }
 
         // Check if cumSquaredTaxes exceeds max value
-        uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
             uint256 decrement;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale down taxes
-                taxes[i] *= uint8(type(uint8).max / sqrtCumSquaredTaxes);
+                taxes[i] = uint8((uint256(taxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
                 if (taxes[i] == 0) {
                     taxes[i] = 1;
                     decrement++;
@@ -581,8 +581,6 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
 
         // Update vaults issuances
-        console.log("Hash old vaults passed to function:");
-        console.logBytes32(keccak256(abi.encodePacked(new uint48[](0))));
         systemControl.updateVaultsIssuances(new uint48[](0), newVaults, taxes);
 
         return newVaults;
@@ -611,9 +609,6 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Sort newVaults
         if (numNewVaults > 1) _quickSort(newVaults, 0, int(numNewVaults - 1));
-        // for (uint256 i = 1; i < numNewVaults; ++i) {
-        //     console.log("newVaults[", i, "]", newVaults[i]);
-        // }
 
         // Cumulative squared tax
         uint256 cumSquaredTaxes;
@@ -621,13 +616,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
             if (newTaxes[i] == 0) newTaxes[i] = 1;
             cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
-        // console.log(cumSquaredTaxes, "<=", uint256(type(uint8).max) ** 2, "?");
 
         // Check if cumSquaredTaxes exceeds max value
-        uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
             uint256 decrement;
-            cumSquaredTaxes = 0;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale down taxes
                 newTaxes[i] = uint8((uint256(newTaxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
@@ -639,17 +632,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
                     newTaxes[i] -= dec;
                     decrement -= dec;
                 }
-                cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
             }
         }
-        // console.log(cumSquaredTaxes, "<=", uint256(type(uint8).max) ** 2, "?");
 
         // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
 
         // Update vaults issuances
         // console.log("updateVaultsIssuances 2nd time");
-        console.log("Hash old vaults passed to function:");
-        console.logBytes32(keccak256(abi.encodePacked(oldVaults)));
         systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
         // console.log("updateVaultsIssuances 2nd time done");
     }

@@ -179,10 +179,6 @@ contract SystemControl is Ownable {
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
 
         // Check the array of old vaults is correct
-        console.log("Hash in smart contract:");
-        console.logBytes32(hashActiveVaults);
-        console.log("Hash old vaults:");
-        console.logBytes32(keccak256(abi.encodePacked(oldVaults)));
         if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
 
         // Aggregate taxes and squared taxes
@@ -204,8 +200,6 @@ contract SystemControl is Ownable {
 
         // Update hash of active vaults
         hashActiveVaults = keccak256(abi.encodePacked(newVaults));
-        console.log("Hash new vaults:");
-        console.logBytes32(hashActiveVaults);
     }
 
     /*///////////////////////////////////////////////////////////////
