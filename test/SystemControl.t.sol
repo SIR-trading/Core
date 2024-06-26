@@ -534,20 +534,131 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     }
 
     function testFuzz_updateVaultsIssuancesFirstTime(
-        uint48[] memory newVaults,
+        uint48[] memory vaults,
         uint8[] memory taxes
     ) public returns (uint48[] memory) {
+        // Prepare the vaults
+        (vaults, taxes) = _prepareVaults(vaults, taxes);
+
+        // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
+
+        // Update vaults issuances
+        systemControl.updateVaultsIssuances(new uint48[](0), vaults, taxes);
+
+        return vaults;
+    }
+
+    function testFuzz_updateVaultsIssuancesWrongCaller(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes,
+        address user
+    ) public {
+        vm.assume(user != address(this));
+
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
+        // Prepare the vaults
+        (newVaults, newTaxes) = _prepareVaults(newVaults, newTaxes);
+
+        // Update vaults issuances
+        vm.prank(user);
+        vm.expectRevert();
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
+    }
+
+    error ArraysLengthMismatch();
+
+    function testFuzz_updateVaultsIssuancesArraysMismatch(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
+    ) public {
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
+        // Remove repeated vaults
+        newVaults = _removeDuplicates(newVaults);
+
+        // Ensure lengths of newVaults and taxes are not equal
+        vm.assume(newVaults.length != newTaxes.length);
+
+        // Sort newVaults
+        if (newVaults.length > 1) _quickSort(newVaults, 0, int(newVaults.length - 1));
+
+        // Cumulative squared tax
+        uint256 cumSquaredTaxes;
+        for (uint256 i = 0; i < newTaxes.length; ++i) {
+            if (newTaxes[i] == 0) newTaxes[i] = 1;
+            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+        }
+
+        // Check if cumSquaredTaxes exceeds max value
+        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
+            uint256 decrement;
+            for (uint256 i = 0; i < newTaxes.length; ++i) {
+                // Scale down taxes
+                newTaxes[i] = uint8((uint256(newTaxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
+                if (newTaxes[i] == 0) {
+                    newTaxes[i] = 1;
+                    decrement++;
+                } else if (decrement > 0) {
+                    uint8 dec = newTaxes[i] - 1 < decrement ? newTaxes[i] - 1 : uint8(decrement);
+                    newTaxes[i] -= dec;
+                    decrement -= dec;
+                }
+            }
+        }
+
+        // Update vaults issuances
+        vm.expectRevert(ArraysLengthMismatch.selector);
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
+    }
+
+    error WrongOrderOfVaults();
+
+    function testFuzz_updateVaultsIssuancesWrongOldVaults(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory wrongOldVaults,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
+    ) public {
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
+        vm.assume(keccak256(abi.encodePacked(oldVaults)) != keccak256(abi.encodePacked(wrongOldVaults)));
+
+        // Prepare the vaults
+        (newVaults, newTaxes) = _prepareVaults(newVaults, newTaxes);
+
+        // Update vaults issuances
+        vm.expectRevert(WrongOrderOfVaults.selector);
+        systemControl.updateVaultsIssuances(wrongOldVaults, newVaults, newTaxes);
+    }
+
+    function testFuzz_updateVaultsIssuancesWithZeroTax(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes,
+        uint256 nullTaxIndex
+    ) public {
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
         // Remove repeated vaults
         newVaults = _removeDuplicates(newVaults);
 
         // Number of new vaults
-        uint256 numNewVaults = newVaults.length < taxes.length ? newVaults.length : taxes.length;
+        uint256 numNewVaults = newVaults.length < newTaxes.length ? newVaults.length : newTaxes.length;
         numNewVaults = _bound(numNewVaults, 0, uint256(type(uint8).max) ** 2);
+        vm.assume(numNewVaults > 0);
 
         // Equalize lengths of newVaults and taxes
         assembly {
             mstore(newVaults, numNewVaults)
-            mstore(taxes, numNewVaults)
+            mstore(newTaxes, numNewVaults)
         }
 
         // Sort newVaults
@@ -556,8 +667,64 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Cumulative squared tax
         uint256 cumSquaredTaxes;
         for (uint256 i = 0; i < numNewVaults; ++i) {
-            if (taxes[i] == 0) taxes[i] = 1;
-            cumSquaredTaxes += uint256(taxes[i]) ** 2;
+            if (newTaxes[i] == 0) newTaxes[i] = 1;
+            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+        }
+
+        // Check if cumSquaredTaxes exceeds max value
+        bool anyTaxIsZero;
+        uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
+        for (uint256 i = 0; i < numNewVaults; ++i) {
+            // Scale down taxes
+            if (cumSquaredTaxes > uint256(type(uint8).max) ** 2)
+                newTaxes[i] = uint8((uint256(newTaxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
+            if (newTaxes[i] == 0) anyTaxIsZero = true;
+        }
+
+        // Add 0 tax if necessary
+        if (numNewVaults > 0 && !anyTaxIsZero) {
+            nullTaxIndex = nullTaxIndex % numNewVaults;
+            newTaxes[nullTaxIndex] = 0;
+        }
+
+        // Update vaults issuances
+        vm.expectRevert(FeeCannotBeZero.selector);
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
+    }
+
+    function testFuzz_updateVaultsIssuancesWrongOrder(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
+    ) public {
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
+        // Number of new vaults
+        uint256 numNewVaults = newVaults.length < newTaxes.length ? newVaults.length : newTaxes.length;
+        numNewVaults = _bound(numNewVaults, 0, uint256(type(uint8).max) ** 2);
+
+        // Equalize lengths of newVaults and taxes
+        assembly {
+            mstore(newVaults, numNewVaults)
+            mstore(newTaxes, numNewVaults)
+        }
+
+        // Check that it's not already sorted without duplicates
+        bool alreadySorted = true;
+        for (uint256 i = 1; i < numNewVaults; ++i) {
+            if (newVaults[i] <= newVaults[i - 1]) {
+                alreadySorted = false;
+                break;
+            }
+        }
+        vm.assume(!alreadySorted);
+
+        // Cumulative squared tax
+        uint256 cumSquaredTaxes;
+        for (uint256 i = 0; i < numNewVaults; ++i) {
+            if (newTaxes[i] == 0) newTaxes[i] = 1;
+            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
 
         // Check if cumSquaredTaxes exceeds max value
@@ -566,24 +733,72 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
             uint256 decrement;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale down taxes
-                taxes[i] = uint8((uint256(taxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
-                if (taxes[i] == 0) {
-                    taxes[i] = 1;
+                newTaxes[i] = uint8((uint256(newTaxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
+                if (newTaxes[i] == 0) {
+                    newTaxes[i] = 1;
                     decrement++;
                 } else if (decrement > 0) {
-                    uint8 dec = taxes[i] - 1 < decrement ? taxes[i] - 1 : uint8(decrement);
-                    taxes[i] -= dec;
+                    uint8 dec = newTaxes[i] - 1 < decrement ? newTaxes[i] - 1 : uint8(decrement);
+                    newTaxes[i] -= dec;
                     decrement -= dec;
                 }
             }
         }
 
-        // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
+        // Update vaults issuances
+        vm.expectRevert(WrongOrderOfVaults.selector);
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
+    }
+
+    error NewTaxesTooHigh();
+
+    function testFuzz_updateVaultsIssuancesWithHighTaxes(
+        uint48[] memory oldVaults,
+        uint8[] memory oldTaxes,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
+    ) public {
+        oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
+
+        // Remove repeated vaults
+        newVaults = _removeDuplicates(newVaults);
+
+        // Number of new vaults
+        uint256 numNewVaults = newVaults.length < newTaxes.length ? newVaults.length : newTaxes.length;
+        numNewVaults = _bound(numNewVaults, 0, uint256(type(uint8).max) ** 2);
+        vm.assume(numNewVaults > 1);
+
+        // Equalize lengths of newVaults and taxes
+        assembly {
+            mstore(newVaults, numNewVaults)
+            mstore(newTaxes, numNewVaults)
+        }
+
+        // Sort newVaults
+        _quickSort(newVaults, 0, int(numNewVaults - 1));
+
+        // Cumulative squared tax
+        uint256 cumSquaredTaxes;
+        for (uint256 i = 0; i < numNewVaults; ++i) {
+            if (newTaxes[i] == 0) newTaxes[i] = 1;
+            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+        }
+
+        // Check if cumSquaredTaxes is too low
+        if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
+            for (uint256 i = 0; i < numNewVaults; ++i) {
+                // Scale up taxes
+                if (newTaxes[i] == 0) newTaxes[i] = 1;
+                uint256 newTax = (uint256(newTaxes[i]) * type(uint8).max - 1) / sqrtCumSquaredTaxes + 1;
+                if (newTax > type(uint8).max) newTaxes[i] = type(uint8).max;
+                else newTaxes[i] = uint8(newTax);
+            }
+        }
 
         // Update vaults issuances
-        systemControl.updateVaultsIssuances(new uint48[](0), newVaults, taxes);
-
-        return newVaults;
+        vm.expectRevert(NewTaxesTooHigh.selector);
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
     }
 
     function testFuzz_updateVaultsIssuances(
@@ -594,6 +809,21 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     ) public {
         oldVaults = testFuzz_updateVaultsIssuancesFirstTime(oldVaults, oldTaxes);
 
+        // Prepare the vaults
+        (newVaults, newTaxes) = _prepareVaults(newVaults, newTaxes);
+
+        // Update vaults issuances
+        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
+    }
+
+    /////////////////////////////////////////////////////////////////
+    ///////////////////  PRIVATE  //  FUNCTIONS  ///////////////////
+    ///////////////////////////////////////////////////////////////
+
+    function _prepareVaults(
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
+    ) private returns (uint48[] memory, uint8[] memory) {
         // Remove repeated vaults
         newVaults = _removeDuplicates(newVaults);
 
@@ -635,17 +865,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
             }
         }
 
-        // vm.writeLine("./numNewVaults.log", vm.toString(numNewVaults));
-
-        // Update vaults issuances
-        // console.log("updateVaultsIssuances 2nd time");
-        systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
-        // console.log("updateVaultsIssuances 2nd time done");
+        return (newVaults, newTaxes);
     }
-
-    /////////////////////////////////////////////////////////////////
-    ///////////////////  PRIVATE  //  FUNCTIONS  ///////////////////
-    ///////////////////////////////////////////////////////////////
 
     function _removeDuplicates(uint48[] memory input) private returns (uint48[] memory) {
         if (input.length == 0) {
