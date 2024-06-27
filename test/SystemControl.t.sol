@@ -900,6 +900,60 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
     }
 
+    function test_updateMaxNumberVaultsIssuances() public {
+        // Prepare the vaults
+        uint256 maxLen = uint256(type(uint8).max) ** 2;
+        uint48[] memory newVaults = new uint48[](maxLen);
+        uint8[] memory newTaxes = new uint8[](maxLen);
+        for (uint256 i = 0; i < maxLen; ++i) {
+            newVaults[i] = uint48(i + 1);
+            newTaxes[i] = 1;
+        }
+
+        // Update vaults issuances
+        systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
+    }
+
+    function testFuzz_updateTooManyVaultsIssuances() public {
+        // Prepare the vaults
+        uint256 maxLen = uint256(type(uint8).max) ** 2 + 1;
+        uint48[] memory newVaults = new uint48[](maxLen);
+        uint8[] memory newTaxes = new uint8[](maxLen);
+        for (uint256 i = 0; i < maxLen; ++i) {
+            newVaults[i] = uint48(i + 1);
+            newTaxes[i] = 1;
+        }
+
+        // Update vaults issuances
+        vm.expectRevert();
+        systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
+    }
+
+    function test_updateHighestVaultIssuance() public {
+        // Prepare the vaults
+        uint48[] memory newVaults = new uint48[](1);
+        uint8[] memory newTaxes = new uint8[](1);
+        newVaults[0] = 1;
+        newTaxes[0] = type(uint8).max;
+
+        // Update vaults issuances
+        systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
+    }
+
+    function test_updateTooHighVaultIssuance() public {
+        // Prepare the vaults
+        uint48[] memory newVaults = new uint48[](2);
+        uint8[] memory newTaxes = new uint8[](2);
+        newVaults[0] = 1;
+        newTaxes[0] = type(uint8).max;
+        newVaults[0] = 2;
+        newTaxes[0] = 1;
+
+        // Update vaults issuances
+        vm.expectRevert();
+        systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
+    }
+
     /////////////////////////////////////////////////////////////////
     ///////////////////  PRIVATE  //  FUNCTIONS  ///////////////////
     ///////////////////////////////////////////////////////////////
