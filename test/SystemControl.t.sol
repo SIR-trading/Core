@@ -14,6 +14,7 @@ import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
 import {VaultStructs} from "src/libraries/VaultStructs.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
+import {MockERC20} from "src/test/MockERC20.sol";
 
 contract SystemControlInitializationTest is Test {
     address payable sir;
@@ -258,6 +259,154 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Burn TEA
         vault.burn(false, vaultParameters, amountTea);
+    }
+
+    function testFuzz_saveFundsWrongCaller(address caller) public {
+        vm.assume(caller != address(this));
+
+        // Set state to Shutdown
+        _setState(SystemStatus.Shutdown);
+
+        // Attempt to withdraw funds
+        address[] memory tokens = new address[](1);
+        tokens[0] = Addresses.ADDR_USDC;
+        vm.prank(caller);
+        vm.expectRevert();
+        systemControl.saveFunds(tokens, address(vm.addr(20)));
+    }
+
+    function test_saveFundsWrongState() public {
+        // Arary of tokens to withdraw
+        address[] memory tokens = new address[](1);
+        tokens[0] = Addresses.ADDR_USDC;
+
+        // Set state to Unstoppable
+        _setState(SystemStatus.Unstoppable);
+
+        // Attempt to withdraw funds
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.saveFunds(tokens, address(vm.addr(20)));
+
+        // Set state to Emergency
+        _setState(SystemStatus.Emergency);
+
+        // Attempt to withdraw funds
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.saveFunds(tokens, address(vm.addr(20)));
+
+        // Set state to TrainingWheels
+        _setState(SystemStatus.TrainingWheels);
+
+        // Attempt to withdraw funds
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.saveFunds(tokens, address(vm.addr(20)));
+    }
+
+    function test_saveNoFunds() public {
+        // Hault minting
+        systemControl.haultMinting();
+
+        // Skip time
+        skip(SHUTDOWN_WITHDRAWAL_DELAY);
+
+        // Shutdown system
+        systemControl.shutdownSystem();
+
+        // Arary of tokens to withdraw
+        address[] memory tokens = new address[](1);
+        tokens[0] = Addresses.ADDR_USDC;
+
+        // Withdraw funds
+        vm.expectEmit();
+        emit FundsWithdrawn(Addresses.ADDR_USDC, 0);
+        systemControl.saveFunds(tokens, address(vm.addr(20)));
+    }
+
+    event FundsWithdrawn(address indexed token, uint256 amount);
+
+    function test_saveFunds() public {
+        // Add some WETH
+        _dealWETH(address(vault), 1 ether);
+
+        // Add some BNB
+        deal(Addresses.ADDR_BNB, address(vault), 2 ether);
+
+        // Add some USDT
+        deal(Addresses.ADDR_USDT, address(vault), 3 ether);
+
+        // Mock token whose totalSupply function reverts
+        MockERC20 token = new MockERC20("Mock", "MCK", 18);
+        token.mint(address(vault), 4 ether);
+        vm.mockCallRevert(address(token), abi.encodeWithSelector(token.balanceOf.selector), "");
+
+        // Mock token whose totalSupply returns nothing
+        MockERC20 token2 = new MockERC20("Mock2", "MCK2", 18);
+        token2.mint(address(vault), 5 ether);
+        vm.mockCall(address(token2), abi.encodeWithSelector(token2.balanceOf.selector), "");
+
+        // Mock token whose totalSupply returns wrong value
+        MockERC20 token3 = new MockERC20("Mock3", "MCK3", 18);
+        token3.mint(address(vault), 6 ether);
+        vm.mockCall(address(token3), abi.encodeWithSelector(token3.balanceOf.selector), abi.encode(7 ether));
+
+        // Mock token whose transfer function reverts
+        MockERC20 token4 = new MockERC20("Mock4", "MCK4", 18);
+        token4.mint(address(vault), 7 ether);
+        vm.mockCallRevert(address(token4), abi.encodeWithSelector(token4.transfer.selector), "");
+
+        // Mock token whose transfer returns false
+        MockERC20 token5 = new MockERC20("Mock5", "MCK5", 18);
+        token5.mint(address(vault), 8 ether);
+        vm.mockCall(address(token5), abi.encodeWithSelector(token5.transfer.selector), abi.encode(false));
+
+        // Hault minting
+        systemControl.haultMinting();
+
+        // Skip time
+        skip(SHUTDOWN_WITHDRAWAL_DELAY);
+
+        // Shutdown system
+        systemControl.shutdownSystem();
+
+        // Arary of tokens to withdraw
+        address[] memory tokens = new address[](9);
+        tokens[0] = Addresses.ADDR_USDC;
+        tokens[1] = address(token5);
+        tokens[2] = address(token4);
+        tokens[3] = address(token3);
+        tokens[4] = address(token2);
+        tokens[5] = address(token);
+        tokens[6] = Addresses.ADDR_USDT;
+        tokens[7] = Addresses.ADDR_BNB;
+        tokens[8] = Addresses.ADDR_WETH;
+
+        // Expected events
+        vm.expectEmit();
+        emit FundsWithdrawn(Addresses.ADDR_USDC, 0);
+        vm.expectEmit();
+        emit FundsWithdrawn(address(token5), 0);
+        vm.expectEmit();
+        emit FundsWithdrawn(address(token4), 0);
+        vm.expectEmit();
+        emit FundsWithdrawn(address(token3), 0);
+        vm.expectEmit();
+        emit FundsWithdrawn(address(token2), 0);
+        vm.expectEmit();
+        emit FundsWithdrawn(address(token), 0);
+        vm.expectEmit();
+        emit FundsWithdrawn(Addresses.ADDR_USDT, 3 ether);
+        vm.expectEmit();
+        emit FundsWithdrawn(Addresses.ADDR_BNB, 2 ether);
+        vm.expectEmit();
+        emit FundsWithdrawn(Addresses.ADDR_WETH, 1 ether);
+
+        // Withdraw funds
+        systemControl.saveFunds(tokens, address(vm.addr(20)));
+
+        // Assert balances
+        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vm.addr(20))), 3 ether, "USDC balance wrong");
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vm.addr(20))), 2 ether, "BNB balance wrong");
+        assertEq(IERC20(Addresses.ADDR_WETH).balanceOf(address(vm.addr(20))), 1 ether, "WETH balance wrong");
     }
 
     /////////////////////////////////////////////////////////////////
