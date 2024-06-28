@@ -61,9 +61,11 @@ contract SystemControlInitializationTest is Test {
 
 contract SystemControlTest is ERC1155TokenReceiver, Test {
     error FeeCannotBeZero();
-    event NewBaseFee(uint16 baseFee);
-    event NewLPFee(uint16 lpFee);
     error ShutdownTooEarly();
+
+    event NewBaseFee(uint16 baseFee);
+    event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);
+    event NewLPFee(uint16 lpFee);
 
     uint256 constant SLOT_SYSTEM_STATUS = 1;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
@@ -272,7 +274,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         tokens[0] = Addresses.ADDR_USDC;
         vm.prank(caller);
         vm.expectRevert();
-        systemControl.saveFunds(tokens, address(vm.addr(20)));
+        systemControl.saveFunds(tokens, vm.addr(20));
     }
 
     function test_saveFundsWrongState() public {
@@ -285,21 +287,21 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Attempt to withdraw funds
         vm.expectRevert(WrongStatus.selector);
-        systemControl.saveFunds(tokens, address(vm.addr(20)));
+        systemControl.saveFunds(tokens, vm.addr(20));
 
         // Set state to Emergency
         _setState(SystemStatus.Emergency);
 
         // Attempt to withdraw funds
         vm.expectRevert(WrongStatus.selector);
-        systemControl.saveFunds(tokens, address(vm.addr(20)));
+        systemControl.saveFunds(tokens, vm.addr(20));
 
         // Set state to TrainingWheels
         _setState(SystemStatus.TrainingWheels);
 
         // Attempt to withdraw funds
         vm.expectRevert(WrongStatus.selector);
-        systemControl.saveFunds(tokens, address(vm.addr(20)));
+        systemControl.saveFunds(tokens, vm.addr(20));
     }
 
     function test_saveNoFunds() public {
@@ -318,11 +320,9 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Withdraw funds
         vm.expectEmit();
-        emit FundsWithdrawn(Addresses.ADDR_USDC, 0);
-        systemControl.saveFunds(tokens, address(vm.addr(20)));
+        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_USDC, 0);
+        systemControl.saveFunds(tokens, vm.addr(20));
     }
-
-    event FundsWithdrawn(address indexed token, uint256 amount);
 
     function test_saveFunds() public {
         // Add some WETH
@@ -382,31 +382,31 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Expected events
         vm.expectEmit();
-        emit FundsWithdrawn(Addresses.ADDR_USDC, 0);
+        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_USDC, 0);
         vm.expectEmit();
-        emit FundsWithdrawn(address(token5), 0);
+        emit FundsWithdrawn(vm.addr(20), address(token5), 0);
         vm.expectEmit();
-        emit FundsWithdrawn(address(token4), 0);
+        emit FundsWithdrawn(vm.addr(20), address(token4), 0);
         vm.expectEmit();
-        emit FundsWithdrawn(address(token3), 0);
+        emit FundsWithdrawn(vm.addr(20), address(token3), 0);
         vm.expectEmit();
-        emit FundsWithdrawn(address(token2), 0);
+        emit FundsWithdrawn(vm.addr(20), address(token2), 0);
         vm.expectEmit();
-        emit FundsWithdrawn(address(token), 0);
+        emit FundsWithdrawn(vm.addr(20), address(token), 0);
         vm.expectEmit();
-        emit FundsWithdrawn(Addresses.ADDR_USDT, 3 ether);
+        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_USDT, 3 ether);
         vm.expectEmit();
-        emit FundsWithdrawn(Addresses.ADDR_BNB, 2 ether);
+        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_BNB, 2 ether);
         vm.expectEmit();
-        emit FundsWithdrawn(Addresses.ADDR_WETH, 1 ether);
+        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_WETH, 1 ether);
 
         // Withdraw funds
-        systemControl.saveFunds(tokens, address(vm.addr(20)));
+        systemControl.saveFunds(tokens, vm.addr(20));
 
         // Assert balances
-        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vm.addr(20))), 3 ether, "USDC balance wrong");
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vm.addr(20))), 2 ether, "BNB balance wrong");
-        assertEq(IERC20(Addresses.ADDR_WETH).balanceOf(address(vm.addr(20))), 1 ether, "WETH balance wrong");
+        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(vm.addr(20)), 3 ether, "USDC balance wrong");
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(vm.addr(20)), 2 ether, "BNB balance wrong");
+        assertEq(IERC20(Addresses.ADDR_WETH).balanceOf(vm.addr(20)), 1 ether, "WETH balance wrong");
     }
 
     /////////////////////////////////////////////////////////////////

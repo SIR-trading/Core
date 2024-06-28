@@ -32,7 +32,7 @@ contract SystemControl is Ownable {
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
     event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
-    event FundsWithdrawn(address indexed token, uint256 amount);
+    event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);
 
     error FeeCannotBeZero();
     error WrongStatus();
@@ -212,7 +212,7 @@ contract SystemControl is Ownable {
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         for (uint256 i = 0; i < tokens.length; ++i) {
-            emit FundsWithdrawn(tokens[i], amounts[i]);
+            emit FundsWithdrawn(to, tokens[i], amounts[i]);
         }
     }
 }
