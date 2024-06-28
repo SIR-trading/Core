@@ -11,6 +11,8 @@ import {VaultStructs} from "./libraries/VaultStructs.sol";
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
+import "forge-std/console.sol";
+
 contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
@@ -34,15 +36,12 @@ contract SystemControl is Ownable {
 
     error FeeCannotBeZero();
     error WrongStatus();
-    error ShutdownWithdrawalDelayNotPassed();
+    error ShutdownTooEarly();
     error ArraysLengthMismatch();
     error WrongOrderOfVaults();
     error NewTaxesTooHigh();
 
-    uint256 private _sumTaxesToTreasury;
-
     Vault public vault;
-    SIR public sir;
     bool private _initialized = false;
 
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
@@ -61,11 +60,10 @@ contract SystemControl is Ownable {
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    function initialize(address vault_, address sir_) external {
+    function initialize(address vault_) external {
         require(!_initialized && msg.sender == owner());
 
         vault = Vault(vault_);
-        sir = SIR(payable(sir_));
 
         _initialized = true;
     }
@@ -79,6 +77,9 @@ contract SystemControl is Ownable {
      */
     function exitBeta() external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+
+        // Change status
+        systemStatus = SystemStatus.Unstoppable;
         tsStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Unstoppable);
@@ -86,6 +87,9 @@ contract SystemControl is Ownable {
 
     function haultMinting() external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+
+        // Change status
+        systemStatus = SystemStatus.Emergency;
         tsStatusChanged = uint40(block.timestamp);
 
         // Retrieve parameters
@@ -104,6 +108,9 @@ contract SystemControl is Ownable {
 
     function resumeMinting() external onlyOwner {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
+
+        // Change status
+        systemStatus = SystemStatus.TrainingWheels;
         tsStatusChanged = uint40(block.timestamp);
 
         // Restore fees
@@ -120,25 +127,13 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
 
         // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
-        if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownWithdrawalDelayNotPassed();
+        if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownTooEarly();
+
+        // Change status
+        systemStatus = SystemStatus.Shutdown;
         tsStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.Shutdown);
-    }
-
-    /*///////////////////////////////////////////////////////////////
-                        WITHDRAWAL FUNCTIONS
-    ///////////////////////////////////////////////////////////////*/
-
-    /// @notice Save the remaining funds that have not been withdrawn from the vaults
-    function saveFunds(address[] calldata tokens, address to) external onlyOwner {
-        if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
-
-        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
-
-        for (uint256 i = 0; i < tokens.length; ++i) {
-            emit FundsWithdrawn(tokens[i], amounts[i]);
-        }
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -171,6 +166,10 @@ contract SystemControl is Ownable {
         emit NewLPFee(lpFee_);
     }
 
+    /** @notice It will not fail even if the newVaults do not exist.
+        @notice The implicit limit on the # of newVaults is 65025,
+        @notice which comes from the act that the sum of squared taxes must be smaller than (2^8-1)^2.
+     */
     function updateVaultsIssuances(
         uint48[] calldata oldVaults,
         uint48[] calldata newVaults,
@@ -186,6 +185,7 @@ contract SystemControl is Ownable {
         uint16 cumTax;
         uint256 cumSquaredTaxes;
         for (uint256 i = 0; i < lenNewVaults; ++i) {
+            if (newTaxes[i] == 0) revert FeeCannotBeZero();
             cumTax += newTaxes[i];
             cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
             if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongOrderOfVaults();
@@ -198,6 +198,21 @@ contract SystemControl is Ownable {
         vault.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
 
         // Update hash of active vaults
-        hashActiveVaults == keccak256(abi.encodePacked(newVaults));
+        hashActiveVaults = keccak256(abi.encodePacked(newVaults));
+    }
+
+    /*///////////////////////////////////////////////////////////////
+                        WITHDRAWAL FUNCTIONS
+    ///////////////////////////////////////////////////////////////*/
+
+    /// @notice Save the remaining funds that have not been withdrawn from the vaults
+    function saveFunds(address[] calldata tokens, address to) external onlyOwner {
+        if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
+
+        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
+
+        for (uint256 i = 0; i < tokens.length; ++i) {
+            emit FundsWithdrawn(tokens[i], amounts[i]);
+        }
     }
 }

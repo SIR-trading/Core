@@ -46,7 +46,7 @@ contract DeployCore is Script {
         console.log("SIR initialized.");
 
         // Initialize SystemControl
-        SystemControl(systemControl).initialize(vault, sir);
+        SystemControl(systemControl).initialize(vault);
         console.log("SystemControl initialized.");
 
         console.log("Hash of APE's contract creation code:");
