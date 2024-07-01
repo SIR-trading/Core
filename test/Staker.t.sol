@@ -1221,7 +1221,7 @@ contract StakerInvariantTest is Test {
     function invariant_stakerBalances() public {
         assertGe(
             address(staker).balance,
-            staker.dividends(stakerHandler.user1()) +
+            uint256(staker.dividends(stakerHandler.user1())) +
                 staker.dividends(stakerHandler.user2()) +
                 staker.dividends(stakerHandler.user3()),
             "Staker's balance should be at least the sum of all dividends"
