@@ -131,7 +131,7 @@ contract Auxiliary is Test {
 
     function _dealToken(address token, address to, uint256 amount) internal {
         if (amount == 0) return;
-        deal(token, vm.addr(2), amount, true);
+        deal(token, vm.addr(2), amount);
         vm.prank(vm.addr(2));
         TransferHelper.safeTransfer(token, to, amount);
     }
