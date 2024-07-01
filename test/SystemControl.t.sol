@@ -317,10 +317,10 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _dealWETH(address(vault), 1 ether);
 
         // Add some BNB
-        deal(Addresses.ADDR_BNB, address(vault), 2 ether);
+        deal(Addresses.ADDR_BNB, address(vault), 2 ether, true);
 
         // Add some USDT
-        deal(Addresses.ADDR_USDT, address(vault), 3 ether);
+        deal(Addresses.ADDR_USDT, address(vault), 3 ether, true);
 
         // Mock token whose totalSupply function reverts
         MockERC20 token = new MockERC20("Mock", "MCK", 18);

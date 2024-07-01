@@ -380,6 +380,7 @@ contract Vault is TEA {
 
                     // If the transfer failed, set the amount of transfered tokens back to 0
                     success = success && (data.length == 0 || abi.decode(data, (bool)));
+
                     if (!success) amounts[i] = 0;
                 }
             }

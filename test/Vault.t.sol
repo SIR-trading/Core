@@ -1840,16 +1840,11 @@ contract VaultControlTest is Test {
         tokens[1] = Addresses.ADDR_BNB;
         tokens[2] = Addresses.ADDR_USDT;
         tokens[3] = Addresses.ADDR_USDC;
-        bytes memory encodedCalldata = abi.encodeWithSignature(
-            "withdrawToSaveSystem(address[],address)",
-            tokens,
-            address(this)
-        );
 
         // Fails to save system
         vm.prank(user);
-        (bool success, ) = address(vault).call(encodedCalldata);
-        assertTrue(!success, "call did not fail");
+        vm.expectRevert();
+        vault.withdrawToSaveSystem(tokens, address(this));
     }
 
     function testFuzz_withdrawToSaveSystem(
@@ -1859,6 +1854,8 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesUSDT,
         TokenFees memory tokenFeesUSDC
     ) public {
+        to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
+
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
         // Add fees to vault
@@ -1873,13 +1870,24 @@ contract VaultControlTest is Test {
         tokens[1] = Addresses.ADDR_BNB;
         tokens[2] = Addresses.ADDR_USDT;
         tokens[3] = Addresses.ADDR_USDC;
-        bytes memory encodedCalldata = abi.encodeWithSignature("withdrawToSaveSystem(address[],address)", tokens, to);
+        if (tokenFeesWETH.total > 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), to, tokenFeesWETH.total);
+        }
+        if (tokenFeesBNB.total > 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), to, tokenFeesBNB.total);
+        }
+        if (tokenFeesUSDT.total > 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), to, tokenFeesUSDT.total);
+        }
+        if (tokenFeesUSDC.total > 0) {
+            vm.expectEmit();
+            emit Transfer(address(vault), to, tokenFeesUSDC.total);
+        }
         vm.prank(systemControl);
-        (bool success, bytes memory returnData) = address(vault).call(encodedCalldata);
-        assertTrue(success, "call failed");
-
-        // Decode the returned data
-        uint256[] memory amounts = abi.decode(returnData, (uint256[]));
+        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Assert balances
         assertEq(amounts[0], tokenFeesWETH.total, "Wrong amounts[0]");
@@ -1921,6 +1929,8 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesUSDC,
         BuggyERC20 calldata buggyUSDC
     ) public {
+        to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
+
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
         // Add fees to vault
@@ -1936,27 +1946,13 @@ contract VaultControlTest is Test {
         _modifyERC20(Addresses.ADDR_USDC, tokenFeesUSDC, buggyUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
-        uint256[] memory amounts;
-        {
-            address[] memory tokens = new address[](4);
-            tokens[0] = Addresses.ADDR_WETH;
-            tokens[1] = Addresses.ADDR_BNB;
-            tokens[2] = Addresses.ADDR_USDT;
-            tokens[3] = Addresses.ADDR_USDC;
-
-            bytes memory encodedCalldata = abi.encodeWithSignature(
-                "withdrawToSaveSystem(address[],address)",
-                tokens,
-                to
-            );
-
-            vm.prank(systemControl);
-            (bool success, bytes memory returnData) = address(vault).call(encodedCalldata);
-            assertTrue(success, "call failed");
-
-            // Decode the returned data
-            amounts = abi.decode(returnData, (uint256[]));
-        }
+        address[] memory tokens = new address[](4);
+        tokens[0] = Addresses.ADDR_WETH;
+        tokens[1] = Addresses.ADDR_BNB;
+        tokens[2] = Addresses.ADDR_USDT;
+        tokens[3] = Addresses.ADDR_USDC;
+        vm.prank(systemControl);
+        uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Set amounts to 0 if buggy ERC20
         if (
@@ -2066,8 +2062,13 @@ contract VaultControlTest is Test {
         (uint112 fees_, ) = vault.tokenStates(token);
         assertEq(tokenFees.fees, fees_, "Wrong token states slot used by vm.store");
 
+        // Check the total supply is correctly updated
+        uint256 pretotalSupply = IERC20(token).totalSupply();
+
         if (token == Addresses.ADDR_WETH) _dealWETH(address(vault), tokenFees.total);
         else _dealToken(token, address(vault), tokenFees.total);
+
+        assertEq(IERC20(token).totalSupply(), pretotalSupply + tokenFees.total, "Wrong total supply");
     }
 
     function _dealWETH(address to, uint256 amount) internal {
@@ -2080,7 +2081,7 @@ contract VaultControlTest is Test {
 
     function _dealToken(address token, address to, uint256 amount) internal {
         if (amount == 0) return;
-        deal(token, vm.addr(2), amount);
+        deal(token, vm.addr(2), amount, true);
         vm.prank(vm.addr(2));
         TransferHelper.safeTransfer(token, to, amount);
     }
