@@ -1214,7 +1214,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private view returns (uint144 collateralOut) {
         collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply));
-        (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeAPE(
+        (uint144 collateralWithdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeAPE(
             collateralOut,
             systemParams.baseFee,
             vaultParams.leverageTier,
@@ -1227,7 +1227,7 @@ contract VaultTest is Test {
             vaultParams.leverageTier
         );
 
-        vm.assume(reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+        vm.assume(reserve >= uint256(2) + collateralWithdrawn_ + collectedFee);
     }
 
     function _constraintReserveBurnTEA(
@@ -1239,7 +1239,7 @@ contract VaultTest is Test {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        (uint144 collateralWidthdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
+        (uint144 collateralWithdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
             collateralOut,
             systemParams.lpFee,
             systemParams.tax
@@ -1251,7 +1251,7 @@ contract VaultTest is Test {
             vaultParams.leverageTier
         );
 
-        vm.assume(reserve >= uint256(2) + collateralWidthdrawn_ + collectedFee);
+        vm.assume(reserve >= uint256(2) + collateralWithdrawn_ + collectedFee);
     }
 
     function _verifyAmountsMintAPE(
@@ -1361,7 +1361,7 @@ contract VaultTest is Test {
         VaultStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
-        uint144 collateralWidthdrawn_;
+        uint144 collateralWithdrawn_;
         uint144 collectedFee;
         uint144 lpersFee;
         uint144 polFee;
@@ -1373,7 +1373,7 @@ contract VaultTest is Test {
             );
 
             // Verify amounts
-            (collateralWidthdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
+            (collateralWithdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
                 collateralOut,
                 systemParams.baseFee,
                 vaultParams.leverageTier,
@@ -1381,7 +1381,7 @@ contract VaultTest is Test {
             );
             reservesPre.reserveApes -= collateralOut;
         }
-        assertEq(inputsOutputs.collateral, collateralWidthdrawn_);
+        assertEq(inputsOutputs.collateral, collateralWithdrawn_);
 
         // Get total reserve
         (uint144 reserve, , ) = vault.vaultStates(
@@ -1529,7 +1529,7 @@ contract VaultTest is Test {
         VaultStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
-        uint144 collateralWidthdrawn_;
+        uint144 collateralWithdrawn_;
         uint144 collectedFee;
         uint144 lpersFee;
         uint144 polFee;
@@ -1541,7 +1541,7 @@ contract VaultTest is Test {
             );
 
             // Verify amounts
-            (collateralWidthdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
+            (collateralWithdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
                 collateralOut,
                 systemParams.lpFee,
                 systemParams.tax
@@ -1549,7 +1549,7 @@ contract VaultTest is Test {
             reservesPre.reserveLPers -= collateralOut;
             reservesPre.reserveLPers += lpersFee;
         }
-        assertEq(inputsOutputs.collateral, collateralWidthdrawn_);
+        assertEq(inputsOutputs.collateral, collateralWithdrawn_);
 
         // Get total reserve
         (uint144 reserve, , ) = vault.vaultStates(

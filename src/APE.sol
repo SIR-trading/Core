@@ -235,7 +235,7 @@ contract APE is Owned {
             VaultStructs.Reserves memory newReserves,
             uint144 collectedFee,
             uint144 polFee,
-            uint144 collateralWidthdrawn
+            uint144 collateralWithdrawn
         )
     {
         // Loads supply of APE
@@ -251,7 +251,7 @@ contract APE is Owned {
 
             // Substract fees
             uint144 lpersFee;
-            (collateralWidthdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
+            (collateralWithdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
                 collateralOut,
                 baseFee,
                 leverageTier,

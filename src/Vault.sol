@@ -21,6 +21,9 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA {
+    event Mint(uint48 indexed vaultId, uint144 collateralDeposited);
+    event Burn(uint48 indexed vaultId, uint144 collateralWithdrawn);
+
     Oracle private immutable _ORACLE;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
@@ -80,6 +83,9 @@ contract Vault is TEA {
                 uint144 collateralDeposited
             ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
 
+            // Emit event
+            emit Mint(vaultState.vaultId, collateralDeposited);
+
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             uint256 collectedFee;
             if (isAPE) {
@@ -132,7 +138,7 @@ contract Vault is TEA {
         bool isAPE,
         VaultStructs.VaultParameters calldata vaultParams,
         uint256 amount
-    ) external returns (uint144 collateralWidthdrawn) {
+    ) external returns (uint144 collateralWithdrawn) {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
 
         // Get reserves
@@ -149,7 +155,7 @@ contract Vault is TEA {
         if (isAPE) {
             // Burn APE
             uint144 polFee;
-            (reserves, collectedFee, polFee, collateralWidthdrawn) = ape.burn(
+            (reserves, collectedFee, polFee, collateralWithdrawn) = ape.burn(
                 msg.sender,
                 systemParams_.baseFee,
                 vaultIssuanceParams_.tax,
@@ -171,7 +177,7 @@ contract Vault is TEA {
             }
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
-            (collateralWidthdrawn, collectedFee) = burn(
+            (collateralWithdrawn, collectedFee) = burn(
                 vaultParams.collateralToken,
                 msg.sender,
                 vaultState.vaultId,
@@ -182,14 +188,17 @@ contract Vault is TEA {
             );
         }
 
+        // Emit event
+        emit Burn(vaultState.vaultId, collateralWithdrawn);
+
         // Update vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update collateral params
-        _updateTokenState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWidthdrawn);
+        _updateTokenState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWithdrawn);
 
         // Send collateral
-        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, collateralWidthdrawn);
+        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, collateralWithdrawn);
     }
 
     /*////////////////////////////////////////////////////////////////

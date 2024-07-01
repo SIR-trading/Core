@@ -804,7 +804,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
         );
 
-        (uint144 collateralWidthdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
+        (uint144 collateralWithdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
             collateralOut,
             systemParams.lpFee,
             vaultIssuanceParams[VAULT_ID].tax
@@ -825,7 +825,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             assertEq(POLAmount, lpersFee + polFee);
         }
 
-        return (collateralWidthdrawn, collectedFee);
+        return (collateralWithdrawn, collectedFee);
     }
 
     function _verifyReserveLPers(
@@ -1247,7 +1247,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
 
         // Burn
         uint256 totalSupply0 = totalSupplyAndBalanceVault[VAULT_ID].totalSupply;
-        (uint256 collateralWidthdrawn, uint144 collectedFee) = burn(
+        (uint256 collateralWithdrawn, uint144 collectedFee) = burn(
             address(collateral),
             bob,
             VAULT_ID,
@@ -1261,14 +1261,14 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         POLBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
-        (uint144 collateralWidthdrawn_, uint144 collectedFee_) = _verifyBurnAmounts(testBurnParams, totalSupply0);
-        assertEq(collateralWidthdrawn, collateralWidthdrawn_);
+        (uint144 collateralWithdrawn_, uint144 collectedFee_) = _verifyBurnAmounts(testBurnParams, totalSupply0);
+        assertEq(collateralWithdrawn, collateralWithdrawn_);
         assertEq(collectedFee, collectedFee_);
 
         // Assert the LP reserve is correct
         assertEq(
             reserves.reserveLPers,
-            testBurnParams.reserveLPers - collateralWidthdrawn - collectedFee,
+            testBurnParams.reserveLPers - collateralWithdrawn - collectedFee,
             "LP reserve wrong"
         );
 

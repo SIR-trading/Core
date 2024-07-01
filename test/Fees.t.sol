@@ -11,7 +11,7 @@ contract FeesTest is Test {
         // Constraint leverageTier to supported values
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
-        (uint144 collateralInOrWidthdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
+        (uint144 collateralInOrWithdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
             collateralDepositedOrOut,
             baseFee,
             leverageTier,
@@ -20,25 +20,25 @@ contract FeesTest is Test {
 
         uint256 totalFee = uint256(treasuryFee) + lpersFee + polFee;
 
-        assertEq(collateralInOrWidthdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
+        assertEq(collateralInOrWithdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
 
         uint256 totalFeeLowerBound;
         uint256 totalFeeUpperBound;
         if (leverageTier >= 0) {
             totalFeeLowerBound = FullMath.mulDiv(
-                collateralInOrWidthdrawn,
+                collateralInOrWithdrawn,
                 uint256(baseFee) * 2 ** uint8(leverageTier),
                 10000
             );
             totalFeeUpperBound = FullMath.mulDivRoundingUp(
-                collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint144).max ? 0 : 1),
+                collateralInOrWithdrawn + (collateralInOrWithdrawn == type(uint144).max ? 0 : 1),
                 uint256(baseFee) * 2 ** uint8(leverageTier),
                 10000
             );
         } else {
-            totalFeeLowerBound = FullMath.mulDiv(collateralInOrWidthdrawn, baseFee, 10000 * 2 ** uint8(-leverageTier));
+            totalFeeLowerBound = FullMath.mulDiv(collateralInOrWithdrawn, baseFee, 10000 * 2 ** uint8(-leverageTier));
             totalFeeUpperBound = FullMath.mulDivRoundingUp(
-                collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint144).max ? 0 : 1),
+                collateralInOrWithdrawn + (collateralInOrWithdrawn == type(uint144).max ? 0 : 1),
                 baseFee,
                 10000 * 2 ** uint8(-leverageTier)
             );
@@ -51,7 +51,7 @@ contract FeesTest is Test {
     }
 
     function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public {
-        (uint144 collateralInOrWidthdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
+        (uint144 collateralInOrWithdrawn, uint144 treasuryFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
             collateralDepositedOrOut,
             lpFee,
             tax
@@ -59,11 +59,11 @@ contract FeesTest is Test {
 
         uint256 totalFee = uint256(treasuryFee) + lpersFee + polFee;
 
-        assertEq(collateralInOrWidthdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
+        assertEq(collateralInOrWithdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
 
-        uint256 totalFeeLowerBound = FullMath.mulDiv(collateralInOrWidthdrawn, lpFee, 10000);
+        uint256 totalFeeLowerBound = FullMath.mulDiv(collateralInOrWithdrawn, lpFee, 10000);
         uint256 totalFeeUpperBound = FullMath.mulDivRoundingUp(
-            collateralInOrWidthdrawn + (collateralInOrWidthdrawn == type(uint144).max ? 0 : 1),
+            collateralInOrWithdrawn + (collateralInOrWithdrawn == type(uint144).max ? 0 : 1),
             lpFee,
             10000
         );

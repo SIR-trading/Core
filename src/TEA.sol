@@ -288,7 +288,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         VaultStructs.Reserves memory reserves,
         uint256 amount
-    ) internal returns (uint144 collateralWidthdrawn, uint144 collectedFee) {
+    ) internal returns (uint144 collateralWithdrawn, uint144 collectedFee) {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -316,7 +316,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
 
             // Substract fees and distribute them across SIR stakers, LPers and POL
-            (collateralWidthdrawn, collectedFee) = _distributeFees(
+            (collateralWithdrawn, collectedFee) = _distributeFees(
                 collateral,
                 vaultId,
                 totalSupplyAndBalanceVault_,
@@ -361,13 +361,13 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         uint8 tax,
         VaultStructs.Reserves memory reserves,
         uint144 collateralDepositedOrOut
-    ) private returns (uint144 collateralInOrWidthdrawn, uint144 collectedFee) {
+    ) private returns (uint144 collateralInOrWithdrawn, uint144 collectedFee) {
         unchecked {
             // To avoid stack too deep errors
             // Substract fees
             uint144 lpersFee;
             uint144 polFee;
-            (collateralInOrWidthdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
+            (collateralInOrWithdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
                 collateralDepositedOrOut,
                 lpFee,
                 tax

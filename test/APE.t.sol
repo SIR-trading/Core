@@ -527,17 +527,13 @@ contract APETest is Test {
         uint8 tax
     )
         private
-        returns (
-            FeesWrapper memory expectedFees,
-            VaultStructs.Reserves memory newReserves,
-            uint144 collateralWidthdrawn
-        )
+        returns (FeesWrapper memory expectedFees, VaultStructs.Reserves memory newReserves, uint144 collateralWithdrawn)
     {
         VaultStructs.Reserves memory reserves;
         reserves.reserveApes = reserveApesInitial;
         uint144 collectedFee;
         uint144 polFee;
-        (newReserves, collectedFee, polFee, collateralWidthdrawn) = ape.burn(alice, baseFee, tax, reserves, amount);
+        (newReserves, collectedFee, polFee, collateralWithdrawn) = ape.burn(alice, baseFee, tax, reserves, amount);
         expectedFees = FeesWrapper(collectedFee, 0, polFee);
     }
 }
@@ -704,10 +700,10 @@ contract APEHandler is Test {
 
         // Make sure at least 2 units of collateral are in the LP reserve + APE reserve
         if (reserves[rndAPE].reserveLPers < 2) {
-            uint144 collateralWidthdrawnMax = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers - 2;
+            uint144 collateralWithdrawnMax = reserves[rndAPE].reserveApes + reserves[rndAPE].reserveLPers - 2;
             uint256 amountMax = FullMath.mulDiv(
                 totalSupplyOld[rndAPE],
-                collateralWidthdrawnMax,
+                collateralWithdrawnMax,
                 reserves[rndAPE].reserveApes
             );
             amount = _bound(amount, 0, amountMax);
@@ -715,8 +711,8 @@ contract APEHandler is Test {
 
         uint144 collectedFee;
         uint144 polFee;
-        uint144 collateralWidthdrawn;
-        (reserves[rndAPE], collectedFee, polFee, collateralWidthdrawn) = ape[rndAPE].burn(
+        uint144 collateralWithdrawn;
+        (reserves[rndAPE], collectedFee, polFee, collateralWithdrawn) = ape[rndAPE].burn(
             from,
             baseFee,
             tax,
@@ -727,7 +723,7 @@ contract APEHandler is Test {
         reserves[rndAPE].reserveLPers += polFee;
 
         // Update totalCollateralDeposited
-        totalCollateralDeposited -= collateralWidthdrawn;
+        totalCollateralDeposited -= collateralWithdrawn;
 
         _changeReserves(finalApesReserve, rndAPE);
         trueIfMintFalseIfBurn[rndAPE] = false;

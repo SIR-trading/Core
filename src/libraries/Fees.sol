@@ -29,14 +29,14 @@ pragma solidity ^0.8.0;
 
 library Fees {
     /**
-     *  @return collateralInOrWidthdrawn
+     *  @return collateralInOrWithdrawn
      */
     function hiddenFeeAPE(
         uint144 collateralDepositedOrOut,
         uint16 baseFee,
         int256 leverageTier,
         uint8 tax
-    ) internal pure returns (uint144 collateralInOrWidthdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
+    ) internal pure returns (uint144 collateralInOrWithdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
         unchecked {
             uint256 feeNum;
             uint256 feeDen;
@@ -49,9 +49,9 @@ library Fees {
                 feeDen = temp + uint256(baseFee);
             }
 
-            // Split collateralDepositedOrOut into fee and collateralInOrWidthdrawn
-            collateralInOrWidthdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
-            uint256 fee = collateralDepositedOrOut - collateralInOrWidthdrawn;
+            // Split collateralDepositedOrOut into fee and collateralInOrWithdrawn
+            collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
+            uint256 fee = collateralDepositedOrOut - collateralInOrWithdrawn;
 
             // Depending on the tax, between 0 and 10% of the fee is for SIR stakers
             collectedFee = uint144((fee * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
@@ -68,14 +68,14 @@ library Fees {
         uint144 collateralDepositedOrOut,
         uint16 lpFee,
         uint8 tax
-    ) internal pure returns (uint144 collateralInOrWidthdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
+    ) internal pure returns (uint144 collateralInOrWithdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
         unchecked {
             uint256 feeNum = 10000;
             uint256 feeDen = 10000 + uint256(lpFee);
 
-            // Split collateralDepositedOrOut into fee and collateralInOrWidthdrawn
-            collateralInOrWidthdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
-            uint256 fee = collateralDepositedOrOut - collateralInOrWidthdrawn;
+            // Split collateralDepositedOrOut into fee and collateralInOrWithdrawn
+            collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
+            uint256 fee = collateralDepositedOrOut - collateralInOrWithdrawn;
 
             // Depending on the tax, between 0 and 10% of the fee is for SIR stakers
             collectedFee = uint144((fee * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
