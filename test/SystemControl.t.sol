@@ -17,27 +17,15 @@ import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 
 contract SystemControlInitializationTest is Test {
-    address payable sir;
     address public vault;
     SystemControl public systemControl;
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
-
-        // Deploy Oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
-
         // Deploy SystemControl
         systemControl = new SystemControl();
 
-        // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
-
         // Deploy Vault
-        vault = address(new Vault(address(systemControl), sir, oracle));
-
-        // Initialize SIR
-        SIR(sir).initialize(vault);
+        vault = address(new Vault(address(systemControl), vm.addr(10), vm.addr(11)));
     }
 
     function testFuzz_initializationWrongCaller(address caller) public {
