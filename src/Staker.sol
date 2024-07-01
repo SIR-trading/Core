@@ -119,10 +119,7 @@ contract Staker {
 
     // Return supply if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
     function maxTotalSupply() external view returns (uint256) {
-        (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
-
-        if (tsIssuanceStart == 0) return 0;
-        return SystemConstants.ISSUANCE * (block.timestamp - tsIssuanceStart);
+        return SystemConstants.ISSUANCE * (block.timestamp - vault.TS_ISSUANCE_START());
     }
 
     /*//////////////////////////////////////////////////////////////

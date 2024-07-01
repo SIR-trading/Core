@@ -32,6 +32,8 @@ abstract contract SystemState is SystemControlAccess {
 
     event VaultNewTax(uint48 indexed vault, uint8 tax, uint16 cumTax);
 
+    uint40 public immutable TS_ISSUANCE_START;
+
     struct LPerIssuanceParams {
         uint176 cumSIRPerTEAx96; // Q80.96, cumulative SIR minted by an LPer per unit of TEA
         uint80 unclaimedRewards; // SIR owed to the LPer. 80 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
@@ -62,11 +64,12 @@ abstract contract SystemState is SystemControlAccess {
     // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     constructor(address systemControl, address sir_) SystemControlAccess(systemControl) {
+        TS_ISSUANCE_START = uint40(block.timestamp);
+
         sir = sir_;
 
         // SIR is issued as soon as the protocol is deployed
         systemParams = VaultStructs.SystemParameters({
-            tsIssuanceStart: uint40(block.timestamp),
             baseFee: 4000, // Test start base fee with 40%. At 1.5 leverage tier, the price has to double for apes to be in profit.
             lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
             mintingStopped: false,
@@ -113,7 +116,7 @@ abstract contract SystemState is SystemControlAccess {
                 uint40 tsStart = vaultIssuanceParams_.tsLastUpdate;
 
                 // Aggregate SIR issued before the first 3 years. Issuance is slightly lower during the first 3 years because some is diverged to contributors.
-                uint40 ts3Years = systemParams_.tsIssuanceStart + SystemConstants.THREE_YEARS;
+                uint40 ts3Years = TS_ISSUANCE_START + SystemConstants.THREE_YEARS;
                 if (tsStart < ts3Years) {
                     uint256 issuance = (uint256(SystemConstants.LP_ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
                         systemParams_.cumTax;
@@ -254,14 +257,12 @@ abstract contract SystemState is SystemControlAccess {
     /// @dev All checks and balances to be done at system control
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
-        systemParams_ = VaultStructs.SystemParameters({
-            tsIssuanceStart: systemParams_.tsIssuanceStart,
+        systemParams = VaultStructs.SystemParameters({
             baseFee: baseFee,
             lpFee: lpFee,
             mintingStopped: mintingStopped,
             cumTax: systemParams_.cumTax
         });
-        systemParams = systemParams_;
     }
 
     function updateVaults(

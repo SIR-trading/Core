@@ -727,8 +727,6 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         alice = vm.addr(1);
         bob = vm.addr(2);
         charlie = vm.addr(3);
-
-        systemParams.tsIssuanceStart = uint40(block.timestamp);
     }
 
     function _verifyMintAmounts(
@@ -856,7 +854,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
 
         if (aggBalanceBob == 0 || vaultIssuanceParams[VAULT_ID].tax == 0) assertEq(rewardsBob, 0);
         else {
-            uint256 ts3Years = systemParams.tsIssuanceStart + SystemConstants.THREE_YEARS;
+            uint256 ts3Years = TS_ISSUANCE_START + SystemConstants.THREE_YEARS;
             uint256 rewardsE;
             uint256 maxErr;
             for (uint256 i = 0; i < tsBalance.length; i++) {
@@ -904,7 +902,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             _bound(testMintParams.reserveLPers, 0, type(uint144).max - testMintParams.collateralDeposited)
         );
         testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 0, collateralTotalSupply0));
-        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, systemParams.tsIssuanceStart, MAX_TS));
+        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TS_ISSUANCE_START, MAX_TS));
 
         // Initialize system parameters
         systemParams.lpFee = lpFee;
@@ -962,7 +960,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             _bound(testMintParams.reserveLPers, 0, type(uint144).max - testMintParams.collateralDeposited)
         );
         testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 0, collateralTotalSupply0));
-        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, systemParams.tsIssuanceStart, MAX_TS));
+        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TS_ISSUANCE_START, MAX_TS));
 
         // Initialize system parameters
         systemParams.lpFee = lpFee;

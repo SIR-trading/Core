@@ -28,7 +28,7 @@ contract SIR is Staker {
             if (allocation == 0) return 0;
 
             // First issuance date
-            (uint40 tsIssuanceStart, , , , ) = vault.systemParams();
+            uint40 tsIssuanceStart = vault.TS_ISSUANCE_START();
 
             // Last issuance date
             uint256 tsIssuanceEnd = tsIssuanceStart + SystemConstants.THREE_YEARS;

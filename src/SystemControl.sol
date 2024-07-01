@@ -94,7 +94,7 @@ contract SystemControl is Ownable {
 
         // Retrieve parameters
         Vault vault_ = vault;
-        (, uint16 baseFee, uint16 lpFee, , ) = vault_.systemParams();
+        (uint16 baseFee, uint16 lpFee, , ) = vault_.systemParams();
 
         // Store fee parameters for later
         _oldBaseFee = baseFee;
@@ -147,7 +147,7 @@ contract SystemControl is Ownable {
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        (, , uint16 lpFee, , ) = vault_.systemParams();
+        (, uint16 lpFee, , ) = vault_.systemParams();
 
         vault_.updateSystemState(baseFee_, lpFee, false);
 
@@ -159,7 +159,7 @@ contract SystemControl is Ownable {
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        (, uint16 baseFee, , , ) = vault_.systemParams();
+        (uint16 baseFee, , , ) = vault_.systemParams();
 
         vault_.updateSystemState(baseFee, lpFee_, false);
 

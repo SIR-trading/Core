@@ -111,10 +111,9 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _initializeVault();
 
         // Save system parameters
-        uint40 tsIssuanceStart;
         uint16 cumTax;
         bool mintingStopped;
-        (tsIssuanceStart, baseFee, lpFee, mintingStopped, cumTax) = vault.systemParams();
+        (baseFee, lpFee, mintingStopped, cumTax) = vault.systemParams();
         assertTrue(!mintingStopped, "mintingStopped not set to false");
 
         // Successfully mint APE
@@ -136,9 +135,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Emergency));
 
         // Check fees are 0
-        (uint40 tsIssuanceStart_, uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = vault
-            .systemParams();
-        assertEq(tsIssuanceStart_, tsIssuanceStart, "tsIssuanceStart not saved correctly");
+        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = vault.systemParams();
         assertEq(baseFee_, 0, "baseFee not set to 0");
         assertEq(lpFee_, 0, "lpFee not set to 0");
         assertEq(mintingStopped_, true, "mintingStopped not set to true");
@@ -182,7 +179,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         vault.mint(false, vaultParameters);
 
         // Check fees are restored
-        (, uint16 baseFee_, uint16 lpFee_, bool mintingStopped, ) = vault.systemParams();
+        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped, ) = vault.systemParams();
         assertEq(baseFee_, baseFee, "baseFee not restored");
         assertEq(lpFee_, lpFee, "lpFee not restored");
         assertTrue(!mintingStopped, "mintingStopped not set to false");
@@ -689,7 +686,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
 
         // Retrieve current lp fee
-        (, , uint16 lpFee, , ) = vault.systemParams();
+        (, uint16 lpFee, , ) = vault.systemParams();
 
         // Set base fee
         vm.expectEmit();
@@ -697,7 +694,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setBaseFee(baseFee);
 
         // Check if base fee is set correctly
-        (, uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
+        (uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
         assertEq(baseFee_, baseFee, "baseFee not set correctly");
         assertEq(lpFee_, lpFee, "lpFee not changed");
     }
@@ -747,7 +744,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
 
         // Retrieve current base fee
-        (, uint16 baseFee, , , ) = vault.systemParams();
+        (uint16 baseFee, , , ) = vault.systemParams();
 
         // Set lp fee
         vm.expectEmit();
@@ -755,7 +752,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setLPFee(lpFee);
 
         // Check if lp fee is set correctly
-        (, uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
+        (uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
         assertEq(baseFee_, baseFee, "baseFee not changed");
         assertEq(lpFee_, lpFee, "lpFee not set correctly");
     }

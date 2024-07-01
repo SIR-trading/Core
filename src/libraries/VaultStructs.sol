@@ -21,8 +21,6 @@ library VaultStructs {
     }
 
     struct SystemParameters {
-        // Timestamp when issuance (re)started. 0 => issuance has not started yet
-        uint40 tsIssuanceStart;
         /** Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
             For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
          */

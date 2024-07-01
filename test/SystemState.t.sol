@@ -844,10 +844,8 @@ contract SystemStateTest is Test {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
         // Check system vaultState
-        (uint40 tsIssuanceStart_, uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState
-            .systemParams();
+        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState.systemParams();
 
-        assertEq(tsIssuanceStart_, tsStart);
         assertEq(baseFee_, baseFee);
         assertEq(lpFee_, lpFee);
         assertEq(mintingStopped_, mintingStopped);
@@ -862,9 +860,8 @@ contract SystemStateTest is Test {
         systemState.updateVaults(newVaults, veryNewVaults, veryNewTaxes, type(uint8).max);
 
         // Check system vaultState
-        (tsIssuanceStart_, baseFee_, lpFee_, mintingStopped_, cumTax_) = systemState.systemParams();
+        (baseFee_, lpFee_, mintingStopped_, cumTax_) = systemState.systemParams();
 
-        assertEq(tsIssuanceStart_, tsStart);
         assertEq(baseFee_, baseFee);
         assertEq(lpFee_, lpFee);
         assertEq(mintingStopped_, mintingStopped);

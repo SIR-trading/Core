@@ -19,7 +19,7 @@ contract ComputeAddress is Script {
         5. Initialize SIR.sol with address of Vault.sol
         6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
     */
-    function run() public {
+    function run() public view {
         console.log("Vauld address:", VAULT);
         console.log("Vauld ID: 1");
         console.log("APE address:", SaltedAddress.getAddress(VAULT, uint256(1)));
