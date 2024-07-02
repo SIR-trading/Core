@@ -19,9 +19,8 @@ This is to save the TVL if the oracle is buggy and reverts.
 
 # Core
 
--   Consider adding more leverage tiers by rerunning tests
--   Index VaultStates by vaultId instead of by VaultParameters. That way I can save gas by just passing vaultId to the mint and burn functions.
--   Add event that breaks downs how the fees are distributed upon minting/burning
+-   Make all external functions accept and return structs (when available) rather than their separate parameters?
+-   Make an event that shows where all the fees are going for every mint/burn? E.g., Mint(uint48 collateralDeposited, collateralFeeToStakers,collateralFeeToLPers,collateralFeeToPOL)
 
 # Marketing
 

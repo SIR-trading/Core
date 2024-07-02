@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {VaultStructs} from "./VaultStructs.sol";
+
 /**
  * @notice	Smart contract for computing fees in SIR.
  */
@@ -28,15 +30,12 @@ pragma solidity ^0.8.0;
 */
 
 library Fees {
-    /**
-     *  @return collateralInOrWithdrawn
-     */
     function hiddenFeeAPE(
         uint144 collateralDepositedOrOut,
         uint16 baseFee,
         int256 leverageTier,
         uint8 tax
-    ) internal pure returns (uint144 collateralInOrWithdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
+    ) internal pure returns (VaultStructs.Fees memory fees) {
         unchecked {
             uint256 feeNum;
             uint256 feeDen;
@@ -50,17 +49,20 @@ library Fees {
             }
 
             // Split collateralDepositedOrOut into fee and collateralInOrWithdrawn
-            collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
-            uint256 fee = collateralDepositedOrOut - collateralInOrWithdrawn;
+            fees.collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
+            uint256 totalFees = collateralDepositedOrOut - fees.collateralInOrWithdrawn;
 
             // Depending on the tax, between 0 and 10% of the fee is for SIR stakers
-            collectedFee = uint144((fee * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
+            fees.collateralFeeToStakers = uint144((totalFees * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
 
-            // 10% of the fee is added as protocol owned liquidity (POL)
-            polFee = uint144(fee) / 10;
+            // 10% of the fee is becomes protocol owned liquidity (POL)
+            fees.collateralFeeToProtocol = uint144(totalFees) / 10;
 
-            // The rest of the fee is added to the LPers
-            lpersFee = uint144(fee) - collectedFee - polFee;
+            // The rest of the fee is sent to the LPers
+            fees.collateralFeeToGentlemen =
+                uint144(totalFees) -
+                fees.collateralFeeToStakers -
+                fees.collateralFeeToProtocol;
         }
     }
 
@@ -68,23 +70,26 @@ library Fees {
         uint144 collateralDepositedOrOut,
         uint16 lpFee,
         uint8 tax
-    ) internal pure returns (uint144 collateralInOrWithdrawn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) {
+    ) internal pure returns (VaultStructs.Fees memory fees) {
         unchecked {
             uint256 feeNum = 10000;
             uint256 feeDen = 10000 + uint256(lpFee);
 
             // Split collateralDepositedOrOut into fee and collateralInOrWithdrawn
-            collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
-            uint256 fee = collateralDepositedOrOut - collateralInOrWithdrawn;
+            fees.collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
+            uint256 totalFees = collateralDepositedOrOut - fees.collateralInOrWithdrawn;
 
             // Depending on the tax, between 0 and 10% of the fee is for SIR stakers
-            collectedFee = uint144((fee * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
+            fees.collateralFeeToStakers = uint144((totalFees * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
 
-            // 10% of the fee is added as protocol owned liquidity (POL)
-            polFee = uint144(fee) / 10;
+            // 10% of the fee is becomes protocol owned liquidity (POL)
+            fees.collateralFeeToProtocol = uint144(totalFees) / 10;
 
-            // The rest of the fee is added to the LPers
-            lpersFee = uint144(fee) - collectedFee - polFee;
+            // The rest of the fee is sent to the LPers
+            fees.collateralFeeToGentlemen =
+                uint144(totalFees) -
+                fees.collateralFeeToStakers -
+                fees.collateralFeeToProtocol;
         }
     }
 }

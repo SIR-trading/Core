@@ -21,8 +21,21 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA {
-    event Mint(uint48 indexed vaultId, uint144 collateralDeposited);
-    event Burn(uint48 indexed vaultId, uint144 collateralWithdrawn);
+    /** collateralFeeToLPers also includes protocol owned liquidity (POL),
+        i.e., collateralFeeToLPers = collateralFeeToGentlemen + collateralFeeToProtocol
+     */
+    event Mint(
+        uint48 indexed vaultId,
+        uint144 collateralIn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers
+    );
+    event Burn(
+        uint48 indexed vaultId,
+        uint144 collateralWithdrawn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers
+    );
 
     Oracle private immutable _ORACLE;
 
@@ -83,15 +96,11 @@ contract Vault is TEA {
                 uint144 collateralDeposited
             ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
 
-            // Emit event
-            emit Mint(vaultState.vaultId, collateralDeposited);
-
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-            uint256 collectedFee;
+            VaultStructs.Fees memory fees;
             if (isAPE) {
                 // Mint APE
-                uint144 polFee;
-                (reserves, collectedFee, polFee, amount) = ape.mint(
+                (reserves, fees, amount) = ape.mint(
                     msg.sender,
                     systemParams_.baseFee,
                     vaultIssuanceParams_.tax,
@@ -100,20 +109,17 @@ contract Vault is TEA {
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
-                if (polFee > 0) {
-                    mint(
+                if (fees.collateralFeeToProtocol > 0) {
+                    mintToProtocol(
                         vaultParams.collateralToken,
-                        address(this),
                         vaultState.vaultId,
-                        systemParams_,
-                        vaultIssuanceParams_,
                         reserves,
-                        polFee
+                        fees.collateralFeeToProtocol
                     );
                 }
             } else {
                 // Mint TEA for user and protocol owned liquidity (POL)
-                (amount, collectedFee) = mint(
+                (fees, amount) = mint(
                     vaultParams.collateralToken,
                     msg.sender,
                     vaultState.vaultId,
@@ -128,7 +134,21 @@ contract Vault is TEA {
             _updateVaultState(vaultState, reserves, vaultParams);
 
             // Update collateral params
-            _updateTokenState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
+            _updateTokenState(
+                true,
+                tokenState,
+                fees.collateralFeeToStakers,
+                vaultParams.collateralToken,
+                collateralDeposited
+            );
+
+            // Emit event
+            emit Mint(
+                vaultState.vaultId,
+                fees.collateralInOrWithdrawn,
+                fees.collateralFeeToStakers,
+                fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+            );
         }
     }
 
@@ -151,33 +171,18 @@ contract Vault is TEA {
         ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
 
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-        uint256 collectedFee;
+        VaultStructs.Fees memory fees;
         if (isAPE) {
             // Burn APE
-            uint144 polFee;
-            (reserves, collectedFee, polFee, collateralWithdrawn) = ape.burn(
-                msg.sender,
-                systemParams_.baseFee,
-                vaultIssuanceParams_.tax,
-                reserves,
-                amount
-            );
+            (reserves, fees) = ape.burn(msg.sender, systemParams_.baseFee, vaultIssuanceParams_.tax, reserves, amount);
 
             // Mint TEA for protocol owned liquidity (POL)
-            if (polFee > 0) {
-                mint(
-                    vaultParams.collateralToken,
-                    address(this),
-                    vaultState.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    reserves,
-                    polFee
-                );
+            if (fees.collateralFeeToProtocol > 0) {
+                mintToProtocol(vaultParams.collateralToken, vaultState.vaultId, reserves, fees.collateralFeeToProtocol);
             }
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
-            (collateralWithdrawn, collectedFee) = burn(
+            fees = burn(
                 vaultParams.collateralToken,
                 msg.sender,
                 vaultState.vaultId,
@@ -188,36 +193,39 @@ contract Vault is TEA {
             );
         }
 
-        // Emit event
-        emit Burn(vaultState.vaultId, collateralWithdrawn);
-
         // Update vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update collateral params
-        _updateTokenState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWithdrawn);
+        _updateTokenState(
+            false,
+            tokenState,
+            fees.collateralFeeToStakers,
+            vaultParams.collateralToken,
+            collateralWithdrawn
+        );
 
         // Send collateral
-        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, collateralWithdrawn);
+        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);
+
+        // Emit event
+        emit Burn(
+            vaultState.vaultId,
+            fees.collateralInOrWithdrawn,
+            fees.collateralFeeToStakers,
+            fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+        );
     }
 
     /*////////////////////////////////////////////////////////////////
                             READ ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // TODO: Add simulateMint and simulateBurn functions to the periphery
-
     /** @dev Kick it to periphery if more space is needed
      */
     function getReserves(
         VaultStructs.VaultParameters calldata vaultParams
     ) external view returns (VaultStructs.Reserves memory) {
-        // return
-        //     getReservesReadOnly(
-        //         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
-        //         _ORACLE,
-        //         vaultParams
-        //     );
         return VaultExternal.getReservesReadOnly(vaultStates, _ORACLE, vaultParams);
     }
 

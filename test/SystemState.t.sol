@@ -990,7 +990,12 @@ contract SystemStateHandler is Test {
         _numUpdatesCumSIRPerTEAForUser[toAddr] = _numUpdatesCumSIRPerTEA;
     }
 
-    function mint(uint256 user, uint256 amount, uint256 amountPOL, uint24 timeSkip) external advanceTime(timeSkip) {
+    function mint(
+        uint256 user,
+        uint256 amount,
+        uint256 amountToProtocol,
+        uint24 timeSkip
+    ) external advanceTime(timeSkip) {
         address addr = _idToAddr(user);
 
         uint256 preBalance = systemState.balanceOf(addr, VAULT_ID);
@@ -998,9 +1003,9 @@ contract SystemStateHandler is Test {
 
         uint256 totalSupply = systemState.totalSupply(VAULT_ID);
         amount = _bound(amount, 0, SystemConstants.TEA_MAX_SUPPLY - totalSupply);
-        amountPOL = _bound(amountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - totalSupply - amount);
+        amountToProtocol = _bound(amountToProtocol, 0, SystemConstants.TEA_MAX_SUPPLY - totalSupply - amount);
 
-        systemState.mint(addr, amount, amountPOL);
+        systemState.mint(addr, amount, amountToProtocol);
 
         // Vault's cumulative SIR per TEA is updated
         _updateCumSIRPerTEA();
@@ -1016,14 +1021,19 @@ contract SystemStateHandler is Test {
         _numUpdatesCumSIRPerTEAForUser[address(systemState)] = _numUpdatesCumSIRPerTEA;
     }
 
-    function burn(uint256 user, uint256 amount, uint256 amountPOL, uint24 timeSkip) external advanceTime(timeSkip) {
+    function burn(
+        uint256 user,
+        uint256 amount,
+        uint256 amountToProtocol,
+        uint24 timeSkip
+    ) external advanceTime(timeSkip) {
         address addr = _idToAddr(user);
         uint256 preBalance = systemState.balanceOf(addr, VAULT_ID);
         amount = _bound(amount, 0, preBalance);
         uint256 vaultPreBalance = systemState.balanceOf(address(systemState), VAULT_ID);
-        amountPOL = _bound(amountPOL, 0, amount);
+        amountToProtocol = _bound(amountToProtocol, 0, amount);
 
-        systemState.burn(addr, amount, amountPOL);
+        systemState.burn(addr, amount, amountToProtocol);
 
         // Vault's cumulative SIR per TEA is updated
         _updateCumSIRPerTEA();
