@@ -1214,7 +1214,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private view returns (uint144 collateralOut) {
         collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply));
-        (uint144 collateralWithdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeAPE(
+        VaultStructs.Fees memory fees = Fees.hiddenFeeAPE(
             collateralOut,
             systemParams.baseFee,
             vaultParams.leverageTier,
@@ -1227,7 +1227,7 @@ contract VaultTest is Test {
             vaultParams.leverageTier
         );
 
-        vm.assume(reserve >= uint256(2) + collateralWithdrawn_ + collectedFee);
+        vm.assume(reserve >= uint256(2) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
     }
 
     function _constraintReserveBurnTEA(
@@ -1239,11 +1239,7 @@ contract VaultTest is Test {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        (uint144 collateralWithdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
-            collateralOut,
-            systemParams.lpFee,
-            systemParams.tax
-        );
+        VaultStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, systemParams.tax);
 
         (uint144 reserve, , ) = vault.vaultStates(
             vaultParams.debtToken,
@@ -1251,7 +1247,7 @@ contract VaultTest is Test {
             vaultParams.leverageTier
         );
 
-        vm.assume(reserve >= uint256(2) + collateralWithdrawn_ + collectedFee);
+        vm.assume(reserve >= uint256(2) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
     }
 
     function _verifyAmountsMintAPE(
@@ -1262,7 +1258,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private {
         // Verify amounts
-        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
+        VaultStructs.Fees memory fees = Fees.hiddenFeeAPE(
             inputsOutputs.collateral,
             systemParams.baseFee,
             vaultParams.leverageTier,
@@ -1295,13 +1291,13 @@ contract VaultTest is Test {
 
             assertApproxEqAbs(
                 reservesPost.reserveApes,
-                reservesPre.reserveApes + collateralIn,
+                reservesPre.reserveApes + fees.collateralInOrWithdrawn,
                 err,
                 "Ape's reserve is wrong"
             );
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + lpersFee + polFee,
+                reservesPre.reserveLPers + fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1309,8 +1305,8 @@ contract VaultTest is Test {
 
         // Verify token state
         {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
+            (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+            assertEq(totalCollateralFeeToStakers, fees.collateralFeeToStakers);
             assertEq(
                 total,
                 reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral,
@@ -1322,13 +1318,13 @@ contract VaultTest is Test {
         if (balances.apeSupply == 0) {
             assertEq(
                 inputsOutputs.amount,
-                collateralIn + reservesPre.reserveApes,
+                fees.collateralInOrWithdrawn + reservesPre.reserveApes,
                 "Minted amount is wrong when APE supply is 0"
             );
         } else if (reservesPre.reserveApes > 0) {
             assertEq(
                 inputsOutputs.amount,
-                FullMath.mulDiv(balances.apeSupply, collateralIn, reservesPre.reserveApes),
+                FullMath.mulDiv(balances.apeSupply, fees.collateralInOrWithdrawn, reservesPre.reserveApes),
                 "Minted amount is wrong"
             );
         } else {
@@ -1340,13 +1336,17 @@ contract VaultTest is Test {
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
         inputsOutputs.amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
-        if (polFee == 0) {
+        if (fees.collateralFeeToProtocol == 0) {
             assertEq(inputsOutputs.amount, 0);
         } else if (balances.teaSupply > 0) {
-            if (reservesPre.reserveLPers + lpersFee > 0) {
+            if (reservesPre.reserveLPers + fees.collateralFeeToGentlemen > 0) {
                 assertEq(
                     inputsOutputs.amount,
-                    FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers + lpersFee)
+                    FullMath.mulDiv(
+                        balances.teaSupply,
+                        fees.collateralFeeToProtocol,
+                        reservesPre.reserveLPers + fees.collateralFeeToGentlemen
+                    )
                 );
             } else {
                 fail("Invalid state");
@@ -1361,27 +1361,21 @@ contract VaultTest is Test {
         VaultStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
-        uint144 collateralWithdrawn_;
-        uint144 collectedFee;
-        uint144 lpersFee;
-        uint144 polFee;
+        // Compute amount of collateral
+        uint144 collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply)
+        );
 
-        {
-            // Compute amount of collateral
-            uint144 collateralOut = uint144(
-                FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply)
-            );
+        // Verify amounts
+        VaultStructs.Fees memory fees = Fees.hiddenFeeAPE(
+            collateralOut,
+            systemParams.baseFee,
+            vaultParams.leverageTier,
+            systemParams.tax
+        );
+        reservesPre.reserveApes -= collateralOut;
 
-            // Verify amounts
-            (collateralWithdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
-                collateralOut,
-                systemParams.baseFee,
-                vaultParams.leverageTier,
-                systemParams.tax
-            );
-            reservesPre.reserveApes -= collateralOut;
-        }
-        assertEq(inputsOutputs.collateral, collateralWithdrawn_);
+        assertEq(inputsOutputs.collateral, fees.collateralInOrWithdrawn);
 
         // Get total reserve
         (uint144 reserve, , ) = vault.vaultStates(
@@ -1408,10 +1402,10 @@ contract VaultTest is Test {
             else err = 1 + reserve / 1e5;
 
             assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Ape's reserve is wrong");
-            reservesPre.reserveLPers += lpersFee;
+            reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + polFee,
+                reservesPre.reserveLPers + fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1419,9 +1413,16 @@ contract VaultTest is Test {
 
         // Verify token state
         {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
-            assertEq(total, reservesPre.reserveLPers + polFee + reservesPre.reserveApes + collectedFee, "1");
+            (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+            assertEq(totalCollateralFeeToStakers, fees.collateralFeeToStakers);
+            assertEq(
+                total,
+                reservesPre.reserveLPers +
+                    fees.collateralFeeToProtocol +
+                    reservesPre.reserveApes +
+                    fees.collateralFeeToStakers,
+                "1"
+            );
         }
 
         // Verify Alice's balances
@@ -1431,11 +1432,14 @@ contract VaultTest is Test {
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
         inputsOutputs.amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
-        if (polFee == 0) {
+        if (fees.collateralFeeToProtocol == 0) {
             assertEq(inputsOutputs.amount, 0);
         } else if (balances.teaSupply > 0) {
             if (reservesPre.reserveLPers > 0) {
-                assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+                assertEq(
+                    inputsOutputs.amount,
+                    FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+                );
             } else {
                 fail("Invalid state");
             }
@@ -1450,7 +1454,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private {
         // Verify amounts
-        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
+        VaultStructs.Fees memory fees = Fees.hiddenFeeTEA(
             inputsOutputs.collateral,
             systemParams.lpFee,
             systemParams.tax
@@ -1482,7 +1486,10 @@ contract VaultTest is Test {
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + collateralIn + lpersFee + polFee,
+                reservesPre.reserveLPers +
+                    fees.collateralInOrWithdrawn +
+                    fees.collateralFeeToGentlemen +
+                    fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1491,32 +1498,38 @@ contract VaultTest is Test {
 
         // Verify token state
         {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
+            (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+            assertEq(totalCollateralFeeToStakers, fees.collateralFeeToStakers);
             assertEq(total, reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral);
         }
 
         // Verify POL's balances
         uint128 amountPol = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
-        reservesPre.reserveLPers += lpersFee;
+        reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
         if (balances.teaSupply == 0) {
-            if (polFee + reservesPre.reserveLPers == 0) {
+            if (fees.collateralFeeToProtocol + reservesPre.reserveLPers == 0) {
                 assertEq(amountPol, 0, "Amount of POL is not 0");
             }
         } else if (reservesPre.reserveLPers == 0) {
             fail("Invalid state");
         } else {
-            assertEq(amountPol, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+            assertEq(
+                amountPol,
+                FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+            );
         }
         assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
 
         // Verify Alice's balances
         balances.teaSupply += amountPol;
-        reservesPre.reserveLPers += polFee;
-        if (collateralIn == 0) {
+        reservesPre.reserveLPers += fees.collateralFeeToProtocol;
+        if (fees.collateralInOrWithdrawn == 0) {
             assertEq(inputsOutputs.amount, 0, "1");
         } else if (balances.teaSupply > 0) {
-            assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, collateralIn, reservesPre.reserveLPers));
+            assertEq(
+                inputsOutputs.amount,
+                FullMath.mulDiv(balances.teaSupply, fees.collateralInOrWithdrawn, reservesPre.reserveLPers)
+            );
         }
         assertEq(inputsOutputs.amount, vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, "3");
         assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "4");
@@ -1529,27 +1542,17 @@ contract VaultTest is Test {
         VaultStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
-        uint144 collateralWithdrawn_;
-        uint144 collectedFee;
-        uint144 lpersFee;
-        uint144 polFee;
+        // Compute amount of collateral
+        uint144 collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
+        );
 
-        {
-            // Compute amount of collateral
-            uint144 collateralOut = uint144(
-                FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
-            );
+        // Verify amounts
+        VaultStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, systemParams.tax);
+        reservesPre.reserveLPers -= collateralOut;
+        reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
 
-            // Verify amounts
-            (collateralWithdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
-                collateralOut,
-                systemParams.lpFee,
-                systemParams.tax
-            );
-            reservesPre.reserveLPers -= collateralOut;
-            reservesPre.reserveLPers += lpersFee;
-        }
-        assertEq(inputsOutputs.collateral, collateralWithdrawn_);
+        assertEq(inputsOutputs.collateral, fees.collateralInOrWithdrawn);
 
         // Get total reserve
         (uint144 reserve, , ) = vault.vaultStates(
@@ -1577,7 +1580,7 @@ contract VaultTest is Test {
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + polFee,
+                reservesPre.reserveLPers + fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1586,9 +1589,15 @@ contract VaultTest is Test {
 
         // Verify token state
         {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
-            assertEq(total, reservesPre.reserveLPers + polFee + reservesPre.reserveApes + collectedFee);
+            (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+            assertEq(totalCollateralFeeToStakers, fees.collateralFeeToStakers);
+            assertEq(
+                total,
+                reservesPre.reserveLPers +
+                    fees.collateralFeeToProtocol +
+                    reservesPre.reserveApes +
+                    fees.collateralFeeToStakers
+            );
         }
 
         // Verify Alice's balances
@@ -1602,7 +1611,10 @@ contract VaultTest is Test {
             if (reservesPre.reserveLPers == 0) {
                 fail("Invalid state");
             } else {
-                assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+                assertEq(
+                    inputsOutputs.amount,
+                    FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+                );
             }
         }
         assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
@@ -1653,8 +1665,8 @@ contract VaultTest is Test {
             )
         );
         vm.store(address(vault), slot, bytes32(abi.encodePacked(vaultState.reserve, uint112(0))));
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-        assertEq(collectedFees, 0, "Wrong slot used by vm.store");
+        (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
+        assertEq(totalCollateralFeeToStakers, 0, "Wrong slot used by vm.store");
         assertEq(total, vaultState.reserve, "Wrong slot used by vm.store");
 
         // Set the total supply of APE
@@ -1759,10 +1771,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_WETH);
+        uint112 totalCollateralFeeToStakers = vault.withdrawFees(Addresses.ADDR_WETH);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalCollateralFeeToStakers, tokenFees.fees);
         assertEq(WETH.balanceOf(sir), tokenFees.fees);
         assertEq(WETH.balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -1777,10 +1789,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_BNB);
+        uint112 totalCollateralFeeToStakers = vault.withdrawFees(Addresses.ADDR_BNB);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalCollateralFeeToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(sir), tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -1795,10 +1807,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_USDT);
+        uint112 totalCollateralFeeToStakers = vault.withdrawFees(Addresses.ADDR_USDT);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalCollateralFeeToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(sir), tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -1813,10 +1825,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_USDC);
+        uint112 totalCollateralFeeToStakers = vault.withdrawFees(Addresses.ADDR_USDC);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalCollateralFeeToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(sir), tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -2318,11 +2330,15 @@ contract VaultHandler is Test, RegimeEnum {
         console.log(inputOutput.amountCollateral, "collateral");
 
         // Sufficient condition to not overflow total collateral
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
+        (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
         inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint144).max - total);
 
         // Sufficient condition to not overflow collected fees
-        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint112).max - collectedFees);
+        inputOutput.amountCollateral = _bound(
+            inputOutput.amountCollateral,
+            0,
+            type(uint112).max - totalCollateralFeeToStakers
+        );
 
         bool success;
         uint256 maxCollateralAmount;
@@ -2527,14 +2543,14 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function _invariantTotalCollateral() private {
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
+        (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(address(_WETH));
         assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         VaultStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
         VaultStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
         assertEq(
             reserves1.reserveApes + reserves1.reserveLPers + reserves2.reserveApes + reserves2.reserveLPers,
-            total - collectedFees,
+            total - totalCollateralFeeToStakers,
             "Total collateral minus fees is wrong"
         );
     }
@@ -2718,11 +2734,15 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public {
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
+        (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(address(_WETH));
         assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(reserveApes + reserveLPers, total - collectedFees, "Total collateral minus fees is wrong");
+        assertEq(
+            reserveApes + reserveLPers,
+            total - totalCollateralFeeToStakers,
+            "Total collateral minus fees is wrong"
+        );
     }
 }
 
@@ -2770,10 +2790,14 @@ contract SaturationInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public {
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
+        (uint112 totalCollateralFeeToStakers, uint144 total) = vault.tokenStates(address(_WETH));
         assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(reserveApes + reserveLPers, total - collectedFees, "Total collateral minus fees is wrong");
+        assertEq(
+            reserveApes + reserveLPers,
+            total - totalCollateralFeeToStakers,
+            "Total collateral minus fees is wrong"
+        );
     }
 }

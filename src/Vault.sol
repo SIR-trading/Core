@@ -26,12 +26,14 @@ contract Vault is TEA {
      */
     event Mint(
         uint48 indexed vaultId,
+        bool isAPE,
         uint144 collateralIn,
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
     );
     event Burn(
         uint48 indexed vaultId,
+        bool isAPE,
         uint144 collateralWithdrawn,
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
@@ -145,6 +147,7 @@ contract Vault is TEA {
             // Emit event
             emit Mint(
                 vaultState.vaultId,
+                isAPE,
                 fees.collateralInOrWithdrawn,
                 fees.collateralFeeToStakers,
                 fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
@@ -211,6 +214,7 @@ contract Vault is TEA {
         // Emit event
         emit Burn(
             vaultState.vaultId,
+            isAPE,
             fees.collateralInOrWithdrawn,
             fees.collateralFeeToStakers,
             fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
