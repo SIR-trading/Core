@@ -161,7 +161,7 @@ contract Vault is TEA {
         bool isAPE,
         VaultStructs.VaultParameters calldata vaultParams,
         uint256 amount
-    ) external returns (uint144 collateralWithdrawn) {
+    ) external returns (uint144) {
         VaultStructs.SystemParameters memory systemParams_ = systemParams;
 
         // Get reserves
@@ -205,7 +205,7 @@ contract Vault is TEA {
             tokenState,
             fees.collateralFeeToStakers,
             vaultParams.collateralToken,
-            collateralWithdrawn
+            fees.collateralInOrWithdrawn
         );
 
         // Send collateral
@@ -219,6 +219,8 @@ contract Vault is TEA {
             fees.collateralFeeToStakers,
             fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
         );
+
+        return fees.collateralInOrWithdrawn;
     }
 
     /*////////////////////////////////////////////////////////////////
