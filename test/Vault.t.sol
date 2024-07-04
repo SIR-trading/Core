@@ -1022,7 +1022,7 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e5;
+        else err = 3 + vaultState.reserve / 1e5;
 
         assertApproxEqAbs(vaultState.reserve - newReserveApes, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);

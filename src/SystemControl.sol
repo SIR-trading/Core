@@ -192,6 +192,7 @@ contract SystemControl is Ownable {
         }
 
         // Condition on squares
+        console.log("cumSquaredTaxes:", cumSquaredTaxes, ", type(uint8).max^2:", uint256(type(uint8).max) ** 2);
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
