@@ -1005,12 +1005,25 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         // Check if cumSquaredTaxes is too low
         if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
             uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
+            cumSquaredTaxes = 0;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale up taxes
                 if (newTaxes[i] == 0) newTaxes[i] = 1;
                 uint256 newTax = (uint256(newTaxes[i]) * type(uint8).max - 1) / sqrtCumSquaredTaxes + 1;
                 if (newTax > type(uint8).max) newTaxes[i] = type(uint8).max;
                 else newTaxes[i] = uint8(newTax);
+
+                cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            }
+        }
+
+        // Still.. Check if cumSquaredTaxes is too low one last time
+        if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
+            for (uint256 i = 0; i < numNewVaults; i++) {
+                if (newTaxes[i] < type(uint8).max) {
+                    newTaxes[i]++;
+                    break;
+                }
             }
         }
 
