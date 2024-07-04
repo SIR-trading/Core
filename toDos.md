@@ -21,6 +21,7 @@ This is to save the TVL if the oracle is buggy and reverts.
 
 -   Make all external functions accept and return structs (when available) rather than their separate parameters?
 -   Make an event that shows where all the fees are going for every mint/burn? E.g., Mint(uint48 collateralDeposited, collateralFeeToStakers,collateralFeeToLPers,collateralFeeToPOL)
+-   Change APE symbol and name from string to byte32 to make it cheaper to deploy
 
 # Marketing
 
