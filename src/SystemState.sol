@@ -51,7 +51,7 @@ abstract contract SystemState is SystemControlAccess {
     mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
-    VaultStructs.SystemParameters public systemParams;
+    VaultStructs.SystemParameters internal _systemParams;
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
@@ -69,7 +69,7 @@ abstract contract SystemState is SystemControlAccess {
         sir = sir_;
 
         // SIR is issued as soon as the protocol is deployed
-        systemParams = VaultStructs.SystemParameters({
+        _systemParams = VaultStructs.SystemParameters({
             baseFee: 4000, // Test start base fee with 40%. At 1.5 leverage tier, the price has to double for apes to be in profit.
             lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
             mintingStopped: false,
@@ -188,6 +188,10 @@ abstract contract SystemState is SystemControlAccess {
         return vaultIssuanceParams[vaultId].tax;
     }
 
+    function systemParams() external view returns (VaultStructs.SystemParameters memory) {
+        return _systemParams;
+    }
+
     /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
@@ -201,7 +205,7 @@ abstract contract SystemState is SystemControlAccess {
             updateLPerIssuanceParams(
                 true,
                 vaultId,
-                systemParams,
+                _systemParams,
                 vaultIssuanceParams[vaultId],
                 supplyExcludeVault(vaultId),
                 lpersBalances
@@ -256,8 +260,8 @@ abstract contract SystemState is SystemControlAccess {
 
     /// @dev All checks and balances to be done at system control
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
-        VaultStructs.SystemParameters memory systemParams_ = systemParams;
-        systemParams = VaultStructs.SystemParameters({
+        VaultStructs.SystemParameters memory systemParams_ = _systemParams;
+        _systemParams = VaultStructs.SystemParameters({
             baseFee: baseFee,
             lpFee: lpFee,
             mintingStopped: mintingStopped,
@@ -304,7 +308,7 @@ abstract contract SystemState is SystemControlAccess {
         }
 
         // Update cumulative taxes
-        systemParams.cumTax = cumTax;
+        _systemParams.cumTax = cumTax;
     }
 
     /*////////////////////////////////////////////////////////////////

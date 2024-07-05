@@ -134,7 +134,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         updateLPerIssuanceParams(
             false,
             vaultId,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[vaultId],
             supplyExcludeVault(vaultId),
             lpersBalances
@@ -180,7 +180,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             updateLPerIssuanceParams(
                 false,
                 vaultId,
-                systemParams,
+                _systemParams,
                 vaultIssuanceParams[vaultId],
                 supplyExcludeVault(vaultId),
                 lpersBalances
@@ -451,6 +451,6 @@ contract TEA is SystemState, ERC1155TokenReceiver {
     ////////////////////////////////////////////////////////////////*/
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumSIRPerTEAx96) {
-        return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
+        return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
     }
 }

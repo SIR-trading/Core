@@ -30,7 +30,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -49,7 +49,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -79,7 +79,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -111,7 +111,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -151,7 +151,7 @@ contract SystemStateWrapper is SystemState {
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176) {
         if (vaultId == VAULT_ID)
-            return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(VAULT_ID));
+            return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(VAULT_ID));
         return type(uint176).max / uint176(vaultId); // To make it somewhat arbitrary
     }
 }
@@ -844,12 +844,12 @@ contract SystemStateTest is Test {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
         // Check system vaultState
-        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState.systemParams();
+        VaultStructs.SystemParameters memory systemParams_ = systemState.systemParams();
 
-        assertEq(baseFee_, baseFee);
-        assertEq(lpFee_, lpFee);
-        assertEq(mintingStopped_, mintingStopped);
-        assertEq(cumTax_, numVaults);
+        assertEq(systemParams_.baseFee, baseFee);
+        assertEq(systemParams_.lpFee, lpFee);
+        assertEq(systemParams_.mintingStopped, mintingStopped);
+        assertEq(systemParams_.cumTax, numVaults);
 
         // Update vaults to only 1 with max tax
         uint48[] memory veryNewVaults = new uint48[](1); // Max # of vaults
@@ -860,12 +860,12 @@ contract SystemStateTest is Test {
         systemState.updateVaults(newVaults, veryNewVaults, veryNewTaxes, type(uint8).max);
 
         // Check system vaultState
-        (baseFee_, lpFee_, mintingStopped_, cumTax_) = systemState.systemParams();
+        systemParams_ = systemState.systemParams();
 
-        assertEq(baseFee_, baseFee);
-        assertEq(lpFee_, lpFee);
-        assertEq(mintingStopped_, mintingStopped);
-        assertEq(cumTax_, type(uint8).max);
+        assertEq(systemParams_.baseFee, baseFee);
+        assertEq(systemParams_.lpFee, lpFee);
+        assertEq(systemParams_.mintingStopped, mintingStopped);
+        assertEq(systemParams_.cumTax, type(uint8).max);
     }
 
     function testFuzz_updateSystemStateNotSystemControl(uint16 baseFee, uint16 lpFee, bool mintingStopped) public {

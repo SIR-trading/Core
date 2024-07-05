@@ -86,7 +86,7 @@ contract Vault is TEA {
      */
     function mint(bool isAPE, VaultStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
         unchecked {
-            VaultStructs.SystemParameters memory systemParams_ = systemParams;
+            VaultStructs.SystemParameters memory systemParams_ = _systemParams;
             require(!systemParams_.mintingStopped);
 
             // Get reserves
@@ -162,7 +162,7 @@ contract Vault is TEA {
         VaultStructs.VaultParameters calldata vaultParams,
         uint256 amount
     ) external returns (uint144) {
-        VaultStructs.SystemParameters memory systemParams_ = systemParams;
+        VaultStructs.SystemParameters memory systemParams_ = _systemParams;
 
         // Get reserves
         (

@@ -733,7 +733,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     ) private returns (VaultStructs.Fees memory fees, uint256 bobAmount) {
         fees = Fees.hiddenFeeTEA(
             testMintParams.collateralDeposited,
-            systemParams.lpFee,
+            _systemParams.lpFee,
             vaultIssuanceParams[VAULT_ID].tax
         );
 
@@ -804,7 +804,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
         );
 
-        fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, vaultIssuanceParams[VAULT_ID].tax);
+        fees = Fees.hiddenFeeTEA(collateralOut, _systemParams.lpFee, vaultIssuanceParams[VAULT_ID].tax);
 
         uint256 bobAmount = bobBalance[tsBalance.length - 2] - bobBalance[tsBalance.length - 1];
         uint256 POLAmount = POLBalance[POLBalance.length - 1] - POLBalance[POLBalance.length - 2];
@@ -905,8 +905,8 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TS_ISSUANCE_START, MAX_TS));
 
         // Initialize system parameters
-        systemParams.lpFee = lpFee;
-        systemParams.cumTax = tax;
+        _systemParams.lpFee = lpFee;
+        _systemParams.cumTax = tax;
 
         // Initialize vault issuance parameters
         vaultIssuanceParams[VAULT_ID].tax = tax;
@@ -925,7 +925,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             address(collateral),
             bob,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
             testMintParams.collateralDeposited
@@ -1062,7 +1062,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             address(collateral),
             bob,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
             testMintParams.collateralDeposited
@@ -1192,7 +1192,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             address(collateral),
             bob,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
             collateralDeposited
@@ -1234,7 +1234,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             address(collateral),
             bob,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
             testBurnParams.tokensBurnt
@@ -1297,7 +1297,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             address(collateral),
             bob,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
             testBurnParams.tokensBurnt
