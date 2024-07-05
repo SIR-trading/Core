@@ -27,18 +27,18 @@ contract TEAInstance is TEA, TEATestConstants {
 
         // Initialize array
         for (uint256 vaultId = 0; vaultId <= MAX_VAULT_ID; vaultId++) {
-            paramsById.push(
+            _paramsById.push(
                 VaultStructs.VaultParameters({debtToken: address(0), collateralToken: address(0), leverageTier: 0})
             );
         }
 
-        paramsById[VAULT_ID] = VaultStructs.VaultParameters({
+        _paramsById[VAULT_ID] = VaultStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: collateral_,
             leverageTier: LEVERAGE_TIER
         });
 
-        paramsById[MAX_VAULT_ID] = VaultStructs.VaultParameters({
+        _paramsById[MAX_VAULT_ID] = VaultStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: collateral_,
             leverageTier: LEVERAGE_TIER

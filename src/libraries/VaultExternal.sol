@@ -141,7 +141,7 @@ library VaultExternal {
 
     function getReservesReadOnly(
         mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
-            storage vaultStates,
+            storage _vaultStates,
         Oracle oracle,
         VaultStructs.VaultParameters calldata vaultParams
     ) external view returns (VaultStructs.Reserves memory reserves) {
@@ -149,7 +149,7 @@ library VaultExternal {
         reserves.tickPriceX42 = oracle.getPrice(vaultParams.collateralToken, vaultParams.debtToken);
 
         _getReserves(
-            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
+            _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
             reserves,
             vaultParams.leverageTier
         );
@@ -160,7 +160,7 @@ library VaultExternal {
         bool isAPE,
         mapping(address collateral => VaultStructs.TokenState) storage tokenStates,
         mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
-            storage vaultStates,
+            storage _vaultStates,
         Oracle oracle,
         VaultStructs.VaultParameters calldata vaultParams
     )
@@ -175,7 +175,7 @@ library VaultExternal {
     {
         unchecked {
             tokenState = tokenStates[vaultParams.collateralToken];
-            vaultState = vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
+            vaultState = _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
 
             // Get price and update oracle state if needed
             reserves.tickPriceX42 = oracle.updateOracleState(vaultParams.collateralToken, vaultParams.debtToken);

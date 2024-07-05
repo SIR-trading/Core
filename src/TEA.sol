@@ -56,7 +56,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
      */
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
 
-    VaultStructs.VaultParameters[] public paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
+    VaultStructs.VaultParameters[] public _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
@@ -65,8 +65,12 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function numberOfVaults() external view returns (uint256) {
-        return paramsById.length - 1;
+    function paramsById(uint48 vaultId) external view returns (VaultStructs.VaultParameters memory) {
+        return _paramsById[vaultId];
+    }
+
+    function numberOfVaults() external view returns (uint48) {
+        return uint48(_paramsById.length - 1);
     }
 
     function totalSupply(uint256 vaultId) external view returns (uint256) {
@@ -80,7 +84,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
     function uri(uint256 vaultId) external view returns (string memory) {
         uint256 totalSupply_ = totalSupplyAndBalanceVault[vaultId].totalSupply;
-        return VaultExternal.teaURI(paramsById, vaultId, totalSupply_);
+        return VaultExternal.teaURI(_paramsById, vaultId, totalSupply_);
     }
 
     function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {

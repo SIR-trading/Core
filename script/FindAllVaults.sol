@@ -23,12 +23,12 @@ contract FindAllVaults is Script {
         console.log("Number of vaults: ", Nvaults);
 
         // Check 1st vault
-        for (uint256 i = 1; i <= Nvaults; i++) {
+        for (uint48 i = 1; i <= Nvaults; i++) {
             console.log("------ Vault ID: ", i, " ------");
-            (address debtToken, address collateralToken, int8 leverageTier) = VAULT.paramsById(i);
-            console.log("debtToken: ", debtToken);
-            console.log("collateralToken: ", collateralToken);
-            console.log("leverageTier: ", vm.toString(leverageTier));
+            VaultStructs.VaultParameters memory vaultParams = VAULT.paramsById(i);
+            console.log("debtToken: ", vaultParams.debtToken);
+            console.log("collateralToken: ", vaultParams.collateralToken);
+            console.log("leverageTier: ", vm.toString(vaultParams.leverageTier));
         }
 
         vm.stopBroadcast();

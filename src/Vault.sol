@@ -42,7 +42,7 @@ contract Vault is TEA {
     Oracle private immutable _ORACLE;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
-        public vaultStates; // Do not use vaultId 0
+        internal _vaultStates; // Do not use vaultId 0
 
     // Global parameters for each type of collateral that aggregates amounts from all vaults
     mapping(address collateral => VaultStructs.TokenState) public tokenStates;
@@ -55,7 +55,7 @@ contract Vault is TEA {
         _ORACLE = Oracle(oracle);
 
         // Push empty parameters to avoid vaultId 0
-        paramsById.push(VaultStructs.VaultParameters(address(0), address(0), 0));
+        _paramsById.push(VaultStructs.VaultParameters(address(0), address(0), 0));
     }
 
     /** @notice Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
@@ -63,8 +63,8 @@ contract Vault is TEA {
     function initialize(VaultStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deploy(
             _ORACLE,
-            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
-            paramsById,
+            _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
+            _paramsById,
             _transientTokenParameters,
             vaultParams
         );
@@ -75,7 +75,7 @@ contract Vault is TEA {
         view
         returns (VaultStructs.TokenParameters memory, VaultStructs.VaultParameters memory)
     {
-        return (_transientTokenParameters, paramsById[paramsById.length - 1]);
+        return (_transientTokenParameters, _paramsById[_paramsById.length - 1]);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -96,7 +96,7 @@ contract Vault is TEA {
                 VaultStructs.Reserves memory reserves,
                 APE ape,
                 uint144 collateralDeposited
-            ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+            ) = VaultExternal.getReserves(true, isAPE, tokenStates, _vaultStates, _ORACLE, vaultParams);
 
             VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             VaultStructs.Fees memory fees;
@@ -132,7 +132,7 @@ contract Vault is TEA {
                 );
             }
 
-            // Update vaultStates from new reserves
+            // Update _vaultStates from new reserves
             _updateVaultState(vaultState, reserves, vaultParams);
 
             // Update collateral params
@@ -171,7 +171,7 @@ contract Vault is TEA {
             VaultStructs.Reserves memory reserves,
             APE ape,
 
-        ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+        ) = VaultExternal.getReserves(false, isAPE, tokenStates, _vaultStates, _ORACLE, vaultParams);
 
         VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         VaultStructs.Fees memory fees;
@@ -196,7 +196,7 @@ contract Vault is TEA {
             );
         }
 
-        // Update vaultStates from new reserves
+        // Update _vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update collateral params
@@ -232,7 +232,7 @@ contract Vault is TEA {
     function getReserves(
         VaultStructs.VaultParameters calldata vaultParams
     ) external view returns (VaultStructs.Reserves memory) {
-        return VaultExternal.getReservesReadOnly(vaultStates, _ORACLE, vaultParams);
+        return VaultExternal.getReservesReadOnly(_vaultStates, _ORACLE, vaultParams);
     }
 
     function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
@@ -341,7 +341,7 @@ contract Vault is TEA {
                 }
             }
 
-            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
+            _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         }
     }
 
@@ -408,5 +408,15 @@ contract Vault is TEA {
                 }
             }
         }
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                            EXPLICIT GETTERS
+    ////////////////////////////////////////////////////////////////*/
+
+    function vaultStates(
+        VaultStructs.VaultParameters calldata vaultParams
+    ) external view returns (VaultStructs.VaultState memory) {
+        return _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
     }
 }
