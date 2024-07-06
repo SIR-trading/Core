@@ -92,4 +92,22 @@ library SirStructs {
         uint40 startTime; // Auction start time
         bool winnerPaid; // Whether the winner has been paid
     }
+
+    struct OracleState {
+        int64 tickPriceX42; // Last stored price. Q21.42
+        uint40 timeStampPrice; // Timestamp of the last stored price
+        uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
+        uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
+        uint40 timeStampFeeTier; // Timestamp of the last probed fee tier
+        bool initialized; // Whether the oracle has been initialized
+        UniswapFeeTier uniswapFeeTier; // Uniswap v3 fee tier currently being used as oracle
+    }
+
+    /**
+     * Parameters of a Uniswap v3 tier.
+     */
+    struct UniswapFeeTier {
+        uint24 fee;
+        int24 tickSpacing;
+    }
 }

@@ -1065,7 +1065,7 @@ contract StakerHandler is Auxiliary {
     uint256 public currentTime;
 
     constructor() {
-        vm.writeFile("./InvariantStaker.log", "");
+        // vm.writeFile("./InvariantStaker.log", "");
         currentTime = 1694616791;
 
         staker = new Staker(Addresses.ADDR_WETH);
@@ -1175,7 +1175,7 @@ contract StakerHandler is Auxiliary {
 
     function payAuctionWinner(uint256 timeSkip, bool collateralSelect) external advanceTime(timeSkip) {
         address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
-        vm.writeLine("./InvariantStaker.log", string.concat("Pays winner of ", vm.toString(collateral), " auction"));
+        // vm.writeLine("./InvariantStaker.log", string.concat("Pays winner of ", vm.toString(collateral), " auction"));
 
         // Pay auction winner
         staker.payAuctionWinner(collateral);
