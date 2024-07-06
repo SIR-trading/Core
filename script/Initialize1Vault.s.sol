@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 
 import {Addresses} from "src/libraries/Addresses.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {Vault} from "src/Vault.sol";
 
 contract Initialize1Vault is Script {
@@ -26,7 +26,7 @@ contract Initialize1Vault is Script {
 
         // Deploy oracle
         VAULT.initialize(
-            VaultStructs.VaultParameters({
+            SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDT,
                 collateralToken: Addresses.ADDR_WETH,
                 leverageTier: int8(-1)

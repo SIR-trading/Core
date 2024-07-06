@@ -10,7 +10,7 @@ import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
 // Contracts
@@ -41,26 +41,26 @@ contract Vault is TEA {
 
     Oracle private immutable _ORACLE;
 
-    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
+    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
 
     // Global parameters for each type of collateral that aggregates amounts from all vaults
-    mapping(address collateral => VaultStructs.CollateralState) internal _collateralStates;
+    mapping(address collateral => SirStructs.CollateralState) internal _collateralStates;
 
     // Used to pass parameters to the APE token constructor
-    VaultStructs.TokenParameters private _transientTokenParameters;
+    SirStructs.TokenParameters private _transientTokenParameters;
 
     constructor(address systemControl, address sir, address oracle) TEA(systemControl, sir) {
         // Price _ORACLE
         _ORACLE = Oracle(oracle);
 
         // Push empty parameters to avoid vaultId 0
-        _paramsById.push(VaultStructs.VaultParameters(address(0), address(0), 0));
+        _paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
     }
 
     /** @notice Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
      */
-    function initialize(VaultStructs.VaultParameters memory vaultParams) external {
+    function initialize(SirStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deploy(
             _ORACLE,
             _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
@@ -73,7 +73,7 @@ contract Vault is TEA {
     function latestTokenParams()
         external
         view
-        returns (VaultStructs.TokenParameters memory, VaultStructs.VaultParameters memory)
+        returns (SirStructs.TokenParameters memory, SirStructs.VaultParameters memory)
     {
         return (_transientTokenParameters, _paramsById[_paramsById.length - 1]);
     }
@@ -84,22 +84,22 @@ contract Vault is TEA {
 
     /** @notice Function for minting APE or TEA
      */
-    function mint(bool isAPE, VaultStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
+    function mint(bool isAPE, SirStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
         unchecked {
-            VaultStructs.SystemParameters memory systemParams_ = _systemParams;
+            SirStructs.SystemParameters memory systemParams_ = _systemParams;
             require(!systemParams_.mintingStopped);
 
             // Get reserves
             (
-                VaultStructs.CollateralState memory collateralState,
-                VaultStructs.VaultState memory vaultState,
-                VaultStructs.Reserves memory reserves,
+                SirStructs.CollateralState memory collateralState,
+                SirStructs.VaultState memory vaultState,
+                SirStructs.Reserves memory reserves,
                 APE ape,
                 uint144 collateralDeposited
             ) = VaultExternal.getReserves(true, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
-            VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-            VaultStructs.Fees memory fees;
+            SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+            SirStructs.Fees memory fees;
             if (isAPE) {
                 // Mint APE
                 (reserves, fees, amount) = ape.mint(
@@ -159,22 +159,22 @@ contract Vault is TEA {
      */
     function burn(
         bool isAPE,
-        VaultStructs.VaultParameters calldata vaultParams,
+        SirStructs.VaultParameters calldata vaultParams,
         uint256 amount
     ) external returns (uint144) {
-        VaultStructs.SystemParameters memory systemParams_ = _systemParams;
+        SirStructs.SystemParameters memory systemParams_ = _systemParams;
 
         // Get reserves
         (
-            VaultStructs.CollateralState memory collateralState,
-            VaultStructs.VaultState memory vaultState,
-            VaultStructs.Reserves memory reserves,
+            SirStructs.CollateralState memory collateralState,
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
             APE ape,
 
         ) = VaultExternal.getReserves(false, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-        VaultStructs.Fees memory fees;
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+        SirStructs.Fees memory fees;
         if (isAPE) {
             // Burn APE
             (reserves, fees) = ape.burn(msg.sender, systemParams_.baseFee, vaultIssuanceParams_.tax, reserves, amount);
@@ -230,8 +230,8 @@ contract Vault is TEA {
     /** @dev Kick it to periphery if more space is needed
      */
     function getReserves(
-        VaultStructs.VaultParameters calldata vaultParams
-    ) external view returns (VaultStructs.Reserves memory) {
+        SirStructs.VaultParameters calldata vaultParams
+    ) external view returns (SirStructs.Reserves memory) {
         return VaultExternal.getReservesReadOnly(_vaultStates, _ORACLE, vaultParams);
     }
 
@@ -253,9 +253,9 @@ contract Vault is TEA {
      *     (R,  0  ) ⇔ (A,0)
      */
     function _updateVaultState(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reserves,
-        VaultStructs.VaultParameters calldata vaultParams
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reserves,
+        SirStructs.VaultParameters calldata vaultParams
     ) private {
         unchecked {
             vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
@@ -347,14 +347,14 @@ contract Vault is TEA {
 
     function _updateCollateralState(
         bool isMint,
-        VaultStructs.CollateralState memory collateralState,
+        SirStructs.CollateralState memory collateralState,
         uint256 collectedFee,
         address collateralToken,
         uint144 collateralDepositedOrWithdrawn
     ) private {
         uint256 totalFeesToStakers_ = collateralState.totalFeesToStakers + collectedFee;
         require(totalFeesToStakers_ <= type(uint112).max); // Ensure it fits in a uint112
-        collateralState = VaultStructs.CollateralState({
+        collateralState = SirStructs.CollateralState({
             totalFeesToStakers: uint112(totalFeesToStakers_),
             total: isMint
                 ? collateralState.total + collateralDepositedOrWithdrawn
@@ -371,10 +371,10 @@ contract Vault is TEA {
     function withdrawFees(address token) external returns (uint112 totalFeesToStakers) {
         require(msg.sender == sir);
 
-        VaultStructs.CollateralState memory collateralState = _collateralStates[token];
+        SirStructs.CollateralState memory collateralState = _collateralStates[token];
         totalFeesToStakers = collateralState.totalFeesToStakers;
         if (totalFeesToStakers != 0) {
-            _collateralStates[token] = VaultStructs.CollateralState({
+            _collateralStates[token] = SirStructs.CollateralState({
                 totalFeesToStakers: 0,
                 total: collateralState.total - totalFeesToStakers
             });
@@ -418,12 +418,12 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     function vaultStates(
-        VaultStructs.VaultParameters calldata vaultParams
-    ) external view returns (VaultStructs.VaultState memory) {
+        SirStructs.VaultParameters calldata vaultParams
+    ) external view returns (SirStructs.VaultState memory) {
         return _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
     }
 
-    function collateralStates(address token) external view returns (VaultStructs.CollateralState memory) {
+    function collateralStates(address token) external view returns (SirStructs.CollateralState memory) {
         return _collateralStates[token];
     }
 }

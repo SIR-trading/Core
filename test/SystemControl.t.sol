@@ -12,7 +12,7 @@ import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 
@@ -61,8 +61,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
-    VaultStructs.VaultParameters vaultParameters =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters vaultParameters =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: -1
@@ -111,7 +111,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _initializeVault();
 
         // Save system parameters
-        VaultStructs.SystemParameters memory systemParams = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
         assertTrue(!systemParams.mintingStopped, "mintingStopped not set to false");
 
         // Successfully mint APE
@@ -133,7 +133,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Emergency));
 
         // Check fees are 0
-        VaultStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
         assertEq(systemParams_.baseFee, 0, "baseFee not set to 0");
         assertEq(systemParams_.lpFee, 0, "lpFee not set to 0");
         assertEq(systemParams_.mintingStopped, true, "mintingStopped not set to true");
@@ -179,7 +179,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         vault.mint(false, vaultParameters);
 
         // Check fees are restored
-        VaultStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
         assertEq(baseFee, systemParams_.baseFee, "baseFee not restored");
         assertEq(lpFee, systemParams_.lpFee, "lpFee not restored");
         assertTrue(!systemParams_.mintingStopped, "mintingStopped not set to false");
@@ -686,7 +686,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
 
         // Retrieve current lp fee
-        VaultStructs.SystemParameters memory systemParams = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
 
         // Set base fee
         vm.expectEmit();
@@ -694,7 +694,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setBaseFee(baseFee);
 
         // Check if base fee is set correctly
-        VaultStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
         assertEq(systemParams_.baseFee, baseFee, "baseFee not set correctly");
         assertEq(systemParams_.lpFee, systemParams.lpFee, "lpFee not changed");
     }
@@ -744,7 +744,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
 
         // Retrieve current base fee
-        VaultStructs.SystemParameters memory systemParams = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
 
         // Set lp fee
         vm.expectEmit();
@@ -752,7 +752,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setLPFee(lpFee);
 
         // Check if lp fee is set correctly
-        VaultStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
         assertEq(systemParams_.baseFee, systemParams.baseFee, "baseFee not changed");
         assertEq(systemParams_.lpFee, lpFee, "lpFee not set correctly");
     }

@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 import {Fees} from "src/libraries/Fees.sol";
@@ -56,17 +56,14 @@ contract APETest is Test {
     function latestTokenParams()
         external
         pure
-        returns (
-            VaultStructs.TokenParameters memory tokenParameters,
-            VaultStructs.VaultParameters memory vaultParameters
-        )
+        returns (SirStructs.TokenParameters memory tokenParameters, SirStructs.VaultParameters memory vaultParameters)
     {
-        tokenParameters = VaultStructs.TokenParameters({
+        tokenParameters = SirStructs.TokenParameters({
             name: "Tokenized ETH/USDC with 1.25x leverage",
             symbol: "APE-42",
             decimals: 18
         });
-        vaultParameters = VaultStructs.VaultParameters({
+        vaultParameters = SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDC,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: LEVERAGE_TIER
@@ -233,16 +230,16 @@ contract APETest is Test {
         vm.assume(collateralDeposited + reserveApesInitial >= 1);
 
         // Expected fees
-        VaultStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
 
         // Mint
         vm.expectEmit();
         emit Transfer(address(0), alice, reserveApesInitial + fees_.collateralInOrWithdrawn);
-        (VaultStructs.Reserves memory reserves, VaultStructs.Fees memory fees, uint256 amount) = ape.mint(
+        (SirStructs.Reserves memory reserves, SirStructs.Fees memory fees, uint256 amount) = ape.mint(
             alice,
             baseFee,
             tax,
-            VaultStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
+            SirStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
             collateralDeposited
         );
 
@@ -288,7 +285,7 @@ contract APETest is Test {
             );
 
         // Expected fees
-        VaultStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
 
         // Expected fees
         uint256 amount_ = FullMath.mulDiv(totalSupplyInitial, fees_.collateralInOrWithdrawn, reserveApesInitial);
@@ -300,11 +297,11 @@ contract APETest is Test {
         // Mint
         vm.expectEmit();
         emit Transfer(address(0), alice, amount_);
-        (VaultStructs.Reserves memory reserves, VaultStructs.Fees memory fees, uint256 amount) = ape.mint(
+        (SirStructs.Reserves memory reserves, SirStructs.Fees memory fees, uint256 amount) = ape.mint(
             alice,
             baseFee,
             tax,
-            VaultStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
+            SirStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
             collateralDeposited
         );
 
@@ -353,14 +350,14 @@ contract APETest is Test {
             bob,
             0,
             0,
-            VaultStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
+            SirStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
             collateralDeposited
         );
     }
 
     function testFail_mintByNonOwner() public {
         vm.prank(alice);
-        ape.mint(bob, 0, 0, VaultStructs.Reserves(0, 0, 0), 10); // This should fail because bob is not the owner
+        ape.mint(bob, 0, 0, SirStructs.Reserves(0, 0, 0), 10); // This should fail because bob is not the owner
     }
 
     function testFuzz_burn(
@@ -386,16 +383,16 @@ contract APETest is Test {
 
         // Expected fees
         uint144 collateralOut_ = uint144(FullMath.mulDiv(reserveApesInitial, amountBurnt, totalSupplyInitial));
-        VaultStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralOut_, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralOut_, baseFee, LEVERAGE_TIER, tax);
 
         // Burn
         vm.expectEmit();
         emit Transfer(alice, address(0), amountBurnt);
-        (VaultStructs.Reserves memory reserves, VaultStructs.Fees memory fees) = ape.burn(
+        (SirStructs.Reserves memory reserves, SirStructs.Fees memory fees) = ape.burn(
             alice,
             baseFee,
             tax,
-            VaultStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
+            SirStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
             amountBurnt
         );
 
@@ -435,7 +432,7 @@ contract APETest is Test {
             alice,
             0,
             0,
-            VaultStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
+            SirStructs.Reserves({reserveApes: reserveApesInitial, reserveLPers: 0, tickPriceX42: 0}),
             amountBurnt
         );
     }
@@ -459,7 +456,7 @@ contract APETest is Test {
         _mint(bob, totalSupplyInitial - amountBalance);
 
         vm.expectRevert();
-        ape.burn(alice, 0, 0, VaultStructs.Reserves(0, 0, 0), amountBurnt);
+        ape.burn(alice, 0, 0, SirStructs.Reserves(0, 0, 0), amountBurnt);
     }
 }
 
@@ -480,7 +477,7 @@ contract APEHandler is Test {
     uint256[2] public totalSupplyOld;
     uint144[2] public apesReserveOld;
 
-    VaultStructs.Reserves[2] public reserves;
+    SirStructs.Reserves[2] public reserves;
     APE[2] public ape;
 
     bool[2] public trueIfMintFalseIfBurn;
@@ -488,17 +485,14 @@ contract APEHandler is Test {
     function latestTokenParams()
         external
         pure
-        returns (
-            VaultStructs.TokenParameters memory tokenParameters,
-            VaultStructs.VaultParameters memory vaultParameters
-        )
+        returns (SirStructs.TokenParameters memory tokenParameters, SirStructs.VaultParameters memory vaultParameters)
     {
-        tokenParameters = VaultStructs.TokenParameters({
+        tokenParameters = SirStructs.TokenParameters({
             name: "Tokenized ETH/USDC with 1.25x leverage",
             symbol: "APE-42",
             decimals: 18
         });
-        vaultParameters = VaultStructs.VaultParameters({
+        vaultParameters = SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDC,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: LEVERAGE_TIER
@@ -585,7 +579,7 @@ contract APEHandler is Test {
         totalCollateralDeposited += collateralDeposited;
 
         address to = _idToAddr(toId);
-        VaultStructs.Fees memory fees;
+        SirStructs.Fees memory fees;
         uint256 amount;
         (reserves[rndAPE], fees, amount) = ape[rndAPE].mint(to, baseFee, tax, reserves[rndAPE], collateralDeposited);
         totalCollateralFeeToStakers += fees.collateralFeeToStakers;
@@ -627,7 +621,7 @@ contract APEHandler is Test {
             amount = _bound(amount, 0, amountMax);
         }
 
-        VaultStructs.Fees memory fees;
+        SirStructs.Fees memory fees;
         (reserves[rndAPE], fees) = ape[rndAPE].burn(from, baseFee, tax, reserves[rndAPE], amount);
         totalCollateralFeeToStakers += fees.collateralFeeToStakers;
         reserves[rndAPE].reserveLPers += fees.collateralFeeToProtocol;

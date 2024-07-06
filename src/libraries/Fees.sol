@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {VaultStructs} from "./VaultStructs.sol";
+import {SirStructs} from "./SirStructs.sol";
 
 /**
  * @notice	Smart contract for computing fees in SIR.
@@ -35,7 +35,7 @@ library Fees {
         uint16 baseFee,
         int256 leverageTier,
         uint8 tax
-    ) internal pure returns (VaultStructs.Fees memory fees) {
+    ) internal pure returns (SirStructs.Fees memory fees) {
         unchecked {
             uint256 feeNum;
             uint256 feeDen;
@@ -70,7 +70,7 @@ library Fees {
         uint144 collateralDepositedOrOut,
         uint16 lpFee,
         uint8 tax
-    ) internal pure returns (VaultStructs.Fees memory fees) {
+    ) internal pure returns (SirStructs.Fees memory fees) {
         unchecked {
             uint256 feeNum = 10000;
             uint256 feeDen = 10000 + uint256(lpFee);

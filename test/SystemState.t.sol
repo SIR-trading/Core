@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
 import {SystemState} from "src/SystemState.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 
@@ -844,7 +844,7 @@ contract SystemStateTest is Test {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
         // Check system vaultState
-        VaultStructs.SystemParameters memory systemParams_ = systemState.systemParams();
+        SirStructs.SystemParameters memory systemParams_ = systemState.systemParams();
 
         assertEq(systemParams_.baseFee, baseFee);
         assertEq(systemParams_.lpFee, lpFee);

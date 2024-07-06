@@ -6,7 +6,7 @@ import {Vault} from "./Vault.sol";
 import {SIR} from "./SIR.sol";
 
 // Libraries
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
@@ -94,7 +94,7 @@ contract SystemControl is Ownable {
 
         // Retrieve parameters
         Vault vault_ = vault;
-        VaultStructs.SystemParameters memory systemParams = vault_.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
 
         // Store fee parameters for later
         _oldBaseFee = systemParams.baseFee;
@@ -147,7 +147,7 @@ contract SystemControl is Ownable {
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        VaultStructs.SystemParameters memory systemParams = vault_.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
 
         vault_.updateSystemState(baseFee_, systemParams.lpFee, false);
 
@@ -159,7 +159,7 @@ contract SystemControl is Ownable {
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        VaultStructs.SystemParameters memory systemParams = vault_.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
 
         vault_.updateSystemState(systemParams.baseFee, lpFee_, false);
 

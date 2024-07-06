@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
@@ -48,10 +48,10 @@ abstract contract SystemState is SystemControlAccess {
 
     address internal immutable sir;
 
-    mapping(uint256 vaultId => VaultStructs.VaultIssuanceParams) internal vaultIssuanceParams;
+    mapping(uint256 vaultId => SirStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
 
-    VaultStructs.SystemParameters internal _systemParams;
+    SirStructs.SystemParameters internal _systemParams;
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
@@ -69,7 +69,7 @@ abstract contract SystemState is SystemControlAccess {
         sir = sir_;
 
         // SIR is issued as soon as the protocol is deployed
-        _systemParams = VaultStructs.SystemParameters({
+        _systemParams = SirStructs.SystemParameters({
             baseFee: 4000, // Test start base fee with 40%. At 1.5 leverage tier, the price has to double for apes to be in profit.
             lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
             mintingStopped: false,
@@ -96,8 +96,8 @@ abstract contract SystemState is SystemControlAccess {
         @return cumSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
     */
     function cumulativeSIRPerTEA(
-        VaultStructs.SystemParameters memory systemParams_,
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        SirStructs.SystemParameters memory systemParams_,
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 supplyExcludeVault_
     ) internal view returns (uint176 cumSIRPerTEAx96) {
         unchecked {
@@ -188,7 +188,7 @@ abstract contract SystemState is SystemControlAccess {
         return vaultIssuanceParams[vaultId].tax;
     }
 
-    function systemParams() external view returns (VaultStructs.SystemParameters memory) {
+    function systemParams() external view returns (SirStructs.SystemParameters memory) {
         return _systemParams;
     }
 
@@ -218,8 +218,8 @@ abstract contract SystemState is SystemControlAccess {
     function updateLPerIssuanceParams(
         bool sirIsCaller,
         uint256 vaultId,
-        VaultStructs.SystemParameters memory systemParams_,
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        SirStructs.SystemParameters memory systemParams_,
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 supplyExcludeVault_,
         LPersBalances memory lpersBalances
     ) internal returns (uint80 unclaimedRewards0) {
@@ -260,8 +260,8 @@ abstract contract SystemState is SystemControlAccess {
 
     /// @dev All checks and balances to be done at system control
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
-        VaultStructs.SystemParameters memory systemParams_ = _systemParams;
-        _systemParams = VaultStructs.SystemParameters({
+        SirStructs.SystemParameters memory systemParams_ = _systemParams;
+        _systemParams = SirStructs.SystemParameters({
             baseFee: baseFee,
             lpFee: lpFee,
             mintingStopped: mintingStopped,
@@ -283,7 +283,7 @@ abstract contract SystemState is SystemControlAccess {
             cumSIRPerTEAx96 = cumulativeSIRPerTEA(oldVaults[i]);
 
             // Update vault issuance parameters
-            vaultIssuanceParams[oldVaults[i]] = VaultStructs.VaultIssuanceParams({
+            vaultIssuanceParams[oldVaults[i]] = SirStructs.VaultIssuanceParams({
                 tax: 0, // Nul tax, and consequently nul SIR issuance
                 tsLastUpdate: uint40(block.timestamp),
                 cumSIRPerTEAx96: cumSIRPerTEAx96
@@ -298,7 +298,7 @@ abstract contract SystemState is SystemControlAccess {
             cumSIRPerTEAx96 = cumulativeSIRPerTEA(newVaults[i]);
 
             // Update vault issuance parameters
-            vaultIssuanceParams[newVaults[i]] = VaultStructs.VaultIssuanceParams({
+            vaultIssuanceParams[newVaults[i]] = SirStructs.VaultIssuanceParams({
                 tax: newTaxes[i],
                 tsLastUpdate: uint40(block.timestamp),
                 cumSIRPerTEAx96: cumSIRPerTEAx96

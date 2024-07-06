@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 
 import "forge-std/console.sol";
 
@@ -40,31 +41,19 @@ contract Staker {
     string public symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
-    struct StakingParams {
-        uint80 stake; // Amount of staked SIR
-        uint176 cumETHPerSIRx80; // Cumulative ETH per SIR * 2^80
-    }
-
     struct Balance {
         uint80 balanceOfSIR; // Amount of transferable SIR
         uint96 unclaimedETH; // Amount of ETH owed to the staker(s)
     }
 
-    struct Auction {
-        address bidder; // Address of the bidder
-        uint96 bid; // Amount of the bid
-        uint40 startTime; // Auction start time
-        bool winnerPaid; // Whether the winner has been paid
-    }
-
-    StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
+    SirStructs.StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
     Balance private _supply; // Total unstaked SIR and ETH owed to the stakers
     uint96 internal totalBids; // Total amount of WETH deposited by the bidders
     bool private _initialized;
 
-    mapping(address token => Auction) public auctions;
+    mapping(address token => SirStructs.Auction) internal _auctions;
     mapping(address user => Balance) internal balances;
-    mapping(address user => StakingParams) public stakersParams;
+    mapping(address user => SirStructs.StakingParams) internal _stakersParams;
 
     mapping(address => mapping(address => uint256)) public allowance;
 
@@ -104,7 +93,7 @@ contract Staker {
 
     // Return staked SIR + transferable (unstaked) SIR
     function totalBalanceOf(address account) external view returns (uint256) {
-        return stakersParams[account].stake + balances[account].balanceOfSIR;
+        return _stakersParams[account].stake + balances[account].balanceOfSIR;
     }
 
     // Return transferable SIR only
@@ -243,8 +232,8 @@ contract Staker {
 
     function stake(uint80 amount) external {
         Balance memory balance = balances[msg.sender];
-        StakingParams memory stakingParams_ = stakingParams;
-        StakingParams memory stakerParams = stakersParams[msg.sender];
+        SirStructs.StakingParams memory stakingParams_ = stakingParams;
+        SirStructs.StakingParams memory stakerParams = _stakersParams[msg.sender];
 
         uint80 newBalanceOfSIR = balance.balanceOfSIR - amount;
 
@@ -253,7 +242,10 @@ contract Staker {
             balances[msg.sender] = Balance(newBalanceOfSIR, _dividends(balance, stakingParams_, stakerParams));
 
             // Update staker info
-            stakersParams[msg.sender] = StakingParams(stakerParams.stake + amount, stakingParams_.cumETHPerSIRx80);
+            _stakersParams[msg.sender] = SirStructs.StakingParams(
+                stakerParams.stake + amount,
+                stakingParams_.cumETHPerSIRx80
+            );
 
             // Update _supply
             _supply.balanceOfSIR -= amount;
@@ -267,8 +259,8 @@ contract Staker {
 
     function unstake(uint80 amount) external {
         Balance memory balance = balances[msg.sender];
-        StakingParams memory stakingParams_ = stakingParams;
-        StakingParams memory stakerParams = stakersParams[msg.sender];
+        SirStructs.StakingParams memory stakingParams_ = stakingParams;
+        SirStructs.StakingParams memory stakerParams = _stakersParams[msg.sender];
 
         uint80 newStake = stakerParams.stake - amount;
 
@@ -280,7 +272,7 @@ contract Staker {
             );
 
             // Update staker info
-            stakersParams[msg.sender] = StakingParams(newStake, stakingParams_.cumETHPerSIRx80);
+            _stakersParams[msg.sender] = SirStructs.StakingParams(newStake, stakingParams_.cumETHPerSIRx80);
 
             // Update _supply
             _supply.balanceOfSIR += amount;
@@ -294,14 +286,14 @@ contract Staker {
 
     function claim() external returns (uint96 dividends_) {
         unchecked {
-            StakingParams memory stakingParams_ = stakingParams;
-            dividends_ = _dividends(balances[msg.sender], stakingParams_, stakersParams[msg.sender]);
+            SirStructs.StakingParams memory stakingParams_ = stakingParams;
+            dividends_ = _dividends(balances[msg.sender], stakingParams_, _stakersParams[msg.sender]);
 
             // Null the unclaimed dividends
             balances[msg.sender].unclaimedETH = 0;
 
             // Update staker info
-            stakersParams[msg.sender].cumETHPerSIRx80 = stakingParams_.cumETHPerSIRx80;
+            _stakersParams[msg.sender].cumETHPerSIRx80 = stakingParams_.cumETHPerSIRx80;
 
             // Update ETH _supply in the contract
             _supply.unclaimedETH -= dividends_;
@@ -312,13 +304,13 @@ contract Staker {
     }
 
     function dividends(address staker) public view returns (uint96) {
-        return _dividends(balances[staker], stakingParams, stakersParams[staker]);
+        return _dividends(balances[staker], stakingParams, _stakersParams[staker]);
     }
 
     function _dividends(
         Balance memory balance,
-        StakingParams memory stakingParams_,
-        StakingParams memory stakerParams
+        SirStructs.StakingParams memory stakingParams_,
+        SirStructs.StakingParams memory stakerParams
     ) private pure returns (uint96 dividends_) {
         unchecked {
             dividends_ = balance.unclaimedETH;
@@ -337,7 +329,7 @@ contract Staker {
     function bid(address token) external {
         unchecked {
             console.log("----------------- BID -----------------");
-            Auction memory auction = auctions[token];
+            SirStructs.Auction memory auction = _auctions[token];
 
             // Unchecked because time stamps cannot overflow
             if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
@@ -362,7 +354,7 @@ contract Staker {
             if (newBid <= auction.bid) revert BidTooLow();
 
             // Update bidder & bid
-            auctions[token] = Auction({
+            _auctions[token] = SirStructs.Auction({
                 bidder: msg.sender,
                 bid: newBid,
                 startTime: auction.startTime,
@@ -380,13 +372,13 @@ contract Staker {
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalBids_ = totalBids;
             if (token != address(_WETH)) {
-                Auction memory auction = auctions[token];
+                SirStructs.Auction memory auction = _auctions[token];
 
                 uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
                 if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
 
                 // Start a new auction
-                auctions[token] = Auction({
+                _auctions[token] = SirStructs.Auction({
                     bidder: address(0),
                     bid: 0,
                     startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
@@ -416,7 +408,7 @@ contract Staker {
             bool noDividends = _distributeDividends(totalBids_);
 
             /** For non-WETH tokens, it is possible it was a non-sale auction, but we don't want to revert because want to be able to start a new auction.
-                For WETH, there are no auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
+                For WETH, there are no _auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
                     No dividends => no fees.
              */
             if (noDividends && token == address(_WETH)) revert NoFeesCollectedYet();
@@ -425,11 +417,11 @@ contract Staker {
 
     /// @notice It reverts if the transfer fails and the dividends (WETH) is not distributed, allowing the bidder to try again.
     function payAuctionWinner(address token) external {
-        Auction memory auction = auctions[token];
+        SirStructs.Auction memory auction = _auctions[token];
         if (block.timestamp < auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsNotOver();
 
         // Update auction
-        auctions[token].winnerPaid = true;
+        _auctions[token].winnerPaid = true;
 
         // Last bid is converted to dividends
         uint96 totalBids_ = totalBids - auction.bid;
@@ -458,7 +450,7 @@ contract Staker {
             // Unwrap WETH dividends to ETH
             _WETH.withdraw(excessWETH);
 
-            StakingParams memory stakingParams_ = stakingParams;
+            SirStructs.StakingParams memory stakingParams_ = stakingParams;
             if (stakingParams_.stake == 0) return true;
 
             // Update cumETHPerSIRx80
@@ -475,7 +467,7 @@ contract Staker {
     }
 
     /// @dev This function must never revert, instead it returns false.
-    function _payAuctionWinner(address token, Auction memory auction) private returns (bool success) {
+    function _payAuctionWinner(address token, SirStructs.Auction memory auction) private returns (bool success) {
         // Bidder already paid
         if (auction.winnerPaid) return false;
 
@@ -507,5 +499,17 @@ contract Staker {
 
         emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
         return true;
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                                GETTERS
+    ////////////////////////////////////////////////////////////////*/
+
+    function auctions(address token) external view returns (SirStructs.Auction memory) {
+        return _auctions[token];
+    }
+
+    function stakersParams(address staker) external view returns (SirStructs.StakingParams memory) {
+        return _stakersParams[staker];
     }
 }

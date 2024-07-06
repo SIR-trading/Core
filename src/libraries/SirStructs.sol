@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-library VaultStructs {
+library SirStructs {
     struct VaultIssuanceParams {
         uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the Treasury.
         uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEAx96 was updated. 0 => use systemParams.tsIssuanceStart instead
@@ -79,5 +79,17 @@ library VaultStructs {
         uint144 collateralFeeToStakers;
         uint144 collateralFeeToGentlemen;
         uint144 collateralFeeToProtocol; // Protocol owned liquidity
+    }
+
+    struct StakingParams {
+        uint80 stake; // Amount of staked SIR
+        uint176 cumETHPerSIRx80; // Cumulative ETH per SIR * 2^80
+    }
+
+    struct Auction {
+        address bidder; // Address of the bidder
+        uint96 bid; // Amount of the bid
+        uint40 startTime; // Auction start time
+        bool winnerPaid; // Whether the winner has been paid
     }
 }

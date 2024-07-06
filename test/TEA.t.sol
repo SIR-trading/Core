@@ -7,7 +7,7 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {VaultExternal} from "src/libraries/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
@@ -28,17 +28,17 @@ contract TEAInstance is TEA, TEATestConstants {
         // Initialize array
         for (uint256 vaultId = 0; vaultId <= MAX_VAULT_ID; vaultId++) {
             _paramsById.push(
-                VaultStructs.VaultParameters({debtToken: address(0), collateralToken: address(0), leverageTier: 0})
+                SirStructs.VaultParameters({debtToken: address(0), collateralToken: address(0), leverageTier: 0})
             );
         }
 
-        _paramsById[VAULT_ID] = VaultStructs.VaultParameters({
+        _paramsById[VAULT_ID] = SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: collateral_,
             leverageTier: LEVERAGE_TIER
         });
 
-        _paramsById[MAX_VAULT_ID] = VaultStructs.VaultParameters({
+        _paramsById[MAX_VAULT_ID] = SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: collateral_,
             leverageTier: LEVERAGE_TIER
@@ -730,7 +730,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function _verifyMintAmounts(
         TestMintParams memory testMintParams,
         uint256 collateralTotalSupply0
-    ) private returns (VaultStructs.Fees memory fees, uint256 bobAmount) {
+    ) private returns (SirStructs.Fees memory fees, uint256 bobAmount) {
         fees = Fees.hiddenFeeTEA(
             testMintParams.collateralDeposited,
             _systemParams.lpFee,
@@ -799,7 +799,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function _verifyBurnAmounts(
         TestBurnParams memory testBurnParams,
         uint256 totalSupply0
-    ) private returns (VaultStructs.Fees memory fees) {
+    ) private returns (SirStructs.Fees memory fees) {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
         );
@@ -827,7 +827,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     }
 
     function _verifyReserveLPers(
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         TestMintParams memory testMintParams,
         uint144 collateralFeeToStakers
     ) private {
@@ -893,7 +893,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
-    ) public returns (VaultStructs.Reserves memory reserves) {
+    ) public returns (SirStructs.Reserves memory reserves) {
         // Bounds the amounts
         testMintParams.collateralDeposited = uint144(
             _bound(testMintParams.collateralDeposited, 0, type(uint256).max - collateralTotalSupply0)
@@ -912,7 +912,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         vaultIssuanceParams[VAULT_ID].tax = tax;
 
         // Initialize reserves
-        reserves = VaultStructs.Reserves({reserveApes: 0, reserveLPers: testMintParams.reserveLPers, tickPriceX42: 0});
+        reserves = SirStructs.Reserves({reserveApes: 0, reserveLPers: testMintParams.reserveLPers, tickPriceX42: 0});
 
         // Mint collateral
         collateral.mint(alice, collateralTotalSupply0 - testMintParams.reserveLPers);
@@ -921,7 +921,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         collateral.mint(address(this), testMintParams.reserveLPers + testMintParams.collateralDeposited);
 
         // Mint for the first time
-        (VaultStructs.Fees memory fees, uint256 amount) = mint(
+        (SirStructs.Fees memory fees, uint256 amount) = mint(
             address(collateral),
             bob,
             VAULT_ID,
@@ -935,7 +935,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         POLBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
-        (VaultStructs.Fees memory fees_, uint256 amount_) = _verifyMintAmounts(testMintParams, collateralTotalSupply0);
+        (SirStructs.Fees memory fees_, uint256 amount_) = _verifyMintAmounts(testMintParams, collateralTotalSupply0);
         assertEq(amount, amount_);
         assertEq32(keccak256(abi.encode(fees)), keccak256(abi.encode(fees_)));
 
@@ -949,7 +949,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function testFuzz_mintPOL1stTime(
         TestMintParams memory testMintParams,
         uint256 collateralTotalSupply0
-    ) public returns (VaultStructs.Reserves memory reserves) {
+    ) public returns (SirStructs.Reserves memory reserves) {
         // Bounds the amounts
         testMintParams.collateralDeposited = uint144(
             _bound(testMintParams.collateralDeposited, 0, type(uint256).max - collateralTotalSupply0)
@@ -961,7 +961,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TS_ISSUANCE_START, MAX_TS));
 
         // Initialize reserves
-        reserves = VaultStructs.Reserves({reserveApes: 0, reserveLPers: testMintParams.reserveLPers, tickPriceX42: 0});
+        reserves = SirStructs.Reserves({reserveApes: 0, reserveLPers: testMintParams.reserveLPers, tickPriceX42: 0});
 
         // Mint collateral
         collateral.mint(alice, collateralTotalSupply0 - testMintParams.reserveLPers);
@@ -1013,7 +1013,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         uint16 lpFee,
         uint8 tax,
         uint256 collateralTotalSupply0
-    ) public returns (VaultStructs.Reserves memory reserves) {
+    ) public returns (SirStructs.Reserves memory reserves) {
         reserves = testFuzz_mint1stTime(testMintParams0, lpFee, tax, collateralTotalSupply0);
 
         // In some rare cases collateral deposited could be non-zero and yet mint no TEA (we are not testing the 1st mint)
@@ -1058,7 +1058,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         collateral.mint(address(this), testMintParams.collateralDeposited);
 
         // Mint
-        (VaultStructs.Fees memory fees, uint256 amount) = mint(
+        (SirStructs.Fees memory fees, uint256 amount) = mint(
             address(collateral),
             bob,
             VAULT_ID,
@@ -1072,7 +1072,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         POLBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
-        (VaultStructs.Fees memory fees_, uint256 amount_) = _verifyMintAmounts(testMintParams, 0);
+        (SirStructs.Fees memory fees_, uint256 amount_) = _verifyMintAmounts(testMintParams, 0);
         assertEq(amount, amount_);
         assertEq32(keccak256(abi.encode(fees_)), keccak256(abi.encode(fees)));
 
@@ -1090,12 +1090,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public {
-        VaultStructs.Reserves memory reserves = testFuzz_mint1stTime(
-            testMintParams0,
-            lpFee,
-            tax,
-            collateralTotalSupply0
-        );
+        SirStructs.Reserves memory reserves = testFuzz_mint1stTime(testMintParams0, lpFee, tax, collateralTotalSupply0);
 
         // In some rare cases collateral deposited could be non-zero and yet mint no TEA (we are not testing the 1st mint)
         vm.assume(totalSupplyAndBalanceVault[VAULT_ID].totalSupply > 0);
@@ -1173,7 +1168,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     }
 
     function testFuzz_mintOverflows(uint16 lpFee, uint8 tax) public {
-        VaultStructs.Reserves memory reserves = testFuzz_mint1stTime(
+        SirStructs.Reserves memory reserves = testFuzz_mint1stTime(
             TestMintParams({reserveLPers: 0, collateralDeposited: SystemConstants.TEA_MAX_SUPPLY, tsCheck: 0}),
             lpFee,
             tax,
@@ -1207,7 +1202,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public {
-        VaultStructs.Reserves memory reserves = testFuzz_mint(
+        SirStructs.Reserves memory reserves = testFuzz_mint(
             testMintParams0,
             testMintParams,
             lpFee,
@@ -1230,7 +1225,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
 
         // Burn
         uint256 totalSupply0 = totalSupplyAndBalanceVault[VAULT_ID].totalSupply;
-        VaultStructs.Fees memory fees = burn(
+        SirStructs.Fees memory fees = burn(
             address(collateral),
             bob,
             VAULT_ID,
@@ -1244,7 +1239,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         POLBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
-        VaultStructs.Fees memory fees_ = _verifyBurnAmounts(testBurnParams, totalSupply0);
+        SirStructs.Fees memory fees_ = _verifyBurnAmounts(testBurnParams, totalSupply0);
         assertEq32(keccak256(abi.encode(fees_)), keccak256(abi.encode(fees)));
 
         // Assert the LP reserve is correct
@@ -1266,7 +1261,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public {
-        VaultStructs.Reserves memory reserves = testFuzz_mint(
+        SirStructs.Reserves memory reserves = testFuzz_mint(
             testMintParams0,
             testMintParams,
             lpFee,

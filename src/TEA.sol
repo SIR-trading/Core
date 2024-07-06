@@ -5,7 +5,7 @@ pragma solidity >=0.8.0;
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {Fees} from "./libraries/Fees.sol";
@@ -56,7 +56,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
      */
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
 
-    VaultStructs.VaultParameters[] public _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
+    SirStructs.VaultParameters[] public _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
@@ -65,7 +65,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function paramsById(uint48 vaultId) external view returns (VaultStructs.VaultParameters memory) {
+    function paramsById(uint48 vaultId) external view returns (SirStructs.VaultParameters memory) {
         return _paramsById[vaultId];
     }
 
@@ -220,11 +220,11 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         address collateral,
         address to,
         uint48 vaultId,
-        VaultStructs.SystemParameters memory systemParams_,
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.SystemParameters memory systemParams_,
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    ) internal returns (VaultStructs.Fees memory fees, uint256 amount) {
+    ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -291,7 +291,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
     function mintToProtocol(
         address collateral,
         uint48 vaultId,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint144 collateralFeeToProtocol
     ) internal {
         unchecked {
@@ -331,11 +331,11 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         address collateral,
         address from,
         uint48 vaultId,
-        VaultStructs.SystemParameters memory systemParams_,
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.SystemParameters memory systemParams_,
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        SirStructs.Reserves memory reserves,
         uint256 amount
-    ) internal returns (VaultStructs.Fees memory fees) {
+    ) internal returns (SirStructs.Fees memory fees) {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -411,9 +411,9 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_,
         uint16 lpFee,
         uint8 tax,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDepositedOrOut
-    ) private returns (VaultStructs.Fees memory fees) {
+    ) private returns (SirStructs.Fees memory fees) {
         unchecked {
             // Substract fees
             fees = Fees.hiddenFeeTEA(collateralDepositedOrOut, lpFee, tax);

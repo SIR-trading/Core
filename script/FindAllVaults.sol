@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 // import "forge-std/console.sol";
 
 import {Addresses} from "src/libraries/Addresses.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {Vault} from "src/Vault.sol";
 
 contract FindAllVaults is Script {
@@ -25,7 +25,7 @@ contract FindAllVaults is Script {
         // Check 1st vault
         for (uint48 i = 1; i <= Nvaults; i++) {
             console.log("------ Vault ID: ", i, " ------");
-            VaultStructs.VaultParameters memory vaultParams = VAULT.paramsById(i);
+            SirStructs.VaultParameters memory vaultParams = VAULT.paramsById(i);
             console.log("debtToken: ", vaultParams.debtToken);
             console.log("collateralToken: ", vaultParams.collateralToken);
             console.log("leverageTier: ", vm.toString(vaultParams.leverageTier));

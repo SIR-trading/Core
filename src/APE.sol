@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 // Libraries
 import {Fees} from "./libraries/Fees.sol";
 import {FullMath} from "./libraries/FullMath.sol";
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 
 // Contracts
 import {Vault} from "./Vault.sol";
@@ -51,7 +51,7 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (VaultStructs.TokenParameters memory tokenParams, VaultStructs.VaultParameters memory vaultParams) = Vault(
+        (SirStructs.TokenParameters memory tokenParams, SirStructs.VaultParameters memory vaultParams) = Vault(
             msg.sender
         ).latestTokenParams();
 
@@ -185,14 +185,10 @@ contract APE is Owned {
         address to,
         uint16 baseFee,
         uint8 tax,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    )
-        external
-        onlyOwner
-        returns (VaultStructs.Reserves memory newReserves, VaultStructs.Fees memory fees, uint256 amount)
-    {
-        // returns (VaultStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
+    ) external onlyOwner returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
+        // returns (SirStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
 
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
@@ -221,9 +217,9 @@ contract APE is Owned {
         address from,
         uint16 baseFee,
         uint8 tax,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint256 amount
-    ) external onlyOwner returns (VaultStructs.Reserves memory newReserves, VaultStructs.Fees memory fees) {
+    ) external onlyOwner returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees) {
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
