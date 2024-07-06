@@ -39,11 +39,11 @@ library VaultStructs {
         uint16 cumTax;
     }
 
-    /** collectedFees: Sum of fees collected for a specific type of collateral
+    /** totalFeesToStakers: Sum of fees collected for a specific type of collateral
         reservesTotal: Sum of 'reserve' for all vaults for a specific type of collateral
      */
-    struct TokenState {
-        uint112 collectedFees; // 112 bits for fees because we expect them to be emptied by the stakers on a regular basis
+    struct CollateralState {
+        uint112 totalFeesToStakers; // 112 bits for fees because we expect them to be emptied by the stakers on a regular basis
         uint144 total; // TOTAL amount of collateral stored by all vaults (including fees)
     }
 

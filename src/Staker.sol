@@ -375,7 +375,7 @@ contract Staker {
     }
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
-    function collectFeesAndStartAuction(address token) external returns (uint112 collectedFees) {
+    function collectFeesAndStartAuction(address token) external returns (uint112 totalFeesToStakers) {
         unchecked {
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalBids_ = totalBids;
@@ -405,12 +405,12 @@ contract Staker {
             }
 
             // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-            collectedFees = vault.withdrawFees(token);
+            totalFeesToStakers = vault.withdrawFees(token);
 
             /** For non-WETH tokens, do not start an auction if there are no fees to collect, unlesss it is WETH
                 For WETH, we distribute the fees immediately as dividends.
              */
-            if (collectedFees == 0 && token != address(_WETH)) revert NoFeesCollectedYet();
+            if (totalFeesToStakers == 0 && token != address(_WETH)) revert NoFeesCollectedYet();
 
             // Distribute dividends from the previous auction even if paying the previous winner fails
             bool noDividends = _distributeDividends(totalBids_);

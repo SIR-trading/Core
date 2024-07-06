@@ -244,7 +244,7 @@ contract VaultExternalGetReserves is Test {
     address alice;
     Oracle oracle;
 
-    mapping(address collateral => VaultStructs.TokenState) tokenStates;
+    mapping(address collateral => VaultStructs.CollateralState) collateralStates;
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState))) vaultStates;
     VaultStructs.VaultParameters vaultParams;
 
@@ -260,28 +260,28 @@ contract VaultExternalGetReserves is Test {
     }
 
     modifier Preprocess(
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams // uint144 collateralDeposited, // int64 newTickPriceX42
     ) {
         // Constraint reserve
-        vaultState.reserve = uint144(_bound(vaultState.reserve, 0, tokenState.total));
+        vaultState.reserve = uint144(_bound(vaultState.reserve, 0, collateralState.total));
         vm.assume(vaultState.reserve != 1); // Min reserve is always 2 (or 0 if no mint has occured)
 
         // Constraint collateralDeposited
         testParams.collateralDeposited = uint144(
-            _bound(testParams.collateralDeposited, 0, type(uint144).max - tokenState.total)
+            _bound(testParams.collateralDeposited, 0, type(uint144).max - collateralState.total)
         );
 
         // Constraint vaultId
         vaultState.vaultId = uint48(_bound(vaultState.vaultId, 1, type(uint48).max));
 
         // Mint tokens
-        // _collateralToken.mint(alice, type(uint256).max - tokenState.total - testParams.collateralDeposited);
-        _collateralToken.mint(address(this), uint256(tokenState.total) + testParams.collateralDeposited);
+        // _collateralToken.mint(alice, type(uint256).max - collateralState.total - testParams.collateralDeposited);
+        _collateralToken.mint(address(this), uint256(collateralState.total) + testParams.collateralDeposited);
 
         // Save token state
-        tokenStates[vaultParams.collateralToken] = tokenState;
+        collateralStates[vaultParams.collateralToken] = collateralState;
 
         // Save vault state
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
@@ -306,13 +306,13 @@ contract VaultExternalGetReserves is Test {
     }
 
     function _assertUnchangedParameters(
-        VaultStructs.TokenState memory tokenState,
-        VaultStructs.TokenState memory tokenState_,
+        VaultStructs.CollateralState memory collateralState,
+        VaultStructs.CollateralState memory collateralState_,
         VaultStructs.VaultState memory vaultState,
         VaultStructs.VaultState memory vaultState_
     ) private {
-        assertEq(tokenState_.total, tokenState.total);
-        assertEq(tokenState_.collectedFees, tokenState.collectedFees);
+        assertEq(collateralState_.total, collateralState.total);
+        assertEq(collateralState_.totalFeesToStakers, collateralState.totalFeesToStakers);
 
         assertEq(vaultState_.reserve, vaultState.reserve);
         assertEq(vaultState_.tickPriceSatX42, vaultState.tickPriceSatX42);
@@ -322,23 +322,23 @@ contract VaultExternalGetReserves is Test {
     function testFuzz_getReservesNoReserves(
         bool isMint,
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public Preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(collateralState, vaultState, testParams) {
         // No collateral in the vault
         vaultState.reserve = 0;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
         (
-            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.CollateralState memory collateralState_,
             VaultStructs.VaultState memory vaultState_,
             VaultStructs.Reserves memory reserves,
             APE ape,
             uint144 collateralDeposited_
-        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+        ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
-        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
+        _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
         assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
@@ -352,24 +352,24 @@ contract VaultExternalGetReserves is Test {
     function testFuzz_getReservesAllAPE(
         bool isMint,
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public Preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(collateralState, vaultState, testParams) {
         // type(int64).min represents -∞ => reserveLPers is empty
         vaultState.tickPriceSatX42 = type(int64).min;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         vm.assume(vaultState.reserve > 0);
 
         (
-            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.CollateralState memory collateralState_,
             VaultStructs.VaultState memory vaultState_,
             VaultStructs.Reserves memory reserves,
             APE ape,
             uint144 collateralDeposited_
-        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+        ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
-        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
+        _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
         assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
@@ -383,24 +383,24 @@ contract VaultExternalGetReserves is Test {
     function testFuzz_getReservesAllTEA(
         bool isMint,
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public Preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(collateralState, vaultState, testParams) {
         // type(int64).max represents +∞ => reserveApes is empty
         vaultState.tickPriceSatX42 = type(int64).max;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         vm.assume(vaultState.reserve > 0);
 
         (
-            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.CollateralState memory collateralState_,
             VaultStructs.VaultState memory vaultState_,
             VaultStructs.Reserves memory reserves,
             APE ape,
             uint144 collateralDeposited_
-        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+        ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
-        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
+        _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
         assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
@@ -414,10 +414,10 @@ contract VaultExternalGetReserves is Test {
     function testFuzz_getReserves(
         bool isMint,
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public Preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(collateralState, vaultState, testParams) {
         vaultState.tickPriceSatX42 = int64(
             _bound(vaultState.tickPriceSatX42, type(int64).min + 1, type(int64).max - 1)
         );
@@ -425,14 +425,14 @@ contract VaultExternalGetReserves is Test {
         vm.assume(vaultState.reserve > 0);
 
         (
-            VaultStructs.TokenState memory tokenState_,
+            VaultStructs.CollateralState memory collateralState_,
             VaultStructs.VaultState memory vaultState_,
             VaultStructs.Reserves memory reserves,
             APE ape,
             uint144 collateralDeposited_
-        ) = VaultExternal.getReserves(isMint, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+        ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
-        _assertUnchangedParameters(tokenState, tokenState_, vaultState, vaultState_);
+        _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
         assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
 
@@ -454,31 +454,31 @@ contract VaultExternalGetReserves is Test {
 
     function testFuzz_getReservesVaultDoesNotExist(
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams
-    ) public Preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(collateralState, vaultState, testParams) {
         vaultState.vaultId = 0;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
         vm.expectRevert(abi.encodeWithSelector(VaultDoesNotExist.selector));
-        VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+        VaultExternal.getReserves(true, isAPE, collateralStates, vaultStates, oracle, vaultParams);
     }
 
     function testFuzz_getReservesTooLargeDeposit(
         bool isAPE,
-        VaultStructs.TokenState memory tokenState,
+        VaultStructs.CollateralState memory collateralState,
         VaultStructs.VaultState memory vaultState,
         TestParameters memory testParams,
         uint256 extraDeposit
-    ) public Preprocess(tokenState, vaultState, testParams) {
+    ) public Preprocess(collateralState, vaultState, testParams) {
         // Deposit extra collateral
         uint256 balanceThis = _collateralToken.balanceOf(address(this));
         extraDeposit = _bound(extraDeposit, type(uint144).max - balanceThis + 1, type(uint256).max - balanceThis);
         _collateralToken.mint(address(this), extraDeposit);
 
         vm.expectRevert(abi.encodeWithSelector(DepositTooLarge.selector));
-        VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, oracle, vaultParams);
+        VaultExternal.getReserves(true, isAPE, collateralStates, vaultStates, oracle, vaultParams);
     }
 
     function _getReservesWithFloatingPoint(

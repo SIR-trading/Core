@@ -10,6 +10,7 @@ import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
+import {VaultStructs} from "src/libraries/VaultStructs.sol";
 
 contract Auxiliary is Test {
     struct Bidder {
@@ -97,21 +98,21 @@ contract Auxiliary is Test {
         _dealETH(address(staker), donations.donationsETH);
     }
 
-    function _incrementFeesVariableInVault(address token, uint112 collectedFees, uint144 total) internal {
+    function _incrementFeesVariableInVault(address token, uint112 totalFeesToStakers, uint144 total) internal {
         // Increase fees in Vault
         uint256 slot = uint256(vm.load(vault, keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES))))));
-        collectedFees += uint112(slot);
+        totalFeesToStakers += uint112(slot);
         slot >>= 112;
         total += uint144(slot);
-        assert(total >= collectedFees);
+        assert(total >= totalFeesToStakers);
         vm.store(
             vault,
             keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
-            bytes32(abi.encodePacked(total, collectedFees))
+            bytes32(abi.encodePacked(total, totalFeesToStakers))
         );
 
-        (uint112 collectedFees_, ) = Vault(vault).tokenStates(token);
-        assertEq(collectedFees, collectedFees_, "Wrong token states slot used by vm.store");
+        VaultStructs.CollateralState memory collateralState_ = Vault(vault).collateralStates(token);
+        assertEq(totalFeesToStakers, collateralState_.totalFeesToStakers, "Wrong token states slot used by vm.store");
     }
 
     /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly

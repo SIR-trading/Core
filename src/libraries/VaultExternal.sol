@@ -158,7 +158,7 @@ library VaultExternal {
     function getReserves(
         bool isMint,
         bool isAPE,
-        mapping(address collateral => VaultStructs.TokenState) storage tokenStates,
+        mapping(address collateral => VaultStructs.CollateralState) storage collateralStates,
         mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
             storage _vaultStates,
         Oracle oracle,
@@ -166,7 +166,7 @@ library VaultExternal {
     )
         external
         returns (
-            VaultStructs.TokenState memory tokenState,
+            VaultStructs.CollateralState memory collateralState,
             VaultStructs.VaultState memory vaultState,
             VaultStructs.Reserves memory reserves,
             APE ape,
@@ -174,7 +174,7 @@ library VaultExternal {
         )
     {
         unchecked {
-            tokenState = tokenStates[vaultParams.collateralToken];
+            collateralState = collateralStates[vaultParams.collateralToken];
             vaultState = _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
 
             // Get price and update oracle state if needed
@@ -189,7 +189,7 @@ library VaultExternal {
                 // Get deposited collateral
                 uint256 balance = APE(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
                 if (balance > type(uint144).max) revert DepositTooLarge(); // Ensure it fits in a uint144
-                collateralDeposited = uint144(balance - tokenState.total);
+                collateralDeposited = uint144(balance - collateralState.total);
             }
         }
     }
