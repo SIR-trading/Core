@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-library VaultStructs {
+library SirStructs {
     struct VaultIssuanceParams {
         uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the Treasury.
         uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEAx96 was updated. 0 => use systemParams.tsIssuanceStart instead
@@ -39,11 +39,11 @@ library VaultStructs {
         uint16 cumTax;
     }
 
-    /** collectedFees: Sum of fees collected for a specific type of collateral
+    /** totalFeesToStakers: Sum of fees collected for a specific type of collateral
         reservesTotal: Sum of 'reserve' for all vaults for a specific type of collateral
      */
-    struct TokenState {
-        uint112 collectedFees; // 112 bits for fees because we expect them to be emptied by the stakers on a regular basis
+    struct CollateralState {
+        uint112 totalFeesToStakers; // 112 bits for fees because we expect them to be emptied by the stakers on a regular basis
         uint144 total; // TOTAL amount of collateral stored by all vaults (including fees)
     }
 
@@ -65,5 +65,49 @@ library VaultStructs {
          */
         int64 tickPriceSatX42; // Saturation price in Q21.42 fixed point
         uint48 vaultId; // Allows the creation of approximately 281 trillion vaults
+    }
+
+    /** The sum of all amounts in Fees are equal to the amounts deposited by the user (in the case of a mint)
+        or taken out by the user (in the case of a burn).
+        collateralInOrWithdrawn: Amount of collateral deposited by the user (in the case of a mint) or taken out by the user (in the case of a burn).
+        collateralFeeToStakers: Amount of collateral paid to the stakers.
+        collateralFeeToGentlemen: Amount of collateral paid to the gentlemen.
+        collateralFeeToProtocol: Amount of collateral paid to the protocol.
+     */
+    struct Fees {
+        uint144 collateralInOrWithdrawn;
+        uint144 collateralFeeToStakers;
+        uint144 collateralFeeToGentlemen;
+        uint144 collateralFeeToProtocol; // Protocol owned liquidity
+    }
+
+    struct StakingParams {
+        uint80 stake; // Amount of staked SIR
+        uint176 cumETHPerSIRx80; // Cumulative ETH per SIR * 2^80
+    }
+
+    struct Auction {
+        address bidder; // Address of the bidder
+        uint96 bid; // Amount of the bid
+        uint40 startTime; // Auction start time
+        bool winnerPaid; // Whether the winner has been paid
+    }
+
+    struct OracleState {
+        int64 tickPriceX42; // Last stored price. Q21.42
+        uint40 timeStampPrice; // Timestamp of the last stored price
+        uint8 indexFeeTier; // Uniswap v3 fee tier currently being used as oracle
+        uint8 indexFeeTierProbeNext; // Uniswap v3 fee tier to probe next
+        uint40 timeStampFeeTier; // Timestamp of the last probed fee tier
+        bool initialized; // Whether the oracle has been initialized
+        UniswapFeeTier uniswapFeeTier; // Uniswap v3 fee tier currently being used as oracle
+    }
+
+    /**
+     * Parameters of a Uniswap v3 tier.
+     */
+    struct UniswapFeeTier {
+        uint24 fee;
+        int24 tickSpacing;
     }
 }

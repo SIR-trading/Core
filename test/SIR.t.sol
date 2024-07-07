@@ -8,7 +8,7 @@ import {Oracle} from "src/Oracle.sol";
 import {SIR} from "src/SIR.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {Contributors} from "src/libraries/Contributors.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 
@@ -212,8 +212,8 @@ contract GentlemenTest is Test {
     address alice = vm.addr(1);
     uint256 teaBalanceOfAlice;
 
-    VaultStructs.VaultParameters vaultParameters =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters vaultParameters =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: -1

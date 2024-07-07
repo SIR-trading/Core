@@ -16,6 +16,7 @@ import {Tick} from "v3-core/libraries/Tick.sol";
 import {SwapMath} from "v3-core/libraries/SwapMath.sol";
 import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 
 contract OracleNewFeeTiersTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     Oracle private _oracle;
@@ -27,7 +28,7 @@ contract OracleNewFeeTiersTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
     }
 
     function test_GetUniswapFeeTiers() public {
-        Oracle.UniswapFeeTier[] memory uniswapFeeTiers = _oracle.getUniswapFeeTiers();
+        SirStructs.UniswapFeeTier[] memory uniswapFeeTiers = _oracle.getUniswapFeeTiers();
 
         IUniswapV3Factory uniswapFactory = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY);
 
@@ -224,20 +225,20 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
         // vm.writeLine("./log.log", "");
 
         // Maximize the number of fee tiers to test stress the initialization
-        Oracle.UniswapFeeTier[] memory uniswapFeeTiers = new Oracle.UniswapFeeTier[](9);
+        SirStructs.UniswapFeeTier[] memory uniswapFeeTiers = new SirStructs.UniswapFeeTier[](9);
 
         // Existing fee tiers
-        uniswapFeeTiers[0] = Oracle.UniswapFeeTier(100, 1);
-        uniswapFeeTiers[1] = Oracle.UniswapFeeTier(500, 10);
-        uniswapFeeTiers[2] = Oracle.UniswapFeeTier(3000, 60);
-        uniswapFeeTiers[3] = Oracle.UniswapFeeTier(10000, 200);
+        uniswapFeeTiers[0] = SirStructs.UniswapFeeTier(100, 1);
+        uniswapFeeTiers[1] = SirStructs.UniswapFeeTier(500, 10);
+        uniswapFeeTiers[2] = SirStructs.UniswapFeeTier(3000, 60);
+        uniswapFeeTiers[3] = SirStructs.UniswapFeeTier(10000, 200);
 
         // Made up fee tiers
-        uniswapFeeTiers[4] = Oracle.UniswapFeeTier(42, 7);
-        uniswapFeeTiers[5] = Oracle.UniswapFeeTier(69, 99);
-        uniswapFeeTiers[6] = Oracle.UniswapFeeTier(300, 6);
-        uniswapFeeTiers[7] = Oracle.UniswapFeeTier(9999, 199);
-        uniswapFeeTiers[8] = Oracle.UniswapFeeTier(100000, 1);
+        uniswapFeeTiers[4] = SirStructs.UniswapFeeTier(42, 7);
+        uniswapFeeTiers[5] = SirStructs.UniswapFeeTier(69, 99);
+        uniswapFeeTiers[6] = SirStructs.UniswapFeeTier(300, 6);
+        uniswapFeeTiers[7] = SirStructs.UniswapFeeTier(9999, 199);
+        uniswapFeeTiers[8] = SirStructs.UniswapFeeTier(100000, 1);
 
         // Add them to Uniswap v3
         vm.startPrank(Addresses.ADDR_UNISWAPV3_OWNER);
@@ -1331,7 +1332,7 @@ contract SirOracleHandler is Test {
         uint24 feeTier = feeTiers[_bound(feeTierIndex, 0, feeTiers.length - 1)];
 
         // Check it has not been added yet
-        Oracle.UniswapFeeTier[] memory uniswapFeeTiers = oracle.getUniswapFeeTiers();
+        SirStructs.UniswapFeeTier[] memory uniswapFeeTiers = oracle.getUniswapFeeTiers();
         for (uint256 i = 0; i < uniswapFeeTiers.length; i++) {
             if (feeTier == uniswapFeeTiers[i].fee) return; // already added
         }
@@ -1403,16 +1404,13 @@ contract OracleInvariantTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     function invariant_priceMaxDivergence() public {
         vm.warp(_currentTime);
 
-        (int64 tickPriceX42_A, uint40 timeStampPrice, , , , , ) = _oracle.vaultState(
-            address(_tokenA),
-            address(_tokenB)
-        );
-        int64 tickPriceX42_B = _oracle.getPrice(address(_tokenA), address(_tokenB));
+        SirStructs.OracleState memory state = _oracle.state(address(_tokenA), address(_tokenB));
+        int64 tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
 
-        uint256 tickPriceDiff = tickPriceX42_A > tickPriceX42_B
-            ? uint64(tickPriceX42_A - tickPriceX42_B)
-            : uint64(tickPriceX42_B - tickPriceX42_A);
+        uint256 tickPriceDiff = state.tickPriceX42 > tickPriceX42
+            ? uint64(state.tickPriceX42 - tickPriceX42)
+            : uint64(tickPriceX42 - state.tickPriceX42);
 
-        assertLe(tickPriceDiff, uint256(uint64(MAX_TICK_INC_PER_SEC)) * (block.timestamp - timeStampPrice));
+        assertLe(tickPriceDiff, uint256(uint64(MAX_TICK_INC_PER_SEC)) * (block.timestamp - state.timeStampPrice));
     }
 }

@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
 import {SystemState} from "src/SystemState.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 
@@ -30,7 +30,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -49,7 +49,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -79,7 +79,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -111,7 +111,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -151,7 +151,7 @@ contract SystemStateWrapper is SystemState {
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176) {
         if (vaultId == VAULT_ID)
-            return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(VAULT_ID));
+            return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(VAULT_ID));
         return type(uint176).max / uint176(vaultId); // To make it somewhat arbitrary
     }
 }
@@ -844,12 +844,12 @@ contract SystemStateTest is Test {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
         // Check system vaultState
-        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = systemState.systemParams();
+        SirStructs.SystemParameters memory systemParams_ = systemState.systemParams();
 
-        assertEq(baseFee_, baseFee);
-        assertEq(lpFee_, lpFee);
-        assertEq(mintingStopped_, mintingStopped);
-        assertEq(cumTax_, numVaults);
+        assertEq(systemParams_.baseFee, baseFee);
+        assertEq(systemParams_.lpFee, lpFee);
+        assertEq(systemParams_.mintingStopped, mintingStopped);
+        assertEq(systemParams_.cumTax, numVaults);
 
         // Update vaults to only 1 with max tax
         uint48[] memory veryNewVaults = new uint48[](1); // Max # of vaults
@@ -860,12 +860,12 @@ contract SystemStateTest is Test {
         systemState.updateVaults(newVaults, veryNewVaults, veryNewTaxes, type(uint8).max);
 
         // Check system vaultState
-        (baseFee_, lpFee_, mintingStopped_, cumTax_) = systemState.systemParams();
+        systemParams_ = systemState.systemParams();
 
-        assertEq(baseFee_, baseFee);
-        assertEq(lpFee_, lpFee);
-        assertEq(mintingStopped_, mintingStopped);
-        assertEq(cumTax_, type(uint8).max);
+        assertEq(systemParams_.baseFee, baseFee);
+        assertEq(systemParams_.lpFee, lpFee);
+        assertEq(systemParams_.mintingStopped, mintingStopped);
+        assertEq(systemParams_.cumTax, type(uint8).max);
     }
 
     function testFuzz_updateSystemStateNotSystemControl(uint16 baseFee, uint16 lpFee, bool mintingStopped) public {
@@ -990,7 +990,12 @@ contract SystemStateHandler is Test {
         _numUpdatesCumSIRPerTEAForUser[toAddr] = _numUpdatesCumSIRPerTEA;
     }
 
-    function mint(uint256 user, uint256 amount, uint256 amountPOL, uint24 timeSkip) external advanceTime(timeSkip) {
+    function mint(
+        uint256 user,
+        uint256 amount,
+        uint256 amountToProtocol,
+        uint24 timeSkip
+    ) external advanceTime(timeSkip) {
         address addr = _idToAddr(user);
 
         uint256 preBalance = systemState.balanceOf(addr, VAULT_ID);
@@ -998,9 +1003,9 @@ contract SystemStateHandler is Test {
 
         uint256 totalSupply = systemState.totalSupply(VAULT_ID);
         amount = _bound(amount, 0, SystemConstants.TEA_MAX_SUPPLY - totalSupply);
-        amountPOL = _bound(amountPOL, 0, SystemConstants.TEA_MAX_SUPPLY - totalSupply - amount);
+        amountToProtocol = _bound(amountToProtocol, 0, SystemConstants.TEA_MAX_SUPPLY - totalSupply - amount);
 
-        systemState.mint(addr, amount, amountPOL);
+        systemState.mint(addr, amount, amountToProtocol);
 
         // Vault's cumulative SIR per TEA is updated
         _updateCumSIRPerTEA();
@@ -1016,14 +1021,19 @@ contract SystemStateHandler is Test {
         _numUpdatesCumSIRPerTEAForUser[address(systemState)] = _numUpdatesCumSIRPerTEA;
     }
 
-    function burn(uint256 user, uint256 amount, uint256 amountPOL, uint24 timeSkip) external advanceTime(timeSkip) {
+    function burn(
+        uint256 user,
+        uint256 amount,
+        uint256 amountToProtocol,
+        uint24 timeSkip
+    ) external advanceTime(timeSkip) {
         address addr = _idToAddr(user);
         uint256 preBalance = systemState.balanceOf(addr, VAULT_ID);
         amount = _bound(amount, 0, preBalance);
         uint256 vaultPreBalance = systemState.balanceOf(address(systemState), VAULT_ID);
-        amountPOL = _bound(amountPOL, 0, amount);
+        amountToProtocol = _bound(amountToProtocol, 0, amount);
 
-        systemState.burn(addr, amount, amountPOL);
+        systemState.burn(addr, amount, amountToProtocol);
 
         // Vault's cumulative SIR per TEA is updated
         _updateCumSIRPerTEA();

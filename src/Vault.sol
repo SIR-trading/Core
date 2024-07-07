@@ -10,7 +10,7 @@ import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
 // Contracts
@@ -21,35 +21,50 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA {
-    event Mint(uint48 indexed vaultId, uint144 collateralDeposited);
-    event Burn(uint48 indexed vaultId, uint144 collateralWithdrawn);
+    /** collateralFeeToLPers also includes protocol owned liquidity (POL),
+        i.e., collateralFeeToLPers = collateralFeeToGentlemen + collateralFeeToProtocol
+     */
+    event Mint(
+        uint48 indexed vaultId,
+        bool isAPE,
+        uint144 collateralIn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers
+    );
+    event Burn(
+        uint48 indexed vaultId,
+        bool isAPE,
+        uint144 collateralWithdrawn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers
+    );
 
     Oracle private immutable _ORACLE;
 
-    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
-        public vaultStates; // Do not use vaultId 0
+    mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
+        internal _vaultStates; // Do not use vaultId 0
 
     // Global parameters for each type of collateral that aggregates amounts from all vaults
-    mapping(address collateral => VaultStructs.TokenState) public tokenStates;
+    mapping(address collateral => SirStructs.CollateralState) internal _collateralStates;
 
     // Used to pass parameters to the APE token constructor
-    VaultStructs.TokenParameters private _transientTokenParameters;
+    SirStructs.TokenParameters private _transientTokenParameters;
 
     constructor(address systemControl, address sir, address oracle) TEA(systemControl, sir) {
         // Price _ORACLE
         _ORACLE = Oracle(oracle);
 
         // Push empty parameters to avoid vaultId 0
-        paramsById.push(VaultStructs.VaultParameters(address(0), address(0), 0));
+        _paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
     }
 
     /** @notice Initialization is always necessary because we must deploy APE contracts, and possibly initialize the Oracle.
      */
-    function initialize(VaultStructs.VaultParameters memory vaultParams) external {
+    function initialize(SirStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deploy(
             _ORACLE,
-            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
-            paramsById,
+            _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
+            _paramsById,
             _transientTokenParameters,
             vaultParams
         );
@@ -58,9 +73,9 @@ contract Vault is TEA {
     function latestTokenParams()
         external
         view
-        returns (VaultStructs.TokenParameters memory, VaultStructs.VaultParameters memory)
+        returns (SirStructs.TokenParameters memory, SirStructs.VaultParameters memory)
     {
-        return (_transientTokenParameters, paramsById[paramsById.length - 1]);
+        return (_transientTokenParameters, _paramsById[_paramsById.length - 1]);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -69,29 +84,25 @@ contract Vault is TEA {
 
     /** @notice Function for minting APE or TEA
      */
-    function mint(bool isAPE, VaultStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
+    function mint(bool isAPE, SirStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
         unchecked {
-            VaultStructs.SystemParameters memory systemParams_ = systemParams;
+            SirStructs.SystemParameters memory systemParams_ = _systemParams;
             require(!systemParams_.mintingStopped);
 
             // Get reserves
             (
-                VaultStructs.TokenState memory tokenState,
-                VaultStructs.VaultState memory vaultState,
-                VaultStructs.Reserves memory reserves,
+                SirStructs.CollateralState memory collateralState,
+                SirStructs.VaultState memory vaultState,
+                SirStructs.Reserves memory reserves,
                 APE ape,
                 uint144 collateralDeposited
-            ) = VaultExternal.getReserves(true, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+            ) = VaultExternal.getReserves(true, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
-            // Emit event
-            emit Mint(vaultState.vaultId, collateralDeposited);
-
-            VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-            uint256 collectedFee;
+            SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+            SirStructs.Fees memory fees;
             if (isAPE) {
                 // Mint APE
-                uint144 polFee;
-                (reserves, collectedFee, polFee, amount) = ape.mint(
+                (reserves, fees, amount) = ape.mint(
                     msg.sender,
                     systemParams_.baseFee,
                     vaultIssuanceParams_.tax,
@@ -100,20 +111,17 @@ contract Vault is TEA {
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
-                if (polFee > 0) {
-                    mint(
+                if (fees.collateralFeeToProtocol > 0) {
+                    mintToProtocol(
                         vaultParams.collateralToken,
-                        address(this),
                         vaultState.vaultId,
-                        systemParams_,
-                        vaultIssuanceParams_,
                         reserves,
-                        polFee
+                        fees.collateralFeeToProtocol
                     );
                 }
             } else {
                 // Mint TEA for user and protocol owned liquidity (POL)
-                (amount, collectedFee) = mint(
+                (fees, amount) = mint(
                     vaultParams.collateralToken,
                     msg.sender,
                     vaultState.vaultId,
@@ -124,11 +132,26 @@ contract Vault is TEA {
                 );
             }
 
-            // Update vaultStates from new reserves
+            // Update _vaultStates from new reserves
             _updateVaultState(vaultState, reserves, vaultParams);
 
             // Update collateral params
-            _updateTokenState(true, tokenState, collectedFee, vaultParams.collateralToken, collateralDeposited);
+            _updateCollateralState(
+                true,
+                collateralState,
+                fees.collateralFeeToStakers,
+                vaultParams.collateralToken,
+                collateralDeposited
+            );
+
+            // Emit event
+            emit Mint(
+                vaultState.vaultId,
+                isAPE,
+                fees.collateralInOrWithdrawn,
+                fees.collateralFeeToStakers,
+                fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+            );
         }
     }
 
@@ -136,48 +159,33 @@ contract Vault is TEA {
      */
     function burn(
         bool isAPE,
-        VaultStructs.VaultParameters calldata vaultParams,
+        SirStructs.VaultParameters calldata vaultParams,
         uint256 amount
-    ) external returns (uint144 collateralWithdrawn) {
-        VaultStructs.SystemParameters memory systemParams_ = systemParams;
+    ) external returns (uint144) {
+        SirStructs.SystemParameters memory systemParams_ = _systemParams;
 
         // Get reserves
         (
-            VaultStructs.TokenState memory tokenState,
-            VaultStructs.VaultState memory vaultState,
-            VaultStructs.Reserves memory reserves,
+            SirStructs.CollateralState memory collateralState,
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
             APE ape,
 
-        ) = VaultExternal.getReserves(false, isAPE, tokenStates, vaultStates, _ORACLE, vaultParams);
+        ) = VaultExternal.getReserves(false, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-        uint256 collectedFee;
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+        SirStructs.Fees memory fees;
         if (isAPE) {
             // Burn APE
-            uint144 polFee;
-            (reserves, collectedFee, polFee, collateralWithdrawn) = ape.burn(
-                msg.sender,
-                systemParams_.baseFee,
-                vaultIssuanceParams_.tax,
-                reserves,
-                amount
-            );
+            (reserves, fees) = ape.burn(msg.sender, systemParams_.baseFee, vaultIssuanceParams_.tax, reserves, amount);
 
             // Mint TEA for protocol owned liquidity (POL)
-            if (polFee > 0) {
-                mint(
-                    vaultParams.collateralToken,
-                    address(this),
-                    vaultState.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    reserves,
-                    polFee
-                );
+            if (fees.collateralFeeToProtocol > 0) {
+                mintToProtocol(vaultParams.collateralToken, vaultState.vaultId, reserves, fees.collateralFeeToProtocol);
             }
         } else {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
-            (collateralWithdrawn, collectedFee) = burn(
+            fees = burn(
                 vaultParams.collateralToken,
                 msg.sender,
                 vaultState.vaultId,
@@ -188,37 +196,43 @@ contract Vault is TEA {
             );
         }
 
-        // Emit event
-        emit Burn(vaultState.vaultId, collateralWithdrawn);
-
-        // Update vaultStates from new reserves
+        // Update _vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update collateral params
-        _updateTokenState(false, tokenState, collectedFee, vaultParams.collateralToken, collateralWithdrawn);
+        _updateCollateralState(
+            false,
+            collateralState,
+            fees.collateralFeeToStakers,
+            vaultParams.collateralToken,
+            fees.collateralInOrWithdrawn
+        );
 
         // Send collateral
-        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, collateralWithdrawn);
+        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);
+
+        // Emit event
+        emit Burn(
+            vaultState.vaultId,
+            isAPE,
+            fees.collateralInOrWithdrawn,
+            fees.collateralFeeToStakers,
+            fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+        );
+
+        return fees.collateralInOrWithdrawn;
     }
 
     /*////////////////////////////////////////////////////////////////
                             READ ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    // TODO: Add simulateMint and simulateBurn functions to the periphery
-
     /** @dev Kick it to periphery if more space is needed
      */
     function getReserves(
-        VaultStructs.VaultParameters calldata vaultParams
-    ) external view returns (VaultStructs.Reserves memory) {
-        // return
-        //     getReservesReadOnly(
-        //         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
-        //         _ORACLE,
-        //         vaultParams
-        //     );
-        return VaultExternal.getReservesReadOnly(vaultStates, _ORACLE, vaultParams);
+        SirStructs.VaultParameters calldata vaultParams
+    ) external view returns (SirStructs.Reserves memory) {
+        return VaultExternal.getReservesReadOnly(_vaultStates, _ORACLE, vaultParams);
     }
 
     function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
@@ -239,9 +253,9 @@ contract Vault is TEA {
      *     (R,  0  ) ⇔ (A,0)
      */
     function _updateVaultState(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reserves,
-        VaultStructs.VaultParameters calldata vaultParams
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reserves,
+        SirStructs.VaultParameters calldata vaultParams
     ) private {
         unchecked {
             vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
@@ -327,41 +341,44 @@ contract Vault is TEA {
                 }
             }
 
-            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
+            _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         }
     }
 
-    function _updateTokenState(
+    function _updateCollateralState(
         bool isMint,
-        VaultStructs.TokenState memory tokenState,
+        SirStructs.CollateralState memory collateralState,
         uint256 collectedFee,
         address collateralToken,
         uint144 collateralDepositedOrWithdrawn
     ) private {
-        uint256 collectedFees_ = tokenState.collectedFees + collectedFee;
-        require(collectedFees_ <= type(uint112).max); // Ensure it fits in a uint112
-        tokenState = VaultStructs.TokenState({
-            collectedFees: uint112(collectedFees_),
+        uint256 totalFeesToStakers_ = collateralState.totalFeesToStakers + collectedFee;
+        require(totalFeesToStakers_ <= type(uint112).max); // Ensure it fits in a uint112
+        collateralState = SirStructs.CollateralState({
+            totalFeesToStakers: uint112(totalFeesToStakers_),
             total: isMint
-                ? tokenState.total + collateralDepositedOrWithdrawn
-                : tokenState.total - collateralDepositedOrWithdrawn
+                ? collateralState.total + collateralDepositedOrWithdrawn
+                : collateralState.total - collateralDepositedOrWithdrawn
         });
 
-        tokenStates[collateralToken] = tokenState;
+        _collateralStates[collateralToken] = collateralState;
     }
 
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(address token) external returns (uint112 collectedFees) {
+    function withdrawFees(address token) external returns (uint112 totalFeesToStakers) {
         require(msg.sender == sir);
 
-        VaultStructs.TokenState memory tokenState = tokenStates[token];
-        collectedFees = tokenState.collectedFees;
-        if (collectedFees != 0) {
-            tokenStates[token] = VaultStructs.TokenState({collectedFees: 0, total: tokenState.total - collectedFees});
-            TransferHelper.safeTransfer(token, sir, collectedFees);
+        SirStructs.CollateralState memory collateralState = _collateralStates[token];
+        totalFeesToStakers = collateralState.totalFeesToStakers;
+        if (totalFeesToStakers != 0) {
+            _collateralStates[token] = SirStructs.CollateralState({
+                totalFeesToStakers: 0,
+                total: collateralState.total - totalFeesToStakers
+            });
+            TransferHelper.safeTransfer(token, sir, totalFeesToStakers);
         }
     }
 
@@ -394,5 +411,19 @@ contract Vault is TEA {
                 }
             }
         }
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                            EXPLICIT GETTERS
+    ////////////////////////////////////////////////////////////////*/
+
+    function vaultStates(
+        SirStructs.VaultParameters calldata vaultParams
+    ) external view returns (SirStructs.VaultState memory) {
+        return _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
+    }
+
+    function collateralStates(address token) external view returns (SirStructs.CollateralState memory) {
+        return _collateralStates[token];
     }
 }

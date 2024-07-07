@@ -10,6 +10,8 @@ import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 
 contract Auxiliary is Test {
     struct Bidder {
@@ -97,21 +99,21 @@ contract Auxiliary is Test {
         _dealETH(address(staker), donations.donationsETH);
     }
 
-    function _incrementFeesVariableInVault(address token, uint112 collectedFees, uint144 total) internal {
+    function _incrementFeesVariableInVault(address token, uint112 totalFeesToStakers, uint144 total) internal {
         // Increase fees in Vault
         uint256 slot = uint256(vm.load(vault, keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES))))));
-        collectedFees += uint112(slot);
+        totalFeesToStakers += uint112(slot);
         slot >>= 112;
         total += uint144(slot);
-        assert(total >= collectedFees);
+        assert(total >= totalFeesToStakers);
         vm.store(
             vault,
             keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
-            bytes32(abi.encodePacked(total, collectedFees))
+            bytes32(abi.encodePacked(total, totalFeesToStakers))
         );
 
-        (uint112 collectedFees_, ) = Vault(vault).tokenStates(token);
-        assertEq(collectedFees, collectedFees_, "Wrong token states slot used by vm.store");
+        SirStructs.CollateralState memory collateralState_ = Vault(vault).collateralStates(token);
+        assertEq(totalFeesToStakers, collateralState_.totalFeesToStakers, "Wrong token states slot used by vm.store");
     }
 
     /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
@@ -137,11 +139,11 @@ contract Auxiliary is Test {
     }
 
     function _assertAuction(Bidder memory bidder_, uint256 timeStamp) internal {
-        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_BNB);
-        assertEq(bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
-        assertEq(bid, bidder_.amount, "Wrong bid");
-        assertEq(startTime, timeStamp, "Wrong start time");
-        assertTrue(!winnerPaid, "Winner should not have been paid yet");
+        SirStructs.Auction memory auction = staker.auctions(Addresses.ADDR_BNB);
+        assertEq(auction.bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
+        assertEq(auction.bid, bidder_.amount, "Wrong bid");
+        assertEq(auction.startTime, timeStamp, "Wrong start time");
+        assertTrue(!auction.winnerPaid, "Winner should not have been paid yet");
     }
 }
 
@@ -827,11 +829,11 @@ contract StakerTest is Auxiliary {
         vm.expectRevert(NoAuction.selector);
         staker.bid(Addresses.ADDR_WETH);
 
-        (address bidder, uint96 bid, uint40 startTime, bool winnerPaid) = staker.auctions(Addresses.ADDR_WETH);
-        assertEq(bidder, address(0), "Bidder should be 0");
-        assertEq(bid, 0, "Bid should be 0");
-        assertEq(startTime, 0, "Start time should be 0");
-        assertEq(winnerPaid, false, "Winner should not be paid");
+        SirStructs.Auction memory auction = staker.auctions(Addresses.ADDR_WETH);
+        assertEq(auction.bidder, address(0), "Bidder should be 0");
+        assertEq(auction.bid, 0, "Bid should be 0");
+        assertEq(auction.startTime, 0, "Start time should be 0");
+        assertEq(auction.winnerPaid, false, "Winner should not be paid");
 
         vm.expectRevert(NoAuction.selector);
         staker.bid(Addresses.ADDR_WETH);
@@ -1063,7 +1065,7 @@ contract StakerHandler is Auxiliary {
     uint256 public currentTime;
 
     constructor() {
-        vm.writeFile("./InvariantStaker.log", "");
+        // vm.writeFile("./InvariantStaker.log", "");
         currentTime = 1694616791;
 
         staker = new Staker(Addresses.ADDR_WETH);
@@ -1173,7 +1175,7 @@ contract StakerHandler is Auxiliary {
 
     function payAuctionWinner(uint256 timeSkip, bool collateralSelect) external advanceTime(timeSkip) {
         address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
-        vm.writeLine("./InvariantStaker.log", string.concat("Pays winner of ", vm.toString(collateral), " auction"));
+        // vm.writeLine("./InvariantStaker.log", string.concat("Pays winner of ", vm.toString(collateral), " auction"));
 
         // Pay auction winner
         staker.payAuctionWinner(collateral);

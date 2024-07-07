@@ -6,7 +6,7 @@ import {Vault} from "./Vault.sol";
 import {SIR} from "./SIR.sol";
 
 // Libraries
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
@@ -94,11 +94,11 @@ contract SystemControl is Ownable {
 
         // Retrieve parameters
         Vault vault_ = vault;
-        (uint16 baseFee, uint16 lpFee, , ) = vault_.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
 
         // Store fee parameters for later
-        _oldBaseFee = baseFee;
-        _oldLpFee = lpFee;
+        _oldBaseFee = systemParams.baseFee;
+        _oldLpFee = systemParams.lpFee;
 
         // Set fees to 0 for emergency withdrawals
         vault_.updateSystemState(0, 0, true);
@@ -147,9 +147,9 @@ contract SystemControl is Ownable {
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        (, uint16 lpFee, , ) = vault_.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
 
-        vault_.updateSystemState(baseFee_, lpFee, false);
+        vault_.updateSystemState(baseFee_, systemParams.lpFee, false);
 
         emit NewBaseFee(baseFee_);
     }
@@ -159,9 +159,9 @@ contract SystemControl is Ownable {
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
         Vault vault_ = vault;
-        (uint16 baseFee, , , ) = vault_.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
 
-        vault_.updateSystemState(baseFee, lpFee_, false);
+        vault_.updateSystemState(systemParams.baseFee, lpFee_, false);
 
         emit NewLPFee(lpFee_);
     }
@@ -192,6 +192,7 @@ contract SystemControl is Ownable {
         }
 
         // Condition on squares
+        console.log("cumSquaredTaxes:", cumSquaredTaxes, ", type(uint8).max^2:", uint256(type(uint8).max) ** 2);
         if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters

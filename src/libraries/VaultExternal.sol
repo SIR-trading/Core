@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 // Libraries
-import {VaultStructs} from "./VaultStructs.sol";
+import {SirStructs} from "./SirStructs.sol";
 import {TickMathPrecision} from "./TickMathPrecision.sol";
 import {SaltedAddress} from "./SaltedAddress.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
@@ -29,10 +29,10 @@ library VaultExternal {
     // Deploy APE token
     function deploy(
         Oracle oracle,
-        VaultStructs.VaultState storage vaultState,
-        VaultStructs.VaultParameters[] storage paramsById,
-        VaultStructs.TokenParameters storage transientTokenParameters,
-        VaultStructs.VaultParameters calldata vaultParams
+        SirStructs.VaultState storage vaultState,
+        SirStructs.VaultParameters[] storage paramsById,
+        SirStructs.TokenParameters storage transientTokenParameters,
+        SirStructs.VaultParameters calldata vaultParams
     ) external {
         if (
             vaultParams.leverageTier > SystemConstants.MAX_LEVERAGE_TIER ||
@@ -80,13 +80,13 @@ library VaultExternal {
     }
 
     function teaURI(
-        VaultStructs.VaultParameters[] storage paramsById,
+        SirStructs.VaultParameters[] storage paramsById,
         uint256 vaultId,
         uint256 totalSupply
     ) external view returns (string memory) {
         string memory vaultIdStr = Strings.toString(vaultId);
 
-        VaultStructs.VaultParameters memory params = paramsById[vaultId];
+        SirStructs.VaultParameters memory params = paramsById[vaultId];
         require(vaultId != 0);
 
         return
@@ -115,7 +115,7 @@ library VaultExternal {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function _generateName(VaultStructs.VaultParameters calldata vaultParams) private view returns (string memory) {
+    function _generateName(SirStructs.VaultParameters calldata vaultParams) private view returns (string memory) {
         string memory leverageStr;
         if (vaultParams.leverageTier == -3) leverageStr = "1.0625";
         else if (vaultParams.leverageTier == -3) leverageStr = "1.125";
@@ -140,16 +140,16 @@ library VaultExternal {
     }
 
     function getReservesReadOnly(
-        mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
-            storage vaultStates,
+        mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
+            storage _vaultStates,
         Oracle oracle,
-        VaultStructs.VaultParameters calldata vaultParams
-    ) external view returns (VaultStructs.Reserves memory reserves) {
+        SirStructs.VaultParameters calldata vaultParams
+    ) external view returns (SirStructs.Reserves memory reserves) {
         // Get price
         reserves.tickPriceX42 = oracle.getPrice(vaultParams.collateralToken, vaultParams.debtToken);
 
         _getReserves(
-            vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
+            _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
             reserves,
             vaultParams.leverageTier
         );
@@ -158,24 +158,24 @@ library VaultExternal {
     function getReserves(
         bool isMint,
         bool isAPE,
-        mapping(address collateral => VaultStructs.TokenState) storage tokenStates,
-        mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => VaultStructs.VaultState)))
-            storage vaultStates,
+        mapping(address collateral => SirStructs.CollateralState) storage collateralStates,
+        mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
+            storage _vaultStates,
         Oracle oracle,
-        VaultStructs.VaultParameters calldata vaultParams
+        SirStructs.VaultParameters calldata vaultParams
     )
         external
         returns (
-            VaultStructs.TokenState memory tokenState,
-            VaultStructs.VaultState memory vaultState,
-            VaultStructs.Reserves memory reserves,
+            SirStructs.CollateralState memory collateralState,
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
             APE ape,
             uint144 collateralDeposited
         )
     {
         unchecked {
-            tokenState = tokenStates[vaultParams.collateralToken];
-            vaultState = vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
+            collateralState = collateralStates[vaultParams.collateralToken];
+            vaultState = _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
 
             // Get price and update oracle state if needed
             reserves.tickPriceX42 = oracle.updateOracleState(vaultParams.collateralToken, vaultParams.debtToken);
@@ -189,14 +189,14 @@ library VaultExternal {
                 // Get deposited collateral
                 uint256 balance = APE(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
                 if (balance > type(uint144).max) revert DepositTooLarge(); // Ensure it fits in a uint144
-                collateralDeposited = uint144(balance - tokenState.total);
+                collateralDeposited = uint144(balance - collateralState.total);
             }
         }
     }
 
     function _getReserves(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reserves,
         int8 leverageTier
     ) private pure {
         unchecked {

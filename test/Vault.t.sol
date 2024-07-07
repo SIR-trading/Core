@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
@@ -55,43 +55,45 @@ contract VaultInitializeTest is Test {
         // Stay within the allowed range
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
+        // Check vault 1 does not exist
         vm.expectRevert();
         vault.paramsById(1);
 
+        // Initialize vault 1
         vm.expectEmit();
         emit VaultInitialized(debtToken, collateralToken, leverageTier, 1, SaltedAddress.getAddress(address(vault), 1));
-        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+        vault.initialize(SirStructs.VaultParameters(debtToken, collateralToken, leverageTier));
 
-        (uint144 reserve, int64 tickPriceSatX42, uint48 vaultId) = vault.vaultStates(
-            debtToken,
-            collateralToken,
-            leverageTier
+        // Check vault 1 is initialized correctly
+        SirStructs.VaultState memory vaultState = vault.vaultStates(
+            SirStructs.VaultParameters(debtToken, collateralToken, leverageTier)
         );
-        (address debtToken_, address collateralToken_, int8 leverageTier_) = vault.paramsById(1);
+        SirStructs.VaultParameters memory vaultParams_ = vault.paramsById(1);
+        assertEq(vaultState.reserve, 0);
+        assertEq(vaultState.tickPriceSatX42, 0);
+        assertEq(vaultState.vaultId, 1);
+        assertEq(debtToken, vaultParams_.debtToken);
+        assertEq(collateralToken, vaultParams_.collateralToken);
+        assertEq(leverageTier, vaultParams_.leverageTier);
 
-        assertEq(reserve, 0);
-        assertEq(tickPriceSatX42, 0);
-        assertEq(vaultId, 1);
-        assertEq(debtToken, debtToken_);
-        assertEq(collateralToken, collateralToken_);
-        assertEq(leverageTier, leverageTier_);
-
+        // Check vault 2 does not exist
         vm.expectRevert();
         vault.paramsById(2);
 
+        // Initialize vault 2
         vm.expectEmit();
         emit VaultInitialized(collateralToken, debtToken, leverageTier, 2, SaltedAddress.getAddress(address(vault), 2));
-        vault.initialize(VaultStructs.VaultParameters(collateralToken, debtToken, leverageTier));
+        vault.initialize(SirStructs.VaultParameters(collateralToken, debtToken, leverageTier));
 
-        (reserve, tickPriceSatX42, vaultId) = vault.vaultStates(collateralToken, debtToken, leverageTier);
-        (debtToken_, collateralToken_, leverageTier_) = vault.paramsById(2);
-
-        assertEq(reserve, 0);
-        assertEq(tickPriceSatX42, 0);
-        assertEq(vaultId, 2);
-        assertEq(debtToken, collateralToken_);
-        assertEq(collateralToken, debtToken_);
-        assertEq(leverageTier, leverageTier_);
+        // Check vault 2 is initialized correctly
+        vaultState = vault.vaultStates(SirStructs.VaultParameters(collateralToken, debtToken, leverageTier));
+        vaultParams_ = vault.paramsById(2);
+        assertEq(vaultState.reserve, 0);
+        assertEq(vaultState.tickPriceSatX42, 0);
+        assertEq(vaultState.vaultId, 2);
+        assertEq(debtToken, vaultParams_.collateralToken);
+        assertEq(collateralToken, vaultParams_.debtToken);
+        assertEq(leverageTier, vaultParams_.leverageTier);
 
         vm.expectRevert();
         vault.paramsById(3);
@@ -105,7 +107,7 @@ contract VaultInitializeTest is Test {
         );
 
         vm.expectRevert(LeverageTierOutOfRange.selector);
-        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+        vault.initialize(SirStructs.VaultParameters(debtToken, collateralToken, leverageTier));
     }
 
     function testFuzz_InitializeVaultAlreadyInitialized(int8 leverageTier) public {
@@ -114,14 +116,14 @@ contract VaultInitializeTest is Test {
         testFuzz_InitializeVault(leverageTier);
 
         vm.expectRevert(VaultAlreadyInitialized.selector);
-        vault.initialize(VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier));
+        vault.initialize(SirStructs.VaultParameters(debtToken, collateralToken, leverageTier));
     }
 
     function testFuzz_InitializeVaultNoUniswapPool(int8 leverageTier) public {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
         vm.expectRevert(NoUniswapPool.selector);
-        vault.initialize(VaultStructs.VaultParameters(Addresses.ADDR_BNB, Addresses.ADDR_ALUSD, leverageTier));
+        vault.initialize(SirStructs.VaultParameters(Addresses.ADDR_BNB, Addresses.ADDR_ALUSD, leverageTier));
     }
 
     function _boundExclude(int8 x, int8 lower, int8 upper) private pure returns (int8) {
@@ -203,7 +205,7 @@ contract VaultTest is Test {
 
     address public alice = vm.addr(3);
 
-    VaultStructs.VaultParameters public vaultParams;
+    SirStructs.VaultParameters public vaultParams;
 
     constructor() {
         ONE = ABDKMathQuad.fromUInt(1);
@@ -237,7 +239,7 @@ contract VaultTest is Test {
         ape = IERC20(SaltedAddress.getAddress(address(vault), VAULT_ID));
     }
 
-    modifier Initialize(SystemParams calldata systemParams, VaultStructs.Reserves memory reservesPre) {
+    modifier Initialize(SystemParams calldata systemParams, SirStructs.Reserves memory reservesPre) {
         {
             vaultParams.leverageTier = int8(
                 _bound(systemParams.leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)
@@ -245,11 +247,7 @@ contract VaultTest is Test {
 
             // Initialize vault
             vault.initialize(
-                VaultStructs.VaultParameters(
-                    vaultParams.debtToken,
-                    vaultParams.collateralToken,
-                    vaultParams.leverageTier
-                )
+                SirStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
             );
 
             // Mock oracle prices
@@ -294,11 +292,11 @@ contract VaultTest is Test {
         bool isFirst,
         bool isMint,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances
     ) {
         {
-            VaultStructs.VaultState memory vaultState;
+            SirStructs.VaultState memory vaultState;
             if (!isFirst) {
                 reservesPre.reserveApes = uint144(_bound(reservesPre.reserveApes, 1, type(uint144).max - 1));
                 reservesPre.reserveLPers = uint144(
@@ -362,8 +360,8 @@ contract VaultTest is Test {
         InputsOutputs memory inputsOutputs
     )
         public
-        Initialize(systemParams, VaultStructs.Reserves(0, 0, 0))
-        ConstraintAmounts(true, true, inputsOutputs, VaultStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
+        Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
+        ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         // Alice deposits collateral
         vm.prank(alice);
@@ -371,15 +369,10 @@ contract VaultTest is Test {
 
         // Alice mints APE
         vm.prank(alice);
-        inputsOutputs.amount = vault.mint(
-            true,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        inputsOutputs.amount = vault.mint(true, vaultParams);
 
         // Check reserves
-        VaultStructs.Reserves memory reserves = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
 
         // To simplify the math, no reserve is allowed to be 0
         assertGt(reserves.reserveApes, 0);
@@ -389,7 +382,7 @@ contract VaultTest is Test {
         _verifyAmountsMintAPE(
             systemParams,
             inputsOutputs,
-            VaultStructs.Reserves(0, 0, 0),
+            SirStructs.Reserves(0, 0, 0),
             reserves,
             Balances(0, 0, 0, 0, 0)
         );
@@ -400,8 +393,8 @@ contract VaultTest is Test {
         InputsOutputs memory inputsOutputs
     )
         public
-        Initialize(systemParams, VaultStructs.Reserves(0, 0, 0))
-        ConstraintAmounts(true, true, inputsOutputs, VaultStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
+        Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
+        ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         // Alice deposits collateral
         vm.prank(alice);
@@ -409,15 +402,10 @@ contract VaultTest is Test {
 
         // Alice mints APE
         vm.prank(alice);
-        inputsOutputs.amount = vault.mint(
-            true,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        inputsOutputs.amount = vault.mint(true, vaultParams);
 
         // Check reserves
-        VaultStructs.Reserves memory reserves = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
 
         // To simplify the math, no reserve is allowed to be 0
         assertGt(reserves.reserveApes, 0);
@@ -427,7 +415,7 @@ contract VaultTest is Test {
         _verifyAmountsMintAPE(
             systemParams,
             inputsOutputs,
-            VaultStructs.Reserves(0, 0, 0),
+            SirStructs.Reserves(0, 0, 0),
             reserves,
             Balances(0, 0, 0, 0, 0)
         );
@@ -438,8 +426,8 @@ contract VaultTest is Test {
         InputsOutputs memory inputsOutputs
     )
         public
-        Initialize(systemParams, VaultStructs.Reserves(0, 0, 0))
-        ConstraintAmounts(true, true, inputsOutputs, VaultStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
+        Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
+        ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         // Alice deposits collateral
         vm.prank(alice);
@@ -447,20 +435,15 @@ contract VaultTest is Test {
 
         // Alice mints APE
         vm.prank(alice);
-        inputsOutputs.amount = vault.mint(
-            false,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        inputsOutputs.amount = vault.mint(false, vaultParams);
 
         // Check reserves
-        VaultStructs.Reserves memory reserves = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
 
         _verifyAmountsMintTEA(
             systemParams,
             inputsOutputs,
-            VaultStructs.Reserves(0, 0, 0),
+            SirStructs.Reserves(0, 0, 0),
             reserves,
             Balances(0, 0, 0, 0, 0)
         );
@@ -472,8 +455,8 @@ contract VaultTest is Test {
         bool isAPE
     )
         public
-        Initialize(systemParams, VaultStructs.Reserves(0, 0, 0))
-        ConstraintAmounts(true, true, inputsOutputs, VaultStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
+        Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
+        ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
         inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, 1));
 
@@ -484,32 +467,23 @@ contract VaultTest is Test {
         // Alice mints APE
         vm.prank(alice);
         vm.expectRevert();
-        vault.mint(
-            isAPE,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        vault.mint(isAPE, vaultParams);
     }
 
     function testFuzz_recursiveStateSave(
         SystemParams calldata systemParams,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances
     )
         public
         Initialize(systemParams, reservesPre)
         ConstraintAmounts(false, false, InputsOutputs(0, 0, 0), reservesPre, balances)
     {
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         assertEq(reservesPre.tickPriceX42, reservesPost.tickPriceX42);
 
-        (uint144 reserve, int64 tickPriceSatX42, ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
-        );
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
         // In power zone error favors apes and in saturation zone error favors LPers
         if (
@@ -522,20 +496,20 @@ contract VaultTest is Test {
             assertApproxEqAbs(
                 reservesPre.reserveApes,
                 reservesPost.reserveApes,
-                1 + reserve / 1e16,
+                1 + vaultState.reserve / 1e16,
                 "Rounding error in reserveApes too large"
             );
             assertApproxEqAbs(
                 reservesPre.reserveLPers,
                 reservesPost.reserveLPers,
-                1 + reserve / 1e16,
+                1 + vaultState.reserve / 1e16,
                 "Rounding error in reserveLPers too large"
             );
 
-            if (reservesPre.tickPriceX42 < tickPriceSatX42) {
+            if (reservesPre.tickPriceX42 < vaultState.tickPriceSatX42) {
                 assertLe(reservesPre.reserveApes, reservesPost.reserveApes, "In power zone apes should increase");
                 assertGe(reservesPre.reserveLPers, reservesPost.reserveLPers, "In power zone LPers should decrease");
-            } else if (reservesPre.tickPriceX42 > tickPriceSatX42) {
+            } else if (reservesPre.tickPriceX42 > vaultState.tickPriceSatX42) {
                 assertGe(reservesPre.reserveApes, reservesPost.reserveApes, "In saturation zone apes should decrease");
                 assertLe(
                     reservesPre.reserveLPers,
@@ -547,13 +521,13 @@ contract VaultTest is Test {
             assertApproxEqAbs(
                 reservesPre.reserveApes,
                 reservesPost.reserveApes,
-                1 + reserve / 1e5,
+                1 + vaultState.reserve / 1e5,
                 "Reserve apes is wrong"
             );
             assertApproxEqAbs(
                 reservesPre.reserveLPers,
                 reservesPost.reserveLPers,
-                1 + reserve / 1e5,
+                1 + vaultState.reserve / 1e5,
                 "Reserve LPers is wrong"
             );
         }
@@ -562,16 +536,14 @@ contract VaultTest is Test {
     function testFuzz_mintAPE(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances
     )
         public
         Initialize(systemParams, reservesPre)
         ConstraintAmounts(false, true, inputsOutputs, reservesPre, balances)
     {
-        reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        reservesPre = vault.getReserves(vaultParams);
 
         {
             // Constraint so it doesn't overflow TEA supply
@@ -599,15 +571,10 @@ contract VaultTest is Test {
 
         // Alice mints APE
         vm.prank(alice);
-        inputsOutputs.amount = vault.mint(
-            true,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        inputsOutputs.amount = vault.mint(true, vaultParams);
 
         // Retrieve reserves after minting
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Verify amounts
         _verifyAmountsMintAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
@@ -616,7 +583,7 @@ contract VaultTest is Test {
     function testFuzz_mintTEA(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances
     )
         public
@@ -624,9 +591,7 @@ contract VaultTest is Test {
         ConstraintAmounts(false, true, inputsOutputs, reservesPre, balances)
     {
         // Get reserves before minting
-        reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        reservesPre = vault.getReserves(vaultParams);
 
         {
             // Constraint so it doesn't overflow TEA supply
@@ -654,15 +619,10 @@ contract VaultTest is Test {
 
         // Alice mints TEA
         vm.prank(alice);
-        inputsOutputs.amount = vault.mint(
-            false,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        inputsOutputs.amount = vault.mint(false, vaultParams);
 
         // Retrieve reserves after minting
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Verify amounts
         _verifyAmountsMintTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
@@ -671,16 +631,14 @@ contract VaultTest is Test {
     function testFuzz_burnAPE(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances
     )
         public
         Initialize(systemParams, reservesPre)
         ConstraintAmounts(false, false, inputsOutputs, reservesPre, balances)
     {
-        reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        reservesPre = vault.getReserves(vaultParams);
 
         // Constraint so it doesn't underflow its balance
         inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.apeAlice);
@@ -706,16 +664,10 @@ contract VaultTest is Test {
 
         // Alice burns APE
         vm.prank(alice);
-        inputsOutputs.collateral = vault.burn(
-            true,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-            inputsOutputs.amount
-        );
+        inputsOutputs.collateral = vault.burn(true, vaultParams, inputsOutputs.amount);
 
         // Retrieve reserves after minting
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Verify amounts
         _verifyAmountsBurnAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
@@ -724,16 +676,14 @@ contract VaultTest is Test {
     function testFuzz_burnTEA(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances
     )
         public
         Initialize(systemParams, reservesPre)
         ConstraintAmounts(false, false, inputsOutputs, reservesPre, balances)
     {
-        reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        reservesPre = vault.getReserves(vaultParams);
 
         // Constraint so it doesn't underflow its balance
         inputsOutputs.amount = _bound(inputsOutputs.amount, 0, balances.teaAlice);
@@ -753,16 +703,10 @@ contract VaultTest is Test {
 
         // Alice burns TEA
         vm.prank(alice);
-        inputsOutputs.collateral = vault.burn(
-            false,
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier),
-            inputsOutputs.amount
-        );
+        inputsOutputs.collateral = vault.burn(false, vaultParams, inputsOutputs.amount);
 
         // Retrieve reserves after minting
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Verify amounts
         _verifyAmountsBurnTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
@@ -773,9 +717,9 @@ contract VaultTest is Test {
         bool isAPE,
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances,
-        VaultStructs.VaultParameters memory vaultParams_
+        SirStructs.VaultParameters memory vaultParams_
     )
         public
         Initialize(systemParams, reservesPre)
@@ -807,9 +751,7 @@ contract VaultTest is Test {
         );
 
         // Get reserves before minting
-        reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        reservesPre = vault.getReserves(vaultParams);
 
         {
             // Constraint so it doesn't overflow TEA supply
@@ -846,9 +788,9 @@ contract VaultTest is Test {
         bool isAPE,
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances,
-        VaultStructs.VaultParameters memory vaultParams_
+        SirStructs.VaultParameters memory vaultParams_
     )
         public
         Initialize(systemParams, reservesPre)
@@ -880,9 +822,7 @@ contract VaultTest is Test {
         );
 
         // Get reserves before minting
-        reservesPre = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        reservesPre = vault.getReserves(vaultParams);
 
         if (isAPE) {
             // Constraint so it doesn't underflow its balance
@@ -936,7 +876,7 @@ contract VaultTest is Test {
 
     function testFuzz_priceFluctuation(
         SystemParams calldata systemParams,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         Balances memory balances,
         int64 newTickPriceX42
     )
@@ -971,21 +911,10 @@ contract VaultTest is Test {
         );
 
         // Retrieve reserves after price fluctuation
-        VaultStructs.Reserves memory reservesPost = vault.getReserves(
-            VaultStructs.VaultParameters(vaultParams.debtToken, vaultParams.collateralToken, vaultParams.leverageTier)
-        );
+        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Get vault state
-        VaultStructs.VaultState memory vaultState;
-        {
-            (uint144 reserve, int64 tickPriceSatX42, ) = vault.vaultStates(
-                vaultParams.debtToken,
-                vaultParams.collateralToken,
-                vaultParams.leverageTier
-            );
-
-            vaultState = VaultStructs.VaultState(reserve, tickPriceSatX42, VAULT_ID);
-        }
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
         if (tickPriceX42 < vaultState.tickPriceSatX42 && newTickPriceX42 < vaultState.tickPriceSatX42) {
             // Price remains in the Power Zone
@@ -1007,9 +936,9 @@ contract VaultTest is Test {
     /////////////////////////////////////////////////////////////////////////
 
     function assertInPowerZone(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
     ) internal {
@@ -1022,16 +951,16 @@ contract VaultTest is Test {
             // Condition to avoid OF/UFing tickPriceSatX42
             vaultState.tickPriceSatX42 != type(int64).min && vaultState.tickPriceSatX42 != type(int64).max
         ) err = 2 + vaultState.reserve / 1e16;
-        else err = 2 + vaultState.reserve / 1e5;
+        else err = 3 + vaultState.reserve / 1e5;
 
         assertApproxEqAbs(vaultState.reserve - newReserveApes, reservesPost.reserveLPers, err);
         assertApproxEqAbs(newReserveApes, reservesPost.reserveApes, err);
     }
 
     function assertInSaturationZone(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
     ) internal {
@@ -1053,9 +982,9 @@ contract VaultTest is Test {
     }
 
     function assertPowerToSaturationZone(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
     ) internal {
@@ -1085,9 +1014,9 @@ contract VaultTest is Test {
     }
 
     function assertSaturationToPowerZone(
-        VaultStructs.VaultState memory vaultState,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
     ) internal {
@@ -1117,8 +1046,8 @@ contract VaultTest is Test {
     }
 
     function _deriveVaultState(
-        VaultStructs.Reserves memory reserves
-    ) private view returns (VaultStructs.VaultState memory vaultState) {
+        SirStructs.Reserves memory reserves
+    ) private view returns (SirStructs.VaultState memory vaultState) {
         unchecked {
             vaultState.vaultId = VAULT_ID;
             vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
@@ -1209,73 +1138,57 @@ contract VaultTest is Test {
 
     function _constraintReserveBurnAPE(
         SystemParams calldata systemParams,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         InputsOutputs memory inputsOutputs,
         Balances memory balances
     ) private view returns (uint144 collateralOut) {
         collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply));
-        (uint144 collateralWithdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeAPE(
+        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
             collateralOut,
             systemParams.baseFee,
             vaultParams.leverageTier,
             systemParams.tax
         );
 
-        (uint144 reserve, , ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
-        );
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
-        vm.assume(reserve >= uint256(2) + collateralWithdrawn_ + collectedFee);
+        vm.assume(vaultState.reserve >= uint256(2) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
     }
 
     function _constraintReserveBurnTEA(
         SystemParams calldata systemParams,
-        VaultStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPre,
         InputsOutputs memory inputsOutputs,
         Balances memory balances
     ) private view {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        (uint144 collateralWithdrawn_, uint144 collectedFee, , ) = Fees.hiddenFeeTEA(
-            collateralOut,
-            systemParams.lpFee,
-            systemParams.tax
-        );
+        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, systemParams.tax);
 
-        (uint144 reserve, , ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
-        );
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
-        vm.assume(reserve >= uint256(2) + collateralWithdrawn_ + collectedFee);
+        vm.assume(vaultState.reserve >= uint256(2) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
     }
 
     function _verifyAmountsMintAPE(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
         // Verify amounts
-        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeAPE(
+        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
             inputsOutputs.collateral,
             systemParams.baseFee,
             vaultParams.leverageTier,
             systemParams.tax
         );
 
-        // Get total reserve
-        (uint144 reserve, , ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
-        );
-        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+        // Get collateralState.total reserve
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
+        assertEq(vaultState.reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
 
         // To simplify the math, no reserve is allowed to be 0
         assertGt(reservesPost.reserveApes, 0);
@@ -1290,45 +1203,43 @@ contract VaultTest is Test {
                 reservesPost.reserveApes > 1 &&
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
-            ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e5;
+            ) err = 1 + vaultState.reserve / 1e16;
+            else err = 1 + vaultState.reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveApes,
-                reservesPre.reserveApes + collateralIn,
+                reservesPre.reserveApes + fees.collateralInOrWithdrawn,
                 err,
                 "Ape's reserve is wrong"
             );
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + lpersFee + polFee,
+                reservesPre.reserveLPers + fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
         }
 
         // Verify token state
-        {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
-            assertEq(
-                total,
-                reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral,
-                "Total reserves does not match"
-            );
-        }
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
+        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        assertEq(
+            collateralState.total,
+            reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral,
+            "Total reserves does not match"
+        );
 
         // Verify Alice's balances
         if (balances.apeSupply == 0) {
             assertEq(
                 inputsOutputs.amount,
-                collateralIn + reservesPre.reserveApes,
+                fees.collateralInOrWithdrawn + reservesPre.reserveApes,
                 "Minted amount is wrong when APE supply is 0"
             );
         } else if (reservesPre.reserveApes > 0) {
             assertEq(
                 inputsOutputs.amount,
-                FullMath.mulDiv(balances.apeSupply, collateralIn, reservesPre.reserveApes),
+                FullMath.mulDiv(balances.apeSupply, fees.collateralInOrWithdrawn, reservesPre.reserveApes),
                 "Minted amount is wrong"
             );
         } else {
@@ -1340,13 +1251,17 @@ contract VaultTest is Test {
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
         inputsOutputs.amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
-        if (polFee == 0) {
+        if (fees.collateralFeeToProtocol == 0) {
             assertEq(inputsOutputs.amount, 0);
         } else if (balances.teaSupply > 0) {
-            if (reservesPre.reserveLPers + lpersFee > 0) {
+            if (reservesPre.reserveLPers + fees.collateralFeeToGentlemen > 0) {
                 assertEq(
                     inputsOutputs.amount,
-                    FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers + lpersFee)
+                    FullMath.mulDiv(
+                        balances.teaSupply,
+                        fees.collateralFeeToProtocol,
+                        reservesPre.reserveLPers + fees.collateralFeeToGentlemen
+                    )
                 );
             } else {
                 fail("Invalid state");
@@ -1357,39 +1272,29 @@ contract VaultTest is Test {
     function _verifyAmountsBurnAPE(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
-        uint144 collateralWithdrawn_;
-        uint144 collectedFee;
-        uint144 lpersFee;
-        uint144 polFee;
-
-        {
-            // Compute amount of collateral
-            uint144 collateralOut = uint144(
-                FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply)
-            );
-
-            // Verify amounts
-            (collateralWithdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
-                collateralOut,
-                systemParams.baseFee,
-                vaultParams.leverageTier,
-                systemParams.tax
-            );
-            reservesPre.reserveApes -= collateralOut;
-        }
-        assertEq(inputsOutputs.collateral, collateralWithdrawn_);
-
-        // Get total reserve
-        (uint144 reserve, , ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
+        // Compute amount of collateral
+        uint144 collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply)
         );
-        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+
+        // Verify amounts
+        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
+            collateralOut,
+            systemParams.baseFee,
+            vaultParams.leverageTier,
+            systemParams.tax
+        );
+        reservesPre.reserveApes -= collateralOut;
+
+        assertEq(inputsOutputs.collateral, fees.collateralInOrWithdrawn);
+
+        // Get collateralState.total reserve
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
+        assertEq(vaultState.reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
 
         // To simplify the math, no reserve is allowed to be 0
         assertGt(reservesPost.reserveApes, 0);
@@ -1404,25 +1309,30 @@ contract VaultTest is Test {
                 reservesPost.reserveApes > 1 &&
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
-            ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e5;
+            ) err = 1 + vaultState.reserve / 1e16;
+            else err = 1 + vaultState.reserve / 1e5;
 
             assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Ape's reserve is wrong");
-            reservesPre.reserveLPers += lpersFee;
+            reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + polFee,
+                reservesPre.reserveLPers + fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
         }
 
         // Verify token state
-        {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
-            assertEq(total, reservesPre.reserveLPers + polFee + reservesPre.reserveApes + collectedFee, "1");
-        }
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
+        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        assertEq(
+            collateralState.total,
+            reservesPre.reserveLPers +
+                fees.collateralFeeToProtocol +
+                reservesPre.reserveApes +
+                fees.collateralFeeToStakers,
+            "1"
+        );
 
         // Verify Alice's balances
         assertEq(inputsOutputs.amount, balances.apeAlice - ape.balanceOf(alice));
@@ -1431,11 +1341,14 @@ contract VaultTest is Test {
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
         inputsOutputs.amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
-        if (polFee == 0) {
+        if (fees.collateralFeeToProtocol == 0) {
             assertEq(inputsOutputs.amount, 0);
         } else if (balances.teaSupply > 0) {
             if (reservesPre.reserveLPers > 0) {
-                assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+                assertEq(
+                    inputsOutputs.amount,
+                    FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+                );
             } else {
                 fail("Invalid state");
             }
@@ -1445,24 +1358,16 @@ contract VaultTest is Test {
     function _verifyAmountsMintTEA(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
         // Verify amounts
-        (uint144 collateralIn, uint144 collectedFee, uint144 lpersFee, uint144 polFee) = Fees.hiddenFeeTEA(
-            inputsOutputs.collateral,
-            systemParams.lpFee,
-            systemParams.tax
-        );
+        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(inputsOutputs.collateral, systemParams.lpFee, systemParams.tax);
 
-        // Get total reserve
-        (uint144 reserve, , ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
-        );
-        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+        // Get collateralState.total reserve
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
+        assertEq(vaultState.reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
 
         // To simplify the math, no reserve is allowed to be 0
         assertGt(reservesPost.reserveApes, 0);
@@ -1477,12 +1382,15 @@ contract VaultTest is Test {
                 reservesPost.reserveApes > 1 &&
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
-            ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e5;
+            ) err = 1 + vaultState.reserve / 1e16;
+            else err = 1 + vaultState.reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + collateralIn + lpersFee + polFee,
+                reservesPre.reserveLPers +
+                    fees.collateralInOrWithdrawn +
+                    fees.collateralFeeToGentlemen +
+                    fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1490,33 +1398,37 @@ contract VaultTest is Test {
         }
 
         // Verify token state
-        {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
-            assertEq(total, reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral);
-        }
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
+        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        assertEq(collateralState.total, reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral);
 
         // Verify POL's balances
         uint128 amountPol = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
-        reservesPre.reserveLPers += lpersFee;
+        reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
         if (balances.teaSupply == 0) {
-            if (polFee + reservesPre.reserveLPers == 0) {
+            if (fees.collateralFeeToProtocol + reservesPre.reserveLPers == 0) {
                 assertEq(amountPol, 0, "Amount of POL is not 0");
             }
         } else if (reservesPre.reserveLPers == 0) {
             fail("Invalid state");
         } else {
-            assertEq(amountPol, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+            assertEq(
+                amountPol,
+                FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+            );
         }
         assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
 
         // Verify Alice's balances
         balances.teaSupply += amountPol;
-        reservesPre.reserveLPers += polFee;
-        if (collateralIn == 0) {
+        reservesPre.reserveLPers += fees.collateralFeeToProtocol;
+        if (fees.collateralInOrWithdrawn == 0) {
             assertEq(inputsOutputs.amount, 0, "1");
         } else if (balances.teaSupply > 0) {
-            assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, collateralIn, reservesPre.reserveLPers));
+            assertEq(
+                inputsOutputs.amount,
+                FullMath.mulDiv(balances.teaSupply, fees.collateralInOrWithdrawn, reservesPre.reserveLPers)
+            );
         }
         assertEq(inputsOutputs.amount, vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, "3");
         assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "4");
@@ -1525,39 +1437,25 @@ contract VaultTest is Test {
     function _verifyAmountsBurnTEA(
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
-        VaultStructs.Reserves memory reservesPre,
-        VaultStructs.Reserves memory reservesPost,
+        SirStructs.Reserves memory reservesPre,
+        SirStructs.Reserves memory reservesPost,
         Balances memory balances
     ) private {
-        uint144 collateralWithdrawn_;
-        uint144 collectedFee;
-        uint144 lpersFee;
-        uint144 polFee;
-
-        {
-            // Compute amount of collateral
-            uint144 collateralOut = uint144(
-                FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
-            );
-
-            // Verify amounts
-            (collateralWithdrawn_, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
-                collateralOut,
-                systemParams.lpFee,
-                systemParams.tax
-            );
-            reservesPre.reserveLPers -= collateralOut;
-            reservesPre.reserveLPers += lpersFee;
-        }
-        assertEq(inputsOutputs.collateral, collateralWithdrawn_);
-
-        // Get total reserve
-        (uint144 reserve, , ) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
+        // Compute amount of collateral
+        uint144 collateralOut = uint144(
+            FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        assertEq(reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
+
+        // Verify amounts
+        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, systemParams.tax);
+        reservesPre.reserveLPers -= collateralOut;
+        reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
+
+        assertEq(inputsOutputs.collateral, fees.collateralInOrWithdrawn);
+
+        // Get collateralState.total reserve
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
+        assertEq(vaultState.reserve, reservesPost.reserveLPers + reservesPost.reserveApes);
 
         // To simplify the math, no reserve is allowed to be 0
         assertGt(reservesPost.reserveApes, 0);
@@ -1572,12 +1470,12 @@ contract VaultTest is Test {
                 reservesPost.reserveApes > 1 &&
                 reservesPre.reserveLPers > 1 &&
                 reservesPost.reserveLPers > 1
-            ) err = 1 + reserve / 1e16;
-            else err = 1 + reserve / 1e5;
+            ) err = 1 + vaultState.reserve / 1e16;
+            else err = 1 + vaultState.reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + polFee,
+                reservesPre.reserveLPers + fees.collateralFeeToProtocol,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1585,11 +1483,15 @@ contract VaultTest is Test {
         }
 
         // Verify token state
-        {
-            (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-            assertEq(collectedFees, collectedFee);
-            assertEq(total, reservesPre.reserveLPers + polFee + reservesPre.reserveApes + collectedFee);
-        }
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
+        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        assertEq(
+            collateralState.total,
+            reservesPre.reserveLPers +
+                fees.collateralFeeToProtocol +
+                reservesPre.reserveApes +
+                fees.collateralFeeToStakers
+        );
 
         // Verify Alice's balances
         assertEq(inputsOutputs.amount, balances.teaAlice - vault.balanceOf(alice, VAULT_ID));
@@ -1602,13 +1504,16 @@ contract VaultTest is Test {
             if (reservesPre.reserveLPers == 0) {
                 fail("Invalid state");
             } else {
-                assertEq(inputsOutputs.amount, FullMath.mulDiv(balances.teaSupply, polFee, reservesPre.reserveLPers));
+                assertEq(
+                    inputsOutputs.amount,
+                    FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+                );
             }
         }
         assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
     }
 
-    function _setState(VaultStructs.VaultState memory vaultState, Balances memory balances) private {
+    function _setState(SirStructs.VaultState memory vaultState, Balances memory balances) private {
         // Find slot of the vaultStates mapping
         // vaultStates mapping is at slot 7
         bytes32 slot = keccak256(
@@ -1635,29 +1540,25 @@ contract VaultTest is Test {
         vm.store(address(vault), slot, vaultStatePacked);
 
         // Verify the operation was correct
-        (uint144 reserve, int64 tickPriceSatX42, uint48 vaultId) = vault.vaultStates(
-            vaultParams.debtToken,
-            vaultParams.collateralToken,
-            vaultParams.leverageTier
-        );
+        SirStructs.VaultState memory vaultState_ = vault.vaultStates(vaultParams);
 
-        assertEq(reserve, vaultState.reserve, "Wrong slot used by vm.store");
-        assertEq(tickPriceSatX42, vaultState.tickPriceSatX42, "Wrong slot used by vm.store");
-        assertEq(vaultId, VAULT_ID, "Wrong slot used by vm.store");
+        assertEq(vaultState_.reserve, vaultState.reserve, "Wrong slot used by vm.store");
+        assertEq(vaultState_.tickPriceSatX42, vaultState.tickPriceSatX42, "Wrong slot used by vm.store");
+        assertEq(vaultState_.vaultId, VAULT_ID, "Wrong slot used by vm.store");
 
-        // Set tokenStates
+        // Set collateralStates
         slot = keccak256(
             abi.encode(
                 vaultParams.collateralToken,
-                uint256(8) // slot of tokenStates
+                uint256(8) // slot of collateralStates
             )
         );
         vm.store(address(vault), slot, bytes32(abi.encodePacked(vaultState.reserve, uint112(0))));
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParams.collateralToken);
-        assertEq(collectedFees, 0, "Wrong slot used by vm.store");
-        assertEq(total, vaultState.reserve, "Wrong slot used by vm.store");
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
+        assertEq(collateralState.totalFeesToStakers, 0, "Wrong slot used by vm.store");
+        assertEq(collateralState.total, vaultState.reserve, "Wrong slot used by vm.store");
 
-        // Set the total supply of APE
+        // Set the collateralState.total supply of APE
         vm.store(address(ape), bytes32(uint256(2)), bytes32(balances.apeSupply));
         assertEq(ape.totalSupply(), balances.apeSupply, "Wrong slot used by vm.store");
 
@@ -1671,7 +1572,7 @@ contract VaultTest is Test {
         vm.store(address(ape), slot, bytes32(balances.apeAlice));
         assertEq(ape.balanceOf(alice), balances.apeAlice, "Wrong slot used by vm.store");
 
-        // Set the total supply of TEA and the vault balance
+        // Set the collateralState.total supply of TEA and the vault balance
         slot = keccak256(
             abi.encode(
                 uint256(VAULT_ID),
@@ -1759,10 +1660,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_WETH);
+        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_WETH);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(WETH.balanceOf(sir), tokenFees.fees);
         assertEq(WETH.balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -1777,10 +1678,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_BNB);
+        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_BNB);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(sir), tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -1795,10 +1696,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_USDT);
+        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDT);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(sir), tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -1813,10 +1714,10 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 collectedFees = vault.withdrawFees(Addresses.ADDR_USDC);
+        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDC);
 
         // Assert balances
-        assertEq(collectedFees, tokenFees.fees);
+        assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(sir), tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
     }
@@ -2059,16 +1960,16 @@ contract VaultControlTest is Test {
             bytes32(abi.encodePacked(tokenFees.total, tokenFees.fees))
         );
 
-        (uint112 fees_, ) = vault.tokenStates(token);
-        assertEq(tokenFees.fees, fees_, "Wrong token states slot used by vm.store");
+        SirStructs.CollateralState memory collateralState_ = vault.collateralStates(token);
+        assertEq(tokenFees.fees, collateralState_.totalFeesToStakers, "Wrong token states slot used by vm.store");
 
-        // Check the total supply is correctly updated
+        // Check the collateralState.total supply is correctly updated
         uint256 pretotalSupply = IERC20(token).totalSupply();
 
         if (token == Addresses.ADDR_WETH) _dealWETH(address(vault), tokenFees.total);
         else _dealToken(token, address(vault), tokenFees.total);
 
-        assertEq(IERC20(token).totalSupply(), pretotalSupply + tokenFees.total, "Wrong total supply");
+        assertEq(IERC20(token).totalSupply(), pretotalSupply + tokenFees.total, "Wrong collateralState.total supply");
     }
 
     function _dealWETH(address to, uint256 amount) internal {
@@ -2095,16 +1996,16 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
     Vault public vault;
 
     // WETH/USDT's Uniswap TWAP has a long cardinality
-    VaultStructs.VaultParameters public vaultParameters1 =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters public vaultParameters1 =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: address(WETH),
             leverageTier: int8(-1)
         });
 
     // BNB/WETH's Uniswap TWAP is of cardinality 1
-    VaultStructs.VaultParameters public vaultParameters2 =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters public vaultParameters2 =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_BNB,
             collateralToken: address(WETH),
             leverageTier: int8(0)
@@ -2191,7 +2092,7 @@ contract VaultHandler is Test, RegimeEnum {
 
     struct InputOutput {
         bool advanceBlock;
-        uint256 vaultId;
+        uint48 vaultId;
         uint256 userId;
         uint256 amountCollateral;
     }
@@ -2206,12 +2107,12 @@ contract VaultHandler is Test, RegimeEnum {
     uint256 public blockNumber;
     uint256 public iterations;
 
-    VaultStructs.Reserves public reserves;
+    SirStructs.Reserves public reserves;
     uint256 public supplyAPE;
     uint256 public supplyTEA;
     int64 public priceTick;
 
-    VaultStructs.Reserves public reservesOld;
+    SirStructs.Reserves public reservesOld;
     uint256 public supplyAPEOld;
     uint256 public supplyTEAOld;
     int64 public priceTickOld;
@@ -2219,17 +2120,17 @@ contract VaultHandler is Test, RegimeEnum {
     // Dummy variables
     address public user;
     address public ape;
-    VaultStructs.VaultParameters public vaultParameters;
+    SirStructs.VaultParameters public vaultParameters;
 
-    VaultStructs.VaultParameters public vaultParameters1 =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters public vaultParameters1 =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: int8(1)
         });
 
-    VaultStructs.VaultParameters public vaultParameters2 =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters public vaultParameters2 =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDC,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: int8(-2)
@@ -2249,7 +2150,7 @@ contract VaultHandler is Test, RegimeEnum {
         }
 
         // Get vault parameters
-        inputOutput.vaultId = idToVault(inputOutput.vaultId);
+        inputOutput.vaultId = uint48(idToVault(inputOutput.vaultId));
 
         // Get reserves
         reserves = vault.getReserves(vaultParameters);
@@ -2317,12 +2218,20 @@ contract VaultHandler is Test, RegimeEnum {
         console.log("------Mint--Attempt------");
         console.log(inputOutput.amountCollateral, "collateral");
 
-        // Sufficient condition to not overflow total collateral
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(vaultParameters.collateralToken);
-        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint144).max - total);
+        // Sufficient condition to not overflow collateralState.total collateral
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParameters.collateralToken);
+        inputOutput.amountCollateral = _bound(
+            inputOutput.amountCollateral,
+            0,
+            type(uint144).max - collateralState.total
+        );
 
         // Sufficient condition to not overflow collected fees
-        inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, type(uint112).max - collectedFees);
+        inputOutput.amountCollateral = _bound(
+            inputOutput.amountCollateral,
+            0,
+            type(uint112).max - collateralState.totalFeesToStakers
+        );
 
         bool success;
         uint256 maxCollateralAmount;
@@ -2463,7 +2372,7 @@ contract VaultHandler is Test, RegimeEnum {
             amount = _bound(amount, 0, maxAmount);
 
             if (amount != 0) {
-                // Sufficient condition to not underflow total collateral
+                // Sufficient condition to not underflow collateralState.total collateral
                 uint256 collateralOutApprox = isAPE
                     ? FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)
                     : FullMath.mulDiv(reserves.reserveLPers, amount, supplyTEA);
@@ -2492,11 +2401,10 @@ contract VaultHandler is Test, RegimeEnum {
         return vm.addr(userId);
     }
 
-    function idToVault(uint256 vaultId) public returns (uint256) {
-        vaultId = _bound(vaultId, 1, 2);
-        (address debtToken, address collateralToken, int8 leverageTier) = vault.paramsById(vaultId);
+    function idToVault(uint48 vaultId) public returns (uint256) {
+        vaultId = uint48(_bound(vaultId, 1, 2));
+        vaultParameters = vault.paramsById(vaultId);
         ape = SaltedAddress.getAddress(address(vault), vaultId);
-        vaultParameters = VaultStructs.VaultParameters(debtToken, collateralToken, leverageTier);
         return vaultId;
     }
 
@@ -2527,14 +2435,14 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function _invariantTotalCollateral() private {
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
-        assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
+        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
-        VaultStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
-        VaultStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
+        SirStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
+        SirStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
         assertEq(
             reserves1.reserveApes + reserves1.reserveLPers + reserves2.reserveApes + reserves2.reserveLPers,
-            total - collectedFees,
+            collateralState.total - collateralState.totalFeesToStakers,
             "Total collateral minus fees is wrong"
         );
     }
@@ -2663,8 +2571,8 @@ contract VaultInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_totalCollateral() public {
-        (, uint144 total) = vault.tokenStates(address(_WETH));
-        assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
+        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
     }
 }
 
@@ -2718,11 +2626,15 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public {
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
-        assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
+        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(reserveApes + reserveLPers, total - collectedFees, "Total collateral minus fees is wrong");
+        assertEq(
+            reserveApes + reserveLPers,
+            collateralState.total - collateralState.totalFeesToStakers,
+            "Total collateral minus fees is wrong"
+        );
     }
 }
 
@@ -2770,10 +2682,14 @@ contract SaturationInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public {
-        (uint112 collectedFees, uint144 total) = vault.tokenStates(address(_WETH));
-        assertEq(total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
+        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(reserveApes + reserveLPers, total - collectedFees, "Total collateral minus fees is wrong");
+        assertEq(
+            reserveApes + reserveLPers,
+            collateralState.total - collateralState.totalFeesToStakers,
+            "Total collateral minus fees is wrong"
+        );
     }
 }

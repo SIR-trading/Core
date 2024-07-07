@@ -12,7 +12,7 @@ import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "src/libraries/TransferHelper.sol";
-import {VaultStructs} from "src/libraries/VaultStructs.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 
@@ -61,8 +61,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
-    VaultStructs.VaultParameters vaultParameters =
-        VaultStructs.VaultParameters({
+    SirStructs.VaultParameters vaultParameters =
+        SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: Addresses.ADDR_WETH,
             leverageTier: -1
@@ -111,10 +111,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _initializeVault();
 
         // Save system parameters
-        uint16 cumTax;
-        bool mintingStopped;
-        (baseFee, lpFee, mintingStopped, cumTax) = vault.systemParams();
-        assertTrue(!mintingStopped, "mintingStopped not set to false");
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
+        assertTrue(!systemParams.mintingStopped, "mintingStopped not set to false");
 
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
@@ -135,11 +133,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Emergency));
 
         // Check fees are 0
-        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped_, uint16 cumTax_) = vault.systemParams();
-        assertEq(baseFee_, 0, "baseFee not set to 0");
-        assertEq(lpFee_, 0, "lpFee not set to 0");
-        assertEq(mintingStopped_, true, "mintingStopped not set to true");
-        assertEq(cumTax_, cumTax, "cumTax not saved correctly");
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        assertEq(systemParams_.baseFee, 0, "baseFee not set to 0");
+        assertEq(systemParams_.lpFee, 0, "lpFee not set to 0");
+        assertEq(systemParams_.mintingStopped, true, "mintingStopped not set to true");
+        assertEq(systemParams_.cumTax, systemParams.cumTax, "cumTax not saved correctly");
 
         // Failure to mint APE
         _dealWETH(address(this), 1 ether);
@@ -158,6 +156,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Burn TEA
         vault.burn(false, vaultParameters, teaAmount);
+
+        return (systemParams.baseFee, systemParams.lpFee);
     }
 
     function test_resumeMinting() public {
@@ -179,10 +179,10 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         vault.mint(false, vaultParameters);
 
         // Check fees are restored
-        (uint16 baseFee_, uint16 lpFee_, bool mintingStopped, ) = vault.systemParams();
-        assertEq(baseFee_, baseFee, "baseFee not restored");
-        assertEq(lpFee_, lpFee, "lpFee not restored");
-        assertTrue(!mintingStopped, "mintingStopped not set to false");
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        assertEq(baseFee, systemParams_.baseFee, "baseFee not restored");
+        assertEq(lpFee, systemParams_.lpFee, "lpFee not restored");
+        assertTrue(!systemParams_.mintingStopped, "mintingStopped not set to false");
     }
 
     function testFuzz_shutdownSystemTooEarly(uint40 skipTime) public {
@@ -686,7 +686,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
 
         // Retrieve current lp fee
-        (, uint16 lpFee, , ) = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
 
         // Set base fee
         vm.expectEmit();
@@ -694,9 +694,9 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setBaseFee(baseFee);
 
         // Check if base fee is set correctly
-        (uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
-        assertEq(baseFee_, baseFee, "baseFee not set correctly");
-        assertEq(lpFee_, lpFee, "lpFee not changed");
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        assertEq(systemParams_.baseFee, baseFee, "baseFee not set correctly");
+        assertEq(systemParams_.lpFee, systemParams.lpFee, "lpFee not changed");
     }
 
     function testFuzz_setLpFeeWrongCaller(address caller, uint16 lpFee) public {
@@ -744,7 +744,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
 
         // Retrieve current base fee
-        (uint16 baseFee, , , ) = vault.systemParams();
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
 
         // Set lp fee
         vm.expectEmit();
@@ -752,9 +752,9 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setLPFee(lpFee);
 
         // Check if lp fee is set correctly
-        (uint16 baseFee_, uint16 lpFee_, , ) = vault.systemParams();
-        assertEq(baseFee_, baseFee, "baseFee not changed");
-        assertEq(lpFee_, lpFee, "lpFee not set correctly");
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        assertEq(systemParams_.baseFee, systemParams.baseFee, "baseFee not changed");
+        assertEq(systemParams_.lpFee, lpFee, "lpFee not set correctly");
     }
 
     function testFuzz_updateVaultsIssuancesFirstTime(
@@ -1005,12 +1005,25 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         // Check if cumSquaredTaxes is too low
         if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
             uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
+            cumSquaredTaxes = 0;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale up taxes
                 if (newTaxes[i] == 0) newTaxes[i] = 1;
                 uint256 newTax = (uint256(newTaxes[i]) * type(uint8).max - 1) / sqrtCumSquaredTaxes + 1;
                 if (newTax > type(uint8).max) newTaxes[i] = type(uint8).max;
                 else newTaxes[i] = uint8(newTax);
+
+                cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            }
+        }
+
+        // Still.. Check if cumSquaredTaxes is too low one last time
+        if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
+            for (uint256 i = 0; i < numNewVaults; i++) {
+                if (newTaxes[i] < type(uint8).max) {
+                    newTaxes[i]++;
+                    break;
+                }
             }
         }
 

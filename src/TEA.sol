@@ -5,7 +5,7 @@ pragma solidity >=0.8.0;
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {Fees} from "./libraries/Fees.sol";
@@ -56,7 +56,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
      */
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
 
-    VaultStructs.VaultParameters[] public paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
+    SirStructs.VaultParameters[] internal _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
@@ -65,8 +65,12 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function numberOfVaults() external view returns (uint256) {
-        return paramsById.length - 1;
+    function paramsById(uint48 vaultId) external view returns (SirStructs.VaultParameters memory) {
+        return _paramsById[vaultId];
+    }
+
+    function numberOfVaults() external view returns (uint48) {
+        return uint48(_paramsById.length - 1);
     }
 
     function totalSupply(uint256 vaultId) external view returns (uint256) {
@@ -80,7 +84,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
     function uri(uint256 vaultId) external view returns (string memory) {
         uint256 totalSupply_ = totalSupplyAndBalanceVault[vaultId].totalSupply;
-        return VaultExternal.teaURI(paramsById, vaultId, totalSupply_);
+        return VaultExternal.teaURI(_paramsById, vaultId, totalSupply_);
     }
 
     function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {
@@ -130,7 +134,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         updateLPerIssuanceParams(
             false,
             vaultId,
-            systemParams,
+            _systemParams,
             vaultIssuanceParams[vaultId],
             supplyExcludeVault(vaultId),
             lpersBalances
@@ -176,7 +180,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             updateLPerIssuanceParams(
                 false,
                 vaultId,
-                systemParams,
+                _systemParams,
                 vaultIssuanceParams[vaultId],
                 supplyExcludeVault(vaultId),
                 lpersBalances
@@ -210,65 +214,66 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
     /**
         @dev To avoid extra SLOADs, we also mint POL when minting TEA.
-        @dev If to == address(this), we know this is just POL when minting/burning APE.
         @dev It modifies reserves
      */
     function mint(
         address collateral,
         address to,
         uint48 vaultId,
-        VaultStructs.SystemParameters memory systemParams_,
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.SystemParameters memory systemParams_,
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    ) internal returns (uint256 amount, uint144 collectedFee) {
+    ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
-            uint256 balanceTo = to == address(this) ? totalSupplyAndBalanceVault_.balanceVault : balances[to][vaultId];
+            uint256 balanceOfTo = balances[to][vaultId];
 
-            uint144 collateralIn;
-            if (to != address(this)) {
-                // Update SIR issuance if it is not POL
-                LPersBalances memory lpersBalances = LPersBalances(to, balanceTo, address(this), 0);
-                updateLPerIssuanceParams(
-                    false,
-                    vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
-                    lpersBalances
-                );
+            // Update SIR issuance if it is not POL
+            LPersBalances memory lpersBalances = LPersBalances(to, balanceOfTo, address(this), 0);
+            updateLPerIssuanceParams(
+                false,
+                vaultId,
+                systemParams_,
+                vaultIssuanceParams_,
+                totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
+                lpersBalances
+            );
 
-                // Substract fees and distribute them across SIR stakers, LPers and POL
-                (collateralIn, collectedFee) = _distributeFees(
-                    collateral,
-                    vaultId,
-                    totalSupplyAndBalanceVault_,
-                    systemParams_.lpFee,
-                    vaultIssuanceParams_.tax,
-                    reserves,
-                    collateralDeposited
-                );
-            } else collateralIn = collateralDeposited;
+            // Substract fees and distribute them across SIR stakers, LPers and protocol
+            fees = _distributeFees(
+                collateral,
+                vaultId,
+                totalSupplyAndBalanceVault_,
+                systemParams_.lpFee,
+                vaultIssuanceParams_.tax,
+                reserves,
+                collateralDeposited
+            );
 
             // Mint TEA
             amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, collateralIn + reserves.reserveLPers)
-                : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralIn, reserves.reserveLPers);
-            if (to != address(this)) {
-                balances[to][vaultId] = balanceTo + amount;
-            } else {
-                totalSupplyAndBalanceVault_.balanceVault += uint128(amount);
-            }
-            if (totalSupplyAndBalanceVault_.totalSupply + amount > SystemConstants.TEA_MAX_SUPPLY) {
+                ? _amountFirstMint(collateral, fees.collateralInOrWithdrawn + reserves.reserveLPers)
+                : FullMath.mulDiv(
+                    totalSupplyAndBalanceVault_.totalSupply,
+                    fees.collateralInOrWithdrawn,
+                    reserves.reserveLPers
+                );
+
+            // Check that total supply does not overflow
+            if (amount > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
                 revert TEAMaxSupplyExceeded();
             }
-            totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
-            reserves.reserveLPers += collateralIn;
-            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
 
-            // Update total supply and vault balance
+            // Update balance and total supply
+            balances[to][vaultId] = balanceOfTo + amount;
+            totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
+
+            // Update reserves
+            reserves.reserveLPers += fees.collateralInOrWithdrawn;
+
+            // Store total supply
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
 
             if (
@@ -277,6 +282,48 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                     : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") !=
                         ERC1155TokenReceiver.onERC1155Received.selector
             ) revert UnsafeRecipient();
+
+            // Emit transfer event
+            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
+        }
+    }
+
+    function mintToProtocol(
+        address collateral,
+        uint48 vaultId,
+        SirStructs.Reserves memory reserves,
+        uint144 collateralFeeToProtocol
+    ) internal {
+        unchecked {
+            // Loads supply and balance of TEA
+            TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
+
+            // Mint TEA
+            uint256 amountToProtocol = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
+                ? _amountFirstMint(collateral, collateralFeeToProtocol + reserves.reserveLPers)
+                : FullMath.mulDiv(
+                    totalSupplyAndBalanceVault_.totalSupply,
+                    collateralFeeToProtocol,
+                    reserves.reserveLPers
+                );
+
+            // Check that total supply does not overflow
+            if (amountToProtocol > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
+                revert TEAMaxSupplyExceeded();
+            }
+
+            // Update balance and total supply
+            totalSupplyAndBalanceVault_.balanceVault += uint128(amountToProtocol);
+            totalSupplyAndBalanceVault_.totalSupply += uint128(amountToProtocol);
+
+            // Update reserves
+            reserves.reserveLPers += collateralFeeToProtocol;
+
+            // Store total supply and vault balance
+            totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
+
+            // Emit transfer event
+            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToProtocol);
         }
     }
 
@@ -284,18 +331,18 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         address collateral,
         address from,
         uint48 vaultId,
-        VaultStructs.SystemParameters memory systemParams_,
-        VaultStructs.VaultIssuanceParams memory vaultIssuanceParams_,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.SystemParameters memory systemParams_,
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
+        SirStructs.Reserves memory reserves,
         uint256 amount
-    ) internal returns (uint144 collateralWithdrawn, uint144 collectedFee) {
+    ) internal returns (SirStructs.Fees memory fees) {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
-            uint256 balanceFrom = balances[from][vaultId];
+            uint256 balanceOfFrom = balances[from][vaultId];
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances = LPersBalances(from, balanceFrom, address(this), 0);
+            LPersBalances memory lpersBalances = LPersBalances(from, balanceOfFrom, address(this), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
@@ -309,14 +356,19 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             uint144 collateralOut = uint144(
                 FullMath.mulDiv(reserves.reserveLPers, amount, totalSupplyAndBalanceVault_.totalSupply)
             ); // Compute amount of collateral
-            require(amount <= balanceFrom);
-            balances[from][vaultId] = balanceFrom - amount; // Checks for underflow
+
+            // Check we are not burning more than the balance
+            require(amount <= balanceOfFrom);
+
+            // Update balance and total supply
+            balances[from][vaultId] = balanceOfFrom - amount;
             totalSupplyAndBalanceVault_.totalSupply -= uint128(amount);
+
+            // Update reserves
             reserves.reserveLPers -= collateralOut;
-            emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
 
             // Substract fees and distribute them across SIR stakers, LPers and POL
-            (collateralWithdrawn, collectedFee) = _distributeFees(
+            fees = _distributeFees(
                 collateral,
                 vaultId,
                 totalSupplyAndBalanceVault_,
@@ -327,10 +379,10 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             );
 
             // Update total supply and vault balance
-            if (totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY) {
-                revert TEAMaxSupplyExceeded();
-            }
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
+
+            // Emit transfer event
+            emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
         }
     }
 
@@ -359,34 +411,38 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_,
         uint16 lpFee,
         uint8 tax,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDepositedOrOut
-    ) private returns (uint144 collateralInOrWithdrawn, uint144 collectedFee) {
+    ) private returns (SirStructs.Fees memory fees) {
         unchecked {
-            // To avoid stack too deep errors
             // Substract fees
-            uint144 lpersFee;
-            uint144 polFee;
-            (collateralInOrWithdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeTEA(
-                collateralDepositedOrOut,
-                lpFee,
-                tax
-            );
+            fees = Fees.hiddenFeeTEA(collateralDepositedOrOut, lpFee, tax);
 
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += lpersFee;
+            reserves.reserveLPers += fees.collateralFeeToGentlemen;
 
             // Mint some TEA as protocol owned liquidity (POL)
-            uint256 amountPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, polFee + reserves.reserveLPers) // Any ownless LP reserve is minted as POL too
-                : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, polFee, reserves.reserveLPers);
-            if (amountPOL + totalSupplyAndBalanceVault_.totalSupply > SystemConstants.TEA_MAX_SUPPLY)
-                revert TEAMaxSupplyExceeded();
-            totalSupplyAndBalanceVault_.balanceVault += uint128(amountPOL);
-            totalSupplyAndBalanceVault_.totalSupply += uint128(amountPOL);
-            reserves.reserveLPers += polFee;
+            uint256 amountToProtocol = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
+                ? _amountFirstMint(collateral, fees.collateralFeeToProtocol + reserves.reserveLPers) // Any ownless LP reserve is minted as POL too
+                : FullMath.mulDiv(
+                    totalSupplyAndBalanceVault_.totalSupply,
+                    fees.collateralFeeToProtocol,
+                    reserves.reserveLPers
+                );
 
-            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountPOL);
+            // Check that total supply does not overflow
+            if (amountToProtocol > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
+                revert TEAMaxSupplyExceeded();
+            }
+
+            // Update total supply and protocol balance
+            totalSupplyAndBalanceVault_.balanceVault += uint128(amountToProtocol);
+            totalSupplyAndBalanceVault_.totalSupply += uint128(amountToProtocol);
+
+            // Update reserves
+            reserves.reserveLPers += fees.collateralFeeToProtocol;
+
+            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToProtocol);
         }
     }
 
@@ -395,6 +451,6 @@ contract TEA is SystemState, ERC1155TokenReceiver {
     ////////////////////////////////////////////////////////////////*/
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumSIRPerTEAx96) {
-        return cumulativeSIRPerTEA(systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
+        return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
     }
 }

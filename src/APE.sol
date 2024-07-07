@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 // Libraries
 import {Fees} from "./libraries/Fees.sol";
 import {FullMath} from "./libraries/FullMath.sol";
-import {VaultStructs} from "./libraries/VaultStructs.sol";
+import {SirStructs} from "./libraries/SirStructs.sol";
 
 // Contracts
 import {Vault} from "./Vault.sol";
@@ -51,7 +51,7 @@ contract APE is Owned {
      */
     constructor() {
         // Set immutable parameters
-        (VaultStructs.TokenParameters memory tokenParams, VaultStructs.VaultParameters memory vaultParams) = Vault(
+        (SirStructs.TokenParameters memory tokenParams, SirStructs.VaultParameters memory vaultParams) = Vault(
             msg.sender
         ).latestTokenParams();
 
@@ -185,36 +185,27 @@ contract APE is Owned {
         address to,
         uint16 baseFee,
         uint8 tax,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    )
-        external
-        onlyOwner
-        returns (VaultStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
-    {
+    ) external onlyOwner returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
+        // returns (SirStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
+
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
         // Substract fees
-        uint144 collateralIn;
-        uint144 lpersFee;
-        (collateralIn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
-            collateralDeposited,
-            baseFee,
-            leverageTier,
-            tax
-        );
+        fees = Fees.hiddenFeeAPE(collateralDeposited, baseFee, leverageTier, tax);
 
         unchecked {
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += lpersFee;
+            reserves.reserveLPers += fees.collateralFeeToGentlemen;
 
             // Mint APE
             amount = supplyAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
-                ? collateralIn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
-                : FullMath.mulDiv(supplyAPE, collateralIn, reserves.reserveApes);
+                ? fees.collateralInOrWithdrawn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
+                : FullMath.mulDiv(supplyAPE, fees.collateralInOrWithdrawn, reserves.reserveApes);
             balanceOf[to] += amount;
-            reserves.reserveApes += collateralIn;
+            reserves.reserveApes += fees.collateralInOrWithdrawn;
         }
         totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
         emit Transfer(address(0), to, amount);
@@ -226,18 +217,9 @@ contract APE is Owned {
         address from,
         uint16 baseFee,
         uint8 tax,
-        VaultStructs.Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint256 amount
-    )
-        external
-        onlyOwner
-        returns (
-            VaultStructs.Reserves memory newReserves,
-            uint144 collectedFee,
-            uint144 polFee,
-            uint144 collateralWithdrawn
-        )
-    {
+    ) external onlyOwner returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees) {
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
@@ -250,16 +232,10 @@ contract APE is Owned {
             emit Transfer(from, address(0), amount);
 
             // Substract fees
-            uint144 lpersFee;
-            (collateralWithdrawn, collectedFee, lpersFee, polFee) = Fees.hiddenFeeAPE(
-                collateralOut,
-                baseFee,
-                leverageTier,
-                tax
-            );
+            fees = Fees.hiddenFeeAPE(collateralOut, baseFee, leverageTier, tax);
 
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += lpersFee;
+            reserves.reserveLPers += fees.collateralFeeToGentlemen;
 
             newReserves = reserves; // Important because memory is not persistent across external calls
         }
