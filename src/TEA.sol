@@ -56,7 +56,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
      */
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
 
-    SirStructs.VaultParameters[] public _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
+    SirStructs.VaultParameters[] internal _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
