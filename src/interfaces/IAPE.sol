@@ -1,20 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.4;
 
+import {SirStructs} from "../libraries/SirStructs.sol";
+
 interface IAPE {
-    struct Fees {
-        uint144 collateralInOrWithdrawn;
-        uint144 collateralFeeToStakers;
-        uint144 collateralFeeToGentlemen;
-        uint144 collateralFeeToProtocol;
-    }
-
-    struct Reserves {
-        uint144 reserveApes;
-        uint144 reserveLPers;
-        int64 tickPriceX42;
-    }
-
     error InvalidSigner();
     error PermitDeadlineExpired();
 
@@ -35,9 +24,9 @@ interface IAPE {
         address from,
         uint16 baseFee,
         uint8 tax,
-        Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint256 amount
-    ) external returns (Reserves memory newReserves, Fees memory fees);
+    ) external returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees);
 
     function collateralToken() external view returns (address);
 
@@ -51,9 +40,9 @@ interface IAPE {
         address to,
         uint16 baseFee,
         uint8 tax,
-        Reserves memory reserves,
+        SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    ) external returns (Reserves memory newReserves, Fees memory fees, uint256 amount);
+    ) external returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount);
 
     function name() external view returns (string memory);
 

@@ -34,7 +34,7 @@ interface ISystemControl {
 
     function resumeMinting() external;
 
-    function saveFunds(address[] memory tokens, address to) external;
+    function saveFunds(address[] calldata tokens, address to) external;
 
     function setBaseFee(uint16 baseFee_) external;
 
@@ -49,9 +49,9 @@ interface ISystemControl {
     function tsStatusChanged() external view returns (uint40);
 
     function updateVaultsIssuances(
-        uint48[] memory oldVaults,
-        uint48[] memory newVaults,
-        uint8[] memory newTaxes
+        uint48[] calldata oldVaults,
+        uint48[] calldata newVaults,
+        uint8[] calldata newTaxes
     ) external;
 
     function vault() external view returns (address);

@@ -1,19 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.4;
 
+import {SirStructs} from "../libraries/SirStructs.sol";
+
 interface ISIR {
-    struct Auction {
-        address bidder;
-        uint96 bid;
-        uint40 startTime;
-        bool winnerPaid;
-    }
-
-    struct StakingParams {
-        uint80 stake;
-        uint176 cumETHPerSIRx80;
-    }
-
     error AuctionIsNotOver();
     error BidTooLow();
     error InvalidSigner();
@@ -40,7 +30,7 @@ interface ISIR {
 
     function approve(address spender, uint256 amount) external returns (bool);
 
-    function auctions(address token) external view returns (Auction memory);
+    function auctions(address token) external view returns (SirStructs.Auction memory);
 
     function balanceOf(address account) external view returns (uint256);
 
@@ -82,7 +72,7 @@ interface ISIR {
 
     function stake(uint80 amount) external;
 
-    function stakersParams(address staker) external view returns (StakingParams memory);
+    function stakersParams(address staker) external view returns (SirStructs.StakingParams memory);
 
     function supply() external view returns (uint256);
 
