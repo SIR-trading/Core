@@ -46,7 +46,7 @@ abstract contract SystemState is SystemControlAccess {
         uint256 balance1;
     }
 
-    address internal immutable sir;
+    address internal immutable _SIR;
 
     mapping(uint256 vaultId => SirStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
@@ -66,7 +66,7 @@ abstract contract SystemState is SystemControlAccess {
     constructor(address systemControl, address sir_) SystemControlAccess(systemControl) {
         TS_ISSUANCE_START = uint40(block.timestamp);
 
-        sir = sir_;
+        _SIR = sir_;
 
         // SIR is issued as soon as the protocol is deployed
         _systemParams = SirStructs.SystemParameters({
@@ -197,7 +197,7 @@ abstract contract SystemState is SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
-        require(msg.sender == sir);
+        require(msg.sender == _SIR);
 
         LPersBalances memory lpersBalances = LPersBalances(lper, balanceOf(lper, vaultId), address(0), 0);
 

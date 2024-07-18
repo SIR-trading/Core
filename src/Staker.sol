@@ -441,7 +441,6 @@ contract Staker {
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
             uint256 excessETH = address(this).balance - unclaimedETH;
-            console.log("excessWETH", excessWETH, ", excessETH", excessETH);
 
             // Compute dividends
             uint256 dividends_ = excessWETH + excessETH;

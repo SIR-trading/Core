@@ -208,9 +208,6 @@ contract Vault is TEA {
             fees.collateralInOrWithdrawn
         );
 
-        // Send collateral
-        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);
-
         // Emit event
         emit Burn(
             vaultState.vaultId,
@@ -219,6 +216,9 @@ contract Vault is TEA {
             fees.collateralFeeToStakers,
             fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
         );
+
+        // Send collateral
+        TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);
 
         return fees.collateralInOrWithdrawn;
     }
