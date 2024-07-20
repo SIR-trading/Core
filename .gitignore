@@ -1,6 +1,11 @@
 # Compiler files
 cache/
 out/
+!out/SIR.sol/
+!out/Vault.sol/
+!out/SystemControl.sol/
+!out/Oracle.sol/
+!out/APE.sol/
 
 # Ignores development broadcast logs
 !/broadcast
