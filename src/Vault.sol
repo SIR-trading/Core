@@ -369,7 +369,7 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     function withdrawFees(address token) external returns (uint112 totalFeesToStakers) {
-        require(msg.sender == sir);
+        require(msg.sender == _SIR);
 
         SirStructs.CollateralState memory collateralState = _collateralStates[token];
         totalFeesToStakers = collateralState.totalFeesToStakers;
@@ -378,7 +378,7 @@ contract Vault is TEA {
                 totalFeesToStakers: 0,
                 total: collateralState.total - totalFeesToStakers
             });
-            TransferHelper.safeTransfer(token, sir, totalFeesToStakers);
+            TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
         }
     }
 
