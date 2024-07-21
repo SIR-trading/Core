@@ -1093,8 +1093,8 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         uint8[] memory newTaxes = new uint8[](2);
         newVaults[0] = 1;
         newTaxes[0] = type(uint8).max;
-        newVaults[0] = 2;
-        newTaxes[0] = 1;
+        newVaults[1] = 2;
+        newTaxes[1] = 1;
 
         // Update vaults issuances
         vm.expectRevert();
