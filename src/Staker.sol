@@ -37,7 +37,7 @@ contract Staker {
     IWETH9 private immutable _WETH;
     Vault internal vault;
 
-    string public name = "Safer Investment Rehypothecation";
+    string public name = "Synthetic Intelligent Rehypothecation";
     string public symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
