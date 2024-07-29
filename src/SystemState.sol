@@ -105,6 +105,7 @@ abstract contract SystemState is SystemControlAccess {
             cumSIRPerTEAx96 = vaultIssuanceParams_.cumSIRPerTEAx96;
 
             // Do nothing if no new SIR has been issued, or it has already been updated
+            // console.log("cumulativeSIRPerTEA");
             if (
                 vaultIssuanceParams_.tax != 0 &&
                 vaultIssuanceParams_.tsLastUpdate != uint40(block.timestamp) &&

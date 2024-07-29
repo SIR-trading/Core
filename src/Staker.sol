@@ -328,7 +328,7 @@ contract Staker {
 
     function bid(address token) external {
         unchecked {
-            console.log("----------------- BID -----------------");
+            // console.log("----------------- BID -----------------");
             SirStructs.Auction memory auction = _auctions[token];
 
             // Unchecked because time stamps cannot overflow
@@ -338,7 +338,7 @@ contract Staker {
             uint96 totalBids_ = totalBids;
             uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
 
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+            // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
                 totalBids = totalBids_ + newBid;
@@ -348,7 +348,7 @@ contract Staker {
                 totalBids = totalBids_ + newBid - auction.bid;
                 _WETH.transfer(auction.bidder, auction.bid);
             }
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+            // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
 
             // If the bidder is not the current winner, we check if the bid is higher
             if (newBid <= auction.bid) revert BidTooLow();
@@ -362,7 +362,7 @@ contract Staker {
             });
 
             emit BidReceived(msg.sender, token, auction.bid, newBid);
-            console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
+            // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
         }
     }
 

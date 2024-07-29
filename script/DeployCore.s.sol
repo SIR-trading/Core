@@ -9,6 +9,7 @@ import {SystemControl} from "src/SystemControl.sol";
 import {SIR} from "src/SIR.sol";
 import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
+import {SirStructs} from "src/libraries/SirStructs.sol";
 
 contract DeployCore is Script {
     function setUp() public {}
@@ -22,7 +23,7 @@ contract DeployCore is Script {
         6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
     */
     function run() public {
-        uint256 deployerPrivateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+        uint256 deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy oracle

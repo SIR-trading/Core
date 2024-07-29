@@ -16,8 +16,7 @@ contract FindAllVaults is Script {
     }
 
     function run() public {
-        uint256 deployerPrivateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         console.log("Vault bytecode length:", address(vault).code.length);
 

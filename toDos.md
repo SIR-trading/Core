@@ -1,16 +1,9 @@
-# Emergency Admin Withdrawals
-
-When only withdrawals are allowed. Add a time interval after which the owner can withdraw all the funds without interacting with the oracle.
-This is to save the TVL if the oracle is buggy and reverts.
-
 # Optimizations
 
 -   Reduce Oracle queries? For example reduce checking the optimal Uniswap pool. Reduce TWAP length increments. Reduce interval between TWAP length increments.
--   By accessing parameters by vaultId instead of VaultParameters we can probably save a 600n gas.
 
 # Periphery
 
--   Add quoting functions
 -   Add getReserves function
 -   Add donate() function which basically transfer TEA to Vault
 -   Function that returns the amount of TEA and amount in the reserve LP.
@@ -19,9 +12,8 @@ This is to save the TVL if the oracle is buggy and reverts.
 
 # Core
 
--   Make all external functions accept and return structs (when available) rather than their separate parameters?
--   Make an event that shows where all the fees are going for every mint/burn? E.g., Mint(uint48 collateralDeposited, collateralFeeToStakers,collateralFeeToLPers,collateralFeeToPOL)
--   Change APE symbol and name from string to byte32 to make it cheaper to deploy
+-   Do not revert claimSIR if rewards are 0
+-   View function for unclaimed SIR?
 
 # Marketing
 

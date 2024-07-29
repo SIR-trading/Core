@@ -9,23 +9,32 @@ import {Vault} from "src/Vault.sol";
 
 contract Initialize1Vault is Script {
     Vault vault;
+    SirStructs.VaultParameters vaultParams;
 
     function setUp() public {
-        vault = Vault(vm.envAddress("VAULT"));
-    }
-
-    function run() public {
-        uint256 deployerPrivateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
-
-        // Deploy oracle
-        vault.initialize(
+        setVaultParams(
             SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDT,
                 collateralToken: Addresses.ADDR_WETH,
                 leverageTier: int8(-1)
             })
         );
+    }
+
+    function setVaultParams(SirStructs.VaultParameters memory vaultParams_) public {
+        vault = Vault(vm.envAddress("VAULT"));
+        vaultParams = vaultParams_;
+    }
+
+    function run() public {
+        uint256 privateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+        vm.startBroadcast(privateKey);
+
+        // Initialize vault if not already initialized
+        SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
+        if (vaultState.vaultId == 0) {
+            vault.initialize(vaultParams);
+        }
 
         vm.stopBroadcast();
     }
