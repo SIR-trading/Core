@@ -8,7 +8,7 @@ interface ISystemControl {
     error FeeCannotBeZero();
     error NewTaxesTooHigh();
     error ShutdownTooEarly();
-    error WrongOrderOfVaults();
+    error WrongVaultsOrOrder();
     error WrongStatus();
 
     event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);

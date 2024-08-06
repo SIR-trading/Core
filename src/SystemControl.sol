@@ -38,7 +38,7 @@ contract SystemControl is Ownable {
     error WrongStatus();
     error ShutdownTooEarly();
     error ArraysLengthMismatch();
-    error WrongOrderOfVaults();
+    error WrongVaultsOrOrder();
     error NewTaxesTooHigh();
 
     Vault public vault;
@@ -179,7 +179,7 @@ contract SystemControl is Ownable {
         if (newTaxes.length != lenNewVaults) revert ArraysLengthMismatch();
 
         // Check the array of old vaults is correct
-        if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongOrderOfVaults();
+        if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongVaultsOrOrder();
 
         // Aggregate taxes and squared taxes
         uint16 cumTax;
@@ -188,7 +188,7 @@ contract SystemControl is Ownable {
             if (newTaxes[i] == 0) revert FeeCannotBeZero();
             cumTax += newTaxes[i];
             cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
-            if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongOrderOfVaults();
+            if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongVaultsOrOrder();
         }
 
         // Condition on squares

@@ -443,7 +443,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
     error ShutdownTooEarly();
     error NewTaxesTooHigh();
     error ArraysLengthMismatch();
-    error WrongOrderOfVaults();
+    error WrongVaultsOrOrder();
 
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
@@ -854,7 +854,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         (newVaults, newTaxes) = _prepareVaults(newVaults, newTaxes);
 
         // Update vaults issuances
-        vm.expectRevert(WrongOrderOfVaults.selector);
+        vm.expectRevert(WrongVaultsOrOrder.selector);
         systemControl.updateVaultsIssuances(wrongOldVaults, newVaults, newTaxes);
     }
 
@@ -966,7 +966,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         }
 
         // Update vaults issuances
-        vm.expectRevert(WrongOrderOfVaults.selector);
+        vm.expectRevert(WrongVaultsOrOrder.selector);
         systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
     }
 

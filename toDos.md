@@ -14,6 +14,7 @@
 
 -   Do not revert claimSIR if rewards are 0
 -   View function for unclaimed SIR?
+-   Event for the claim function
 
 # Marketing
 
