@@ -235,12 +235,6 @@ contract Vault is TEA {
         return VaultExternal.getReservesReadOnly(_vaultStates, _ORACLE, vaultParams);
     }
 
-    function _divRoundUp(uint256 a, uint256 b) private pure returns (uint256) {
-        unchecked {
-            return (a - 1) / b + 1;
-        }
-    }
-
     /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
