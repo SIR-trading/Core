@@ -300,6 +300,9 @@ contract Staker {
 
             // Transfer dividends
             payable(msg.sender).transfer(dividends_);
+
+            // Emit event
+            emit DividendsClaimed(msg.sender, dividends_);
         }
     }
 
