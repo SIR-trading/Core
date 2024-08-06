@@ -207,6 +207,8 @@ contract SystemControl is Ownable {
 
     /// @notice Save the remaining funds that have not been withdrawn from the vaults
     function saveFunds(address[] calldata tokens, address to) external onlyOwner {
+        require(to != address(0));
+
         if (systemStatus != SystemStatus.Shutdown) revert WrongStatus();
 
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);

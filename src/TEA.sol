@@ -276,15 +276,15 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             // Store total supply
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
 
+            // Emit transfer event
+            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
+
             if (
                 to.code.length == 0
                     ? to == address(0)
                     : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") !=
                         ERC1155TokenReceiver.onERC1155Received.selector
             ) revert UnsafeRecipient();
-
-            // Emit transfer event
-            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
         }
     }
 
