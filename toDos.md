@@ -12,10 +12,6 @@
 
 # Core
 
--   Do not revert claimSIR if rewards are 0
--   View function for unclaimed SIR?
--   Event for the claim function
-
 # Marketing
 
 -   Airdrops? https://twitter.com/sassal0x/status/1756839032070508746

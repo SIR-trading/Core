@@ -27,6 +27,7 @@ contract Staker {
     event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
     event DividendsPaid(uint256 amountETH);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
+    event DividendsClaimed(address indexed staker, uint96 amount);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
