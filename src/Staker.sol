@@ -437,6 +437,12 @@ contract Staker {
         _distributeDividends(totalBids_);
     }
 
+    /** @dev Susceptible to reentrancy attacks by previous external calls in _payAuctionWinner.
+        @dev Attacker could manipulate excess (W)ETH.
+        MAYBE ADD IN _supply CALLED inUse TO PREVENT REENTRANCY ATTACKS
+        BUT FIRST TEST THAT THE ATTACK EXISTS
+        USE slither TO VERIFY AGAIN THAT I DID NOT FORGET ANY REENTRANCY ATTACK
+     */
     function _distributeDividends(uint96 totalBids_) private returns (bool noDividends) {
         unchecked {
             // Any excess WETH in the contract will be distributed.
