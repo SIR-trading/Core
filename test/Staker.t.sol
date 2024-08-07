@@ -143,7 +143,6 @@ contract Auxiliary is Test {
         assertEq(auction.bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
         assertEq(auction.bid, bidder_.amount, "Wrong bid");
         assertEq(auction.startTime, timeStamp, "Wrong start time");
-        assertTrue(!auction.winnerPaid, "Winner should not have been paid yet");
     }
 }
 
@@ -833,7 +832,6 @@ contract StakerTest is Auxiliary {
         assertEq(auction.bidder, address(0), "Bidder should be 0");
         assertEq(auction.bid, 0, "Bid should be 0");
         assertEq(auction.startTime, 0, "Start time should be 0");
-        assertEq(auction.winnerPaid, false, "Winner should not be paid");
 
         vm.expectRevert(NoAuction.selector);
         staker.bid(Addresses.ADDR_WETH);

@@ -90,7 +90,6 @@ library SirStructs {
         address bidder; // Address of the bidder
         uint96 bid; // Amount of the bid
         uint40 startTime; // Auction start time
-        bool winnerPaid; // Whether the winner has been paid
     }
 
     struct OracleState {

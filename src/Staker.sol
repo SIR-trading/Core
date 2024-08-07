@@ -49,7 +49,7 @@ contract Staker {
 
     SirStructs.StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
     Balance private _supply; // Total unstaked SIR and ETH owed to the stakers
-    uint96 internal totalBids; // Total amount of WETH deposited by the bidders
+    uint96 internal totalWinningBids; // Total amount of WETH deposited by the bidders
     bool private _initialized;
 
     mapping(address token => SirStructs.Auction) internal _auctions;
@@ -339,31 +339,28 @@ contract Staker {
             if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
 
             // Get the current bid
-            uint96 totalBids_ = totalBids;
-            uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalBids_);
+            uint96 totalWinningBids_ = totalWinningBids;
+            uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalWinningBids_);
 
             // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
-                totalBids = totalBids_ + newBid;
+                totalWinningBids = totalWinningBids_ + newBid;
                 newBid += auction.bid;
             } else {
                 // Return the previous bid to the previous bidder
-                totalBids = totalBids_ + newBid - auction.bid;
+                totalWinningBids = totalWinningBids_ + newBid - auction.bid;
                 _WETH.transfer(auction.bidder, auction.bid);
             }
             // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
 
-            // If the bidder is not the current winner, we check if the bid is higher
+            /** If the bidder is not the current winner, we check if the bid is higher.
+                Null bids are no possible because auction.bid >=0 always.
+             */
             if (newBid <= auction.bid) revert BidTooLow();
 
             // Update bidder & bid
-            _auctions[token] = SirStructs.Auction({
-                bidder: msg.sender,
-                bid: newBid,
-                startTime: auction.startTime,
-                winnerPaid: false
-            });
+            _auctions[token] = SirStructs.Auction({bidder: msg.sender, bid: newBid, startTime: auction.startTime});
 
             emit BidReceived(msg.sender, token, auction.bid, newBid);
             // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
@@ -374,9 +371,10 @@ contract Staker {
     function collectFeesAndStartAuction(address token) external returns (uint112 totalFeesToStakers) {
         unchecked {
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
-            uint96 totalBids_ = totalBids;
+            uint96 totalWinningBids_ = totalWinningBids;
+            SirStructs.Auction memory auction;
             if (token != address(_WETH)) {
-                SirStructs.Auction memory auction = _auctions[token];
+                auction = _auctions[token];
 
                 uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
                 if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
@@ -385,16 +383,12 @@ contract Staker {
                 _auctions[token] = SirStructs.Auction({
                     bidder: address(0),
                     bid: 0,
-                    startTime: uint40(block.timestamp), // This automatically aborts any reentrancy attack
-                    winnerPaid: false
+                    startTime: uint40(block.timestamp) // This automatically aborts any reentrancy attack
                 });
 
                 // Last bid is converted to dividends
-                totalBids_ -= auction.bid;
-                totalBids = totalBids_;
-
-                // We pay the previous winner if it has not been paid yet
-                _payAuctionWinner(token, auction);
+                totalWinningBids_ -= auction.bid;
+                totalWinningBids = totalWinningBids_;
 
                 // Emit event for the new auction
                 emit AuctionStarted(token);
@@ -403,19 +397,24 @@ contract Staker {
             // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
             totalFeesToStakers = vault.withdrawFees(token);
 
-            /** For non-WETH tokens, do not start an auction if there are no fees to collect, unlesss it is WETH
+            /** For non-WETH tokens, do not start an auction if there are no fees to collect.
                 For WETH, we distribute the fees immediately as dividends.
              */
             if (totalFeesToStakers == 0 && token != address(_WETH)) revert NoFeesCollectedYet();
 
             // Distribute dividends from the previous auction even if paying the previous winner fails
-            bool noDividends = _distributeDividends(totalBids_);
+            bool noDividends = _distributeDividends(totalWinningBids_);
 
             /** For non-WETH tokens, it is possible it was a non-sale auction, but we don't want to revert because want to be able to start a new auction.
                 For WETH, there are no _auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
                     No dividends => no fees.
              */
             if (noDividends && token == address(_WETH)) revert NoFeesCollectedYet();
+
+            /** The auction winner is paid last because
+                it makes external calls that could be used for reentrancy attacks. 
+             */
+            if (token != address(_WETH)) _payAuctionWinner(token, auction);
         }
     }
 
@@ -425,28 +424,25 @@ contract Staker {
         if (block.timestamp < auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsNotOver();
 
         // Update auction
-        _auctions[token].winnerPaid = true;
+        _auctions[token].bid = 0;
 
         // Last bid is converted to dividends
-        uint96 totalBids_ = totalBids - auction.bid;
-        totalBids = totalBids_;
-
-        if (!_payAuctionWinner(token, auction)) revert NoAuctionLot();
+        uint96 totalWinningBids_ = totalWinningBids - auction.bid;
+        totalWinningBids = totalWinningBids_;
 
         // Distribute dividends.
-        _distributeDividends(totalBids_);
+        _distributeDividends(totalWinningBids_);
+
+        /** The auction winner is paid last because
+            it makes external calls that could be used for reentrancy attacks. 
+        */
+        if (!_payAuctionWinner(token, auction)) revert NoAuctionLot();
     }
 
-    /** @dev Susceptible to reentrancy attacks by previous external calls in _payAuctionWinner.
-        @dev Attacker could manipulate excess (W)ETH.
-        MAYBE ADD IN _supply CALLED inUse TO PREVENT REENTRANCY ATTACKS
-        BUT FIRST TEST THAT THE ATTACK EXISTS
-        USE slither TO VERIFY AGAIN THAT I DID NOT FORGET ANY REENTRANCY ATTACK
-     */
-    function _distributeDividends(uint96 totalBids_) private returns (bool noDividends) {
+    function _distributeDividends(uint96 totalWinningBids_) private returns (bool noDividends) {
         unchecked {
             // Any excess WETH in the contract will be distributed.
-            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalBids_;
+            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalWinningBids_;
 
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
@@ -477,9 +473,6 @@ contract Staker {
 
     /// @dev This function must never revert, instead it returns false.
     function _payAuctionWinner(address token, SirStructs.Auction memory auction) private returns (bool success) {
-        // Bidder already paid
-        if (auction.winnerPaid) return false;
-
         // Only pay if there is any bid
         if (auction.bid == 0) return false;
 
