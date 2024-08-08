@@ -229,7 +229,7 @@ contract StakerTest is Auxiliary {
         assertEq(staker.balanceOf(bob), 0);
         assertEq(staker.totalBalanceOf(bob), 0);
 
-        assertEq(staker.name(), "Safer Investment Rehypothecation");
+        assertEq(staker.name(), "Synthetic Intelligent Rehypothecation");
         assertEq(staker.symbol(), "SIR");
         assertEq(staker.decimals(), SystemConstants.SIR_DECIMALS);
     }
