@@ -6,8 +6,6 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
-import "forge-std/Test.sol";
-
 abstract contract SystemState is SystemControlAccess {
     /** Choice of types for 'cumSIRPerTEAx96' and 'unclaimedRewards'
 
@@ -105,7 +103,6 @@ abstract contract SystemState is SystemControlAccess {
             cumSIRPerTEAx96 = vaultIssuanceParams_.cumSIRPerTEAx96;
 
             // Do nothing if no new SIR has been issued, or it has already been updated
-            // console.log("cumulativeSIRPerTEA");
             if (
                 vaultIssuanceParams_.tax != 0 &&
                 vaultIssuanceParams_.tsLastUpdate != uint40(block.timestamp) &&

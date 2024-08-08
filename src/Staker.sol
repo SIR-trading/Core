@@ -6,8 +6,6 @@ import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 
-import "forge-std/console.sol";
-
 /** @notice Solmate mod
     @dev SIR supply is designed to fit in a 80-bit unsigned integer.
     @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
@@ -38,8 +36,8 @@ contract Staker {
     IWETH9 private immutable _WETH;
     Vault internal vault;
 
-    string public name = "Synthetic Intelligent Rehypothecation";
-    string public symbol = "SIR";
+    string public constant name = "Synthetic Intelligent Rehypothecation";
+    string public constant symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
     struct Balance {
@@ -332,7 +330,6 @@ contract Staker {
 
     function bid(address token) external {
         unchecked {
-            // console.log("----------------- BID -----------------");
             SirStructs.Auction memory auction = _auctions[token];
 
             // Unchecked because time stamps cannot overflow
@@ -342,7 +339,6 @@ contract Staker {
             uint96 totalWinningBids_ = totalWinningBids;
             uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalWinningBids_);
 
-            // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
                 totalWinningBids = totalWinningBids_ + newBid;
@@ -352,7 +348,6 @@ contract Staker {
                 totalWinningBids = totalWinningBids_ + newBid - auction.bid;
                 _WETH.transfer(auction.bidder, auction.bid);
             }
-            // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
 
             /** If the bidder is not the current winner, we check if the bid is higher.
                 Null bids are no possible because auction.bid >=0 always.
@@ -363,7 +358,6 @@ contract Staker {
             _auctions[token] = SirStructs.Auction({bidder: msg.sender, bid: newBid, startTime: auction.startTime});
 
             emit BidReceived(msg.sender, token, auction.bid, newBid);
-            // console.log("address(this).balance:", address(this).balance, ", unclaimedETH:", _supply.unclaimedETH);
         }
     }
 

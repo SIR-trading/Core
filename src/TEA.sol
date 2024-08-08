@@ -15,8 +15,6 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemState} from "./SystemState.sol";
 
-import "forge-std/Test.sol";
-
 /** @notice Modified from Solmate
  */
 contract TEA is SystemState, ERC1155TokenReceiver {

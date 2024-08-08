@@ -7,8 +7,6 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Contributors} from "./libraries/Contributors.sol";
 import {Staker} from "./Staker.sol";
 
-import "forge-std/console.sol";
-
 // Contracts
 contract SIR is Staker {
     mapping(address => uint40) internal tsLastMint;

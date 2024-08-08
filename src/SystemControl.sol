@@ -3,15 +3,12 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {Vault} from "./Vault.sol";
-import {SIR} from "./SIR.sol";
 
 // Libraries
 import {SirStructs} from "./libraries/SirStructs.sol";
 
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
-
-import "forge-std/console.sol";
 
 contract SystemControl is Ownable {
     uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;

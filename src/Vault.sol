@@ -2,23 +2,18 @@
 pragma solidity ^0.8.0;
 
 // Interfaces
-import {ISIR} from "./interfaces/ISIR.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
-import {FullMath} from "./libraries/FullMath.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
-import {SystemConstants} from "./libraries/SystemConstants.sol";
 
 // Contracts
 import {APE} from "./APE.sol";
 import {Oracle} from "./Oracle.sol";
 import {TEA} from "./TEA.sol";
-
-import "forge-std/console.sol";
 
 contract Vault is TEA {
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),

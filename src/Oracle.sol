@@ -6,12 +6,8 @@ import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
-import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
-
-// Contracts
-import "forge-std/Test.sol";
 
 /**
  *     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
@@ -324,7 +320,6 @@ contract Oracle {
                 oracleData.period,
                 oracleData.cardinalityToIncrease
             );
-            // console.log("CONTRACT, params:", uniswapFeeTiers[i].fee, oracleData.avLiquidity, oracleData.period);
 
             if (oracleData.avLiquidity > 0) {
                 /** Compute scores.
@@ -336,7 +331,6 @@ contract Oracle {
                     uint256(oracleData.avLiquidity) * oracleData.period,
                     uniswapFeeTiers[i]
                 );
-                // console.log("CONTRACT, fee tier:", uniswapFeeTiers[i].fee, ", score:", scoreTemp);
 
                 // Update best score
                 if (scoreTemp > score) {
@@ -368,8 +362,6 @@ contract Oracle {
             bestOracleData.avLiquidity,
             bestOracleData.period
         );
-        // console.log(oracleState.uniswapFeeTier.fee, "FEE TIER SELECTED");
-        // console.log("------------------------------");
     }
 
     // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
@@ -429,7 +421,6 @@ contract Oracle {
                 oracleData.period,
                 oracleData.cardinalityToIncrease
             );
-            // console.log("UniswapOracleProbed", token0, token1, oracleState.uniswapFeeTier.fee);
 
             // oracleData.period == 0 is not possible because it would mean the pool is not initialized
             if (oracleData.period == 1) {
@@ -462,7 +453,6 @@ contract Oracle {
                     );
 
                     // Retrieve oracle data
-                    // console.log("PROBING FEE TIER", uniswapFeeTierProbed.fee);
                     UniswapOracleData memory oracleDataProbed = _uniswapOracleData(
                         token0,
                         token1,
@@ -477,7 +467,6 @@ contract Oracle {
                         oracleDataProbed.period,
                         oracleDataProbed.cardinalityToIncrease
                     );
-                    // console.log("UniswapOracleProbed", token0, token1, uniswapFeeTierProbed.fee);
 
                     if (oracleDataProbed.avLiquidity > 0) {
                         /** Compute scores.
@@ -498,12 +487,6 @@ contract Oracle {
                         if (scoreProbed > score) {
                             // If the probed fee tier is better than the current one, then we increase its cardinality if necessary
                             if (oracleDataProbed.cardinalityToIncrease > 0) {
-                                // console.log(
-                                //     "Increasing cardinality of fee tier",
-                                //     uniswapFeeTierProbed.fee,
-                                //     "to",
-                                //     oracleDataProbed.cardinalityToIncrease
-                                // );
                                 oracleDataProbed.uniswapPool.increaseObservationCardinalityNext(
                                     oracleDataProbed.cardinalityToIncrease
                                 );
@@ -530,7 +513,6 @@ contract Oracle {
                     checkCardinalityCurrentFeeTier = true;
                 }
 
-                // console.log("Check cardinality", checkCardinalityCurrentFeeTier, oracleData.cardinalityToIncrease);
                 if (checkCardinalityCurrentFeeTier && oracleData.cardinalityToIncrease > 0) {
                     // We increase the cardinality of the current tier if necessary
                     oracleData.uniswapPool.increaseObservationCardinalityNext(oracleData.cardinalityToIncrease);
@@ -567,7 +549,6 @@ contract Oracle {
 
         // If pool does not exist, no-op, return all parameters 0.
         if (address(oracleData.uniswapPool).code.length == 0) return oracleData;
-        // console.log("Retrieved data for fee tier", fee);
 
         // Retrieve oracle info from Uniswap v3
         uint32[] memory interval = new uint32[](2);
@@ -602,7 +583,6 @@ contract Oracle {
             (, , uint16 observationIndex, uint16 cardinalityNow, uint16 cardinalityNext, , ) = oracleData
                 .uniswapPool
                 .slot0();
-            // console.log("cardinalityNow", cardinalityNow, "cardinalityNext", cardinalityNext);
 
             // Get oracle data at the current timestamp
             (tickCumulatives, liquidityCumulatives) = oracleData.uniswapPool.observe(new uint32[](1)); // It should never fail
