@@ -11,6 +11,7 @@ import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 
 // Contracts
+import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {APE} from "./APE.sol";
 import {Oracle} from "./Oracle.sol";
 import {TEA} from "./TEA.sol";
@@ -118,7 +119,6 @@ contract Vault is TEA {
                 // Mint TEA for user and protocol owned liquidity (POL)
                 (fees, amount) = mint(
                     vaultParams.collateralToken,
-                    msg.sender,
                     vaultState.vaultId,
                     systemParams_,
                     vaultIssuanceParams_,
@@ -147,6 +147,22 @@ contract Vault is TEA {
                 fees.collateralFeeToStakers,
                 fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
             );
+
+            /** Check if recipient is enabled for receiving TEA.
+                This check is done last to avoid reentrancy attacks because it may call an external contract.
+             */
+            if (
+                !isAPE &&
+                msg.sender.code.length > 0 &&
+                ERC1155TokenReceiver(msg.sender).onERC1155Received(
+                    msg.sender,
+                    address(0),
+                    vaultState.vaultId,
+                    amount,
+                    ""
+                ) !=
+                ERC1155TokenReceiver.onERC1155Received.selector
+            ) revert UnsafeRecipient();
         }
     }
 
@@ -182,7 +198,6 @@ contract Vault is TEA {
             // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
             fees = burn(
                 vaultParams.collateralToken,
-                msg.sender,
                 vaultState.vaultId,
                 systemParams_,
                 vaultIssuanceParams_,

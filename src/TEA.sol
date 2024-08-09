@@ -216,7 +216,6 @@ contract TEA is SystemState, ERC1155TokenReceiver {
      */
     function mint(
         address collateral,
-        address to,
         uint48 vaultId,
         SirStructs.SystemParameters memory systemParams_,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
@@ -226,10 +225,10 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
-            uint256 balanceOfTo = balances[to][vaultId];
+            uint256 balanceOfTo = balances[msg.sender][vaultId];
 
             // Update SIR issuance if it is not POL
-            LPersBalances memory lpersBalances = LPersBalances(to, balanceOfTo, address(this), 0);
+            LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfTo, address(this), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
@@ -265,7 +264,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             }
 
             // Update balance and total supply
-            balances[to][vaultId] = balanceOfTo + amount;
+            balances[msg.sender][vaultId] = balanceOfTo + amount;
             totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
 
             // Update reserves
@@ -275,14 +274,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
 
             // Emit transfer event
-            emit TransferSingle(msg.sender, address(0), to, vaultId, amount);
-
-            if (
-                to.code.length == 0
-                    ? to == address(0)
-                    : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, address(0), vaultId, amount, "") !=
-                        ERC1155TokenReceiver.onERC1155Received.selector
-            ) revert UnsafeRecipient();
+            emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
         }
     }
 
@@ -327,7 +319,6 @@ contract TEA is SystemState, ERC1155TokenReceiver {
 
     function burn(
         address collateral,
-        address from,
         uint48 vaultId,
         SirStructs.SystemParameters memory systemParams_,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
@@ -337,10 +328,10 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
-            uint256 balanceOfFrom = balances[from][vaultId];
+            uint256 balanceOfFrom = balances[msg.sender][vaultId];
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances = LPersBalances(from, balanceOfFrom, address(this), 0);
+            LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfFrom, address(this), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
@@ -359,7 +350,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             require(amount <= balanceOfFrom);
 
             // Update balance and total supply
-            balances[from][vaultId] = balanceOfFrom - amount;
+            balances[msg.sender][vaultId] = balanceOfFrom - amount;
             totalSupplyAndBalanceVault_.totalSupply -= uint128(amount);
 
             // Update reserves
@@ -380,7 +371,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
 
             // Emit transfer event
-            emit TransferSingle(msg.sender, from, address(0), vaultId, amount);
+            emit TransferSingle(msg.sender, msg.sender, address(0), vaultId, amount);
         }
     }
 

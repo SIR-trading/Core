@@ -1,31 +1,4 @@
 INFO:Detectors:
-Reentrancy in Vault.mint(bool,SirStructs.VaultParameters) (src/Vault.sol#82-151):
-	External calls:
-	- (collateralState,vaultState,reserves,ape,collateralDeposited) = VaultExternal.getReserves(true,isAPE,_collateralStates,_vaultStates,_ORACLE,vaultParams) (src/Vault.sol#88-94)
-	- (reserves,fees,amount) = ape.mint(msg.sender,systemParams_.baseFee,vaultIssuanceParams_.tax,reserves,collateralDeposited) (src/Vault.sol#100-106)
-	- (fees,amount) = mint(vaultParams.collateralToken,msg.sender,vaultState.vaultId,systemParams_,vaultIssuanceParams_,reserves,collateralDeposited) (src/Vault.sol#119-127)
-		- ERC1155TokenReceiver(to).onERC1155Received(msg.sender,address(0),vaultId,amount,) != ERC1155TokenReceiver.onERC1155Received.selector (src/TEA.sol#282-285)
-	State variables written after the call(s):
-	- _updateCollateralState(true,collateralState,fees.collateralFeeToStakers,vaultParams.collateralToken,collateralDeposited) (src/Vault.sol#134-140)
-		- _collateralStates[collateralToken] = collateralState (src/Vault.sol#353)
-	Vault._collateralStates (src/Vault.sol#43) can be used in cross function reentrancies:
-	- Vault._updateCollateralState(bool,SirStructs.CollateralState,uint256,address,uint144) (src/Vault.sol#337-354)
-	- Vault.burn(bool,SirStructs.VaultParameters,uint256) (src/Vault.sol#155-219)
-	- Vault.collateralStates(address) (src/Vault.sol#415-417)
-	- Vault.mint(bool,SirStructs.VaultParameters) (src/Vault.sol#82-151)
-	- Vault.withdrawFees(address) (src/Vault.sol#360-372)
-	- _updateVaultState(vaultState,reserves,vaultParams) (src/Vault.sol#131)
-		- _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState (src/Vault.sol#333)
-	Vault._vaultStates (src/Vault.sol#39-40) can be used in cross function reentrancies:
-	- Vault._updateVaultState(SirStructs.VaultState,SirStructs.Reserves,SirStructs.VaultParameters) (src/Vault.sol#244-335)
-	- Vault.burn(bool,SirStructs.VaultParameters,uint256) (src/Vault.sol#155-219)
-	- Vault.getReserves(SirStructs.VaultParameters) (src/Vault.sol#227-231)
-	- Vault.initialize(SirStructs.VaultParameters) (src/Vault.sol#58-66)
-	- Vault.mint(bool,SirStructs.VaultParameters) (src/Vault.sol#82-151)
-	- Vault.vaultStates(SirStructs.VaultParameters) (src/Vault.sol#409-413)
-Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#reentrancy-vulnerabilities-1
-
-INFO:Detectors:
 Reentrancy in Staker._payAuctionWinner(address,SirStructs.Auction) (src/Staker.sol#469-498):
 	External calls:
 	- (success,data) = token.call(abi.encodeWithSignature(balanceOf(address),address(this))) (src/Staker.sol#477)
@@ -43,24 +16,6 @@ Reentrancy in Staker.collectFeesAndStartAuction(address) (src/Staker.sol#365-413
 	Event emitted after the call(s):
 	- AuctionedTokensSentToWinner(auction.bidder,token,tokenAmount) (src/Staker.sol#496)
 		- _payAuctionWinner(token,auction) (src/Staker.sol#411)
-Reentrancy in Vault.mint(bool,SirStructs.VaultParameters) (src/Vault.sol#82-151):
-	External calls:
-	- (collateralState,vaultState,reserves,ape,collateralDeposited) = VaultExternal.getReserves(true,isAPE,_collateralStates,_vaultStates,_ORACLE,vaultParams) (src/Vault.sol#88-94)
-	- (fees,amount) = mint(vaultParams.collateralToken,msg.sender,vaultState.vaultId,systemParams_,vaultIssuanceParams_,reserves,collateralDeposited) (src/Vault.sol#119-127)
-		- ERC1155TokenReceiver(to).onERC1155Received(msg.sender,address(0),vaultId,amount,) != ERC1155TokenReceiver.onERC1155Received.selector (src/TEA.sol#282-285)
-	Event emitted after the call(s):
-	- TransferSingle(msg.sender,address(0),address(this),vaultId,amountToProtocol) (src/TEA.sol#444)
-		- (fees,amount) = mint(vaultParams.collateralToken,msg.sender,vaultState.vaultId,systemParams_,vaultIssuanceParams_,reserves,collateralDeposited) (src/Vault.sol#119-127)
-	- TransferSingle(msg.sender,address(0),to,vaultId,amount) (src/TEA.sol#278)
-		- (fees,amount) = mint(vaultParams.collateralToken,msg.sender,vaultState.vaultId,systemParams_,vaultIssuanceParams_,reserves,collateralDeposited) (src/Vault.sol#119-127)
-Reentrancy in Vault.mint(bool,SirStructs.VaultParameters) (src/Vault.sol#82-151):
-	External calls:
-	- (collateralState,vaultState,reserves,ape,collateralDeposited) = VaultExternal.getReserves(true,isAPE,_collateralStates,_vaultStates,_ORACLE,vaultParams) (src/Vault.sol#88-94)
-	- (reserves,fees,amount) = ape.mint(msg.sender,systemParams_.baseFee,vaultIssuanceParams_.tax,reserves,collateralDeposited) (src/Vault.sol#100-106)
-	- (fees,amount) = mint(vaultParams.collateralToken,msg.sender,vaultState.vaultId,systemParams_,vaultIssuanceParams_,reserves,collateralDeposited) (src/Vault.sol#119-127)
-		- ERC1155TokenReceiver(to).onERC1155Received(msg.sender,address(0),vaultId,amount,) != ERC1155TokenReceiver.onERC1155Received.selector (src/TEA.sol#282-285)
-	Event emitted after the call(s):
-	- Mint(vaultState.vaultId,isAPE,fees.collateralInOrWithdrawn,fees.collateralFeeToStakers,fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol) (src/Vault.sol#143-149)
 Reentrancy in Staker.payAuctionWinner(address) (src/Staker.sol#416-434):
 	External calls:
 	- _distributeDividends(totalWinningBids_) (src/Staker.sol#428)
