@@ -117,7 +117,7 @@ library VaultExternal {
 
     function _generateName(SirStructs.VaultParameters calldata vaultParams) private view returns (string memory) {
         string memory leverageStr;
-        if (vaultParams.leverageTier == -3) leverageStr = "1.0625";
+        if (vaultParams.leverageTier == -4) leverageStr = "1.0625";
         else if (vaultParams.leverageTier == -3) leverageStr = "1.125";
         else if (vaultParams.leverageTier == -2) leverageStr = "1.25";
         else if (vaultParams.leverageTier == -1) leverageStr = "1.5";
