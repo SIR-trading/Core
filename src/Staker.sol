@@ -297,11 +297,11 @@ contract Staker {
             // Update ETH _supply in the contract
             _supply.unclaimedETH -= dividends_;
 
-            // Transfer dividends
-            payable(msg.sender).transfer(dividends_);
-
             // Emit event
             emit DividendsClaimed(msg.sender, dividends_);
+
+            // Transfer dividends
+            payable(msg.sender).transfer(dividends_);
         }
     }
 

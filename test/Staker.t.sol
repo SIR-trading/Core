@@ -30,11 +30,9 @@ contract Auxiliary is Test {
         uint96 donationsWETH;
     }
 
-    uint256 constant SLOT_STAKING_PARAMS = 3;
-    uint256 constant SLOT_SUPPLY = 4;
-    uint256 constant SLOT_BALANCES = 7;
-    uint256 constant SLOT_STAKERS_PARAMS = 3;
-    uint256 constant SLOT_INITIALIZED = 5;
+    uint256 constant SLOT_SUPPLY = 2;
+    uint256 constant SLOT_BALANCES = 5;
+    uint256 constant SLOT_INITIALIZED = 3;
     uint256 constant SLOT_TOKEN_STATES = 8;
 
     uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
@@ -992,12 +990,6 @@ contract StakerTest is Auxiliary {
         if (bidder1.amount + bidder2.amount == 0) {
             vm.expectRevert(NoAuctionLot.selector);
         } else {
-            vm.expectEmit();
-            emit AuctionedTokensSentToWinner(
-                bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id),
-                Addresses.ADDR_BNB,
-                tokenFees.fees + tokenFees.donations
-            );
             if (user.stakeAmount > 0) {
                 vm.expectEmit();
                 console.log(_idToAddress(bidder1.id), _idToAddress(bidder2.id));
@@ -1010,6 +1002,12 @@ contract StakerTest is Auxiliary {
                     ) + bidder3.amount
                 );
             }
+            vm.expectEmit();
+            emit AuctionedTokensSentToWinner(
+                bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id),
+                Addresses.ADDR_BNB,
+                tokenFees.fees + tokenFees.donations
+            );
         }
         console.log("Staker ETH balance is", address(staker).balance);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
@@ -1049,8 +1047,6 @@ contract StakerTest is Auxiliary {
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
     }
 }
-
-// INVARIANT TEST WITH MULTIPLE TOKENS BEING BID
 
 contract StakerHandler is Auxiliary {
     address constant COLLATERAL1 = Addresses.ADDR_WETH;
