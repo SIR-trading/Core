@@ -14,7 +14,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 contract DeployCore is Script {
     function setUp() public {}
 
-    /** 
+    /** cli: forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol
         3. Deploy SIR.sol

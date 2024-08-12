@@ -256,7 +256,7 @@ contract Staker {
         }
     }
 
-    function unstake(uint80 amount) external {
+    function unstake(uint80 amount) public {
         Balance memory balance = balances[msg.sender];
         SirStructs.StakingParams memory stakingParams_ = stakingParams;
         SirStructs.StakingParams memory stakerParams = _stakersParams[msg.sender];
@@ -283,7 +283,7 @@ contract Staker {
         }
     }
 
-    function claim() external returns (uint96 dividends_) {
+    function claim() public returns (uint96 dividends_) {
         unchecked {
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
             dividends_ = _dividends(balances[msg.sender], stakingParams_, _stakersParams[msg.sender]);
@@ -303,6 +303,11 @@ contract Staker {
             // Transfer dividends
             payable(msg.sender).transfer(dividends_);
         }
+    }
+
+    function unstakeAndClaim(uint80 amount) external returns (uint96 dividends_) {
+        unstake(amount);
+        return claim();
     }
 
     function dividends(address staker) public view returns (uint96) {

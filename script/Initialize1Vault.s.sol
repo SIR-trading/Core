@@ -7,6 +7,7 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {Vault} from "src/Vault.sol";
 
+/// cli: forge script script/Initialize1Vault.s.sol --rpc-url tarp_testnet --broadcast
 contract Initialize1Vault is Script {
     Vault vault;
     SirStructs.VaultParameters vaultParams;

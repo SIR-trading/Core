@@ -631,6 +631,72 @@ contract StakerTest is Auxiliary {
         }
     }
 
+    function testFuzz_unstakeAndClaim(
+        User memory user,
+        uint80 totalSupplyAmount,
+        Donations memory donations,
+        uint80 unstakeAmount
+    ) public {
+        address account = _idToAddress(user.id);
+
+        // Stakes
+        testFuzz_stake(user, totalSupplyAmount);
+        unstakeAmount = uint80(_bound(unstakeAmount, 0, user.stakeAmount));
+
+        // Set up donations
+        _setDonations(donations);
+
+        // Trigger a payment of dividends
+        uint96 dividends = donations.donationsWETH + donations.donationsETH;
+        if (dividends > 0 && user.stakeAmount > 0) {
+            vm.expectEmit();
+            emit DividendsPaid(dividends);
+        } else {
+            vm.expectRevert(NoFeesCollectedYet.selector);
+        }
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+
+        // Check dividends
+        if (user.stakeAmount == 0) {
+            assertEq(staker.dividends(account), 0);
+        } else {
+            assertLe(staker.dividends(account), donations.donationsWETH + donations.donationsETH);
+            assertApproxEqAbs(
+                staker.dividends(account),
+                donations.donationsWETH + donations.donationsETH,
+                ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
+                "Donations before unstaking too low"
+            );
+        }
+
+        // Unstakes
+        vm.expectEmit();
+        emit Unstaked(account, unstakeAmount);
+        vm.prank(account);
+        uint96 dividends_ = staker.unstakeAndClaim(unstakeAmount);
+        assertEq(staker.dividends(account), 0);
+
+        assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
+        assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
+        assertEq(staker.supply(), totalSupplyAmount - user.stakeAmount + unstakeAmount, "Wrong supply");
+        assertEq(staker.totalSupply(), totalSupplyAmount, "Wrong total supply");
+
+        // Check dividends still there
+        assertEq(staker.dividends(account), 0);
+        if (user.stakeAmount == 0) {
+            assertEq(dividends_, 0);
+        } else {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
+            assertLe(dividends_, dividends);
+            assertApproxEqAbs(
+                dividends_,
+                donations.donationsWETH + donations.donationsETH,
+                maxError,
+                "Donations after unstaking too low"
+            );
+        }
+    }
+
     function testFuzz_unstakeExceedsStake(
         User memory user,
         uint80 totalSupplyAmount,
@@ -669,6 +735,46 @@ contract StakerTest is Auxiliary {
         vm.expectRevert();
         vm.prank(account);
         staker.unstake(unstakeAmount);
+    }
+
+    function testFuzz_unstakeAndClaimExceedsStake(
+        User memory user,
+        uint80 totalSupplyAmount,
+        Donations memory donations,
+        uint80 unstakeAmount
+    ) public {
+        address account = _idToAddress(user.id);
+
+        // Stakes
+        user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
+        testFuzz_stake(user, totalSupplyAmount);
+        unstakeAmount = uint80(_bound(unstakeAmount, user.stakeAmount + 1, type(uint80).max));
+
+        // Set up donations
+        _setDonations(donations);
+
+        // Trigger a payment of dividends
+        vm.assume(donations.donationsWETH + donations.donationsETH > 0 && user.stakeAmount > 0);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+
+        // Check dividends
+        if (user.stakeAmount == 0) {
+            assertEq(staker.dividends(account), 0);
+        } else {
+            assertLe(staker.dividends(account), donations.donationsWETH + donations.donationsETH);
+            assertApproxEqAbs(
+                staker.dividends(account),
+                donations.donationsWETH + donations.donationsETH,
+                ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
+                "Donations before unstaking too low"
+            );
+        }
+
+        // Unstakes
+        vm.prank(account);
+        vm.expectRevert();
+        vm.prank(account);
+        staker.unstakeAndClaim(unstakeAmount);
     }
 
     /////////////////////////////////////////////////////////
