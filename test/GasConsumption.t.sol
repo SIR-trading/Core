@@ -12,7 +12,6 @@ import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 import "forge-std/Test.sol";
 
-/// cli: forge test --mc VaultGasTest --gas-report
 contract VaultGasTest is Test, ERC1155TokenReceiver {
     uint256 public constant TIME_ADVANCE = 1 days;
     uint256 public constant BLOCK_NUMBER_START = 18128102;
@@ -21,11 +20,32 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
     Vault public vault;
     APE public ape;
 
-    SirStructs.VaultParameters public vaultParameters =
+    /**
+    | Deployment Cost              | Deployment Size |         |         |         |         |
+    | 5328289                      | 24912           |         |         |         |         |
+    | Function Name                | min             | avg     | median  | max     | # calls |
+    | balanceOf                    | 706             | 706     | 706     | 706     | 4       |
+    | burn                         | 103488          | 111318  | 111194  | 119395  | 8       |
+    | initialize                   | 1580204         | 1645270 | 1645335 | 1710208 | 4       |
+    | latestTokenParams            | 3916            | 3916    | 3916    | 3916    | 4       |
+    | mint                         | 123467          | 167635  | 163324  | 228138  | 8       |
+    | updateVaults                 | 85621           | 85621   | 85621   | 85621   | 4       |
+     */
+
+    // WETH/USDT's Uniswap TWAP has a long cardinality
+    SirStructs.VaultParameters public vaultParameters1 =
         SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_USDT,
             collateralToken: address(WETH),
             leverageTier: int8(-1)
+        });
+
+    // BNB/WETH's Uniswap TWAP is of cardinality 1
+    SirStructs.VaultParameters public vaultParameters2 =
+        SirStructs.VaultParameters({
+            debtToken: Addresses.ADDR_BNB,
+            collateralToken: address(WETH),
+            leverageTier: int8(0)
         });
 
     function setUp() public {
@@ -66,36 +86,35 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
     ///////////////////////////////////////////////
 
     /// @dev Around 205,457 gas
-    function test_DoNotProbeFeeTier() public {
+    function test_DoNotProbeFeeTierA() public {
         // To make sure mint() is done exactly at the same time than other tests
         skip(TIME_ADVANCE);
 
         // Intialize vault
-        vault.initialize(vaultParameters);
+        vault.initialize(vaultParameters1);
 
         // Deposit WETH to vault
         _depositWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters);
+        vault.mint(true, vaultParameters1);
 
         // Deposit WETH to vault
         _depositWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters);
+        vault.mint(false, vaultParameters1);
 
         // Burn some APE
-        vault.burn(true, vaultParameters, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
 
         // Burn some TEA
-        vault.burn(false, vaultParameters, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters1, vault.balanceOf(address(this), 1));
     }
 
-    /// @dev Around 232,642 gas
-    function test_ProbeFeeTier() public {
+    function test_ProbeFeeTierA() public {
         // Intialize vault
-        vault.initialize(vaultParameters);
+        vault.initialize(vaultParameters1);
 
         // Skip
         skip(TIME_ADVANCE);
@@ -104,18 +123,70 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
         _depositWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters);
+        vault.mint(true, vaultParameters1);
 
         // Deposit WETH to vault
         _depositWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters);
+        vault.mint(false, vaultParameters1);
 
         // Burn some APE
-        vault.burn(true, vaultParameters, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
 
         // Burn some TEA
-        vault.burn(false, vaultParameters, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters1, vault.balanceOf(address(this), 1));
+    }
+
+    function test_DoNotProbeFeeTierB() public {
+        // To make sure mint() is done exactly at the same time than other tests
+        skip(TIME_ADVANCE);
+
+        // Intialize vault
+        vault.initialize(vaultParameters2);
+
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint some APE
+        vault.mint(true, vaultParameters2);
+
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint some TEA
+        vault.mint(false, vaultParameters2);
+
+        // Burn some APE
+        vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
+
+        // Burn some TEA
+        vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1));
+    }
+
+    function test_ProbeFeeTierB() public {
+        // Intialize vault
+        vault.initialize(vaultParameters2);
+
+        // Skip
+        skip(TIME_ADVANCE);
+
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint some APE
+        vault.mint(true, vaultParameters2);
+
+        // Deposit WETH to vault
+        _depositWETH(2 ether);
+
+        // Mint some TEA
+        vault.mint(false, vaultParameters2);
+
+        // Burn some APE
+        vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
+
+        // Burn some TEA
+        vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1));
     }
 }
