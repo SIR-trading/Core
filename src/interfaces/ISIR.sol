@@ -72,8 +72,6 @@ interface ISIR {
 
     function stake(uint80 amount) external;
 
-    function unstakeAndClaim(uint80 amount) external returns (uint96 dividends_);
-
     function stakersParams(address staker) external view returns (SirStructs.StakingParams memory);
 
     function supply() external view returns (uint256);
@@ -89,4 +87,6 @@ interface ISIR {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 
     function unstake(uint80 amount) external;
+
+    function unstakeAndClaim(uint80 amount) external returns (uint96 dividends_);
 }

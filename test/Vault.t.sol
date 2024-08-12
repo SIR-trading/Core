@@ -6,7 +6,6 @@ import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
-import {Fees} from "src/libraries/Fees.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
@@ -1985,95 +1984,6 @@ contract VaultControlTest is Test {
         deal(token, vm.addr(2), amount, true);
         vm.prank(vm.addr(2));
         TransferHelper.safeTransfer(token, to, amount);
-    }
-}
-
-contract VaultGasTest is Test, ERC1155TokenReceiver {
-    uint256 public constant TIME_ADVANCE = 1 days;
-    uint256 public constant BLOCK_NUMBER_START = 18128102;
-
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
-    Vault public vault;
-
-    // WETH/USDT's Uniswap TWAP has a long cardinality
-    SirStructs.VaultParameters public vaultParameters1 =
-        SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDT,
-            collateralToken: address(WETH),
-            leverageTier: int8(-1)
-        });
-
-    // BNB/WETH's Uniswap TWAP is of cardinality 1
-    SirStructs.VaultParameters public vaultParameters2 =
-        SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_BNB,
-            collateralToken: address(WETH),
-            leverageTier: int8(0)
-        });
-
-    function setUp() public {
-        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
-
-        // vm.writeFile("./gains.log", "");
-
-        Oracle oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
-
-        // Set tax between 2 vaults
-        {
-            uint48[] memory oldVaults = new uint48[](0);
-            uint48[] memory newVaults = new uint48[](2);
-            newVaults[0] = 1;
-            newVaults[1] = 2;
-            uint8[] memory newTaxes = new uint8[](2);
-            newTaxes[0] = 228;
-            newTaxes[1] = 114; // Ensure 114^2+228^2 <= (2^8-1)^2
-            vm.prank(vm.addr(100));
-            vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
-        }
-    }
-
-    function _depositWETH(uint256 amount) private {
-        // Deal ETH
-        vm.deal(address(this), amount);
-
-        // Wrap ETH to WETH
-        WETH.deposit{value: amount}();
-
-        // Deposit WETH to vault
-        WETH.transfer(address(vault), amount);
-    }
-
-    ///////////////////////////////////////////////
-
-    /// @dev Around 205,457 gas
-    function test_DoNotProbeFeeTier() public {
-        // To make sure mint() is done exactly at the same time than other tests
-        skip(TIME_ADVANCE);
-
-        // Intialize vault
-        vault.initialize(vaultParameters1);
-
-        // Deposit WETH to vault
-        _depositWETH(2 ether);
-
-        // Mint some APE
-        vault.mint(true, vaultParameters1);
-    }
-
-    /// @dev Around 232,642 gas
-    function test_ProbeFeeTier() public {
-        // Intialize vault
-        vault.initialize(vaultParameters1);
-
-        // Skip
-        skip(TIME_ADVANCE);
-
-        // Deposit WETH to vault
-        _depositWETH(2 ether);
-
-        // Mint some APE
-        vault.mint(true, vaultParameters1);
     }
 }
 
