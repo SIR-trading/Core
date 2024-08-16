@@ -11,7 +11,7 @@ import {SystemControl} from "src/SystemControl.sol";
 import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
-import {TransferHelper} from "src/libraries/TransferHelper.sol";
+import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {MockERC20} from "src/test/MockERC20.sol";

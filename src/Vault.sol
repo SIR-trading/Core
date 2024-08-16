@@ -6,7 +6,7 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
-import {TransferHelper} from "./libraries/TransferHelper.sol";
+import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 

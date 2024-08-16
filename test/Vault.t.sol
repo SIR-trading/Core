@@ -16,7 +16,7 @@ import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
-import {TransferHelper} from "src/libraries/TransferHelper.sol";
+import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 
 import "forge-std/Test.sol";
 

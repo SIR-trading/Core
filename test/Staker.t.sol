@@ -9,7 +9,7 @@ import {Staker} from "src/Staker.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
-import {TransferHelper} from "src/libraries/TransferHelper.sol";
+import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
