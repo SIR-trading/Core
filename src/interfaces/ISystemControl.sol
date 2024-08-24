@@ -46,7 +46,7 @@ interface ISystemControl {
 
     function transferOwnership(address newOwner) external;
 
-    function tsStatusChanged() external view returns (uint40);
+    function timestampStatusChanged() external view returns (uint40);
 
     function updateVaultsIssuances(
         uint48[] calldata oldVaults,

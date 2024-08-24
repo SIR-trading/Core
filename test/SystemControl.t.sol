@@ -137,7 +137,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(systemParams_.baseFee, 0, "baseFee not set to 0");
         assertEq(systemParams_.lpFee, 0, "lpFee not set to 0");
         assertEq(systemParams_.mintingStopped, true, "mintingStopped not set to true");
-        assertEq(systemParams_.cumTax, systemParams.cumTax, "cumTax not saved correctly");
+        assertEq(systemParams_.cumulativeTax, systemParams.cumulativeTax, "cumulativeTax not saved correctly");
 
         // Failure to mint APE
         _dealWETH(address(this), 1 ether);
@@ -810,15 +810,15 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         if (newVaults.length > 1) _quickSort(newVaults, 0, int(newVaults.length - 1));
 
         // Cumulative squared tax
-        uint256 cumSquaredTaxes;
+        uint256 cumulativeSquaredTaxes;
         for (uint256 i = 0; i < newTaxes.length; ++i) {
             if (newTaxes[i] == 0) newTaxes[i] = 1;
-            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
 
-        // Check if cumSquaredTaxes exceeds max value
-        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
-            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
+        // Check if cumulativeSquaredTaxes exceeds max value
+        if (cumulativeSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumulativeSquaredTaxes) + 1; // To ensure it's rounding up
             uint256 decrement;
             for (uint256 i = 0; i < newTaxes.length; ++i) {
                 // Scale down taxes
@@ -885,18 +885,18 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         if (numNewVaults > 1) _quickSort(newVaults, 0, int(numNewVaults - 1));
 
         // Cumulative squared tax
-        uint256 cumSquaredTaxes;
+        uint256 cumulativeSquaredTaxes;
         for (uint256 i = 0; i < numNewVaults; ++i) {
             if (newTaxes[i] == 0) newTaxes[i] = 1;
-            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
 
-        // Check if cumSquaredTaxes exceeds max value
+        // Check if cumulativeSquaredTaxes exceeds max value
         bool anyTaxIsZero;
-        uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
+        uint128 sqrtCumSquaredTaxes = _sqrt(cumulativeSquaredTaxes) + 1; // To ensure it's rounding up
         for (uint256 i = 0; i < numNewVaults; ++i) {
             // Scale down taxes
-            if (cumSquaredTaxes > uint256(type(uint8).max) ** 2)
+            if (cumulativeSquaredTaxes > uint256(type(uint8).max) ** 2)
                 newTaxes[i] = uint8((uint256(newTaxes[i]) * type(uint8).max) / sqrtCumSquaredTaxes);
             if (newTaxes[i] == 0) anyTaxIsZero = true;
         }
@@ -941,15 +941,15 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         vm.assume(!alreadySorted);
 
         // Cumulative squared tax
-        uint256 cumSquaredTaxes;
+        uint256 cumulativeSquaredTaxes;
         for (uint256 i = 0; i < numNewVaults; ++i) {
             if (newTaxes[i] == 0) newTaxes[i] = 1;
-            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
 
-        // Check if cumSquaredTaxes exceeds max value
-        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
-            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
+        // Check if cumulativeSquaredTaxes exceeds max value
+        if (cumulativeSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumulativeSquaredTaxes) + 1; // To ensure it's rounding up
             uint256 decrement;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale down taxes
@@ -996,16 +996,16 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         _quickSort(newVaults, 0, int(numNewVaults - 1));
 
         // Cumulative squared tax
-        uint256 cumSquaredTaxes;
+        uint256 cumulativeSquaredTaxes;
         for (uint256 i = 0; i < numNewVaults; ++i) {
             if (newTaxes[i] == 0) newTaxes[i] = 1;
-            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
 
-        // Check if cumSquaredTaxes is too low
-        if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
-            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes);
-            cumSquaredTaxes = 0;
+        // Check if cumulativeSquaredTaxes is too low
+        if (cumulativeSquaredTaxes <= uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumulativeSquaredTaxes);
+            cumulativeSquaredTaxes = 0;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale up taxes
                 if (newTaxes[i] == 0) newTaxes[i] = 1;
@@ -1013,12 +1013,12 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
                 if (newTax > type(uint8).max) newTaxes[i] = type(uint8).max;
                 else newTaxes[i] = uint8(newTax);
 
-                cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+                cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
             }
         }
 
-        // Still.. Check if cumSquaredTaxes is too low one last time
-        if (cumSquaredTaxes <= uint256(type(uint8).max) ** 2) {
+        // Still.. Check if cumulativeSquaredTaxes is too low one last time
+        if (cumulativeSquaredTaxes <= uint256(type(uint8).max) ** 2) {
             for (uint256 i = 0; i < numNewVaults; i++) {
                 if (newTaxes[i] < type(uint8).max) {
                     newTaxes[i]++;
@@ -1126,15 +1126,15 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         if (numNewVaults > 1) _quickSort(newVaults, 0, int(numNewVaults - 1));
 
         // Cumulative squared tax
-        uint256 cumSquaredTaxes;
+        uint256 cumulativeSquaredTaxes;
         for (uint256 i = 0; i < numNewVaults; ++i) {
             if (newTaxes[i] == 0) newTaxes[i] = 1;
-            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
         }
 
-        // Check if cumSquaredTaxes exceeds max value
-        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) {
-            uint128 sqrtCumSquaredTaxes = _sqrt(cumSquaredTaxes) + 1; // To ensure it's rounding up
+        // Check if cumulativeSquaredTaxes exceeds max value
+        if (cumulativeSquaredTaxes > uint256(type(uint8).max) ** 2) {
+            uint128 sqrtCumSquaredTaxes = _sqrt(cumulativeSquaredTaxes) + 1; // To ensure it's rounding up
             uint256 decrement;
             for (uint256 i = 0; i < numNewVaults; ++i) {
                 // Scale down taxes

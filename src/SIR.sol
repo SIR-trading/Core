@@ -9,7 +9,7 @@ import {Staker} from "./Staker.sol";
 
 // Contracts
 contract SIR is Staker {
-    mapping(address => uint40) internal tsLastMint;
+    mapping(address => uint40) internal timestampLastMint;
 
     constructor(address weth) Staker(weth) {}
 
@@ -26,29 +26,29 @@ contract SIR is Staker {
             if (allocation == 0) return 0;
 
             // First issuance date
-            uint40 tsIssuanceStart = vault.TS_ISSUANCE_START();
+            uint40 timestampIssuanceStart = vault.TIMESTAMP_ISSUANCE_START();
 
             // Last issuance date
-            uint256 tsIssuanceEnd = tsIssuanceStart + SystemConstants.THREE_YEARS;
+            uint256 timestampIssuanceEnd = timestampIssuanceStart + SystemConstants.THREE_YEARS;
 
             // Get last mint time stamp
-            uint256 tsLastMint_ = tsLastMint[contributor];
+            uint256 timestampLastMint_ = timestampLastMint[contributor];
 
             // Contributor has already claimed all rewards
-            if (tsLastMint_ >= tsIssuanceEnd) return 0;
+            if (timestampLastMint_ >= timestampIssuanceEnd) return 0;
 
-            // If tsLastMint[contributor] had never been set
-            if (tsLastMint_ == 0) tsLastMint_ = tsIssuanceStart;
+            // If timestampLastMint[contributor] had never been set
+            if (timestampLastMint_ == 0) timestampLastMint_ = timestampIssuanceStart;
 
             // Calculate the contributor's issuance
             uint256 issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) /
                 type(uint56).max;
 
             // Update unclaimed rewards
-            uint256 tsNow = block.timestamp >= tsIssuanceEnd ? tsIssuanceEnd : block.timestamp;
+            uint256 timestampNow = block.timestamp >= timestampIssuanceEnd ? timestampIssuanceEnd : block.timestamp;
 
             // Return unclaimed rewards
-            return uint80(issuance * (tsNow - tsLastMint_));
+            return uint80(issuance * (timestampNow - timestampLastMint_));
         }
     }
 
@@ -65,7 +65,7 @@ contract SIR is Staker {
         _mint(msg.sender, rewards);
 
         // Update time stamp
-        tsLastMint[msg.sender] = uint40(block.timestamp);
+        timestampLastMint[msg.sender] = uint40(block.timestamp);
     }
 
     function lPerMint(uint256 vaultId) external returns (uint80 rewards) {

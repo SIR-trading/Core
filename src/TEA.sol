@@ -439,7 +439,7 @@ contract TEA is SystemState, ERC1155TokenReceiver {
                         SYSTEM STATE VIRTUAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumSIRPerTEAx96) {
+    function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumulativeSIRPerTEAx96) {
         return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
     }
 }

@@ -39,9 +39,9 @@ interface IVault {
         uint256 amount
     );
     event URI(string value, uint256 indexed id);
-    event VaultNewTax(uint48 indexed vault, uint8 tax, uint16 cumTax);
+    event VaultNewTax(uint48 indexed vault, uint8 tax, uint16 cumulativeTax);
 
-    function TS_ISSUANCE_START() external view returns (uint40);
+    function TIMESTAMP_ISSUANCE_START() external view returns (uint40);
 
     function balanceOf(address account, uint256 vaultId) external view returns (uint256);
 
@@ -60,7 +60,7 @@ interface IVault {
 
     function collateralStates(address token) external view returns (SirStructs.CollateralState memory);
 
-    function cumulativeSIRPerTEA(uint256 vaultId) external view returns (uint176 cumSIRPerTEAx96);
+    function cumulativeSIRPerTEA(uint256 vaultId) external view returns (uint176 cumulativeSIRPerTEAx96);
 
     function getReserves(
         SirStructs.VaultParameters calldata vaultParams
@@ -117,7 +117,7 @@ interface IVault {
         uint48[] calldata oldVaults,
         uint48[] calldata newVaults,
         uint8[] calldata newTaxes,
-        uint16 cumTax
+        uint16 cumulativeTax
     ) external;
 
     function uri(uint256 vaultId) external view returns (string memory);

@@ -4,8 +4,8 @@ pragma solidity ^0.8.0;
 library SirStructs {
     struct VaultIssuanceParams {
         uint8 tax; // (tax / type(uint8).max * 10%) of its fee revenue is directed to the Treasury.
-        uint40 tsLastUpdate; // timestamp of the last time cumSIRPerTEAx96 was updated. 0 => use systemParams.tsIssuanceStart instead
-        uint176 cumSIRPerTEAx96; // Q104.96, cumulative SIR minted by the vaultId per unit of TEA.
+        uint40 timestampLastUpdate; // timestamp of the last time cumulativeSIRPerTEAx96 was updated. 0 => use systemParams.timestampIssuanceStart instead
+        uint176 cumulativeSIRPerTEAx96; // Q104.96, cumulative SIR minted by the vaultId per unit of TEA.
     }
 
     struct VaultParameters {
@@ -31,12 +31,12 @@ library SirStructs {
             For vault i, (tax_i / type(uint8).max)*10% is charged, where tax_i is of type uint8.
             They must satisfy the condition
                 Σ_i (tax_i / type(uint8).max)^2 ≤ 0.1^2
-            Under this constraint, cumTax = Σ_i tax_i is maximized when all taxes are equal (tax_i = tax for all i) and
+            Under this constraint, cumulativeTax = Σ_i tax_i is maximized when all taxes are equal (tax_i = tax for all i) and
                 tax = type(uint8).max / sqrt(Nvaults)
             Since the lowest non-zero value is tax=1, the maximum number of vaults with non-zero tax is
                 Nvaults = type(uint8).max^2 < type(uint16).max
          */
-        uint16 cumTax;
+        uint16 cumulativeTax;
     }
 
     /** totalFeesToStakers: Sum of fees collected for a specific type of collateral
@@ -83,7 +83,7 @@ library SirStructs {
 
     struct StakingParams {
         uint80 stake; // Amount of staked SIR
-        uint176 cumETHPerSIRx80; // Cumulative ETH per SIR * 2^80
+        uint176 cumulativeETHPerSIRx80; // Cumulative ETH per SIR * 2^80
     }
 
     struct Auction {

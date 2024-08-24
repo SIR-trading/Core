@@ -107,7 +107,7 @@ contract Staker {
 
     // Return supply if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
     function maxTotalSupply() external view returns (uint256) {
-        return SystemConstants.ISSUANCE * (block.timestamp - vault.TS_ISSUANCE_START());
+        return SystemConstants.ISSUANCE * (block.timestamp - vault.TIMESTAMP_ISSUANCE_START());
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -243,7 +243,7 @@ contract Staker {
             // Update staker info
             _stakersParams[msg.sender] = SirStructs.StakingParams(
                 stakerParams.stake + amount,
-                stakingParams_.cumETHPerSIRx80
+                stakingParams_.cumulativeETHPerSIRx80
             );
 
             // Update _supply
@@ -271,7 +271,7 @@ contract Staker {
             );
 
             // Update staker info
-            _stakersParams[msg.sender] = SirStructs.StakingParams(newStake, stakingParams_.cumETHPerSIRx80);
+            _stakersParams[msg.sender] = SirStructs.StakingParams(newStake, stakingParams_.cumulativeETHPerSIRx80);
 
             // Update _supply
             _supply.balanceOfSIR += amount;
@@ -292,7 +292,7 @@ contract Staker {
             balances[msg.sender].unclaimedETH = 0;
 
             // Update staker info
-            _stakersParams[msg.sender].cumETHPerSIRx80 = stakingParams_.cumETHPerSIRx80;
+            _stakersParams[msg.sender].cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
 
             // Update ETH _supply in the contract
             _supply.unclaimedETH -= dividends_;
@@ -323,7 +323,8 @@ contract Staker {
             dividends_ = balance.unclaimedETH;
             if (stakerParams.stake > 0) {
                 dividends_ += uint96( // Safe to cast to uint96 because _supply.unclaimedETH is uint96
-                    (uint256(stakingParams_.cumETHPerSIRx80 - stakerParams.cumETHPerSIRx80) * stakerParams.stake) >> 80
+                    (uint256(stakingParams_.cumulativeETHPerSIRx80 - stakerParams.cumulativeETHPerSIRx80) *
+                        stakerParams.stake) >> 80
                 );
             }
         }
@@ -457,9 +458,9 @@ contract Staker {
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
             if (stakingParams_.stake == 0) return true;
 
-            // Update cumETHPerSIRx80
-            stakingParams.cumETHPerSIRx80 =
-                stakingParams_.cumETHPerSIRx80 +
+            // Update cumulativeETHPerSIRx80
+            stakingParams.cumulativeETHPerSIRx80 =
+                stakingParams_.cumulativeETHPerSIRx80 +
                 uint176((dividends_ << 80) / stakingParams_.stake);
 
             // Update _supply

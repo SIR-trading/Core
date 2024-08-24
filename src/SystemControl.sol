@@ -42,7 +42,7 @@ contract SystemControl is Ownable {
     bool private _initialized = false;
 
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
-    uint40 public tsStatusChanged; // Timestamp when the status last changed
+    uint40 public timestampStatusChanged; // Timestamp when the status last changed
 
     uint16 private _oldBaseFee;
     uint16 private _oldLpFee;
@@ -77,7 +77,7 @@ contract SystemControl is Ownable {
 
         // Change status
         systemStatus = SystemStatus.Unstoppable;
-        tsStatusChanged = uint40(block.timestamp);
+        timestampStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Unstoppable);
     }
@@ -87,7 +87,7 @@ contract SystemControl is Ownable {
 
         // Change status
         systemStatus = SystemStatus.Emergency;
-        tsStatusChanged = uint40(block.timestamp);
+        timestampStatusChanged = uint40(block.timestamp);
 
         // Retrieve parameters
         Vault vault_ = vault;
@@ -108,7 +108,7 @@ contract SystemControl is Ownable {
 
         // Change status
         systemStatus = SystemStatus.TrainingWheels;
-        tsStatusChanged = uint40(block.timestamp);
+        timestampStatusChanged = uint40(block.timestamp);
 
         // Restore fees
         vault.updateSystemState(_oldBaseFee, _oldLpFee, false);
@@ -124,11 +124,11 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
 
         // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
-        if (block.timestamp - tsStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownTooEarly();
+        if (block.timestamp - timestampStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownTooEarly();
 
         // Change status
         systemStatus = SystemStatus.Shutdown;
-        tsStatusChanged = uint40(block.timestamp);
+        timestampStatusChanged = uint40(block.timestamp);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.Shutdown);
     }
@@ -179,20 +179,20 @@ contract SystemControl is Ownable {
         if (hashActiveVaults != keccak256(abi.encodePacked(oldVaults))) revert WrongVaultsOrOrder();
 
         // Aggregate taxes and squared taxes
-        uint16 cumTax;
-        uint256 cumSquaredTaxes;
+        uint16 cumulativeTax;
+        uint256 cumulativeSquaredTaxes;
         for (uint256 i = 0; i < lenNewVaults; ++i) {
             if (newTaxes[i] == 0) revert FeeCannotBeZero();
-            cumTax += newTaxes[i];
-            cumSquaredTaxes += uint256(newTaxes[i]) ** 2;
+            cumulativeTax += newTaxes[i];
+            cumulativeSquaredTaxes += uint256(newTaxes[i]) ** 2;
             if (i > 0 && newVaults[i] <= newVaults[i - 1]) revert WrongVaultsOrOrder();
         }
 
         // Condition on squares
-        if (cumSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
+        if (cumulativeSquaredTaxes > uint256(type(uint8).max) ** 2) revert NewTaxesTooHigh();
 
         // Update parameters
-        vault.updateVaults(oldVaults, newVaults, newTaxes, cumTax);
+        vault.updateVaults(oldVaults, newVaults, newTaxes, cumulativeTax);
 
         // Update hash of active vaults
         hashActiveVaults = keccak256(abi.encodePacked(newVaults));

@@ -852,22 +852,22 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
 
         if (aggBalanceSender == 0 || vaultIssuanceParams[VAULT_ID].tax == 0) assertEq(rewardsSender, 0);
         else {
-            uint256 ts3Years = TS_ISSUANCE_START + SystemConstants.THREE_YEARS;
+            uint256 timestamp3Years = TIMESTAMP_ISSUANCE_START + SystemConstants.THREE_YEARS;
             uint256 rewardsE;
             uint256 maxErr;
             for (uint256 i = 0; i < tsBalance.length; i++) {
                 if (tsBalance[i] <= tsCheck && senderBalance[i] > 0) {
-                    uint256 tsStart = tsBalance[i];
+                    uint256 timestampStart = tsBalance[i];
                     uint256 tsEnd = i == tsBalance.length - 1 ? tsCheck : tsBalance[i + 1];
-                    if (tsStart <= ts3Years && tsEnd >= ts3Years) {
-                        rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (ts3Years - tsStart);
-                        rewardsE += SystemConstants.ISSUANCE * (tsEnd - ts3Years);
+                    if (timestampStart <= timestamp3Years && tsEnd >= timestamp3Years) {
+                        rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (timestamp3Years - timestampStart);
+                        rewardsE += SystemConstants.ISSUANCE * (tsEnd - timestamp3Years);
                         maxErr += ErrorComputation.maxErrorBalance(96, senderBalance[i], 2);
-                    } else if (tsStart <= ts3Years && tsEnd <= ts3Years) {
-                        rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (tsEnd - tsStart);
+                    } else if (timestampStart <= timestamp3Years && tsEnd <= timestamp3Years) {
+                        rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (tsEnd - timestampStart);
                         maxErr += ErrorComputation.maxErrorBalance(96, senderBalance[i], 1);
                     } else {
-                        rewardsE += SystemConstants.ISSUANCE * (tsEnd - tsStart);
+                        rewardsE += SystemConstants.ISSUANCE * (tsEnd - timestampStart);
                         maxErr += ErrorComputation.maxErrorBalance(96, senderBalance[i], 1);
                     }
                 }
@@ -900,11 +900,11 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             _bound(testMintParams.reserveLPers, 0, type(uint144).max - testMintParams.collateralDeposited)
         );
         testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 0, collateralTotalSupply0));
-        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TS_ISSUANCE_START, MAX_TS));
+        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TIMESTAMP_ISSUANCE_START, MAX_TS));
 
         // Initialize system parameters
         _systemParams.lpFee = lpFee;
-        _systemParams.cumTax = tax;
+        _systemParams.cumulativeTax = tax;
 
         // Initialize vault issuance parameters
         vaultIssuanceParams[VAULT_ID].tax = tax;
@@ -955,7 +955,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             _bound(testMintParams.reserveLPers, 0, type(uint144).max - testMintParams.collateralDeposited)
         );
         testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 0, collateralTotalSupply0));
-        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TS_ISSUANCE_START, MAX_TS));
+        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TIMESTAMP_ISSUANCE_START, MAX_TS));
 
         // Initialize reserves
         reserves = SirStructs.Reserves({reserveApes: 0, reserveLPers: testMintParams.reserveLPers, tickPriceX42: 0});
