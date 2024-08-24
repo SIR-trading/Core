@@ -1009,24 +1009,18 @@ contract StakerTest is Auxiliary {
 
         // Bidder 1
         if (bidder1.amount > 0) {
-            // _dealWETH(address(staker), bidder1.amount);
             console.log("bidder1 amount is", bidder1.amount);
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder1.id), Addresses.ADDR_BNB, 0, bidder1.amount);
         } else {
             vm.expectRevert(BidTooLow.selector);
         }
-        console.log("Staker ETH balance is", address(staker).balance);
         new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder1.id), bidder1.amount);
-        console.log("Staker ETH balance is", address(staker).balance);
-        // vm.prank(_idToAddress(bidder1.id));
-        // staker.bid(Addresses.ADDR_BNB);
         if (bidder1.amount > 0) _assertAuction(bidder1, start);
         else _assertAuction(Bidder(0, 0), start);
 
         // Bidder 2
         skip(SystemConstants.AUCTION_DURATION - 1);
-        // _dealWETH(address(staker), bidder2.amount);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 // Bidder increases its own bid
@@ -1052,7 +1046,6 @@ contract StakerTest is Auxiliary {
             vm.expectRevert(BidTooLow.selector);
         }
         new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder2.id), bidder2.amount);
-        console.log("Staker ETH balance is", address(staker).balance);
         // vm.prank(_idToAddress(bidder2.id));
         // staker.bid(Addresses.ADDR_BNB);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
