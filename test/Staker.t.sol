@@ -1046,8 +1046,6 @@ contract StakerTest is Auxiliary {
             vm.expectRevert(BidTooLow.selector);
         }
         new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder2.id), bidder2.amount);
-        // vm.prank(_idToAddress(bidder2.id));
-        // staker.bid(Addresses.ADDR_BNB);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);

@@ -1242,7 +1242,7 @@ contract VaultTest is Test {
                 "Minted amount is wrong"
             );
         } else {
-            fail("Invalid state");
+            revert("Invalid state");
         }
         assertEq(inputsOutputs.amount, ape.balanceOf(alice) - balances.apeAlice);
         assertEq(vault.balanceOf(alice, VAULT_ID), balances.teaAlice);
@@ -1263,7 +1263,7 @@ contract VaultTest is Test {
                     )
                 );
             } else {
-                fail("Invalid state");
+                revert("Invalid state");
             }
         }
     }
@@ -1349,7 +1349,7 @@ contract VaultTest is Test {
                     FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
                 );
             } else {
-                fail("Invalid state");
+                revert("Invalid state");
             }
         }
     }
@@ -1409,7 +1409,7 @@ contract VaultTest is Test {
                 assertEq(amountPol, 0, "Amount of POL is not 0");
             }
         } else if (reservesPre.reserveLPers == 0) {
-            fail("Invalid state");
+            revert("Invalid state");
         } else {
             assertEq(
                 amountPol,
@@ -1501,7 +1501,7 @@ contract VaultTest is Test {
         inputsOutputs.amount = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
         if (balances.teaSupply > 0) {
             if (reservesPre.reserveLPers == 0) {
-                fail("Invalid state");
+                revert("Invalid state");
             } else {
                 assertEq(
                     inputsOutputs.amount,
@@ -2160,7 +2160,7 @@ contract VaultHandler is Test, RegimeEnum {
                     ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
                     : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
 
-                if (maxCollateralAmount < reserves.reserveApes) fail("Saturation zone");
+                if (maxCollateralAmount < reserves.reserveApes) revert("Saturation zone");
 
                 maxCollateralAmount -= reserves.reserveApes;
 
@@ -2185,7 +2185,7 @@ contract VaultHandler is Test, RegimeEnum {
                 : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
 
             console.log("Max collateral amount", maxCollateralAmount, "reserveLPers", reserves.reserveLPers);
-            if (maxCollateralAmount < reserves.reserveLPers) fail("Power zone");
+            if (maxCollateralAmount < reserves.reserveLPers) revert("Power zone");
 
             maxCollateralAmount -= reserves.reserveLPers;
 
@@ -2248,7 +2248,7 @@ contract VaultHandler is Test, RegimeEnum {
                         ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
                         : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
 
-                    if (reserves.reserveLPers < reserveMin) fail("Saturation zone");
+                    if (reserves.reserveLPers < reserveMin) revert("Saturation zone");
                     uint256 maxCollateralAmount = reserves.reserveLPers - reserveMin;
 
                     maxAmount = FullMath.mulDiv(supplyTEA, maxCollateralAmount, reserves.reserveLPers);
@@ -2268,7 +2268,7 @@ contract VaultHandler is Test, RegimeEnum {
                         ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
                         : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
 
-                    if (reserves.reserveApes < reserveMin) fail("Saturation zone");
+                    if (reserves.reserveApes < reserveMin) revert("Saturation zone");
 
                     // Sufficient condition to change to Power
                     uint256 maxCollateralAmount = vaultParameters.leverageTier < 0
@@ -2329,7 +2329,7 @@ contract VaultHandler is Test, RegimeEnum {
                     : reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
             )
         ) {
-            fail("Saturation");
+            revert("Saturation");
         }
 
         if (
@@ -2340,7 +2340,7 @@ contract VaultHandler is Test, RegimeEnum {
                     : reserves.reserveApes < uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
             )
         ) {
-            fail("Power zone");
+            revert("Power zone");
         }
     }
 
