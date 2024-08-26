@@ -33,3 +33,6 @@
 [submodule "lib/ERC1155-in-pure-yul"]
 	path = lib/ERC1155-in-pure-yul
 	url = https://github.com/Frenchkebab/ERC1155-in-pure-yul
+[submodule "lib/forge-std"]
+	path = lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
