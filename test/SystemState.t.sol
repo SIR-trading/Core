@@ -1176,7 +1176,7 @@ contract SystemStateInvariantTest is Test {
         assertApproxEqAbs(claimedSIR + unclaimedSIR, totalSIR, totalSIRMaxError, "Total SIR is too low");
     }
 
-    function invariant_vaultTeaBalance() public {
+    function invariant_vaultTeaBalance() public view {
         SystemStateWrapper systemState = SystemStateWrapper(_systemStateHandler.systemState());
         uint256 vaultBalance = systemState.balanceOf(address(systemState), _systemStateHandler.VAULT_ID());
         assertGe(vaultBalance, _systemStateHandler.vaultBalanceOld());

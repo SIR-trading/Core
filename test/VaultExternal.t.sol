@@ -310,7 +310,7 @@ contract VaultExternalGetReserves is Test {
         SirStructs.CollateralState memory collateralState_,
         SirStructs.VaultState memory vaultState,
         SirStructs.VaultState memory vaultState_
-    ) private {
+    ) private pure {
         assertEq(collateralState_.total, collateralState.total);
         assertEq(collateralState_.totalFeesToStakers, collateralState.totalFeesToStakers);
 

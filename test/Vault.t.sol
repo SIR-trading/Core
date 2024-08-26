@@ -940,7 +940,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
-    ) internal {
+    ) internal view {
         bytes16 leverageRatioSub1 = ABDKMathQuad.fromInt(vaultParams.leverageTier).pow_2();
         bytes16 leveragedGain = newTickPriceX42.tickToFP().div(tickPriceX42.tickToFP()).pow(leverageRatioSub1);
         uint256 newReserveApes = ABDKMathQuad.fromUInt(reservesPre.reserveApes).mul(leveragedGain).toUInt();
@@ -962,7 +962,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
-    ) internal {
+    ) internal pure {
         uint256 newReserveLPers = ABDKMathQuad
             .fromUInt(reservesPre.reserveLPers)
             .mul(tickPriceX42.tickToFP())
@@ -986,7 +986,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
-    ) internal {
+    ) internal view {
         bytes16 leverageRatioSub1 = ABDKMathQuad.fromInt(vaultParams.leverageTier).pow_2();
         bytes16 leveragedGain = vaultState.tickPriceSatX42.tickToFP().div(tickPriceX42.tickToFP()).pow(
             leverageRatioSub1
@@ -1018,7 +1018,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPost,
         int64 tickPriceX42,
         int64 newTickPriceX42
-    ) internal {
+    ) internal view {
         uint256 newReserveLPers = ABDKMathQuad
             .fromUInt(reservesPre.reserveLPers)
             .mul(tickPriceX42.tickToFP())
@@ -1176,7 +1176,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPre,
         SirStructs.Reserves memory reservesPost,
         Balances memory balances
-    ) private {
+    ) private view {
         // Verify amounts
         SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
             inputsOutputs.collateral,
@@ -1274,7 +1274,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPre,
         SirStructs.Reserves memory reservesPost,
         Balances memory balances
-    ) private {
+    ) private view {
         // Compute amount of collateral
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply)
@@ -1360,7 +1360,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPre,
         SirStructs.Reserves memory reservesPost,
         Balances memory balances
-    ) private {
+    ) private view {
         // Verify amounts
         SirStructs.Fees memory fees = Fees.hiddenFeeTEA(inputsOutputs.collateral, systemParams.lpFee, systemParams.tax);
 
@@ -1439,7 +1439,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPre,
         SirStructs.Reserves memory reservesPost,
         Balances memory balances
-    ) private {
+    ) private view {
         // Compute amount of collateral
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
@@ -2318,7 +2318,7 @@ contract VaultHandler is Test, RegimeEnum {
         return vaultId;
     }
 
-    function _checkRegime() private {
+    function _checkRegime() private view {
         if (regime == Regime.Any) return;
 
         if (
@@ -2344,7 +2344,7 @@ contract VaultHandler is Test, RegimeEnum {
         }
     }
 
-    function _invariantTotalCollateral() private {
+    function _invariantTotalCollateral() private view {
         SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
         assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
@@ -2357,7 +2357,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantPowerZone() private {
+    function _invariantPowerZone() private view {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical leveraged gain
@@ -2400,7 +2400,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantSaturationZone() private {
+    function _invariantSaturationZone() private view {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical margin gain
@@ -2480,7 +2480,7 @@ contract VaultInvariantTest is Test, RegimeEnum {
 
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
-    function invariant_totalCollateral() public {
+    function invariant_totalCollateral() public view {
         SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
         assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
     }
@@ -2535,7 +2535,7 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
 
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public {
+    function invariant_dummy() public view {
         SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
         assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
@@ -2591,7 +2591,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public {
+    function invariant_dummy() public view {
         SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
         assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 

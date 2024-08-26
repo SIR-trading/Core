@@ -105,7 +105,7 @@ contract TEATest is Test, TEATestConstants {
         return id == 0 ? address(tea) : vm.addr(id);
     }
 
-    function test_initialConditions() public {
+    function test_initialConditions() public view {
         assertEq(tea.totalSupply(VAULT_ID), 0);
         assertEq(tea.balanceOf(alice, VAULT_ID), 0);
         assertEq(tea.balanceOf(bob, VAULT_ID), 0);
@@ -726,7 +726,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function _verifyMintAmounts(
         TestMintParams memory testMintParams,
         uint256 collateralTotalSupply0
-    ) private returns (SirStructs.Fees memory fees, uint256 senderAmount) {
+    ) private view returns (SirStructs.Fees memory fees, uint256 senderAmount) {
         fees = Fees.hiddenFeeTEA(
             testMintParams.collateralDeposited,
             _systemParams.lpFee,
@@ -797,7 +797,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
     function _verifyBurnAmounts(
         TestBurnParams memory testBurnParams,
         uint256 totalSupply0
-    ) private returns (SirStructs.Fees memory fees) {
+    ) private view returns (SirStructs.Fees memory fees) {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
         );
@@ -828,7 +828,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         SirStructs.Reserves memory reserves,
         TestMintParams memory testMintParams,
         uint144 collateralFeeToStakers
-    ) private {
+    ) private pure {
         assertEq(
             reserves.reserveLPers,
             testMintParams.reserveLPers + testMintParams.collateralDeposited - collateralFeeToStakers,

@@ -15,7 +15,7 @@ contract TickMathPrecisionTest is Test {
         LOG_2_10001 = ABDKMathQuad.fromUInt(10001).div(ABDKMathQuad.fromUInt(10000)).log_2();
     }
 
-    function testFuzz_getRatioAtTick(uint64 tickX42Uint) public {
+    function testFuzz_getRatioAtTick(uint64 tickX42Uint) public view {
         int64 tickX42 = int64(int256(_bound(tickX42Uint, 0, uint64(SystemConstants.MAX_TICK_X42))));
 
         uint128 ratioX64 = TickMathPrecision.getRatioAtTick(tickX42);
@@ -36,7 +36,7 @@ contract TickMathPrecisionTest is Test {
         assertLe(ratioX64, ratioX64Bis + 2);
     }
 
-    function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public {
+    function testFuzz_getRatioAtTickOneBitActive(uint8 tickX42ActiveBit) public view {
         tickX42ActiveBit = uint8(_bound(tickX42ActiveBit, 0, 60)); // Because 2^60 < SystemConstants.MAX_TICK_X42 and 2^61 > SystemConstants.MAX_TICK_X42
         int64 tickX42 = int64(int256(1 << tickX42ActiveBit));
 
@@ -65,7 +65,7 @@ contract TickMathPrecisionTest is Test {
         TickMathPrecision.getRatioAtTick(tickX42);
     }
 
-    function testFuzz_getTickAtRatio(uint256 num, uint256 den) public {
+    function testFuzz_getTickAtRatio(uint256 num, uint256 den) public view {
         // console.log("num: %d, den: %d", num, den);
         vm.assume(den > 0);
         num = _bound(num, den, type(uint256).max);
@@ -137,7 +137,7 @@ contract TickMathPrecisionTest is Test {
         TickMathPrecision.getTickAtRatio(num, den);
     }
 
-    function testFuzz_getRatioAtTickAndInverse(int64 tickX42) public {
+    function testFuzz_getRatioAtTickAndInverse(int64 tickX42) public pure {
         tickX42 = int64(_bound(tickX42, 0, int64(SystemConstants.MAX_TICK_X42)));
 
         uint128 ratioX64 = TickMathPrecision.getRatioAtTick(tickX42);

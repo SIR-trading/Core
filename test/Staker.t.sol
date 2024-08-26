@@ -116,10 +116,6 @@ contract Auxiliary is Test {
 
     /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
     function _dealWETH(address to, uint256 amount) internal {
-        // vm.deal(address(1), amount);
-        // console.log("ETH dealt: ", amount, ", balance of 1: ", address(1).balance);
-        // console.log("WETH balance is", WETH.balanceOf(address(this)));
-        // vm.startPrank(address(1));
         hoax(vm.addr(1), amount);
         WETH.deposit{value: amount}();
         console.log("ETH deposited");
@@ -149,16 +145,13 @@ contract Auxiliary is Test {
 }
 
 // This contract atomically combines a deposit of WETH and a bid for an auction
-contract DepositAndBid is Test {
+contract WrapTransferWETH {
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
-    constructor(Staker staker, address token, address depositer, uint96 amount) {
-        vm.deal(vm.addr(2), amount);
-        vm.prank(vm.addr(2));
+    // Etch this cointract to the sender
+    function andBid(Staker staker, address token, uint96 amount) external {
         WETH.deposit{value: amount}();
-        vm.prank(vm.addr(2));
         WETH.transfer(address(staker), amount);
-        vm.prank(depositer);
         staker.bid(token);
     }
 }
@@ -1019,7 +1012,9 @@ contract StakerTest is Auxiliary {
         } else {
             vm.expectRevert(BidTooLow.selector);
         }
-        new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder1.id), bidder1.amount);
+        vm.etch(_idToAddress(bidder1.id), type(WrapTransferWETH).runtimeCode);
+        vm.deal(_idToAddress(bidder1.id), bidder1.amount);
+        WrapTransferWETH(_idToAddress(bidder1.id)).andBid(staker, Addresses.ADDR_BNB, bidder1.amount);
 
         // Assert auction parameters
         if (bidder1.amount > 0) _assertAuction(bidder1, start);
@@ -1051,31 +1046,31 @@ contract StakerTest is Auxiliary {
             // Bidder2 fails to outbid bidder1
             vm.expectRevert(BidTooLow.selector);
         }
-        new DepositAndBid(staker, Addresses.ADDR_BNB, _idToAddress(bidder2.id), bidder2.amount);
+        vm.etch(_idToAddress(bidder2.id), type(WrapTransferWETH).runtimeCode);
+        vm.deal(_idToAddress(bidder2.id), bidder2.amount);
+        WrapTransferWETH(_idToAddress(bidder2.id)).andBid(staker, Addresses.ADDR_BNB, bidder2.amount);
 
-        // // Assert auction parameters
-        // if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
-        //     if (bidder2.amount > 0) {
-        //         _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);
-        //     } else {
-        //         if (bidder1.amount > 0) _assertAuction(bidder1, start);
-        //         else _assertAuction(Bidder(0, 0), start);
-        //     }
-        // } else if (bidder2.amount > bidder1.amount) {
-        //     _assertAuction(bidder2, start);
-        // } else {
-        //     if (bidder1.amount > 0) _assertAuction(bidder1, start);
-        //     else _assertAuction(Bidder(0, 0), start);
-        // }
+        // Assert auction parameters
+        if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
+            if (bidder2.amount > 0) {
+                _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);
+            } else {
+                if (bidder1.amount > 0) _assertAuction(bidder1, start);
+                else _assertAuction(Bidder(0, 0), start);
+            }
+        } else if (bidder2.amount > bidder1.amount) {
+            _assertAuction(bidder2, start);
+        } else {
+            if (bidder1.amount > 0) _assertAuction(bidder1, start);
+            else _assertAuction(Bidder(0, 0), start);
+        }
 
-        // // Bidder 3 tries to bid after auction is over. It doesn't revert its transfer so it becomes a donation.
-        // skip(1);
-        // // console.log("bidder3 amount is", bidder3.amount);
-        // _dealWETH(address(staker), bidder3.amount);
-        // // console.log("WETH sent");
-        // vm.prank(_idToAddress(bidder3.id));
-        // vm.expectRevert(NoAuction.selector);
-        // staker.bid(Addresses.ADDR_BNB);
+        // Bidder 3 tries to bid after auction is over. It doesn't revert its transfer so it becomes a donation.
+        skip(1);
+        _dealWETH(address(staker), bidder3.amount);
+        vm.prank(_idToAddress(bidder3.id));
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_BNB);
     }
 
     function testFuzz_payAuctionWinnerBNB(
@@ -1187,10 +1182,10 @@ contract StakerHandler is Auxiliary {
         // SIR cannot exceed type(uint80).max
         uint80 balanceOfUser = uint80(staker.balanceOf(user));
         amount = uint80(_bound(amount, 0, type(uint80).max - staker.totalSupply() + balanceOfUser));
-        vm.writeLine(
-            "./InvariantStaker.log",
-            string.concat("User ", vm.toString(user), " stakes ", vm.toString(amount), " SIR")
-        );
+        // vm.writeLine(
+        //     "./InvariantStaker.log",
+        //     string.concat("User ", vm.toString(user), " stakes ", vm.toString(amount), " SIR")
+        // );
 
         // Mint SIR
         if (amount > balanceOfUser) _mint(user, amount - balanceOfUser);
@@ -1206,10 +1201,10 @@ contract StakerHandler is Auxiliary {
         // Cannot unstake more than what is staked
         uint256 stakeBalanceOfUser = staker.totalBalanceOf(user) - staker.balanceOf(user);
         amount = uint80(_bound(amount, 0, stakeBalanceOfUser));
-        vm.writeLine(
-            "./InvariantStaker.log",
-            string.concat("User ", vm.toString(user), " UNstakes ", vm.toString(amount), " SIR")
-        );
+        // vm.writeLine(
+        //     "./InvariantStaker.log",
+        //     string.concat("User ", vm.toString(user), " UNstakes ", vm.toString(amount), " SIR")
+        // );
 
         // Unstake SIR
         vm.prank(user);
@@ -1223,10 +1218,10 @@ contract StakerHandler is Auxiliary {
         vm.prank(user);
         uint96 dividends = staker.claim();
 
-        vm.writeLine(
-            "./InvariantStaker.log",
-            string.concat("User ", vm.toString(user), " claims ", vm.toString(dividends), " ETH")
-        );
+        // vm.writeLine(
+        //     "./InvariantStaker.log",
+        //     string.concat("User ", vm.toString(user), " claims ", vm.toString(dividends), " ETH")
+        // );
     }
 
     function bid(
@@ -1240,19 +1235,21 @@ contract StakerHandler is Auxiliary {
 
         // Bid
         amount = uint96(_bound(amount, 0, ETH_SUPPLY));
-        vm.writeLine(
-            "./InvariantStaker.log",
-            string.concat(
-                "User ",
-                vm.toString(user),
-                " bids ",
-                vm.toString(collateral),
-                " collateral with ",
-                vm.toString(amount),
-                " ETH"
-            )
-        );
-        new DepositAndBid(staker, collateral, user, amount);
+        // vm.writeLine(
+        //     "./InvariantStaker.log",
+        //     string.concat(
+        //         "User ",
+        //         vm.toString(user),
+        //         " bids ",
+        //         vm.toString(collateral),
+        //         " collateral with ",
+        //         vm.toString(amount),
+        //         " ETH"
+        //     )
+        // );
+        vm.etch(user, type(WrapTransferWETH).runtimeCode);
+        vm.deal(user, amount);
+        WrapTransferWETH(user).andBid(staker, collateral, amount);
     }
 
     function collectFeesAndStartAuction(
@@ -1261,10 +1258,10 @@ contract StakerHandler is Auxiliary {
         bool collateralSelect
     ) external advanceTime(timeSkip) {
         address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
-        vm.writeLine(
-            "./InvariantStaker.log",
-            string.concat("Collects fees for ", vm.toString(collateral), " and starts auction")
-        );
+        // vm.writeLine(
+        //     "./InvariantStaker.log",
+        //     string.concat("Collects fees for ", vm.toString(collateral), " and starts auction")
+        // );
 
         // Set fees in vault
         _setFees(collateral, tokenFees);
@@ -1285,16 +1282,16 @@ contract StakerHandler is Auxiliary {
         // Set donations in vault
         _setDonations(donations);
 
-        vm.writeLine(
-            "./InvariantStaker.log",
-            string.concat(
-                "Donations: ",
-                vm.toString(donations.donationsETH),
-                " ETH and ",
-                vm.toString(donations.donationsWETH),
-                " WETH"
-            )
-        );
+        // vm.writeLine(
+        //     "./InvariantStaker.log",
+        //     string.concat(
+        //         "Donations: ",
+        //         vm.toString(donations.donationsETH),
+        //         " ETH and ",
+        //         vm.toString(donations.donationsWETH),
+        //         " WETH"
+        //     )
+        // );
     }
 }
 

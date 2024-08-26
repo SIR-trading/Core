@@ -86,7 +86,7 @@ contract ContributorsTest is Test {
         }
     }
 
-    function test_getAllocation() public {
+    function test_getAllocation() public view {
         uint256 aggContributions = 0;
 
         for (uint256 i = 0; i < contributorsFR.length; i++) {

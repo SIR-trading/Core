@@ -8,7 +8,12 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import "forge-std/Test.sol";
 
 contract FeesTest is Test {
-    function testFuzz_FeeAPE(uint144 collateralDepositedOrOut, uint16 baseFee, int8 leverageTier, uint8 tax) public {
+    function testFuzz_FeeAPE(
+        uint144 collateralDepositedOrOut,
+        uint16 baseFee,
+        int8 leverageTier,
+        uint8 tax
+    ) public pure {
         // Constraint leverageTier to supported values
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
@@ -56,7 +61,7 @@ contract FeesTest is Test {
         assertEq(fees.collateralFeeToProtocol, totalFee / 10, "LPers fee incorrect");
     }
 
-    function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public {
+    function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public pure {
         SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralDepositedOrOut, lpFee, tax);
 
         uint256 totalFee = uint256(fees.collateralFeeToStakers) +

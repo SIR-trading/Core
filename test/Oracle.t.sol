@@ -27,7 +27,7 @@ contract OracleNewFeeTiersTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
     }
 
-    function test_GetUniswapFeeTiers() public {
+    function test_GetUniswapFeeTiers() public view {
         SirStructs.UniswapFeeTier[] memory uniswapFeeTiers = _oracle.getUniswapFeeTiers();
 
         IUniswapV3Factory uniswapFactory = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY);

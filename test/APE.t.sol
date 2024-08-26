@@ -83,7 +83,7 @@ contract APETest is Test {
         return vm.addr(id);
     }
 
-    function test_initialConditions() public {
+    function test_initialConditions() public view {
         assertEq(ape.totalSupply(), 0);
         assertEq(ape.balanceOf(alice), 0);
         assertEq(ape.balanceOf(bob), 0);
@@ -653,7 +653,7 @@ contract APEInvariantTest is Test {
         targetSelector(FuzzSelector({addr: address(apeHandler), selectors: selectors}));
     }
 
-    function invariant_collateralCheck() public {
+    function invariant_collateralCheck() public view {
         uint256 totalCollateralDeposited = apeHandler.totalCollateralDeposited();
         (uint144 reserveApes, uint144 reserveLPers, ) = apeHandler.reserves(0);
         uint256 totalCollateral = apeHandler.totalCollateralFeeToStakers() + reserveApes + reserveLPers;
@@ -663,14 +663,14 @@ contract APEInvariantTest is Test {
         assertEq(totalCollateralDeposited, totalCollateral);
     }
 
-    function invariant_treasuryAlwaysIncreases() public {
+    function invariant_treasuryAlwaysIncreases() public view {
         uint256 totalCollateralFeeToStakers = apeHandler.totalCollateralFeeToStakers();
         uint256 totalCollateralFeeToStakersPrev = apeHandler.totalCollateralFeeToStakersPrev();
 
         assertGe(totalCollateralFeeToStakers, totalCollateralFeeToStakersPrev);
     }
 
-    function invariant_ratioReservesAreProportionalToSupply() public {
+    function invariant_ratioReservesAreProportionalToSupply() public view {
         bool changeReserves = apeHandler.changeReserves(0);
         if (changeReserves) {
             uint256 totalSupplyOld = apeHandler.totalSupplyOld(0);
