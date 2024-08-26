@@ -6,6 +6,8 @@ import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 
+import "forge-std/console.sol";
+
 /** @notice Solmate mod
     @dev SIR supply is designed to fit in a 80-bit unsigned integer.
     @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
