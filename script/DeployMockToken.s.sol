@@ -9,15 +9,21 @@ import {MockERC20} from "src/test/MockERC20.sol";
 contract DeployMockToken is Script {
     uint256 privateKey;
 
-    string name = "MockToken";
-    string symbol = "METH";
-    uint8 decimals = 18;
+    string name;
+    string symbol;
+    uint8 decimals;
 
     function setUp() public {
         privateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+
+        name = vm.envString("NAME");
+        symbol = vm.envString("SYMBOL");
+        decimals = uint8(vm.envUint("DECIMALS"));
     }
 
-    /** cli: forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast --env-var NAME=MockToken --env-var SYMBOL=MCK --env-var DECIMALS=18
+    /** cli:
+            export NAME="MockToken" SYMBOL="METH" DECIMALS="18" \
+            forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast
      */
     function run() public {
         vm.startBroadcast(privateKey);
