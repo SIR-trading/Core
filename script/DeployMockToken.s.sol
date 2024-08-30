@@ -22,8 +22,7 @@ contract DeployMockToken is Script {
     }
 
     /** cli:
-            export NAME="MockToken" SYMBOL="METH" DECIMALS="18" \
-            forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast
+            export NAME="MockToken" SYMBOL="METH" DECIMALS="18" && forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast
      */
     function run() public {
         vm.startBroadcast(privateKey);

@@ -12,9 +12,21 @@ import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
 contract DeployCore is Script {
-    function setUp() public {}
+    string network;
+    uint256 deployerPrivateKey;
 
-    /** cli: forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy
+    function setUp() public {
+        if (block.chainid == 1) {
+            deployerPrivateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+        } else if (block.chainid == 11155111) {
+            deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        } else {
+            revert("Network not supported");
+        }
+    }
+
+    /** cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy
+        cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol
         3. Deploy SIR.sol
@@ -23,7 +35,6 @@ contract DeployCore is Script {
         6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
     */
     function run() public {
-        uint256 deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy oracle
