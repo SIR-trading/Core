@@ -52,6 +52,14 @@ contract SIR is Staker {
         }
     }
 
+    function ISSUANCE_RATE() external pure returns (uint72) {
+        return SystemConstants.ISSUANCE;
+    }
+
+    function LP_ISSUANCE_FIRST_3_YEARS() external pure returns (uint72) {
+        return SystemConstants.LP_ISSUANCE_FIRST_3_YEARS;
+    }
+
     /*////////////////////////////////////////////////////////////////
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/

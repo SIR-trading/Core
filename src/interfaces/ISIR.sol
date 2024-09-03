@@ -26,6 +26,10 @@ interface ISIR {
 
     function DOMAIN_SEPARATOR() external view returns (bytes32);
 
+    function ISSUANCE_RATE() external pure returns (uint72);
+
+    function LP_ISSUANCE_FIRST_3_YEARS() external pure returns (uint72);
+
     function allowance(address, address) external view returns (uint256);
 
     function approve(address spender, uint256 amount) external returns (bool);

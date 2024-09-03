@@ -17,7 +17,7 @@ contract DeployCore is Script {
 
     function setUp() public {
         if (block.chainid == 1) {
-            deployerPrivateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+            deployerPrivateKey = vm.envUint("TARP_TESTNET_DEPLOYER_PRIVATE_KEY");
         } else if (block.chainid == 11155111) {
             deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
         } else {

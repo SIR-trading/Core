@@ -1216,7 +1216,7 @@ contract StakerHandler is Auxiliary {
 
         // Claim dividends
         vm.prank(user);
-        uint96 dividends = staker.claim();
+        staker.claim();
 
         // vm.writeLine(
         //     "./InvariantStaker.log",
