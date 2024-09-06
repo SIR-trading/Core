@@ -26,8 +26,14 @@ contract DeployMockToken is Script {
      */
     function run() public {
         vm.startBroadcast(privateKey);
-        address token = address(new MockERC20("MockToken", "MCK", 18));
+
+        // Deploy the token
+        address token = address(new MockERC20(name, symbol, decimals));
         console.log(string.concat(name, " (", symbol, ") deployed at ", vm.toString(token)));
+
+        // Mint 1M tokens to the deployer
+        MockERC20(token).mint(1e6 * 10 ** decimals);
+
         vm.stopBroadcast();
     }
 }
