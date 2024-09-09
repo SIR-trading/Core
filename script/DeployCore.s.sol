@@ -11,6 +11,16 @@ import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
+/** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy
+    @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast
+    @dev Steps:
+        1. Deploy Oracle.sol
+        2. Deploy SystemControl.sol
+        3. Deploy SIR.sol
+        4. Deploy Vault.sol (and VaultExternal.sol) with addresses of SystemControl.sol, SIR.sol, and Oracle.sol
+        5. Initialize SIR.sol with address of Vault.sol
+        6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
+*/
 contract DeployCore is Script {
     string network;
     uint256 deployerPrivateKey;
@@ -25,15 +35,6 @@ contract DeployCore is Script {
         }
     }
 
-    /** cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy
-        cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast
-        1. Deploy Oracle.sol
-        2. Deploy SystemControl.sol
-        3. Deploy SIR.sol
-        4. Deploy Vault.sol (and VaultExternal.sol) with addresses of SystemControl.sol, SIR.sol, and Oracle.sol
-        5. Initialize SIR.sol with address of Vault.sol
-        6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
-    */
     function run() public {
         vm.startBroadcast(deployerPrivateKey);
 
