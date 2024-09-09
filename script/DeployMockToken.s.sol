@@ -6,6 +6,9 @@ import {Vm} from "forge-std/Vm.sol";
 
 import {MockERC20} from "src/test/MockERC20.sol";
 
+/** @notice cli:
+    export NAME="MockToken" SYMBOL="METH" DECIMALS="18" && forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast
+*/
 contract DeployMockToken is Script {
     uint256 privateKey;
 
@@ -21,9 +24,6 @@ contract DeployMockToken is Script {
         decimals = uint8(vm.envUint("DECIMALS"));
     }
 
-    /** cli:
-            export NAME="MockToken" SYMBOL="METH" DECIMALS="18" && forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast
-     */
     function run() public {
         vm.startBroadcast(privateKey);
 
