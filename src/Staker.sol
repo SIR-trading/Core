@@ -336,36 +336,35 @@ contract Staker {
                         DIVIDEND PAYING FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function bid(address token) external {
+    function bid(address token, uint96 amount) external {
         unchecked {
             SirStructs.Auction memory auction = _auctions[token];
 
             // Unchecked because time stamps cannot overflow
             if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
 
-            // Get the current bid
-            uint96 totalWinningBids_ = totalWinningBids;
-            uint96 newBid = uint96(_WETH.balanceOf(address(this)) - totalWinningBids_);
+            // Transfer the bid to the contract
+            _WETH.transferFrom(msg.sender, address(this), amount);
 
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
-                totalWinningBids = totalWinningBids_ + newBid;
-                newBid += auction.bid;
+                totalWinningBids += amount;
+                amount += auction.bid;
             } else {
                 // Return the previous bid to the previous bidder
-                totalWinningBids = totalWinningBids_ + newBid - auction.bid;
+                totalWinningBids += amount - auction.bid;
                 _WETH.transfer(auction.bidder, auction.bid);
             }
 
             /** If the bidder is not the current winner, we check if the bid is higher.
                 Null bids are no possible because auction.bid >=0 always.
              */
-            if (newBid <= auction.bid) revert BidTooLow();
+            if (amount <= auction.bid) revert BidTooLow();
 
             // Update bidder & bid
-            _auctions[token] = SirStructs.Auction({bidder: msg.sender, bid: newBid, startTime: auction.startTime});
+            _auctions[token] = SirStructs.Auction({bidder: msg.sender, bid: amount, startTime: auction.startTime});
 
-            emit BidReceived(msg.sender, token, auction.bid, newBid);
+            emit BidReceived(msg.sender, token, auction.bid, amount);
         }
     }
 

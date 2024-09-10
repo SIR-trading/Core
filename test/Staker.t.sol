@@ -37,7 +37,7 @@ contract Auxiliary is Test {
 
     uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
 
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 internal constant WETH = IWETH9(Addresses.ADDR_WETH);
 
     Staker public staker;
     address public vault;
@@ -116,23 +116,22 @@ contract Auxiliary is Test {
 
     /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
     function _dealWETH(address to, uint256 amount) internal {
-        hoax(vm.addr(1), amount);
+        hoax(address(1), amount);
         WETH.deposit{value: amount}();
-        console.log("ETH deposited");
-        vm.prank(vm.addr(1));
+        vm.prank(address(1));
         WETH.transfer(address(to), amount);
     }
 
     function _dealETH(address to, uint256 amount) internal {
-        vm.deal(vm.addr(2), amount);
-        vm.prank(vm.addr(2));
+        vm.deal(address(1), amount);
+        vm.prank(address(1));
         payable(address(to)).transfer(amount);
     }
 
     function _dealToken(address token, address to, uint256 amount) internal {
         if (amount == 0) return;
-        deal(token, vm.addr(2), amount);
-        vm.prank(vm.addr(2));
+        deal(token, address(1), amount);
+        vm.prank(address(1));
         TransferHelper.safeTransfer(token, to, amount);
     }
 
@@ -141,18 +140,6 @@ contract Auxiliary is Test {
         assertEq(auction.bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
         assertEq(auction.bid, bidder_.amount, "Wrong bid");
         assertEq(auction.startTime, timeStamp, "Wrong start time");
-    }
-}
-
-// This contract atomically combines a deposit of WETH and a bid for an auction
-contract WrapTransferWETH {
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
-
-    // Etch this cointract to the sender
-    function andBid(Staker staker, address token, uint96 amount) external {
-        WETH.deposit{value: amount}();
-        WETH.transfer(address(staker), amount);
-        staker.bid(token);
     }
 }
 
@@ -908,7 +895,8 @@ contract StakerTest is Auxiliary {
         User memory user,
         uint80 totalSupplyAmount,
         TokenFees memory tokenFees,
-        Donations memory donations
+        Donations memory donations,
+        uint96 amount
     ) public {
         // User stakes
         testFuzz_stake(user, totalSupplyAmount);
@@ -926,16 +914,18 @@ contract StakerTest is Auxiliary {
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
         // No auction
+        WETH.approve(address(staker), amount);
         vm.expectRevert(NoAuction.selector);
-        staker.bid(Addresses.ADDR_WETH);
+        staker.bid(Addresses.ADDR_WETH, amount);
 
         SirStructs.Auction memory auction = staker.auctions(Addresses.ADDR_WETH);
         assertEq(auction.bidder, address(0), "Bidder should be 0");
         assertEq(auction.bid, 0, "Bid should be 0");
         assertEq(auction.startTime, 0, "Start time should be 0");
 
+        WETH.approve(address(staker), amount);
         vm.expectRevert(NoAuction.selector);
-        staker.bid(Addresses.ADDR_WETH);
+        staker.bid(Addresses.ADDR_WETH, amount);
     }
 
     function testFuzz_startAuctionOfBNBNoFees(
@@ -1005,6 +995,9 @@ contract StakerTest is Auxiliary {
         bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
 
         // Bidder 1
+        _dealWETH(_idToAddress(bidder1.id), bidder1.amount);
+        vm.prank(_idToAddress(bidder1.id));
+        WETH.approve(address(staker), bidder1.amount);
         if (bidder1.amount > 0) {
             console.log("bidder1 amount is", bidder1.amount);
             vm.expectEmit();
@@ -1012,9 +1005,8 @@ contract StakerTest is Auxiliary {
         } else {
             vm.expectRevert(BidTooLow.selector);
         }
-        vm.etch(_idToAddress(bidder1.id), type(WrapTransferWETH).runtimeCode);
-        vm.deal(_idToAddress(bidder1.id), bidder1.amount);
-        WrapTransferWETH(_idToAddress(bidder1.id)).andBid(staker, Addresses.ADDR_BNB, bidder1.amount);
+        vm.prank(_idToAddress(bidder1.id));
+        staker.bid(Addresses.ADDR_BNB, bidder1.amount);
 
         // Assert auction parameters
         if (bidder1.amount > 0) _assertAuction(bidder1, start);
@@ -1022,6 +1014,9 @@ contract StakerTest is Auxiliary {
 
         // Bidder 2
         skip(SystemConstants.AUCTION_DURATION - 1);
+        _dealWETH(_idToAddress(bidder2.id), bidder2.amount);
+        vm.prank(_idToAddress(bidder2.id));
+        WETH.approve(address(staker), bidder2.amount);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 // Bidder increases its own bid
@@ -1046,9 +1041,8 @@ contract StakerTest is Auxiliary {
             // Bidder2 fails to outbid bidder1
             vm.expectRevert(BidTooLow.selector);
         }
-        vm.etch(_idToAddress(bidder2.id), type(WrapTransferWETH).runtimeCode);
-        vm.deal(_idToAddress(bidder2.id), bidder2.amount);
-        WrapTransferWETH(_idToAddress(bidder2.id)).andBid(staker, Addresses.ADDR_BNB, bidder2.amount);
+        vm.prank(_idToAddress(bidder2.id));
+        staker.bid(Addresses.ADDR_BNB, bidder2.amount);
 
         // Assert auction parameters
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
@@ -1069,8 +1063,10 @@ contract StakerTest is Auxiliary {
         skip(1);
         _dealWETH(address(staker), bidder3.amount);
         vm.prank(_idToAddress(bidder3.id));
+        WETH.approve(address(staker), bidder3.amount);
+        vm.prank(_idToAddress(bidder3.id));
         vm.expectRevert(NoAuction.selector);
-        staker.bid(Addresses.ADDR_BNB);
+        staker.bid(Addresses.ADDR_BNB, bidder3.amount);
     }
 
     function testFuzz_payAuctionWinnerBNB(
@@ -1119,9 +1115,10 @@ contract StakerTest is Auxiliary {
         User memory user,
         uint80 totalSupplyAmount,
         TokenFees memory tokenFees,
-        Donations memory donations
+        Donations memory donations,
+        uint96 amount
     ) public {
-        testFuzz_auctionOfWETHFails(user, totalSupplyAmount, tokenFees, donations);
+        testFuzz_auctionOfWETHFails(user, totalSupplyAmount, tokenFees, donations, amount);
 
         skip(SystemConstants.AUCTION_DURATION + 1);
 
@@ -1247,9 +1244,11 @@ contract StakerHandler is Auxiliary {
         //         " ETH"
         //     )
         // );
-        vm.etch(user, type(WrapTransferWETH).runtimeCode);
-        vm.deal(user, amount);
-        WrapTransferWETH(user).andBid(staker, collateral, amount);
+        _dealWETH(user, amount);
+        vm.prank(user);
+        WETH.approve(address(staker), amount);
+        vm.prank(user);
+        staker.bid(collateral, amount);
     }
 
     function collectFeesAndStartAuction(
