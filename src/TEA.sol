@@ -17,7 +17,7 @@ import {SystemState} from "./SystemState.sol";
 
 /** @notice Modified from Solmate
  */
-contract TEA is SystemState, ERC1155TokenReceiver {
+contract TEA is SystemState {
     error TEAMaxSupplyExceeded();
     error NotAuthorized();
     error LengthMismatch();
@@ -152,7 +152,8 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         if (
             to.code.length == 0
                 ? to == address(0)
-                : ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) !=
+                : to != address(this) &&
+                    ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) !=
                     ERC1155TokenReceiver.onERC1155Received.selector
         ) revert UnsafeRecipient();
     }
@@ -205,7 +206,8 @@ contract TEA is SystemState, ERC1155TokenReceiver {
         if (
             to.code.length == 0
                 ? to == address(0)
-                : ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) !=
+                : to != address(this) &&
+                    ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) !=
                     ERC1155TokenReceiver.onERC1155BatchReceived.selector
         ) revert UnsafeRecipient();
     }
