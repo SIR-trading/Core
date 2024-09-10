@@ -38,7 +38,7 @@ interface ISIR {
 
     function balanceOf(address account) external view returns (uint256);
 
-    function bid(address token) external;
+    function bid(address token, uint96 amount) external;
 
     function claim() external returns (uint96 dividends_);
 

@@ -24,6 +24,7 @@ interface IVault {
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
     );
+    event FeesToStakers(address indexed collateralToken, uint112 totalFeesToStakers);
     event TransferBatch(
         address indexed operator,
         address indexed from,
