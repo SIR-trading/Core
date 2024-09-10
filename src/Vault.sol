@@ -34,6 +34,7 @@ contract Vault is TEA {
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
     );
+    event FeesToStakers(address indexed collateralToken, uint112 totalFeesToStakers);
 
     Oracle private immutable _ORACLE;
 
@@ -352,11 +353,11 @@ contract Vault is TEA {
     function _updateCollateralState(
         bool isMint,
         SirStructs.CollateralState memory collateralState,
-        uint256 collectedFee,
+        uint256 collateralFeeToStakers,
         address collateralToken,
         uint144 collateralDepositedOrWithdrawn
     ) private {
-        uint256 totalFeesToStakers_ = collateralState.totalFeesToStakers + collectedFee;
+        uint256 totalFeesToStakers_ = collateralState.totalFeesToStakers + collateralFeeToStakers;
         require(totalFeesToStakers_ <= type(uint112).max); // Ensure it fits in a uint112
         collateralState = SirStructs.CollateralState({
             totalFeesToStakers: uint112(totalFeesToStakers_),
@@ -366,6 +367,7 @@ contract Vault is TEA {
         });
 
         _collateralStates[collateralToken] = collateralState;
+        emit FeesToStakers(collateralToken, uint112(totalFeesToStakers_));
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -382,6 +384,7 @@ contract Vault is TEA {
                 totalFeesToStakers: 0,
                 total: collateralState.total - totalFeesToStakers
             });
+            emit FeesToStakers(token, 0);
             TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
         }
     }
