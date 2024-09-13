@@ -8,10 +8,8 @@ out/*
 !out/Oracle.sol/
 !out/APE.sol/
 
-# Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
+# Ignores broadcast logs
+broadcast
 
 # Docs
 docs/
