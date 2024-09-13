@@ -165,11 +165,11 @@ contract Oracle {
     error OracleAlreadyInitialized();
     error OracleNotInitialized();
 
-    event UniswapFeeTierAdded(uint24 indexed fee);
+    event UniswapFeeTierAdded(uint24 fee);
     event UniswapOracleProbed(
         address indexed tokenA,
         address indexed tokenB,
-        uint24 indexed fee,
+        uint24 fee,
         int56 aggPriceTick,
         uint160 avLiquidity,
         uint40 period,
@@ -178,17 +178,17 @@ contract Oracle {
     event OracleInitialized(
         address indexed token0,
         address indexed token1,
-        uint24 indexed feeTierSelected,
+        uint24 feeTierSelected,
         uint160 avLiquidity,
         uint40 period
     );
     event OracleFeeTierChanged(
         address indexed token0,
         address indexed token1,
-        uint24 indexed feeTierPrevious,
+        uint24 feeTierPrevious,
         uint24 feeTierSelected
     );
-    event PriceUpdated(address indexed token0, address indexed token1, bool indexed priceTruncated, int64 priceTickX42);
+    event PriceUpdated(address indexed token0, address indexed token1, bool priceTruncated, int64 priceTickX42);
 
     address private immutable _ADDR_UNISWAPV3_FACTORY;
 
