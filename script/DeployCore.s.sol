@@ -22,7 +22,6 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
         6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
 */
 contract DeployCore is Script {
-    string network;
     uint256 deployerPrivateKey;
 
     function setUp() public {

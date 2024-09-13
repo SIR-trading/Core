@@ -7,12 +7,24 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {Vault} from "src/Vault.sol";
 
-/// cli: forge script script/Initialize1Vault.s.sol --rpc-url tarp_testnet --broadcast
+/** @dev cli for local testnet:  forge script script/Initialize1Vault.s.sol --rpc-url tarp_testnet --broadcast
+    @dev cli for Sepolia:        forge script script/Initialize1Vault.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
+*/
 contract Initialize1Vault is Script {
+    uint256 deployerPrivateKey;
+
     Vault vault;
     SirStructs.VaultParameters vaultParams;
 
     function setUp() public {
+        if (block.chainid == 1) {
+            deployerPrivateKey = vm.envUint("TARP_TESTNET_DEPLOYER_PRIVATE_KEY");
+        } else if (block.chainid == 11155111) {
+            deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        } else {
+            revert("Network not supported");
+        }
+
         setVaultParams(
             SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDT,
@@ -28,8 +40,7 @@ contract Initialize1Vault is Script {
     }
 
     function run() public {
-        uint256 privateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
-        vm.startBroadcast(privateKey);
+        vm.startBroadcast(deployerPrivateKey);
 
         // Initialize vault if not already initialized
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
