@@ -166,15 +166,6 @@ contract Oracle {
     error OracleNotInitialized();
 
     event UniswapFeeTierAdded(uint24 fee);
-    event UniswapOracleProbed(
-        address indexed tokenA,
-        address indexed tokenB,
-        uint24 fee,
-        int56 aggPriceTick,
-        uint160 avLiquidity,
-        uint40 period,
-        uint16 cardinalityToIncrease
-    );
     event OracleInitialized(
         address indexed token0,
         address indexed token1,
@@ -182,13 +173,16 @@ contract Oracle {
         uint160 avLiquidity,
         uint40 period
     );
-    event OracleFeeTierChanged(
-        address indexed token0,
-        address indexed token1,
-        uint24 feeTierPrevious,
-        uint24 feeTierSelected
-    );
     event PriceUpdated(address indexed token0, address indexed token1, bool priceTruncated, int64 priceTickX42);
+
+    event UniswapOracleProbed(
+        uint24 fee,
+        int56 aggPriceTick,
+        uint160 avLiquidity,
+        uint40 period,
+        uint16 cardinalityToIncrease
+    );
+    event OracleFeeTierChanged(uint24 feeTierPrevious, uint24 feeTierSelected);
 
     address private immutable _ADDR_UNISWAPV3_FACTORY;
 
@@ -312,8 +306,6 @@ contract Oracle {
             // Retrieve average liquidity
             oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
             emit UniswapOracleProbed(
-                tokenA,
-                tokenB,
                 uniswapFeeTiers[i].fee,
                 oracleData.aggPriceTick,
                 oracleData.avLiquidity,
@@ -413,8 +405,6 @@ contract Oracle {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
             emit UniswapOracleProbed(
-                token0,
-                token1,
                 oracleState.uniswapFeeTier.fee,
                 oracleData.aggPriceTick,
                 oracleData.avLiquidity,
@@ -459,8 +449,6 @@ contract Oracle {
                         uniswapFeeTierProbed.fee
                     );
                     emit UniswapOracleProbed(
-                        token0,
-                        token1,
                         uniswapFeeTierProbed.fee,
                         oracleDataProbed.aggPriceTick,
                         oracleDataProbed.avLiquidity,
@@ -493,12 +481,7 @@ contract Oracle {
                             } else if (oracleDataProbed.period >= TWAP_DURATION) {
                                 // If the probed fee tier is better than the current one AND the cardinality is sufficient, switch to the probed tier
                                 oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
-                                emit OracleFeeTierChanged(
-                                    token0,
-                                    token1,
-                                    oracleState.uniswapFeeTier.fee,
-                                    uniswapFeeTierProbed.fee
-                                );
+                                emit OracleFeeTierChanged(oracleState.uniswapFeeTier.fee, uniswapFeeTierProbed.fee);
                                 oracleState.uniswapFeeTier = uniswapFeeTierProbed;
                             }
                         } else {

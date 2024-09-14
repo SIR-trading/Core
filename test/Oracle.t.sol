@@ -759,8 +759,6 @@ contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     }
 }
 
-// ADD ORACLE TEST THAT CHECKS ON ETH PRICE FROM 9653500 UNTIL 1 DAY AND 6H LATER FOR MAX PRICE VOLATILITY. CHECK IF TRUNCATION IS ACTIVATED.
-
 contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     event IncreaseObservationCardinalityNext(
         uint16 observationCardinalityNextOld,
@@ -785,13 +783,6 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
     }
 
     function test_nextFeeTierNotProbed() public {
-        // // Retrieve/store price
-        // vm.expectEmit(true, true, true, false);
-        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
-        // vm.expectEmit(true, true, true, false);
-        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
-        // _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
-
         // Hugely increase liquidity rest of fee tiers
         _addLiquidity(100, 2 ** 70);
         _addLiquidity(3000, 2 ** 70);
@@ -801,7 +792,7 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Retrieve/store price but do NOT PROBE tier
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        emit UniswapOracleProbed(500, 0, 0, 0, 0);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -811,22 +802,15 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Retrieve/store price but do NOT PROBE tier
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        emit UniswapOracleProbed(500, 0, 0, 0, 0);
 
         // This one should fail because not enough time has elapsed to probe a new tier.
         vm.expectEmit(false, false, false, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 10000, 0, 0, 0, 0);
+        emit UniswapOracleProbed(10000, 0, 0, 0, 0);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
     function test_nextFeeTierProbedAndSwitched() public {
-        // // Retrieve/store price
-        // vm.expectEmit(true, true, true, false);
-        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
-        // vm.expectEmit(true, true, true, false);
-        // emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
-        // _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
-
         // Hugely increase liquidity rest of fee tiers
         _addLiquidity(100, 2 ** 70);
         _addLiquidity(3000, 2 ** 70);
@@ -836,11 +820,11 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Retrieve/store price but do NOT PROBE tier
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        emit UniswapOracleProbed(500, 0, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 3000, 0, 0, 0, 0);
+        emit UniswapOracleProbed(3000, 0, 0, 0, 0);
         vm.expectEmit();
-        emit OracleFeeTierChanged(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 3000);
+        emit OracleFeeTierChanged(500, 3000);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -852,7 +836,7 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         // Probe new tier
         console.log("--------------");
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, newFeeTier, 0, 0, 0, 0);
+        emit UniswapOracleProbed(newFeeTier, 0, 0, 0, 0);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -863,9 +847,9 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Probe new tier
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, newFeeTier, 0, 0, 0, 0);
+        emit UniswapOracleProbed(newFeeTier, 0, 0, 0, 0);
         vm.expectEmit(false, false, false, false);
-        emit OracleFeeTierChanged(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, newFeeTier);
+        emit OracleFeeTierChanged(500, newFeeTier);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -876,9 +860,9 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Probe new tier
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, newFeeTier, 0, 0, 0, 0);
+        emit UniswapOracleProbed(newFeeTier, 0, 0, 0, 0);
         vm.expectEmit();
-        emit OracleFeeTierChanged(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, newFeeTier);
+        emit OracleFeeTierChanged(500, newFeeTier);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -889,9 +873,9 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
 
         // Probe 1st tier (100 bp) again
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 69, 0, 0, 0, 0);
+        emit UniswapOracleProbed(69, 0, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 100, 0, 0, 0, 0);
+        emit UniswapOracleProbed(100, 0, 0, 0, 0);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 
@@ -900,9 +884,9 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         (tokenId, liquidity) = _prepareNewFeeTier();
 
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        emit UniswapOracleProbed(500, 0, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, newFeeTier, 0, 0, 0, 0);
+        emit UniswapOracleProbed(newFeeTier, 0, 0, 0, 0);
         vm.expectEmit();
         emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC); // Probe new fee tier
@@ -915,9 +899,9 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         skip(TWAP_DURATION); // Skip enough time to have a full TWAP
 
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 500, 0, 0, 0, 0);
+        emit UniswapOracleProbed(500, 0, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
-        emit UniswapOracleProbed(Addresses.ADDR_USDC, Addresses.ADDR_WETH, newFeeTier, 0, 0, 0, 0);
+        emit UniswapOracleProbed(newFeeTier, 0, 0, 0, 0);
         vm.expectEmit(false, false, false, false);
         emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
