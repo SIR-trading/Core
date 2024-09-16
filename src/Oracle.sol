@@ -102,18 +102,18 @@ import {SirStructs} from "./libraries/SirStructs.sol";
  *          Attacker wins = A-A' = A-A/g^(l-1) = A(1-1/g^(l-1))
  *     The cost of this attack are the fees paid when minting/burning TEA. In order to
  *     to operate in the power zone, we know L ≥ (l-1)A. Two cases:
- *          1) Attacker loses = L'*fmaam = (L+A-A')*fmaam ≥ L*fmaam ≥ (l-1)A*fmaam
- *          2) Attacker loses = L*fmaam ≥ (l-1)A*fmaam
+ *          1) Attacker loses = L'*f_lp = (L+A-A')*f_lp ≥ L*f_lp ≥ (l-1)A*f_lp
+ *          2) Attacker loses = L*f_lp ≥ (l-1)A*f_lp
  *     To ensure the attacker is not profitable, we must enforce:
- *          (l-1)A*fmaam ≥ A(1-1/g^(l-1))
+ *          (l-1)A*f_lp ≥ A(1-1/g^(l-1))
  *     We know by Taylor series that 1/g^(l-1) ≥ 1+(l-1)(1/g-1) around g≈1, and so a tighter condition is
- *          (l-1)A*fmaam ≥ A(l-1)(1-1/g)
+ *          (l-1)A*f_lp ≥ A(l-1)(1-1/g)
  *     Which results in the following equivalent conditions:
- *          fmaam ≥ 1-1/g      OR      g ≤ 1/(1-fmaam)      G ≤ -log_1.0001(1-fmaam)
+ *          f_lp ≥ 1-1/g      OR      g ≤ 1/(1-f_lp)      G ≤ -log_1.0001(1-f_lp)
  *
  *     For example,
- *          fmaam=0.01 (1% charged upon burning TEA) |=> G ≤ 100.5 tick/min
- *          fmaam=0.001 (0.1%) |=> G ≤ 10.0 tick/min
+ *          f_lp=0.01 (1% charged upon burning TEA) |=> G ≤ 100.5 tick/min
+ *          f_lp=0.001 (0.1%) |=> G ≤ 10.0 tick/min
  *
  *     Saturation Zone
  *     ───────────────
@@ -122,10 +122,10 @@ import {SirStructs} from "./libraries/SirStructs.sol";
  *     The attacker deposits a total of L to mint TEA and manipulates the price down so that apes lose
  *          Attacker wins = L'-L = L(g-1)
  *     The attacker pays some fees proportional to L' to withdraw his collateral:
- *          1) Attacker loses = L'*fmaam = g*L*fmaam
- *          2) Attacker loses = L*fmaam = L*fmaam
+ *          1) Attacker loses = L'*f_lp = g*L*f_lp
+ *          2) Attacker loses = L*f_lp = L*f_lp
  *     Thus, the condition for an unprofitable attack is
- *          g*L*fmaam ≥ L(g-1)  OR  L*fmaam ≥ L(g-1)
+ *          g*L*f_lp ≥ L(g-1)  OR  L*f_lp ≥ L(g-1)
  *     Which results in the same conditions than the previous section.
  *
  *
