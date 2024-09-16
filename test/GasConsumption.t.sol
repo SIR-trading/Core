@@ -21,15 +21,15 @@ contract VaultGasTest is Test, ERC1155TokenReceiver {
     APE public ape;
 
     /**
-    | Deployment Cost              | Deployment Size |         |         |         |         |
-    | 5328289                      | 24912           |         |         |         |         |
-    | Function Name                | min             | avg     | median  | max     | # calls |
-    | balanceOf                    | 706             | 706     | 706     | 706     | 4       |
-    | burn                         | 103488          | 111318  | 111194  | 119395  | 8       |
-    | initialize                   | 1580204         | 1645270 | 1645335 | 1710208 | 4       |
-    | latestTokenParams            | 3916            | 3916    | 3916    | 3916    | 4       |
-    | mint                         | 123467          | 167635  | 163324  | 228138  | 8       |
-    | updateVaults                 | 85621           | 85621   | 85621   | 85621   | 4       |
+| Deployment Cost              | Deployment Size |         |         |         |         |
+| 5361646                      | 25045           |         |         |         |         |
+| Function Name                | min             | avg     | median  | max     | # calls |
+| balanceOf                    | 706             | 706     | 706     | 706     | 4       |
+| burn                         | 104972          | 112840  | 112717  | 120956  | 8       |
+| initialize                   | 1621541         | 1686583 | 1686647 | 1751497 | 4       |
+| latestTokenParams            | 3958            | 3958    | 3958    | 3958    | 4       |
+| mint                         | 125018          | 168525  | 164432  | 227924  | 8       |
+| updateVaults                 | 85430           | 85430   | 85430   | 85430   | 4       |
      */
 
     // WETH/USDT's Uniswap TWAP has a long cardinality
