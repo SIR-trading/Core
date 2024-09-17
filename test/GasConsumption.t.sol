@@ -12,7 +12,7 @@ import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 
 import "forge-std/Test.sol";
 
-contract VaultGasTest is Test, ERC1155TokenReceiver {
+contract GasConsumption is Test, ERC1155TokenReceiver {
     uint256 public constant TIME_ADVANCE = 1 days;
     uint256 public constant BLOCK_NUMBER_START = 18128102;
 
