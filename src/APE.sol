@@ -5,28 +5,27 @@ pragma solidity >=0.8.0;
 import {Fees} from "./libraries/Fees.sol";
 import {FullMath} from "./libraries/FullMath.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
+import {Clone} from "lib/clones-with-immutable-args/src/Clone.sol";
 
 // Contracts
 import {Vault} from "./Vault.sol";
-import {Owned} from "./Owned.sol";
 
 /**
  * @dev Modified from Solmate's ERC20.sol
  */
-contract APE is Owned {
+contract APE is Clone {
     error PermitDeadlineExpired();
     error InvalidSigner();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
-    address public immutable debtToken;
-    address public immutable collateralToken;
-    int8 public immutable leverageTier;
+    address public debtToken;
+    address public collateralToken;
 
     string public name;
     string public symbol;
-    uint8 public immutable decimals;
+    uint8 public decimals;
 
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
@@ -41,28 +40,34 @@ contract APE is Owned {
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    /** @dev CREATE2 deployment allows Vault.sol to compute the APE address (needed by Vault to make external calls)
-        without storing it in storage, saving gas. However, because Vault.sol is already at the limit of 24KB,
-        we can't import the APE creation code necessary for predicting the CREATE2 address.
-        However, CREATE2 uses the hash of the creation code and its parameters to predict the address.
-        So if we do not pass any parameters we can just hardcode the hash of the APE creation code which
-        only takes 32 bytes.
-     */
+    modifier onlyVault() {
+        address vault = _getArgAddress(1);
+        require(vault == msg.sender);
+        _;
+    }
+
     constructor() {
-        // Set immutable parameters
-        (SirStructs.TokenParameters memory tokenParams, SirStructs.VaultParameters memory vaultParams) = Vault(
-            msg.sender
-        ).latestTokenParams();
-
-        name = tokenParams.name;
-        symbol = tokenParams.symbol;
-        decimals = tokenParams.decimals;
-        debtToken = vaultParams.debtToken;
-        collateralToken = vaultParams.collateralToken;
-        leverageTier = vaultParams.leverageTier;
-
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
+    }
+
+    function initialize(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        address debtToken_,
+        address collateralToken_
+    ) external onlyVault {
+        name = name_;
+        symbol = symbol_;
+        decimals = decimals_;
+
+        debtToken = debtToken_;
+        collateralToken = collateralToken_;
+    }
+
+    function leverageTier() public pure returns (int8) {
+        return int8(_getArgUint8(0));
     }
 
     /*///////////////////////////////////////////////////////////////
@@ -186,14 +191,14 @@ contract APE is Owned {
         uint8 tax,
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    ) external onlyOwner returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
+    ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
         // returns (SirStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
 
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
         // Substract fees
-        fees = Fees.hiddenFeeAPE(collateralDeposited, baseFee, leverageTier, tax);
+        fees = Fees.hiddenFeeAPE(collateralDeposited, baseFee, leverageTier(), tax);
 
         unchecked {
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
@@ -218,7 +223,7 @@ contract APE is Owned {
         uint8 tax,
         SirStructs.Reserves memory reserves,
         uint256 amount
-    ) external onlyOwner returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees) {
+    ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees) {
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
@@ -231,7 +236,7 @@ contract APE is Owned {
             emit Transfer(from, address(0), amount);
 
             // Substract fees
-            fees = Fees.hiddenFeeAPE(collateralOut, baseFee, leverageTier, tax);
+            fees = Fees.hiddenFeeAPE(collateralOut, baseFee, leverageTier(), tax);
 
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
             reserves.reserveLPers += fees.collateralFeeToGentlemen;

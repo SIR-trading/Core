@@ -14,12 +14,6 @@ library SirStructs {
         int8 leverageTier;
     }
 
-    struct TokenParameters {
-        string name;
-        string symbol;
-        uint8 decimals;
-    }
-
     struct SystemParameters {
         /** Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
             For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.

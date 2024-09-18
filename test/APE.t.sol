@@ -10,11 +10,16 @@ import {FullMath} from "src/libraries/FullMath.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 import {Fees} from "src/libraries/Fees.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
+import {ClonesWithImmutableArgs} from "lib/clones-with-immutable-args/src/ClonesWithImmutableArgs.sol";
 
 contract APETest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
+    uint256 constant SLOT_TOTAL_SUPPLY = 5;
+    uint256 constant SLOT_BALANCE_OF = 6;
+
     int8 constant LEVERAGE_TIER = -1;
+    uint48 constant VAULT_ID = 42;
 
     APE ape;
     address alice;
@@ -29,49 +34,51 @@ contract APETest is Test {
 
     /// @dev Auxiliary function for minting APE tokens
     function _mint(address account, uint256 amount) private {
-        uint256 totalSupply = uint256(vm.load(address(ape), bytes32(uint256(2))));
+        uint256 totalSupply = uint256(vm.load(address(ape), bytes32(SLOT_TOTAL_SUPPLY)));
         totalSupply += amount;
-        vm.store(address(ape), bytes32(uint256(2)), bytes32(totalSupply));
+        vm.store(address(ape), bytes32(SLOT_TOTAL_SUPPLY), bytes32(totalSupply));
         assertEq(ape.totalSupply(), totalSupply, "Wrong slot used by vm.store");
 
-        uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(uint256(3))))));
+        uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(SLOT_BALANCE_OF)))));
         balance += amount;
-        vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
+        vm.store(address(ape), keccak256(abi.encode(account, bytes32(SLOT_BALANCE_OF))), bytes32(balance));
         assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
     }
 
-    /// @dev Auxiliary function for burning APE tokens
-    function _burn(address account, uint256 amount) private {
-        uint256 totalSupply = uint256(vm.load(address(ape), bytes32(uint256(2))));
-        totalSupply -= amount;
-        vm.store(address(ape), bytes32(uint256(2)), bytes32(totalSupply));
-        assertEq(ape.totalSupply(), totalSupply, "Wrong slot used by vm.store");
+    // /// @dev Auxiliary function for burning APE tokens
+    // function _burn(address account, uint256 amount) private {
+    //     uint256 totalSupply = uint256(vm.load(address(ape), bytes32(SLOT_TOTAL_SUPPLY)));
+    //     totalSupply -= amount;
+    //     vm.store(address(ape), bytes32(SLOT_TOTAL_SUPPLY), bytes32(totalSupply));
+    //     assertEq(ape.totalSupply(), totalSupply, "Wrong slot used by vm.store");
 
-        uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(uint256(3))))));
-        balance -= amount;
-        vm.store(address(ape), keccak256(abi.encode(account, bytes32(uint256(3)))), bytes32(balance));
-        assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
-    }
-
-    function latestTokenParams()
-        external
-        pure
-        returns (SirStructs.TokenParameters memory tokenParameters, SirStructs.VaultParameters memory vaultParameters)
-    {
-        tokenParameters = SirStructs.TokenParameters({
-            name: "Tokenized ETH/USDC with 1.25x leverage",
-            symbol: "APE-42",
-            decimals: 18
-        });
-        vaultParameters = SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDC,
-            collateralToken: Addresses.ADDR_WETH,
-            leverageTier: LEVERAGE_TIER
-        });
-    }
+    //     uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(SLOT_BALANCE_OF)))));
+    //     balance -= amount;
+    //     vm.store(address(ape), keccak256(abi.encode(account, bytes32(SLOT_BALANCE_OF))), bytes32(balance));
+    //     assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
+    // }
 
     function setUp() public {
-        ape = new APE();
+        // Deploy APE implementation
+        address implementationOfAPE = address(new APE());
+
+        // Deploy APE clone
+        ape = APE(
+            ClonesWithImmutableArgs.clone3(
+                implementationOfAPE,
+                abi.encodePacked(LEVERAGE_TIER, address(this)),
+                bytes32(uint256(VAULT_ID))
+            )
+        );
+
+        // Initialize APE clone
+        ape.initialize(
+            "Tokenized ETH/USDC with 1.25x leverage",
+            "APE-42",
+            18,
+            Addresses.ADDR_USDC,
+            Addresses.ADDR_WETH
+        );
 
         alice = vm.addr(1);
         bob = vm.addr(2);
@@ -482,26 +489,25 @@ contract APEHandler is Test {
 
     bool[2] public trueIfMintFalseIfBurn;
 
-    function latestTokenParams()
-        external
-        pure
-        returns (SirStructs.TokenParameters memory tokenParameters, SirStructs.VaultParameters memory vaultParameters)
-    {
-        tokenParameters = SirStructs.TokenParameters({
-            name: "Tokenized ETH/USDC with 1.25x leverage",
-            symbol: "APE-42",
-            decimals: 18
-        });
-        vaultParameters = SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDC,
-            collateralToken: Addresses.ADDR_WETH,
-            leverageTier: LEVERAGE_TIER
-        });
-    }
-
     function setUp() public {
-        ape[0] = new APE();
-        ape[1] = new APE();
+        // Deploy APE implementation
+        address implementationOfAPE = address(new APE());
+
+        // Deploy APE clones
+        ape[0] = APE(
+            ClonesWithImmutableArgs.clone3(
+                implementationOfAPE,
+                abi.encodePacked(LEVERAGE_TIER, address(this)),
+                bytes32(uint256(1))
+            )
+        );
+        ape[1] = APE(
+            ClonesWithImmutableArgs.clone3(
+                implementationOfAPE,
+                abi.encodePacked(LEVERAGE_TIER, address(this)),
+                bytes32(uint256(2))
+            )
+        );
     }
 
     // Limit test to 5 accounts

@@ -71,11 +71,6 @@ interface IVault {
 
     function isApprovedForAll(address, address) external view returns (bool);
 
-    function latestTokenParams()
-        external
-        view
-        returns (SirStructs.TokenParameters memory, SirStructs.VaultParameters memory);
-
     function mint(bool isAPE, SirStructs.VaultParameters calldata vaultParams) external returns (uint256 amount);
 
     function numberOfVaults() external view returns (uint48);

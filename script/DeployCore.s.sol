@@ -49,8 +49,12 @@ contract DeployCore is Script {
         address payable sir = payable(address(new SIR(Addresses.ADDR_WETH)));
         console.log("SIR deployed at: ", sir);
 
+        // Deploy APE
+        address ape = address(new APE());
+        console.log("APE implementation deployed at: ", ape);
+
         // Deploy Vault
-        address vault = address(new Vault(systemControl, sir, oracle));
+        address vault = address(new Vault(systemControl, sir, oracle, ape));
         console.log("Vault deployed at: ", vault);
 
         // Initialize SIR

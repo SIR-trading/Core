@@ -6,7 +6,7 @@ import {Strings} from "openzeppelin/utils/Strings.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
-import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
+import {AddressClone} from "src/libraries/AddressClone.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {APE} from "src/APE.sol";
@@ -29,23 +29,15 @@ contract VaultExternalTest is Test {
     );
 
     SirStructs.VaultParameters[] paramsById;
+    address apeImplementation;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         public vaultState; // Do not use vaultId 0
-    SirStructs.TokenParameters transientTokenParameters;
     uint48 constant VAULT_ID = 9;
     uint48 vaultId;
     address alice;
 
     Oracle oracle;
-
-    function latestTokenParams()
-        external
-        view
-        returns (SirStructs.TokenParameters memory, SirStructs.VaultParameters memory)
-    {
-        return (transientTokenParameters, paramsById[paramsById.length - 1]);
-    }
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
@@ -55,8 +47,11 @@ contract VaultExternalTest is Test {
             paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
         }
 
-        // Deployr oracle
+        // Deploy oracle
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+
+        // Deploy APE implementation
+        apeImplementation = address(new APE());
 
         alice = vm.addr(1);
     }
@@ -70,15 +65,15 @@ contract VaultExternalTest is Test {
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
-            transientTokenParameters,
             SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDC,
                 collateralToken: Addresses.ADDR_WETH,
                 leverageTier: leverageTier
-            })
+            }),
+            apeImplementation
         );
 
-        APE ape = APE(SaltedAddress.getAddress(address(this), vaultId));
+        APE ape = APE(AddressClone.getAddress(address(this), vaultId));
         assertGt(address(ape).code.length, 0);
 
         assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)), "Symbol is not correct");
@@ -101,8 +96,8 @@ contract VaultExternalTest is Test {
             oracle,
             vaultState[debtToken][collateralToken][leverageTier],
             paramsById,
-            transientTokenParameters,
-            SirStructs.VaultParameters(debtToken, collateralToken, leverageTier)
+            SirStructs.VaultParameters(debtToken, collateralToken, leverageTier),
+            apeImplementation
         );
     }
 
@@ -114,12 +109,12 @@ contract VaultExternalTest is Test {
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
-            transientTokenParameters,
             SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDC,
                 collateralToken: Addresses.ADDR_WETH,
                 leverageTier: leverageTier
-            })
+            }),
+            apeImplementation
         );
     }
 
@@ -132,21 +127,21 @@ contract VaultExternalTest is Test {
                 Addresses.ADDR_WETH,
                 leverageTier,
                 vaultId,
-                SaltedAddress.getAddress(address(this), vaultId)
+                AddressClone.getAddress(address(this), vaultId)
             );
             VaultExternal.deploy(
                 oracle,
                 vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
                 paramsById,
-                transientTokenParameters,
                 SirStructs.VaultParameters({
                     debtToken: Addresses.ADDR_USDC,
                     collateralToken: Addresses.ADDR_WETH,
                     leverageTier: leverageTier
-                })
+                }),
+                apeImplementation
             );
 
-            APE ape = APE(SaltedAddress.getAddress(address(this), vaultId));
+            APE ape = APE(AddressClone.getAddress(address(this), vaultId));
             assertGt(address(ape).code.length, 0);
 
             assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)));
@@ -172,12 +167,12 @@ contract VaultExternalTest is Test {
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
-            transientTokenParameters,
             SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDC,
                 collateralToken: Addresses.ADDR_WETH,
                 leverageTier: leverageTier
-            })
+            }),
+            apeImplementation
         );
 
         leverageTier--;
@@ -186,12 +181,12 @@ contract VaultExternalTest is Test {
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
             paramsById,
-            transientTokenParameters,
             SirStructs.VaultParameters({
                 debtToken: Addresses.ADDR_USDC,
                 collateralToken: Addresses.ADDR_WETH,
                 leverageTier: leverageTier
-            })
+            }),
+            apeImplementation
         );
     }
 
@@ -334,13 +329,13 @@ contract VaultExternalGetReserves is Test {
             SirStructs.CollateralState memory collateralState_,
             SirStructs.VaultState memory vaultState_,
             SirStructs.Reserves memory reserves,
-            APE ape,
+            address ape,
             uint144 collateralDeposited_
         ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
-        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
+        assertTrue(isAPE ? ape != address(0) : ape == address(0));
 
         assertEq(reserves.reserveApes, 0);
         assertEq(reserves.reserveLPers, 0);
@@ -365,13 +360,13 @@ contract VaultExternalGetReserves is Test {
             SirStructs.CollateralState memory collateralState_,
             SirStructs.VaultState memory vaultState_,
             SirStructs.Reserves memory reserves,
-            APE ape,
+            address ape,
             uint144 collateralDeposited_
         ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
-        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
+        assertTrue(isAPE ? ape != address(0) : ape == address(0));
 
         assertEq(reserves.reserveApes, vaultState.reserve - 1);
         assertEq(reserves.reserveLPers, 1);
@@ -396,13 +391,13 @@ contract VaultExternalGetReserves is Test {
             SirStructs.CollateralState memory collateralState_,
             SirStructs.VaultState memory vaultState_,
             SirStructs.Reserves memory reserves,
-            APE ape,
+            address ape,
             uint144 collateralDeposited_
         ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
-        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
+        assertTrue(isAPE ? ape != address(0) : ape == address(0));
 
         assertEq(reserves.reserveApes, 1);
         assertEq(reserves.reserveLPers, vaultState.reserve - 1);
@@ -428,13 +423,13 @@ contract VaultExternalGetReserves is Test {
             SirStructs.CollateralState memory collateralState_,
             SirStructs.VaultState memory vaultState_,
             SirStructs.Reserves memory reserves,
-            APE ape,
+            address ape,
             uint144 collateralDeposited_
         ) = VaultExternal.getReserves(isMint, isAPE, collateralStates, vaultStates, oracle, vaultParams);
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
-        assertTrue(isAPE ? address(ape) != address(0) : address(ape) == address(0));
+        assertTrue(isAPE ? ape != address(0) : ape == address(0));
 
         {
             console.logInt(testParams.tickPriceX42);

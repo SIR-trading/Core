@@ -3,12 +3,13 @@ pragma solidity >=0.8.0;
 
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
+import {APE} from "src/APE.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {Fees} from "src/libraries/Fees.sol";
-import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
+import {AddressClone} from "src/libraries/AddressClone.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
@@ -46,8 +47,10 @@ contract VaultInitializeTest is Test {
 
         address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
+        address apeImplementation = address(new APE());
+
         // Deploy vault
-        vault = new Vault(systemControl, sir, oracle);
+        vault = new Vault(systemControl, sir, oracle, apeImplementation);
     }
 
     function testFuzz_InitializeVault(int8 leverageTier) public {
@@ -60,7 +63,7 @@ contract VaultInitializeTest is Test {
 
         // Initialize vault 1
         vm.expectEmit();
-        emit VaultInitialized(debtToken, collateralToken, leverageTier, 1, SaltedAddress.getAddress(address(vault), 1));
+        emit VaultInitialized(debtToken, collateralToken, leverageTier, 1, AddressClone.getAddress(address(vault), 1));
         vault.initialize(SirStructs.VaultParameters(debtToken, collateralToken, leverageTier));
 
         // Check vault 1 is initialized correctly
@@ -81,7 +84,7 @@ contract VaultInitializeTest is Test {
 
         // Initialize vault 2
         vm.expectEmit();
-        emit VaultInitialized(collateralToken, debtToken, leverageTier, 2, SaltedAddress.getAddress(address(vault), 2));
+        emit VaultInitialized(collateralToken, debtToken, leverageTier, 2, AddressClone.getAddress(address(vault), 2));
         vault.initialize(SirStructs.VaultParameters(collateralToken, debtToken, leverageTier));
 
         // Check vault 2 is initialized correctly
@@ -192,6 +195,13 @@ contract VaultTest is Test {
         uint256 amount;
     }
 
+    uint256 constant SLOT_VAULT_STATE = 7;
+    uint256 constant SLOT_COLLATERAL_STATES = 8;
+    uint256 constant SLOT_TOTAL_SUPPLY_APE = 5;
+    uint256 constant SLOT_APE_BALANCE_OF = 6;
+    uint256 constant SLOT_TOTAL_SUPPLY_TEA = 4;
+    uint256 constant SLOT_TEA_BALANCE_OF = 3;
+
     uint48 constant VAULT_ID = 1;
     bytes16 immutable ONE;
 
@@ -231,11 +241,14 @@ contract VaultTest is Test {
             abi.encode()
         );
 
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
         // Deploy vault
-        vault = new Vault(systemControl, sir, oracle);
+        vault = new Vault(systemControl, sir, oracle, address(apeImplementation));
 
         // Derive APE address
-        ape = IERC20(SaltedAddress.getAddress(address(vault), VAULT_ID));
+        ape = IERC20(AddressClone.getAddress(address(vault), VAULT_ID));
     }
 
     modifier Initialize(SystemParams calldata systemParams, SirStructs.Reserves memory reservesPre) {
@@ -1524,7 +1537,7 @@ contract VaultTest is Test {
                         keccak256(
                             abi.encode(
                                 vaultParams.debtToken,
-                                uint256(7) // slot of vaultStates
+                                SLOT_VAULT_STATE // slot of vaultStates
                             )
                         )
                     )
@@ -1549,7 +1562,7 @@ contract VaultTest is Test {
         slot = keccak256(
             abi.encode(
                 vaultParams.collateralToken,
-                uint256(8) // slot of collateralStates
+                SLOT_COLLATERAL_STATES // slot of collateralStates
             )
         );
         vm.store(address(vault), slot, bytes32(abi.encodePacked(vaultState.reserve, uint112(0))));
@@ -1557,25 +1570,25 @@ contract VaultTest is Test {
         assertEq(collateralState.totalFeesToStakers, 0, "Wrong slot used by vm.store");
         assertEq(collateralState.total, vaultState.reserve, "Wrong slot used by vm.store");
 
-        // Set the collateralState.total supply of APE
-        vm.store(address(ape), bytes32(uint256(2)), bytes32(balances.apeSupply));
+        // Set the total supply of APE
+        vm.store(address(ape), bytes32(SLOT_TOTAL_SUPPLY_APE), bytes32(balances.apeSupply));
         assertEq(ape.totalSupply(), balances.apeSupply, "Wrong slot used by vm.store");
 
         // Set the Alice's APE balance
         slot = keccak256(
             abi.encode(
                 alice,
-                uint256(3) // slot of balanceOf
+                SLOT_APE_BALANCE_OF // slot of balanceOf
             )
         );
         vm.store(address(ape), slot, bytes32(balances.apeAlice));
         assertEq(ape.balanceOf(alice), balances.apeAlice, "Wrong slot used by vm.store");
 
-        // Set the collateralState.total supply of TEA and the vault balance
+        // Set the total supply of TEA and the vault balance
         slot = keccak256(
             abi.encode(
                 uint256(VAULT_ID),
-                uint256(4) // Slot of totalSupplyAndBalanceVault
+                SLOT_TOTAL_SUPPLY_TEA // Slot of totalSupplyAndBalanceVault
             )
         );
         vm.store(address(vault), slot, bytes32(abi.encodePacked(balances.teaVault, balances.teaSupply)));
@@ -1589,7 +1602,7 @@ contract VaultTest is Test {
                 keccak256(
                     abi.encode(
                         alice,
-                        uint256(3) // slot of balances
+                        SLOT_TEA_BALANCE_OF // slot of balances
                     )
                 )
             )
@@ -1635,8 +1648,11 @@ contract VaultControlTest is Test {
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
         // Deploy vault
-        vault = new Vault(systemControl, sir, vm.addr(3));
+        vault = new Vault(systemControl, sir, vm.addr(3), address(apeImplementation));
     }
 
     function testFuzz_withdrawFeesFailsCuzNotSIR(address user, TokenFees memory tokenFees) public {
@@ -2013,6 +2029,7 @@ contract VaultHandler is Test, RegimeEnum {
     IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
     Vault public vault;
     Oracle public oracle;
+    address public apeImplementation;
 
     uint256 public blockNumber;
     uint256 public iterations;
@@ -2102,7 +2119,8 @@ contract VaultHandler is Test, RegimeEnum {
         regime = regime_;
 
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
+        apeImplementation = address(new APE());
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation);
 
         // Set tax between 2 vaults
         vm.prank(vm.addr(100));
@@ -2314,7 +2332,7 @@ contract VaultHandler is Test, RegimeEnum {
     function idToVault(uint48 vaultId) public returns (uint256) {
         vaultId = uint48(_bound(vaultId, 1, 2));
         vaultParameters = vault.paramsById(vaultId);
-        ape = SaltedAddress.getAddress(address(vault), vaultId);
+        ape = AddressClone.getAddress(address(vault), vaultId);
         return vaultId;
     }
 
@@ -2459,6 +2477,8 @@ contract VaultInvariantTest is Test, RegimeEnum {
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Any);
         targetContract(address(vaultHandler));
 
+        address apeImplementation = vaultHandler.apeImplementation();
+
         vaultHandler.idToVault(1);
         address ape1 = vaultHandler.ape();
         vaultHandler.idToVault(2);
@@ -2476,6 +2496,7 @@ contract VaultInvariantTest is Test, RegimeEnum {
         vm.makePersistent(address(vaultHandler.oracle()));
         vm.makePersistent(ape1);
         vm.makePersistent(ape2);
+        vm.makePersistent(apeImplementation);
     }
 
     /// forge-config: default.invariant.runs = 1
@@ -2504,6 +2525,8 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Power);
         targetContract(address(vaultHandler));
 
+        address apeImplementation = vaultHandler.apeImplementation();
+
         vaultHandler.idToVault(1);
         address ape = vaultHandler.ape();
 
@@ -2519,6 +2542,7 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
         vm.makePersistent(address(vault));
         vm.makePersistent(address(oracle));
         vm.makePersistent(ape);
+        vm.makePersistent(apeImplementation);
 
         // Mint 8 ETH worth of TEA
         vaultHandler.mint(
@@ -2566,6 +2590,8 @@ contract SaturationInvariantTest is Test, RegimeEnum {
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Saturation);
         targetContract(address(vaultHandler));
 
+        address apeImplementation = vaultHandler.apeImplementation();
+
         vaultHandler.idToVault(1);
         address ape = vaultHandler.ape();
 
@@ -2581,6 +2607,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
         vm.makePersistent(address(vault));
         vm.makePersistent(address(oracle));
         vm.makePersistent(ape);
+        vm.makePersistent(apeImplementation);
 
         // Mint 4 ETH worth of APE (Fees will also mint 2 ETH approx of TEA)
         vaultHandler.mint(

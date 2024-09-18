@@ -5,7 +5,7 @@ import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {Oracle} from "src/Oracle.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
-import {SaltedAddress} from "src/libraries/SaltedAddress.sol";
+import {AddressClone} from "src/libraries/AddressClone.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -20,16 +20,16 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
     Vault public vault;
     APE public ape;
 
-    /**
-| Deployment Cost              | Deployment Size |         |         |         |         |
-| 5361646                      | 25045           |         |         |         |         |
-| Function Name                | min             | avg     | median  | max     | # calls |
-| balanceOf                    | 706             | 706     | 706     | 706     | 4       |
-| burn                         | 104972          | 112840  | 112717  | 120956  | 8       |
-| initialize                   | 1621541         | 1686583 | 1686647 | 1751497 | 4       |
-| latestTokenParams            | 3958            | 3958    | 3958    | 3958    | 4       |
-| mint                         | 125018          | 168525  | 164432  | 227924  | 8       |
-| updateVaults                 | 85430           | 85430   | 85430   | 85430   | 4       |
+    /**            |        |        |        |         |
+|------------------------------|-----------------|--------|--------|--------|---------|
+| Deployment Cost              | Deployment Size |        |        |        |         |
+| 5190362                      | 24315           |        |        |        |         |
+| Function Name                | min             | avg    | median | max    | # calls |
+| balanceOf                    | 706             | 706    | 706    | 706    | 4       |
+| burn                         | 104994          | 112811 | 112687 | 120875 | 8       |
+| initialize                   | 477563          | 542517 | 542493 | 607519 | 4       |
+| mint                         | 125018          | 168506 | 164413 | 227885 | 8       |
+| updateVaults                 | 85430           | 85430  | 85430  | 85430  | 4       |
      */
 
     // WETH/USDT's Uniswap TWAP has a long cardinality
@@ -53,8 +53,10 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // vm.writeFile("./gains.log", "");
 
+        ape = new APE();
+
         Oracle oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle));
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), address(ape));
 
         // Set tax between 2 vaults
         {
@@ -69,7 +71,7 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
             vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
         }
 
-        ape = APE(SaltedAddress.getAddress(address(vault), 1));
+        ape = APE(AddressClone.getAddress(address(vault), 1));
     }
 
     function _depositWETH(uint256 amount) private {

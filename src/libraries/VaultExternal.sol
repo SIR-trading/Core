@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+// Interfaces
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
+
 // Libraries
 import {SirStructs} from "./SirStructs.sol";
 import {TickMathPrecision} from "./TickMathPrecision.sol";
-import {SaltedAddress} from "./SaltedAddress.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
 import {SystemConstants} from "./SystemConstants.sol";
+import {ClonesWithImmutableArgs} from "lib/clones-with-immutable-args/src/ClonesWithImmutableArgs.sol";
 
 // Contracts
-import {APE} from "../APE.sol";
 import {Oracle} from "../Oracle.sol";
 
 library VaultExternal {
@@ -31,8 +33,8 @@ library VaultExternal {
         Oracle oracle,
         SirStructs.VaultState storage vaultState,
         SirStructs.VaultParameters[] storage paramsById,
-        SirStructs.TokenParameters storage transientTokenParameters,
-        SirStructs.VaultParameters calldata vaultParams
+        SirStructs.VaultParameters calldata vaultParams,
+        address implementationOfAPE
     ) external {
         if (
             vaultParams.leverageTier > SystemConstants.MAX_LEVERAGE_TIER ||
@@ -56,16 +58,28 @@ library VaultExternal {
         // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
         paramsById.push(vaultParams);
 
-        /**
-         * Set the parameters that will be read during the instantiation of the tokens.
-         * This pattern is used to avoid passing arguments to the constructor explicitly.
-         */
-        transientTokenParameters.name = _generateName(vaultParams);
-        transientTokenParameters.symbol = string.concat("APE-", Strings.toString(vaultId));
-        transientTokenParameters.decimals = APE(vaultParams.collateralToken).decimals();
+        // Deploy APE clone
+        address ape = ClonesWithImmutableArgs.clone3(
+            implementationOfAPE,
+            abi.encodePacked(
+                vaultParams.leverageTier, // The clone needs to know the leverage tier when minting/burning
+                address(this) // So the clone knows the owner
+            ),
+            bytes32(vaultId)
+        );
 
-        // Deploy APE
-        address ape = address(new APE{salt: bytes32(vaultId)}());
+        // Initialize APE clone
+        (bool success, ) = ape.call(
+            abi.encodeWithSignature(
+                "initialize(string,string,uint8,address,address)",
+                _generateName(vaultParams),
+                string.concat("APE-", Strings.toString(vaultId)),
+                IERC20(vaultParams.collateralToken).decimals(),
+                vaultParams.debtToken,
+                vaultParams.collateralToken
+            )
+        );
+        require(success);
 
         // Save vaultId
         vaultState.vaultId = uint48(vaultId);
@@ -96,7 +110,7 @@ library VaultExternal {
                 "%22%2C%22symbol%22%3A%22TEA-",
                 vaultIdStr,
                 "%22%2C%22decimals%22%3A",
-                Strings.toString(APE(params.collateralToken).decimals()),
+                Strings.toString(IERC20(params.collateralToken).decimals()),
                 "%2C%22chain_id%22%3A1%2C%22vault_id%22%3A",
                 vaultIdStr,
                 "%2C%22debt_token%22%3A%22",
@@ -104,7 +118,7 @@ library VaultExternal {
                 "%22%2C%22collateral_token%22%3A%22",
                 Strings.toHexString(params.collateralToken),
                 "%22%2C%22leverage_tier%22%3A",
-                Strings.toString(params.leverageTier),
+                Strings.toStringSigned(params.leverageTier),
                 "%2C%22total_supply%22%3A",
                 Strings.toString(totalSupply),
                 "%7D"
@@ -129,9 +143,9 @@ library VaultExternal {
             string(
                 abi.encodePacked(
                     "Tokenized ",
-                    APE(vaultParams.collateralToken).symbol(),
+                    IERC20(vaultParams.collateralToken).symbol(),
                     "/",
-                    APE(vaultParams.debtToken).symbol(),
+                    IERC20(vaultParams.debtToken).symbol(),
                     " with ",
                     leverageStr,
                     "x leverage"
@@ -169,7 +183,7 @@ library VaultExternal {
             SirStructs.CollateralState memory collateralState,
             SirStructs.VaultState memory vaultState,
             SirStructs.Reserves memory reserves,
-            APE ape,
+            address ape,
             uint144 collateralDeposited
         )
     {
@@ -181,13 +195,13 @@ library VaultExternal {
             reserves.tickPriceX42 = oracle.updateOracleState(vaultParams.collateralToken, vaultParams.debtToken);
 
             // Derive APE address if needed
-            if (isAPE) ape = APE(SaltedAddress.getAddress(address(this), vaultState.vaultId));
+            if (isAPE) ape = ClonesWithImmutableArgs.addressOfClone3(bytes32(uint256(vaultState.vaultId)));
 
             _getReserves(vaultState, reserves, vaultParams.leverageTier);
 
             if (isMint) {
                 // Get deposited collateral
-                uint256 balance = APE(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
+                uint256 balance = IERC20(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
                 if (balance > type(uint144).max) revert DepositTooLarge(); // Ensure it fits in a uint144
                 collateralDeposited = uint144(balance - collateralState.total);
             }

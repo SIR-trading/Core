@@ -6,6 +6,7 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SIR} from "src/SIR.sol";
+import {APE} from "src/APE.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {Contributors} from "src/libraries/Contributors.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
@@ -46,8 +47,11 @@ contract ContributorsTest is Test {
         // Deploy SIR
         sir = new SIR(Addresses.ADDR_WETH);
 
+        // Deploy APE implementation
+        address ape = address(new APE());
+
         // Deploy Vault
-        address vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11)));
+        address vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape));
 
         // Initialize SIR
         sir.initialize(vault);
@@ -228,8 +232,11 @@ contract GentlemenTest is Test {
         // Deploy SIR
         sir = new SIR(Addresses.ADDR_WETH);
 
+        // Deploy APE implementation
+        address ape = address(new APE());
+
         // Deploy Vault
-        vault = new Vault(vm.addr(10), address(sir), oracle);
+        vault = new Vault(vm.addr(10), address(sir), oracle, ape);
 
         // Initialize SIR
         sir.initialize(address(vault));

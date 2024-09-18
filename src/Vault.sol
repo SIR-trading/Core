@@ -37,6 +37,7 @@ contract Vault is TEA {
     event FeesToStakers(address indexed collateralToken, uint112 totalFeesToStakers);
 
     Oracle private immutable _ORACLE;
+    address private immutable _APE_IMPLEMENTATION;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
@@ -44,12 +45,12 @@ contract Vault is TEA {
     // Global parameters for each type of collateral that aggregates amounts from all vaults
     mapping(address collateral => SirStructs.CollateralState) internal _collateralStates;
 
-    // Used to pass parameters to the APE token constructor
-    SirStructs.TokenParameters private _transientTokenParameters;
-
-    constructor(address systemControl, address sir, address oracle) TEA(systemControl, sir) {
+    constructor(address systemControl, address sir, address oracle, address apeImplementation) TEA(systemControl, sir) {
         // Price _ORACLE
         _ORACLE = Oracle(oracle);
+
+        // Save the address of the APE implementation
+        _APE_IMPLEMENTATION = apeImplementation;
 
         // Push empty parameters to avoid vaultId 0
         _paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
@@ -62,17 +63,9 @@ contract Vault is TEA {
             _ORACLE,
             _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
             _paramsById,
-            _transientTokenParameters,
-            vaultParams
+            vaultParams,
+            _APE_IMPLEMENTATION
         );
-    }
-
-    function latestTokenParams()
-        external
-        view
-        returns (SirStructs.TokenParameters memory, SirStructs.VaultParameters memory)
-    {
-        return (_transientTokenParameters, _paramsById[_paramsById.length - 1]);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -91,7 +84,7 @@ contract Vault is TEA {
                 SirStructs.CollateralState memory collateralState,
                 SirStructs.VaultState memory vaultState,
                 SirStructs.Reserves memory reserves,
-                APE ape,
+                address ape,
                 uint144 collateralDeposited
             ) = VaultExternal.getReserves(true, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
@@ -99,7 +92,7 @@ contract Vault is TEA {
             SirStructs.Fees memory fees;
             if (isAPE) {
                 // Mint APE
-                (reserves, fees, amount) = ape.mint(
+                (reserves, fees, amount) = APE(ape).mint(
                     msg.sender,
                     systemParams_.baseFee,
                     vaultIssuanceParams_.tax,
@@ -181,7 +174,7 @@ contract Vault is TEA {
             SirStructs.CollateralState memory collateralState,
             SirStructs.VaultState memory vaultState,
             SirStructs.Reserves memory reserves,
-            APE ape,
+            address ape,
 
         ) = VaultExternal.getReserves(false, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
@@ -189,7 +182,13 @@ contract Vault is TEA {
         SirStructs.Fees memory fees;
         if (isAPE) {
             // Burn APE
-            (reserves, fees) = ape.burn(msg.sender, systemParams_.baseFee, vaultIssuanceParams_.tax, reserves, amount);
+            (reserves, fees) = APE(ape).burn(
+                msg.sender,
+                systemParams_.baseFee,
+                vaultIssuanceParams_.tax,
+                reserves,
+                amount
+            );
 
             // Mint TEA for protocol owned liquidity (POL)
             if (fees.collateralFeeToProtocol > 0) {

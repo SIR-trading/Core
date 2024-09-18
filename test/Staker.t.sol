@@ -11,7 +11,7 @@ import {ErrorComputation} from "./ErrorComputation.sol";
 import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
-import {SirStructs} from "src/libraries/SirStructs.sol";
+import {APE} from "src/APE.sol";
 
 contract Auxiliary is Test {
     struct Bidder {
@@ -174,7 +174,9 @@ contract StakerTest is Auxiliary {
 
         staker = new Staker(Addresses.ADDR_WETH);
 
-        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12)));
+        APE ape = new APE();
+
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), address(ape)));
         staker.initialize(vault);
 
         alice = vm.addr(1);
@@ -1162,7 +1164,9 @@ contract StakerHandler is Auxiliary {
 
         staker = new Staker(Addresses.ADDR_WETH);
 
-        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12)));
+        address ape = address(new APE());
+
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), ape));
         staker.initialize(vault);
     }
 

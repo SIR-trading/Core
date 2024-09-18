@@ -15,6 +15,7 @@ import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
+import {APE} from "src/APE.sol";
 
 contract SystemControlInitializationTest is Test {
     address public vault;
@@ -24,8 +25,11 @@ contract SystemControlInitializationTest is Test {
         // Deploy SystemControl
         systemControl = new SystemControl();
 
+        // Deploy APE implementation
+        address ape = address(new APE());
+
         // Deploy Vault
-        vault = address(new Vault(address(systemControl), vm.addr(10), vm.addr(11)));
+        vault = address(new Vault(address(systemControl), vm.addr(10), vm.addr(11), ape));
     }
 
     function testFuzz_initializationWrongCaller(address caller) public {
@@ -96,8 +100,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Deploy SIR
         sir = payable(address(new SIR(Addresses.ADDR_WETH)));
 
+        // Deploy APE implementation
+        address ape = address(new APE());
+
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, oracle);
+        vault = new Vault(address(systemControl), sir, oracle, ape);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));
@@ -475,8 +482,11 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         // Deploy SIR
         sir = payable(address(new SIR(Addresses.ADDR_WETH)));
 
+        // Deploy APE implementation
+        address ape = address(new APE());
+
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, vm.addr(10));
+        vault = new Vault(address(systemControl), sir, vm.addr(10), ape);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));
