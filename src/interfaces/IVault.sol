@@ -71,7 +71,11 @@ interface IVault {
 
     function isApprovedForAll(address, address) external view returns (bool);
 
-    function mint(bool isAPE, SirStructs.VaultParameters calldata vaultParams) external returns (uint256 amount);
+    function mint(
+        bool isAPE,
+        SirStructs.VaultParameters calldata vaultParams,
+        uint144 collateralToDeposit
+    ) external returns (uint256 amount);
 
     function numberOfVaults() external view returns (uint48);
 
