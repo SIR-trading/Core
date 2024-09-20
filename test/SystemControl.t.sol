@@ -178,12 +178,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether);
+        vault.mint(true, vaultParameters, 1 ether);
 
         // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether);
+        vault.mint(false, vaultParameters, 1 ether);
 
         // Check fees are restored
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
