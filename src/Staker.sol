@@ -38,7 +38,7 @@ contract Staker {
     IWETH9 private immutable _WETH;
     Vault internal vault;
 
-    string public constant name = "Synthetic Implemented Right";
+    string public constant name = "Synthetics Implemented Right";
     string public constant symbol = "SIR";
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 

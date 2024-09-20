@@ -47,10 +47,9 @@ contract GetSIR is Script {
         uint256 balance = vault.balanceOf(vm.addr(privateKey), 1);
         if (balance == 0) {
             weth.deposit{value: 1 ether}(); // Wrap 1 ETH
-            weth.transfer(address(vault), 1 ether); // Transfer 1 WETH to the vault
-
+            weth.approve(address(vault), 1 ether); // Approve 1 WETH to the vault
             SirStructs.VaultParameters memory vaultParams = vault.paramsById(1);
-            vault.mint(false, vaultParams); // Mint TEA
+            vault.mint(false, vaultParams, 1 ether); // Mint TEA
         }
 
         // Time forward

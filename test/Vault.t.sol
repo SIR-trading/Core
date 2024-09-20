@@ -146,24 +146,6 @@ contract VaultInitializeTest is Test {
     }
 }
 
-library ExtraABDKMathQuad {
-    using ABDKMathQuad for bytes16;
-
-    function tickToFP(int64 tickX42) internal pure returns (bytes16) {
-        bytes16 log2Point0001 = ABDKMathQuad.fromUInt(10001).div(ABDKMathQuad.fromUInt(10000)).log_2();
-        return ABDKMathQuad.fromInt(tickX42).div(ABDKMathQuad.fromUInt(1 << 42)).mul(log2Point0001).pow_2();
-    }
-}
-
-library BonusABDKMathQuad {
-    using ABDKMathQuad for bytes16;
-
-    // x^y
-    function pow(bytes16 x, bytes16 y) internal pure returns (bytes16) {
-        return x.log_2().mul(y).pow_2();
-    }
-}
-
 contract VaultTest is Test {
     using ABDKMathQuad for bytes16;
     using ExtraABDKMathQuad for int64;
@@ -375,13 +357,10 @@ contract VaultTest is Test {
         Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
         ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
         // Alice mints APE
-        vm.prank(alice);
-        inputsOutputs.amount = vault.mint(true, vaultParams);
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(true, vaultParams, inputsOutputs.collateral);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -408,13 +387,10 @@ contract VaultTest is Test {
         Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
         ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
         // Alice mints APE
-        vm.prank(alice);
-        inputsOutputs.amount = vault.mint(true, vaultParams);
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(true, vaultParams, inputsOutputs.collateral);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -441,13 +417,10 @@ contract VaultTest is Test {
         Initialize(systemParams, SirStructs.Reserves(0, 0, 0))
         ConstraintAmounts(true, true, inputsOutputs, SirStructs.Reserves(0, 0, 0), Balances(0, 0, 0, 0, 0))
     {
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
         // Alice mints APE
-        vm.prank(alice);
-        inputsOutputs.amount = vault.mint(false, vaultParams);
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(false, vaultParams, inputsOutputs.collateral);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -472,14 +445,11 @@ contract VaultTest is Test {
     {
         inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, 1));
 
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
         // Alice mints APE
-        vm.prank(alice);
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        vault.mint(isAPE, vaultParams);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
     }
 
     function testFuzz_recursiveStateSave(
@@ -545,54 +515,8 @@ contract VaultTest is Test {
         }
     }
 
-    function testFuzz_mintAPE(
-        SystemParams calldata systemParams,
-        InputsOutputs memory inputsOutputs,
-        SirStructs.Reserves memory reservesPre,
-        Balances memory balances
-    )
-        public
-        Initialize(systemParams, reservesPre)
-        ConstraintAmounts(false, true, inputsOutputs, reservesPre, balances)
-    {
-        reservesPre = vault.getReserves(vaultParams);
-
-        {
-            // Constraint so it doesn't overflow TEA supply
-            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
-                reservesPre.reserveLPers,
-                SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
-                vault.totalSupply(VAULT_ID)
-            );
-            if (success)
-                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
-
-            // Constraint so it doesn't overflow APE supply
-            (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
-                reservesPre.reserveApes,
-                type(uint256).max - ape.totalSupply(),
-                ape.totalSupply()
-            );
-            if (success)
-                inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
-        }
-
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
-        // Alice mints APE
-        vm.prank(alice);
-        inputsOutputs.amount = vault.mint(true, vaultParams);
-
-        // Retrieve reserves after minting
-        SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
-
-        // Verify amounts
-        _verifyAmountsMintAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
-    }
-
-    function testFuzz_mintTEA(
+    function testFuzz_mint(
+        bool isAPE,
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
@@ -621,23 +545,25 @@ contract VaultTest is Test {
                 type(uint256).max - ape.totalSupply(),
                 ape.totalSupply()
             );
-            if (success)
+            if (success) {
                 inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+            }
         }
 
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
-        // Alice mints TEA
-        vm.prank(alice);
-        inputsOutputs.amount = vault.mint(false, vaultParams);
+        // Alice mints APE
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
 
         // Retrieve reserves after minting
         SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Verify amounts
-        _verifyAmountsMintTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+        if (isAPE) {
+            _verifyAmountsMintAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+        } else {
+            _verifyAmountsMintTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+        }
     }
 
     function testFuzz_burnAPE(
@@ -772,8 +698,9 @@ contract VaultTest is Test {
                 SystemConstants.TEA_MAX_SUPPLY - vault.totalSupply(VAULT_ID),
                 vault.totalSupply(VAULT_ID)
             );
-            if (success)
+            if (success) {
                 inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+            }
 
             // Constraint so it doesn't overflow APE supply
             (success, collateralDepositedUpperBound) = FullMath.tryMulDiv(
@@ -781,18 +708,16 @@ contract VaultTest is Test {
                 type(uint256).max - ape.totalSupply(),
                 ape.totalSupply()
             );
-            if (success)
+            if (success) {
                 inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, 0, collateralDepositedUpperBound));
+            }
         }
 
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
-        // Alice tries to mint/burn non-existant APE or TEA
+        // Alice mints APE
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert(VaultDoesNotExist.selector);
-        vm.prank(alice);
-        vault.mint(isAPE, vaultParams_);
+        vault.mint(isAPE, vaultParams_, inputsOutputs.collateral);
     }
 
     function testFuzz_burnWrongVaultParameters(
@@ -876,14 +801,11 @@ contract VaultTest is Test {
             _constraintReserveBurnTEA(systemParams, reservesPre, inputsOutputs, balances);
         }
 
-        // Alice deposits collateral
-        vm.prank(alice);
-        MockERC20(vaultParams.collateralToken).transfer(address(vault), inputsOutputs.collateral);
-
-        // Alice tries to mint/burn non-existant APE or TEA
+        // Alice mints APE
+        vm.startPrank(alice);
+        MockERC20(vaultParams.collateralToken).approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert(VaultDoesNotExist.selector);
-        vm.prank(alice);
-        vault.mint(isAPE, vaultParams_);
+        vault.mint(true, vaultParams_, inputsOutputs.collateral);
     }
 
     function testFuzz_priceFluctuation(
@@ -2020,7 +1942,7 @@ contract VaultHandler is Test, RegimeEnum {
         bool advanceBlock;
         uint48 vaultId;
         uint256 userId;
-        uint256 amountCollateral;
+        uint144 amountCollateral;
     }
 
     uint256 public constant TIME_ADVANCE = 5 minutes;
@@ -2143,22 +2065,15 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        console.log("------Mint--Attempt------");
-        console.log(inputOutput.amountCollateral, "collateral");
-
         // Sufficient condition to not overflow collateralState.total collateral
         SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParameters.collateralToken);
-        inputOutput.amountCollateral = _bound(
-            inputOutput.amountCollateral,
-            0,
-            type(uint144).max - collateralState.total
+        inputOutput.amountCollateral = uint144(
+            _bound(inputOutput.amountCollateral, 0, type(uint144).max - collateralState.total)
         );
 
         // Sufficient condition to not overflow collected fees
-        inputOutput.amountCollateral = _bound(
-            inputOutput.amountCollateral,
-            0,
-            type(uint112).max - collateralState.totalFeesToStakers
+        inputOutput.amountCollateral = uint144(
+            _bound(inputOutput.amountCollateral, 0, type(uint112).max - collateralState.totalFeesToStakers)
         );
 
         bool success;
@@ -2170,7 +2085,9 @@ contract VaultHandler is Test, RegimeEnum {
                 type(uint256).max - supplyAPE,
                 supplyAPE
             );
-            if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+            if (success) {
+                inputOutput.amountCollateral = uint144(_bound(inputOutput.amountCollateral, 0, maxCollateralAmount));
+            }
 
             if (regime == Regime.Power) {
                 // Do not mint too much APE that it changes to Saturation
@@ -2182,7 +2099,7 @@ contract VaultHandler is Test, RegimeEnum {
 
                 maxCollateralAmount -= reserves.reserveApes;
 
-                inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+                inputOutput.amountCollateral = uint144(_bound(inputOutput.amountCollateral, 0, maxCollateralAmount));
             }
         }
 
@@ -2193,7 +2110,9 @@ contract VaultHandler is Test, RegimeEnum {
                 SystemConstants.TEA_MAX_SUPPLY - supplyTEA,
                 supplyTEA
             );
-            if (success) inputOutput.amountCollateral = _bound(inputOutput.amountCollateral, 0, maxCollateralAmount);
+            if (success) {
+                inputOutput.amountCollateral = uint144(_bound(inputOutput.amountCollateral, 0, maxCollateralAmount));
+            }
         }
 
         if (regime == Regime.Saturation && !isAPE) {
@@ -2207,10 +2126,8 @@ contract VaultHandler is Test, RegimeEnum {
 
             maxCollateralAmount -= reserves.reserveLPers;
 
-            inputOutput.amountCollateral = _bound(
-                inputOutput.amountCollateral,
-                0,
-                (isAPE ? uint256(10) : 1) * maxCollateralAmount
+            inputOutput.amountCollateral = uint144(
+                _bound(inputOutput.amountCollateral, 0, (isAPE ? uint256(10) : 1) * maxCollateralAmount)
             );
         }
 
@@ -2225,15 +2142,15 @@ contract VaultHandler is Test, RegimeEnum {
             // Deal ETH
             vm.deal(user, inputOutput.amountCollateral);
 
-            // Wrap ETH and deposit to vault
+            console.log("------Mint--Attempt------");
+            console.log(inputOutput.amountCollateral, "collateral");
+
+            // Mint with WETH
             vm.startPrank(user);
             _WETH.deposit{value: inputOutput.amountCollateral}();
-            _WETH.transfer(address(vault), inputOutput.amountCollateral);
-
-            // Mint
+            _WETH.approve(address(vault), inputOutput.amountCollateral);
             _checkRegime();
-            console.log(isAPE ? "Minting APE with" : "Minting TEA with ", inputOutput.amountCollateral, "wei");
-            vault.mint(isAPE, vaultParameters);
+            vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral);
             vm.stopPrank();
         }
     }
@@ -2364,6 +2281,8 @@ contract VaultHandler is Test, RegimeEnum {
 
     function _invariantTotalCollateral() private view {
         SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
+        console.log("Total collateral", collateralState.total);
+        console.log("Balance of WETH", _WETH.balanceOf(address(vault)));
         assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         SirStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
@@ -2628,5 +2547,23 @@ contract SaturationInvariantTest is Test, RegimeEnum {
             collateralState.total - collateralState.totalFeesToStakers,
             "Total collateral minus fees is wrong"
         );
+    }
+}
+
+library ExtraABDKMathQuad {
+    using ABDKMathQuad for bytes16;
+
+    function tickToFP(int64 tickX42) internal pure returns (bytes16) {
+        bytes16 log2Point0001 = ABDKMathQuad.fromUInt(10001).div(ABDKMathQuad.fromUInt(10000)).log_2();
+        return ABDKMathQuad.fromInt(tickX42).div(ABDKMathQuad.fromUInt(1 << 42)).mul(log2Point0001).pow_2();
+    }
+}
+
+library BonusABDKMathQuad {
+    using ABDKMathQuad for bytes16;
+
+    // x^y
+    function pow(bytes16 x, bytes16 y) internal pure returns (bytes16) {
+        return x.log_2().mul(y).pow_2();
     }
 }

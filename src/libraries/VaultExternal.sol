@@ -18,7 +18,6 @@ library VaultExternal {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error VaultDoesNotExist();
-    error DepositTooLarge();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -55,7 +54,7 @@ library VaultExternal {
         uint256 vaultId = paramsById.length;
         require(vaultId <= type(uint48).max); // It has to fit in a uint48
 
-        // Push parameters before deploying tokens, because they are accessed by the tokens' constructors
+        // Save parameters
         paramsById.push(vaultParams);
 
         // Deploy APE clone
@@ -170,7 +169,6 @@ library VaultExternal {
     }
 
     function getReserves(
-        bool isMint,
         bool isAPE,
         mapping(address collateral => SirStructs.CollateralState) storage collateralStates,
         mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
@@ -183,8 +181,7 @@ library VaultExternal {
             SirStructs.CollateralState memory collateralState,
             SirStructs.VaultState memory vaultState,
             SirStructs.Reserves memory reserves,
-            address ape,
-            uint144 collateralDeposited
+            address ape
         )
     {
         unchecked {
@@ -198,13 +195,6 @@ library VaultExternal {
             if (isAPE) ape = ClonesWithImmutableArgs.addressOfClone3(bytes32(uint256(vaultState.vaultId)));
 
             _getReserves(vaultState, reserves, vaultParams.leverageTier);
-
-            if (isMint) {
-                // Get deposited collateral
-                uint256 balance = IERC20(vaultParams.collateralToken).balanceOf(address(this)); // collateralToken is not an APE token, but it shares the balanceOf method
-                if (balance > type(uint144).max) revert DepositTooLarge(); // Ensure it fits in a uint144
-                collateralDeposited = uint144(balance - collateralState.total);
-            }
         }
     }
 

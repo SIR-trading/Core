@@ -6,7 +6,7 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
-import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
+import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 
@@ -74,7 +74,11 @@ contract Vault is TEA {
 
     /** @notice Function for minting APE or TEA
      */
-    function mint(bool isAPE, SirStructs.VaultParameters calldata vaultParams) external returns (uint256 amount) {
+    function mint(
+        bool isAPE,
+        SirStructs.VaultParameters calldata vaultParams,
+        uint144 collateralToDeposit
+    ) external returns (uint256 amount) {
         unchecked {
             SirStructs.SystemParameters memory systemParams_ = _systemParams;
             require(!systemParams_.mintingStopped);
@@ -84,9 +88,8 @@ contract Vault is TEA {
                 SirStructs.CollateralState memory collateralState,
                 SirStructs.VaultState memory vaultState,
                 SirStructs.Reserves memory reserves,
-                address ape,
-                uint144 collateralDeposited
-            ) = VaultExternal.getReserves(true, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
+                address ape
+            ) = VaultExternal.getReserves(isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
             SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             SirStructs.Fees memory fees;
@@ -97,7 +100,7 @@ contract Vault is TEA {
                     systemParams_.baseFee,
                     vaultIssuanceParams_.tax,
                     reserves,
-                    collateralDeposited
+                    collateralToDeposit
                 );
 
                 // Mint TEA for protocol owned liquidity (POL)
@@ -117,7 +120,7 @@ contract Vault is TEA {
                     systemParams_,
                     vaultIssuanceParams_,
                     reserves,
-                    collateralDeposited
+                    collateralToDeposit
                 );
             }
 
@@ -130,7 +133,7 @@ contract Vault is TEA {
                 collateralState,
                 fees.collateralFeeToStakers,
                 vaultParams.collateralToken,
-                collateralDeposited
+                collateralToDeposit
             );
 
             // Emit event
@@ -140,6 +143,14 @@ contract Vault is TEA {
                 fees.collateralInOrWithdrawn,
                 fees.collateralFeeToStakers,
                 fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+            );
+
+            // Deposit collateral
+            TransferHelper.safeTransferFrom(
+                vaultParams.collateralToken,
+                msg.sender,
+                address(this),
+                collateralToDeposit
             );
 
             /** Check if recipient is enabled for receiving TEA.
@@ -174,9 +185,8 @@ contract Vault is TEA {
             SirStructs.CollateralState memory collateralState,
             SirStructs.VaultState memory vaultState,
             SirStructs.Reserves memory reserves,
-            address ape,
-
-        ) = VaultExternal.getReserves(false, isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
+            address ape
+        ) = VaultExternal.getReserves(isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;

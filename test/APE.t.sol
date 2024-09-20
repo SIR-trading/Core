@@ -21,6 +21,7 @@ contract APETest is Test {
     int8 constant LEVERAGE_TIER = -1;
     uint48 constant VAULT_ID = 42;
 
+    APE apeImplentation;
     APE ape;
     address alice;
     address bob;
@@ -60,12 +61,13 @@ contract APETest is Test {
 
     function setUp() public {
         // Deploy APE implementation
-        address implementationOfAPE = address(new APE());
+        apeImplentation = new APE();
 
         // Deploy APE clone
+        console.log("Tester:", address(this));
         ape = APE(
             ClonesWithImmutableArgs.clone3(
-                implementationOfAPE,
+                address(apeImplentation),
                 abi.encodePacked(LEVERAGE_TIER, address(this)),
                 bytes32(uint256(VAULT_ID))
             )
@@ -83,11 +85,6 @@ contract APETest is Test {
         alice = vm.addr(1);
         bob = vm.addr(2);
         charlie = vm.addr(3);
-    }
-
-    function _idToAddress(uint256 id) private pure returns (address) {
-        id = _bound(id, 1, 3);
-        return vm.addr(id);
     }
 
     function test_initialConditions() public view {
@@ -464,6 +461,11 @@ contract APETest is Test {
 
         vm.expectRevert();
         ape.burn(alice, 0, 0, SirStructs.Reserves(0, 0, 0), amountBurnt);
+    }
+
+    function _idToAddress(uint256 id) private pure returns (address) {
+        id = _bound(id, 1, 3);
+        return vm.addr(id);
     }
 }
 

@@ -10,6 +10,8 @@ import {Clone} from "lib/clones-with-immutable-args/src/Clone.sol";
 // Contracts
 import {Vault} from "./Vault.sol";
 
+import "forge-std/console.sol";
+
 /**
  * @dev Modified from Solmate's ERC20.sol
  */
