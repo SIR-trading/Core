@@ -74,7 +74,7 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         ape = APE(AddressClone.getAddress(address(vault), 1));
     }
 
-    function _depositWETH(uint256 amount) private {
+    function _prepareWETH(uint256 amount) private {
         // Deal ETH
         vm.deal(address(this), amount);
 
@@ -82,7 +82,7 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         WETH.deposit{value: amount}();
 
         // Deposit WETH to vault
-        WETH.transfer(address(vault), amount);
+        WETH.approve(address(vault), amount);
     }
 
     ///////////////////////////////////////////////
@@ -96,16 +96,16 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         vault.initialize(vaultParameters1);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters1);
+        vault.mint(true, vaultParameters1, 2 ether);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters1);
+        vault.mint(false, vaultParameters1, 2 ether);
 
         // Burn some APE
         vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
@@ -122,16 +122,16 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         skip(TIME_ADVANCE);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters1);
+        vault.mint(true, vaultParameters1, 2 ether);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters1);
+        vault.mint(false, vaultParameters1, 2 ether);
 
         // Burn some APE
         vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
@@ -148,16 +148,16 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         vault.initialize(vaultParameters2);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters2);
+        vault.mint(true, vaultParameters2, 2 ether);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters2);
+        vault.mint(false, vaultParameters2, 2 ether);
 
         // Burn some APE
         vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
@@ -174,16 +174,16 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         skip(TIME_ADVANCE);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters2);
+        vault.mint(true, vaultParameters2, 2 ether);
 
         // Deposit WETH to vault
-        _depositWETH(2 ether);
+        _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters2);
+        vault.mint(false, vaultParameters2, 2 ether);
 
         // Burn some APE
         vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));

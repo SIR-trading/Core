@@ -256,11 +256,11 @@ contract GentlemenTest is Test {
         // First gentleman deposits 1 WETH
         _dealWETH(alice, 1 ether);
         vm.prank(alice);
-        WETH.transfer(address(vault), 1 ether);
+        WETH.approve(address(vault), 1 ether);
 
         // Alice mints TEA
         vm.prank(alice);
-        teaBalanceOfAlice = vault.mint(false, vaultParameters);
+        teaBalanceOfAlice = vault.mint(false, vaultParameters, 1 ether);
     }
 
     function testFuzz_fakeLPerMint(address lper, uint32 timeSkip) public {

@@ -123,13 +123,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
-        uint256 apeAmount = vault.mint(true, vaultParameters);
+        WETH.approve(address(vault), 1 ether);
+        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether);
 
         // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
-        uint256 teaAmount = vault.mint(false, vaultParameters);
+        WETH.approve(address(vault), 1 ether);
+        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether);
 
         // Exit Beta
         vm.expectEmit();
@@ -148,15 +148,15 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Failure to mint APE
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
+        WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(true, vaultParameters);
+        vault.mint(true, vaultParameters, 1 ether);
 
         // Failure to mint TEA
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
+        WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(false, vaultParameters);
+        vault.mint(false, vaultParameters, 1 ether);
 
         // Burn APE
         vault.burn(true, vaultParameters, apeAmount);
@@ -177,13 +177,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
-        vault.mint(true, vaultParameters);
+        WETH.approve(address(vault), 1 ether);
+        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether);
 
         // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
-        vault.mint(false, vaultParameters);
+        WETH.approve(address(vault), 1 ether);
+        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether);
 
         // Check fees are restored
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
@@ -212,15 +212,15 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Initialize vault
         _initializeVault();
 
-        // Mint APE
+        // Successfully mint APE
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
-        uint256 amountApe = vault.mint(true, vaultParameters);
+        WETH.approve(address(vault), 1 ether);
+        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether);
 
-        // Mint TEA
+        // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
-        uint256 amountTea = vault.mint(false, vaultParameters);
+        WETH.approve(address(vault), 1 ether);
+        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether);
 
         // Hault minting
         systemControl.haultMinting();
@@ -236,23 +236,23 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Check if system is shutdown
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Shutdown));
 
-        // Attempt to mint APE
+        // Failure to mint APE
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
+        WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(true, vaultParameters);
+        vault.mint(true, vaultParameters, 1 ether);
 
-        // Attempt to mint TEA
+        // Failure to mint TEA
         _dealWETH(address(this), 1 ether);
-        WETH.transfer(address(vault), 1 ether);
+        WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(false, vaultParameters);
+        vault.mint(false, vaultParameters, 1 ether);
 
         // Burn APE
-        vault.burn(true, vaultParameters, amountApe);
+        vault.burn(true, vaultParameters, apeAmount);
 
         // Burn TEA
-        vault.burn(false, vaultParameters, amountTea);
+        vault.burn(false, vaultParameters, teaAmount);
     }
 
     function testFuzz_saveFundsWrongCaller(address caller) public {
