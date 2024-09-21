@@ -20,15 +20,15 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
     Vault public vault;
     APE public ape;
 
-    /**            |        |        |        |         |
+    /**
 |------------------------------|-----------------|--------|--------|--------|---------|
 | Deployment Cost              | Deployment Size |        |        |        |         |
-| 5190362                      | 24315           |        |        |        |         |
+| 5276545                      | 24720           |        |        |        |         |
 | Function Name                | min             | avg    | median | max    | # calls |
 | balanceOf                    | 706             | 706    | 706    | 706    | 4       |
-| burn                         | 104994          | 112811 | 112687 | 120875 | 8       |
-| initialize                   | 477563          | 542517 | 542493 | 607519 | 4       |
-| mint                         | 125018          | 168506 | 164413 | 227885 | 8       |
+| burn                         | 104060          | 111864 | 111740 | 119915 | 8       |
+| initialize                   | 477585          | 542539 | 542515 | 607541 | 4       |
+| mint                         | 132067          | 184099 | 180006 | 252022 | 8       |
 | updateVaults                 | 85430           | 85430  | 85430  | 85430  | 4       |
      */
 
