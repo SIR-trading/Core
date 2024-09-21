@@ -3,12 +3,14 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
+import {Addresses} from "./libraries/Addresses.sol";
 
 // Contracts
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -17,6 +19,8 @@ import {Oracle} from "./Oracle.sol";
 import {TEA} from "./TEA.sol";
 
 contract Vault is TEA {
+    error NotAWETHVault();
+
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
         i.e., collateralFeeToLPers = collateralFeeToGentlemen + collateralFeeToProtocol
      */
@@ -78,8 +82,20 @@ contract Vault is TEA {
         bool isAPE,
         SirStructs.VaultParameters calldata vaultParams,
         uint144 collateralToDeposit
-    ) external returns (uint256 amount) {
+    ) external payable returns (uint256 amount) {
         unchecked {
+            if (msg.value != 0) {
+                // TO BE TESTED!!!!!!!!
+                // This is an ETH mint but still need to check this is a WETH vault
+                if (vaultParams.collateralToken != Addresses.ADDR_WETH) revert NotAWETHVault();
+
+                // collateralToDeposit is the amount of ETH sent
+                collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
+
+                // We must wrap it to WETH
+                IWETH9(Addresses.ADDR_WETH).deposit{value: msg.value}();
+            }
+
             SirStructs.SystemParameters memory systemParams_ = _systemParams;
             require(!systemParams_.mintingStopped);
 
@@ -145,13 +161,15 @@ contract Vault is TEA {
                 fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
             );
 
-            // Deposit collateral
-            TransferHelper.safeTransferFrom(
-                vaultParams.collateralToken,
-                msg.sender,
-                address(this),
-                collateralToDeposit
-            );
+            if (msg.value == 0) {
+                // If it is not an ETH mint, auto transfer the ERC20 collateral token
+                TransferHelper.safeTransferFrom(
+                    vaultParams.collateralToken,
+                    msg.sender,
+                    address(this),
+                    collateralToDeposit
+                );
+            }
 
             /** Check if recipient is enabled for receiving TEA.
                 This check is done last to avoid reentrancy attacks because it may call an external contract.

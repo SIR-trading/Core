@@ -127,25 +127,8 @@ contract TEA is SystemState {
         assert(from != address(this));
         if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
-        // Update SIR issuances
-        LPersBalances memory lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
-        updateLPerIssuanceParams(
-            false,
-            vaultId,
-            _systemParams,
-            vaultIssuanceParams[vaultId],
-            supplyExcludeVault(vaultId),
-            lpersBalances
-        );
-
-        lpersBalances.balance0 -= amount;
-
-        if (from != to) {
-            balances[from][vaultId] = lpersBalances.balance0; // POL can never be transfered out
-            unchecked {
-                _setBalance(to, vaultId, lpersBalances.balance1 + amount);
-            }
-        }
+        // Update balances
+        _updateBalances(from, to, vaultId, amount);
 
         emit TransferSingle(msg.sender, from, to, vaultId, amount);
 
@@ -165,51 +148,26 @@ contract TEA is SystemState {
         uint256[] calldata amounts,
         bytes calldata data
     ) external {
-        assert(from != address(this));
-        if (vaultIds.length != amounts.length) revert LengthMismatch();
-        if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
+        unchecked {
+            assert(from != address(this));
+            if (vaultIds.length != amounts.length) revert LengthMismatch();
+            if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
-        LPersBalances memory lpersBalances;
-        for (uint256 i = 0; i < vaultIds.length; ) {
-            uint256 vaultId = vaultIds[i];
-            uint256 amount = amounts[i];
-
-            // Update SIR issuances
-            lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
-            updateLPerIssuanceParams(
-                false,
-                vaultId,
-                _systemParams,
-                vaultIssuanceParams[vaultId],
-                supplyExcludeVault(vaultId),
-                lpersBalances
-            );
-
-            lpersBalances.balance0 -= amount;
-
-            if (from != to) {
-                balances[from][vaultId] = lpersBalances.balance0;
-                unchecked {
-                    _setBalance(to, vaultId, lpersBalances.balance1 + amount);
-                }
+            for (uint256 i = 0; i < vaultIds.length; ++i) {
+                // Update balances
+                _updateBalances(from, to, vaultIds[i], amounts[i]);
             }
 
-            unchecked {
-                // An array can't have a total length
-                // larger than the max uint256 value.
-                ++i;
-            }
+            emit TransferBatch(msg.sender, from, to, vaultIds, amounts);
+
+            if (
+                to.code.length == 0
+                    ? to == address(0)
+                    : to != address(this) &&
+                        ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) !=
+                        ERC1155TokenReceiver.onERC1155BatchReceived.selector
+            ) revert UnsafeRecipient();
         }
-
-        emit TransferBatch(msg.sender, from, to, vaultIds, amounts);
-
-        if (
-            to.code.length == 0
-                ? to == address(0)
-                : to != address(this) &&
-                    ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) !=
-                    ERC1155TokenReceiver.onERC1155BatchReceived.selector
-        ) revert UnsafeRecipient();
     }
 
     /**
@@ -434,6 +392,28 @@ contract TEA is SystemState {
             reserves.reserveLPers += fees.collateralFeeToProtocol;
 
             emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToProtocol);
+        }
+    }
+
+    function _updateBalances(address from, address to, uint256 vaultId, uint256 amount) private {
+        // Update SIR issuances
+        LPersBalances memory lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
+        updateLPerIssuanceParams(
+            false,
+            vaultId,
+            _systemParams,
+            vaultIssuanceParams[vaultId],
+            supplyExcludeVault(vaultId),
+            lpersBalances
+        );
+
+        // Update balances
+        lpersBalances.balance0 -= amount;
+        if (from != to) {
+            balances[from][vaultId] = lpersBalances.balance0;
+            unchecked {
+                _setBalance(to, vaultId, lpersBalances.balance1 + amount);
+            }
         }
     }
 
