@@ -65,9 +65,6 @@ contract DeployCore is Script {
         SystemControl(systemControl).initialize(vault);
         console.log("SystemControl initialized.");
 
-        console.log("Hash of APE's contract creation code:");
-        console.logBytes32(keccak256(type(APE).creationCode));
-
         vm.stopBroadcast();
     }
 }

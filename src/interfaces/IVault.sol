@@ -75,7 +75,7 @@ interface IVault {
         bool isAPE,
         SirStructs.VaultParameters calldata vaultParams,
         uint144 collateralToDeposit
-    ) external returns (uint256 amount);
+    ) external payable returns (uint256 amount);
 
     function numberOfVaults() external view returns (uint48);
 
