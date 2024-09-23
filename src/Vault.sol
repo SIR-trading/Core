@@ -77,6 +77,7 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /** @notice Function for minting APE or TEA
+        @notice The user can also send ETH if the collateral token is WETH
      */
     function mint(
         bool isAPE,
@@ -85,11 +86,10 @@ contract Vault is TEA {
     ) external payable returns (uint256 amount) {
         unchecked {
             if (msg.value != 0) {
-                // TO BE TESTED!!!!!!!!
-                // This is an ETH mint but still need to check this is a WETH vault
+                // This is an ETH mint but so we need to check that this is a WETH vault
                 if (vaultParams.collateralToken != Addresses.ADDR_WETH) revert NotAWETHVault();
 
-                // collateralToDeposit is the amount of ETH sent
+                // collateralToDeposit is the amount of ETH received
                 collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
 
                 // We must wrap it to WETH

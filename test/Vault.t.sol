@@ -1534,6 +1534,81 @@ contract VaultTest is Test {
     }
 }
 
+contract VaultTestWithETH is Test {
+    error NotAWETHVault();
+
+    Vault public vault;
+    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+
+    address public alice = vm.addr(3);
+
+    SirStructs.VaultParameters public vaultParams =
+        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -1);
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy oracle
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
+        // Deploy vault
+        vault = new Vault(vm.addr(1), vm.addr(2), oracle, address(apeImplementation));
+
+        // Initialize vault
+        vault.initialize(vaultParams);
+    }
+
+    function test_mint(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+        // Constraint the amount of ETH
+        amountETH = _bound(amountETH, 2, 2 ** 96);
+
+        // Alice mints APE
+        deal(alice, amountETH);
+        vm.prank(alice);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
+
+        // Check reserves
+        SirStructs.CollateralState memory collateralState = vault.collateralStates(Addresses.ADDR_WETH);
+
+        // Check the total reserve
+        assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
+        assertEq(collateralState.total, amountETH, "Wrong total reserve");
+    }
+
+    function test_mintTooLittle(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+        // Constraint the amount of ETH
+        amountETH = _bound(amountETH, 0, 1);
+
+        // Alice mints APE
+        deal(alice, amountETH);
+        vm.prank(alice);
+        vm.expectRevert();
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
+    }
+
+    function test_mintNotAWETHVault(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+        // Initialize a non-WETH vault
+        SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
+            Addresses.ADDR_WETH,
+            Addresses.ADDR_USDC,
+            -1
+        );
+        vault.initialize(vaultParams2);
+
+        // Constraint the amount of ETH
+        amountETH = _bound(amountETH, 2, 2 ** 96);
+
+        // Alice mints APE
+        deal(alice, amountETH);
+        vm.prank(alice);
+        vm.expectRevert(NotAWETHVault.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH);
+    }
+}
+
 contract VaultControlTest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
