@@ -2,12 +2,12 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
-import {Vm} from "forge-std/Vm.sol";
 
-import {MockERC20} from "src/test/MockERC20.sol";
+import {SepoliaERC20} from "src/test/SepoliaERC20.sol";
 
-/** @notice cli:
-    export NAME="MockToken" SYMBOL="METH" DECIMALS="18" && forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast
+/** @dev cli for env variables: export NAME="MockToken" SYMBOL="METH" DECIMALS="18"
+    @dev cli for local testnet:   forge script script/DeployMockToken.s.sol --rpc-url tarp_testnet --broadcast--legacy
+    @dev cli for Sepolia:        forge script script/DeployMockToken.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
 */
 contract DeployMockToken is Script {
     uint256 privateKey;
@@ -17,7 +17,13 @@ contract DeployMockToken is Script {
     uint8 decimals;
 
     function setUp() public {
-        privateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+        if (block.chainid == 1) {
+            privateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
+        } else if (block.chainid == 11155111) {
+            privateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        } else {
+            revert("Network not supported");
+        }
 
         name = vm.envString("NAME");
         symbol = vm.envString("SYMBOL");
@@ -28,11 +34,8 @@ contract DeployMockToken is Script {
         vm.startBroadcast(privateKey);
 
         // Deploy the token
-        address token = address(new MockERC20(name, symbol, decimals));
+        address token = address(new SepoliaERC20(name, symbol, decimals));
         console.log(string.concat(name, " (", symbol, ") deployed at ", vm.toString(token)));
-
-        // Mint 1M tokens to the deployer
-        MockERC20(token).mint(1e6 * 10 ** decimals);
 
         vm.stopBroadcast();
     }
