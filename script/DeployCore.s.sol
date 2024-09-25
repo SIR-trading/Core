@@ -38,7 +38,7 @@ contract DeployCore is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle());
         console.log("Oracle deployed at: ", oracle);
 
         // Deploy SystemControl
@@ -46,15 +46,15 @@ contract DeployCore is Script {
         console.log("SystemControl deployed at: ", systemControl);
 
         // Deploy SIR
-        address payable sir = payable(address(new SIR(Addresses.ADDR_WETH)));
+        address payable sir = payable(address(new SIR()));
         console.log("SIR deployed at: ", sir);
 
-        // Deploy APE
-        address ape = address(new APE());
-        console.log("APE implementation deployed at: ", ape);
+        // Deploy APE implementation
+        address apeImplementation = address(new APE());
+        console.log("APE implementation deployed at: ", apeImplementation);
 
         // Deploy Vault
-        address vault = address(new Vault(systemControl, sir, oracle, ape));
+        address vault = address(new Vault(systemControl, sir, oracle, apeImplementation));
         console.log("Vault deployed at: ", vault);
 
         // Initialize SIR

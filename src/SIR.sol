@@ -11,8 +11,6 @@ import {Staker} from "./Staker.sol";
 contract SIR is Staker {
     mapping(address => uint40) internal timestampLastMint;
 
-    constructor(address weth) Staker(weth) {}
-
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/

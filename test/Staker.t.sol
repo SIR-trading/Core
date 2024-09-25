@@ -172,7 +172,7 @@ contract StakerTest is Auxiliary {
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
-        staker = new Staker(Addresses.ADDR_WETH);
+        staker = new Staker();
 
         APE ape = new APE();
 
@@ -1162,7 +1162,7 @@ contract StakerHandler is Auxiliary {
         // vm.writeFile("./InvariantStaker.log", "");
         currentTime = 1694616791;
 
-        staker = new Staker(Addresses.ADDR_WETH);
+        staker = new Staker();
 
         address ape = address(new APE());
 

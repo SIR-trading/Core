@@ -18,13 +18,13 @@ import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
-contract OracleNewFeeTiersTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
+contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
 
     constructor() {
         vm.createSelectFork("mainnet", 18128102);
 
-        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle();
     }
 
     function test_GetUniswapFeeTiers() public view {
@@ -98,7 +98,7 @@ contract OracleNewFeeTiersTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
     }
 }
 
-contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
+contract OracleInitializeTest is Test, Oracle {
     event PoolCreated(
         address indexed token0,
         address indexed token1,
@@ -120,7 +120,7 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
     constructor() {
         vm.createSelectFork("mainnet", 18128102);
 
-        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle();
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
     }
@@ -461,7 +461,7 @@ contract OracleInitializeTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) 
     }
 }
 
-contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
+contract OracleGetPrice is Test, Oracle {
     using ABDKMath64x64 for int128;
 
     event IncreaseObservationCardinalityNext(
@@ -481,7 +481,7 @@ contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
         // We fork after this tx because it allows us to test a 0-TWAP.
         vm.createSelectFork("mainnet", 18149275);
 
-        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle();
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -759,7 +759,7 @@ contract OracleGetPrice is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
     }
 }
 
-contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
+contract OracleProbingFeeTiers is Test, Oracle {
     event IncreaseObservationCardinalityNext(
         uint16 observationCardinalityNextOld,
         uint16 observationCardinalityNextNew
@@ -778,7 +778,7 @@ contract OracleProbingFeeTiers is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY)
         // We fork after this tx because it allows us to test a 0-TWAP.
         vm.createSelectFork("mainnet", 18149275);
 
-        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle();
         _oracle.initialize(Addresses.ADDR_WETH, Addresses.ADDR_USDC); // It picks feeTier = 500
     }
 
@@ -1304,7 +1304,7 @@ contract SirOracleHandler is Test {
 
         _oracleInvariantTest = IOracleInvariantTest(msg.sender);
         _uniswapHandler = uniswapHandler_;
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle();
         oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
@@ -1339,7 +1339,7 @@ interface IOracleInvariantTest {
     function skip(uint40 timeSkip) external;
 }
 
-contract OracleInvariantTest is Test, Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
+contract OracleInvariantTest is Test, Oracle {
     SirOracleHandler private _oracleHandler;
     Oracle private _oracle;
 

@@ -92,13 +92,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // vm.writeFile("./numNewVaults.log", "");
 
         // Deploy Oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle());
 
         // Deploy SystemControl
         systemControl = new SystemControl();
 
         // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
+        sir = payable(address(new SIR()));
 
         // Deploy APE implementation
         address ape = address(new APE());
@@ -480,7 +480,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl = new SystemControl();
 
         // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
+        sir = payable(address(new SIR()));
 
         // Deploy APE implementation
         address ape = address(new APE());

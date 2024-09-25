@@ -48,7 +48,7 @@ contract VaultExternalTest is Test {
         }
 
         // Deploy oracle
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle();
 
         // Deploy APE implementation
         apeImplementation = address(new APE());
@@ -245,7 +245,7 @@ contract VaultExternalGetReserves is Test {
         vaultParams = SirStructs.VaultParameters(Addresses.ADDR_USDC, address(_collateralToken), 0);
 
         alice = vm.addr(1);
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle();
     }
 
     modifier Preprocess(

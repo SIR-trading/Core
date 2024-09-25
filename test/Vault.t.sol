@@ -45,7 +45,7 @@ contract VaultInitializeTest is Test {
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle());
 
         address apeImplementation = address(new APE());
 
@@ -209,7 +209,7 @@ contract VaultTest is Test {
         // vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        oracle = address(new Oracle());
 
         // Mock oracle initialization
         vm.mockCall(
@@ -1549,7 +1549,7 @@ contract VaultTestWithETH is Test {
         vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle());
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
@@ -2115,7 +2115,7 @@ contract VaultHandler is Test, RegimeEnum {
         blockNumber = blockNumber_;
         regime = regime_;
 
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle();
         apeImplementation = address(new APE());
         vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation);
 
