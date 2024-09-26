@@ -7,6 +7,8 @@ import "forge-std/Script.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {Vault} from "src/Vault.sol";
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
+import {AddressClone} from "src/libraries/AddressClone.sol";
 
 /** @dev cli for local testnet:  forge script script/FindAllVaults.s.sol --rpc-url tarp_testnet --broadcast --legacy
     @dev cli for Sepolia:        forge script script/FindAllVaults.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
@@ -38,13 +40,44 @@ contract FindAllVaults is Script {
 
         // Check 1st vault
         for (uint48 i = 1; i <= Nvaults; i++) {
+            console.log("");
             console.log("------ Vault ID: ", i, " ------");
             SirStructs.VaultParameters memory vaultParams = vault.paramsById(i);
-            console.log("debtToken: ", vaultParams.debtToken);
-            console.log("collateralToken: ", vaultParams.collateralToken);
-            console.log("leverageTier: ", vm.toString(vaultParams.leverageTier));
-        }
+            console.log("debtToken:", vaultParams.debtToken);
+            console.log("collateralToken:", vaultParams.collateralToken);
+            console.log("leverageTier:", vm.toString(vaultParams.leverageTier));
 
-        vm.stopBroadcast();
+            SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
+            string memory collateralSymbol = IERC20(vaultParams.collateralToken).symbol();
+            uint256 teaTotalSupply = vault.totalSupply(i);
+            console.log("Supply of TEA:", teaTotalSupply);
+            console.log("LP reserve:", reserves.reserveLPers, collateralSymbol);
+
+            address ape = AddressClone.getAddress(address(vault), i);
+            console.log("Supply of APE:", IERC20(ape).totalSupply());
+            console.log("Apes reserve:", reserves.reserveApes, collateralSymbol);
+
+            uint256 teaBalanceOfVault = vault.balanceOf(address(vault), i);
+            console.log("POL:", (teaBalanceOfVault * 100) / teaTotalSupply, "%");
+
+            uint256 minReserveLPers = vaultParams.leverageTier >= 0
+                ? uint256(reserves.reserveApes) << uint256(int256(vaultParams.leverageTier))
+                : uint256(reserves.reserveApes) >> uint256(int256(-vaultParams.leverageTier));
+
+            uint256 GRatio = (uint256(reserves.reserveLPers) * 2 ** 112) / minReserveLPers;
+            console.log("G =", (uint256(reserves.reserveLPers) * 100) / minReserveLPers, "% of Gmin");
+            console.log(
+                "Apes:",
+                GRatio >= 1.25 * 2 ** 112 ? "Healthy, more than enough liquidity" : GRatio >= 2 ** 112
+                    ? "Borderline, just enough liquidity"
+                    : "Degraded, insufficient liquidity for constant leverage"
+            );
+            console.log(
+                "Gentlemen:",
+                GRatio >= 1.25 * 2 ** 112 ? "Minimally profitable" : GRatio >= 2 ** 112
+                    ? "Moderately profitable"
+                    : "Highly profitable"
+            );
+        }
     }
 }
