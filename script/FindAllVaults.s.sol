@@ -58,26 +58,29 @@ contract FindAllVaults is Script {
             console.log("Apes reserve:", reserves.reserveApes, collateralSymbol);
 
             uint256 teaBalanceOfVault = vault.balanceOf(address(vault), i);
-            console.log("POL:", (teaBalanceOfVault * 100) / teaTotalSupply, "%");
+            console.log("Vault TEA balance:", teaBalanceOfVault);
+            console.log("POL:", teaTotalSupply == 0 ? 0 : (teaBalanceOfVault * 100) / teaTotalSupply, "%");
 
             uint256 minReserveLPers = vaultParams.leverageTier >= 0
                 ? uint256(reserves.reserveApes) << uint256(int256(vaultParams.leverageTier))
                 : uint256(reserves.reserveApes) >> uint256(int256(-vaultParams.leverageTier));
 
-            uint256 GRatio = (uint256(reserves.reserveLPers) * 2 ** 112) / minReserveLPers;
-            console.log("G =", (uint256(reserves.reserveLPers) * 100) / minReserveLPers, "% of Gmin");
-            console.log(
-                "Apes:",
-                GRatio >= 1.25 * 2 ** 112 ? "Healthy, more than enough liquidity" : GRatio >= 2 ** 112
-                    ? "Borderline, just enough liquidity"
-                    : "Degraded, insufficient liquidity for constant leverage"
-            );
-            console.log(
-                "Gentlemen:",
-                GRatio >= 1.25 * 2 ** 112 ? "Minimally profitable" : GRatio >= 2 ** 112
-                    ? "Moderately profitable"
-                    : "Highly profitable"
-            );
+            if (minReserveLPers != 0) {
+                console.log("G =", (uint256(reserves.reserveLPers) * 100) / minReserveLPers, "% of Gmin");
+                uint256 GRatio = (uint256(reserves.reserveLPers) * 2 ** 112) / minReserveLPers;
+                console.log(
+                    "Apes:",
+                    GRatio >= 1.25 * 2 ** 112 ? "Healthy, more than enough liquidity" : GRatio >= 2 ** 112
+                        ? "Borderline, just enough liquidity"
+                        : "Degraded, insufficient liquidity for constant leverage"
+                );
+                console.log(
+                    "Gentlemen:",
+                    GRatio >= 1.25 * 2 ** 112 ? "Minimally profitable" : GRatio >= 2 ** 112
+                        ? "Moderately profitable"
+                        : "Highly profitable"
+                );
+            }
         }
     }
 }
