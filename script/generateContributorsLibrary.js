@@ -36,13 +36,35 @@ const fundraisingAllocations = fundraisingData.map(({ contributor, contribution,
 });
 
 // Combine all allocations
-const allAllocations = [
-    ...preMainnetData.map(({ contributor, allocation }) => ({
-        contributor,
-        allocation: (allocation / TOTAL_PREMAINNET_ALLOCATION) * 0.2 // 20% of total issuance
-    })),
-    ...fundraisingAllocations
-];
+let allocationMap = new Map();
+let caseMap = new Map();
+
+// Helper function to add or update allocation
+function addOrUpdateAllocation(contributor, allocation) {
+    const lowerCaseContributor = contributor.toLowerCase();
+    if (allocationMap.has(lowerCaseContributor)) {
+        allocationMap.set(lowerCaseContributor, allocationMap.get(lowerCaseContributor) + allocation);
+    } else {
+        allocationMap.set(lowerCaseContributor, allocation);
+        caseMap.set(lowerCaseContributor, contributor); // Store original case
+    }
+}
+
+// Add pre-mainnet allocations
+preMainnetData.forEach(({ contributor, allocation }) => {
+    addOrUpdateAllocation(contributor, (allocation / TOTAL_PREMAINNET_ALLOCATION) * 0.2); // 20% of total issuance
+});
+
+// Add fundraising allocations
+fundraisingAllocations.forEach(({ contributor, allocation }) => {
+    addOrUpdateAllocation(contributor, allocation);
+});
+
+// Convert map to array, using the original case
+const allAllocations = Array.from(allocationMap, ([lowerCaseContributor, allocation]) => ({
+    contributor: caseMap.get(lowerCaseContributor),
+    allocation
+}));
 
 // Check if the sum of all allocations is within the expected range (30-33%)
 const totalAllocation = allAllocations.reduce((sum, { allocation }) => sum + allocation, 0);
@@ -73,9 +95,7 @@ library Contributors {
 ${scaledAllocations
     .map(
         ({ contributor, allocation }, i) =>
-            `        ${
-                i == 0 ? "" : "else "
-            }if (contributor == address(${contributor.toLowerCase()})) return ${allocation};`
+            `        ${i == 0 ? "" : "else "}if (contributor == address(${contributor})) return ${allocation};`
     )
     .join("\n")}
         
@@ -87,7 +107,7 @@ ${scaledAllocations
 // Write the Solidity library to a file
 const outputPath = path.join(__dirname, "../src/libraries", "Contributors.sol");
 fs.writeFileSync(outputPath, libraryContent);
-console.log("Library Contributors.sol successfully.");
+console.log("Library Contributors.sol generated successfully.");
 
 // Update SystemConstants.sol with new LP_ISSUANCE_FIRST_3_YEARS
 const systemConstantsPath = path.join(__dirname, "../src/libraries/SystemConstants.sol");
@@ -104,3 +124,12 @@ systemConstantsContent = systemConstantsContent.replace(
 
 fs.writeFileSync(systemConstantsPath, systemConstantsContent);
 console.log("SystemConstants.sol updated successfully.");
+
+// Save addresses and allocations as JSON
+const addressesAndAllocations = allAllocations.map(({ contributor, allocation }) => ({
+    address: contributor,
+    allocation: allocation
+}));
+const addressesJsonPath = path.join(__dirname, "../contributors", "addresses_and_allocations.json");
+fs.writeFileSync(addressesJsonPath, JSON.stringify(addressesAndAllocations, null, 2));
+console.log("Addresses and allocations JSON file saved successfully.");
