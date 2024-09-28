@@ -38,7 +38,7 @@ contract Vault is TEA {
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
     );
-    event FeesToStakers(address indexed collateralToken, uint112 totalFeesToStakers);
+    event FeesSentToStakers(address indexed collateralToken, uint256 amount);
 
     Oracle private immutable _ORACLE;
     address private immutable _APE_IMPLEMENTATION;
@@ -46,8 +46,11 @@ contract Vault is TEA {
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
 
-    // Global parameters for each type of collateral that aggregates amounts from all vaults
-    mapping(address collateral => SirStructs.CollateralState) internal _collateralStates;
+    /** Global parameters for each type of collateral that aggregates amounts from all vaults (excluding fees to stakers)
+        Fees to stakers can always be recovered by computing IERC20(collateral).balanceOf(address(this)) - totalReserves[collateral],
+        so that if a token is accidentally sent to this contract, it becomes dividends for the stakers.
+     */
+    mapping(address collateral => uint256) public totalReserves;
 
     constructor(address systemControl, address sir, address oracle, address apeImplementation) TEA(systemControl, sir) {
         // Price _ORACLE
@@ -100,12 +103,8 @@ contract Vault is TEA {
             require(!systemParams_.mintingStopped);
 
             // Get reserves
-            (
-                SirStructs.CollateralState memory collateralState,
-                SirStructs.VaultState memory vaultState,
-                SirStructs.Reserves memory reserves,
-                address ape
-            ) = VaultExternal.getReserves(isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
+            (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+                .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
 
             SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
             SirStructs.Fees memory fees;
@@ -143,14 +142,8 @@ contract Vault is TEA {
             // Update _vaultStates from new reserves
             _updateVaultState(vaultState, reserves, vaultParams);
 
-            // Update collateral params
-            _updateCollateralState(
-                true,
-                collateralState,
-                fees.collateralFeeToStakers,
-                vaultParams.collateralToken,
-                collateralToDeposit
-            );
+            // Update total reserves
+            totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
 
             // Emit event
             emit Mint(
@@ -199,12 +192,8 @@ contract Vault is TEA {
         SirStructs.SystemParameters memory systemParams_ = _systemParams;
 
         // Get reserves
-        (
-            SirStructs.CollateralState memory collateralState,
-            SirStructs.VaultState memory vaultState,
-            SirStructs.Reserves memory reserves,
-            address ape
-        ) = VaultExternal.getReserves(isAPE, _collateralStates, _vaultStates, _ORACLE, vaultParams);
+        (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
@@ -237,14 +226,8 @@ contract Vault is TEA {
         // Update _vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
 
-        // Update collateral params
-        _updateCollateralState(
-            false,
-            collateralState,
-            fees.collateralFeeToStakers,
-            vaultParams.collateralToken,
-            fees.collateralInOrWithdrawn
-        );
+        // Update total reserves
+        totalReserves[vaultParams.collateralToken] -= fees.collateralInOrWithdrawn + fees.collateralFeeToStakers;
 
         // Emit event
         emit Burn(
@@ -377,41 +360,18 @@ contract Vault is TEA {
         }
     }
 
-    function _updateCollateralState(
-        bool isMint,
-        SirStructs.CollateralState memory collateralState,
-        uint256 collateralFeeToStakers,
-        address collateralToken,
-        uint144 collateralDepositedOrWithdrawn
-    ) private {
-        uint256 totalFeesToStakers_ = collateralState.totalFeesToStakers + collateralFeeToStakers;
-        require(totalFeesToStakers_ <= type(uint112).max); // Ensure it fits in a uint112
-        collateralState = SirStructs.CollateralState({
-            totalFeesToStakers: uint112(totalFeesToStakers_),
-            total: isMint
-                ? collateralState.total + collateralDepositedOrWithdrawn
-                : collateralState.total - collateralDepositedOrWithdrawn
-        });
-
-        _collateralStates[collateralToken] = collateralState;
-        emit FeesToStakers(collateralToken, uint112(totalFeesToStakers_));
-    }
-
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    function withdrawFees(address token) external returns (uint112 totalFeesToStakers) {
+    function withdrawFees(address token) external returns (uint256 totalFeesToStakers) {
         require(msg.sender == _SIR);
 
-        SirStructs.CollateralState memory collateralState = _collateralStates[token];
-        totalFeesToStakers = collateralState.totalFeesToStakers;
+        // Anything above the totalReserves is fees to stakers
+        totalFeesToStakers = IERC20(token).balanceOf(address(this)) - totalReserves[token];
+
         if (totalFeesToStakers != 0) {
-            _collateralStates[token] = SirStructs.CollateralState({
-                totalFeesToStakers: 0,
-                total: collateralState.total - totalFeesToStakers
-            });
-            emit FeesToStakers(token, 0);
+            emit FeesSentToStakers(token, totalFeesToStakers);
             TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
         }
     }
@@ -455,9 +415,5 @@ contract Vault is TEA {
         SirStructs.VaultParameters calldata vaultParams
     ) external view returns (SirStructs.VaultState memory) {
         return _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
-    }
-
-    function collateralStates(address token) external view returns (SirStructs.CollateralState memory) {
-        return _collateralStates[token];
     }
 }

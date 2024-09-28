@@ -24,7 +24,7 @@ interface IVault {
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
     );
-    event FeesToStakers(address indexed collateralToken, uint112 totalFeesToStakers);
+    event FeesSentToStakers(address indexed collateralToken, uint256 amount);
     event TransferBatch(
         address indexed operator,
         address indexed from,
@@ -59,7 +59,7 @@ interface IVault {
 
     function claimSIR(uint256 vaultId, address lper) external returns (uint80);
 
-    function collateralStates(address token) external view returns (SirStructs.CollateralState memory);
+    function totalReserves(address token) external view returns (uint256);
 
     function cumulativeSIRPerTEA(uint256 vaultId) external view returns (uint176 cumulativeSIRPerTEAx96);
 

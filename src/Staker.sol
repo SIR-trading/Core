@@ -368,7 +368,7 @@ contract Staker {
     }
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
-    function collectFeesAndStartAuction(address token) external returns (uint112 totalFeesToStakers) {
+    function collectFeesAndStartAuction(address token) external returns (uint256 totalFeesToStakers) {
         unchecked {
             // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalWinningBids_ = totalWinningBids;

@@ -170,22 +170,12 @@ library VaultExternal {
 
     function getReserves(
         bool isAPE,
-        mapping(address collateral => SirStructs.CollateralState) storage collateralStates,
         mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
             storage _vaultStates,
         Oracle oracle,
         SirStructs.VaultParameters calldata vaultParams
-    )
-        external
-        returns (
-            SirStructs.CollateralState memory collateralState,
-            SirStructs.VaultState memory vaultState,
-            SirStructs.Reserves memory reserves,
-            address ape
-        )
-    {
+    ) external returns (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) {
         unchecked {
-            collateralState = collateralStates[vaultParams.collateralToken];
             vaultState = _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
 
             // Get price and update oracle state if needed
