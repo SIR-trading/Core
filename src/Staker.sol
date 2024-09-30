@@ -395,7 +395,7 @@ contract Staker {
             }
 
             // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-            totalFeesToStakers = vault.withdrawFees(token);
+            totalFeesToStakers = vault.withdrawFees(token); // WONT THIS AMOUNT ALSO BE PAID TO THE AUCTION WINNER?!?!
 
             /** For non-WETH tokens, do not start an auction if there are no fees to collect.
                 For WETH, we distribute the fees immediately as dividends.

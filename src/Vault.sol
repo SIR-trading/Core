@@ -18,6 +18,8 @@ import {APE} from "./APE.sol";
 import {Oracle} from "./Oracle.sol";
 import {TEA} from "./TEA.sol";
 
+import "forge-std/console.sol";
+
 contract Vault is TEA {
     error NotAWETHVault();
 
@@ -367,11 +369,12 @@ contract Vault is TEA {
     function withdrawFees(address token) external returns (uint256 totalFeesToStakers) {
         require(msg.sender == _SIR);
 
-        // Anything above the totalReserves is fees to stakers
+        // Surplus above totalReserves is fees to stakers
         totalFeesToStakers = IERC20(token).balanceOf(address(this)) - totalReserves[token];
 
         if (totalFeesToStakers != 0) {
             emit FeesSentToStakers(token, totalFeesToStakers);
+            // WE MAY NOT NEED IT IF WE ALREADY HAVE AN AUCTION EVENT!!!
             TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
         }
     }

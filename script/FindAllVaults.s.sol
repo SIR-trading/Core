@@ -45,6 +45,8 @@ contract FindAllVaults is Script {
             SirStructs.VaultParameters memory vaultParams = vault.paramsById(i);
             console.log("debtToken:", vaultParams.debtToken);
             console.log("collateralToken:", vaultParams.collateralToken);
+            address ape = AddressClone.getAddress(address(vault), i);
+            console.log("ape token:", ape);
             console.log("leverageTier:", vm.toString(vaultParams.leverageTier));
 
             SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -53,7 +55,6 @@ contract FindAllVaults is Script {
             console.log("Supply of TEA:", teaTotalSupply);
             console.log("LP reserve:", reserves.reserveLPers, collateralSymbol);
 
-            address ape = AddressClone.getAddress(address(vault), i);
             console.log("Supply of APE:", IERC20(ape).totalSupply());
             console.log("Apes reserve:", reserves.reserveApes, collateralSymbol);
 
