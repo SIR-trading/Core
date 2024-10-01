@@ -373,8 +373,6 @@ contract Vault is TEA {
         totalFeesToStakers = IERC20(token).balanceOf(address(this)) - totalReserves[token];
 
         if (totalFeesToStakers != 0) {
-            emit FeesSentToStakers(token, totalFeesToStakers);
-            // WE MAY NOT NEED IT IF WE ALREADY HAVE AN AUCTION EVENT!!!
             TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
         }
     }

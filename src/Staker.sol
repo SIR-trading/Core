@@ -6,6 +6,7 @@ import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 import {Addresses} from "./libraries/Addresses.sol";
+// import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 
 import "forge-std/console.sol";
 
@@ -17,14 +18,14 @@ import "forge-std/console.sol";
 contract Staker {
     error NewAuctionCannotStartYet();
     error NoAuctionLot();
-    error NoFeesCollectedYet();
+    error NoFeesCollected();
     error AuctionIsNotOver();
     error NoAuction();
     error BidTooLow();
     error InvalidSigner();
     error PermitDeadlineExpired();
 
-    event AuctionStarted(address indexed token);
+    event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
     event DividendsPaid(uint256 amountETH);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
@@ -368,13 +369,13 @@ contract Staker {
     }
 
     /// @notice It cannot fail if the dividends transfer fails or payment to the winner fails.
-    function collectFeesAndStartAuction(address token) external returns (uint256 totalFeesToStakers) {
+    function collectFeesAndStartAuction(address token) external returns (uint256 totalFees) {
         unchecked {
-            // (W)ETH is the dividend paying token, so we do not start an auction for it.
             uint96 totalWinningBids_ = totalWinningBids;
-            SirStructs.Auction memory auction;
+
+            // Because ETH is the dividend paying token, we do not need to start an auction if fees are in WETH.
             if (token != address(_WETH)) {
-                auction = _auctions[token];
+                SirStructs.Auction memory auction = _auctions[token];
 
                 uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
                 if (block.timestamp < newStartTime) revert NewAuctionCannotStartYet();
@@ -390,31 +391,32 @@ contract Staker {
                 totalWinningBids_ -= auction.bid;
                 totalWinningBids = totalWinningBids_;
 
-                // Emit event for the new auction
-                emit AuctionStarted(token);
+                // Distribute dividends collected from the previous auction if there were any
+                _distributeDividends(totalWinningBids_);
+
+                // The winner of the previous auction is paid after all state changes have been made to avoid reentrancy attacks.
+                _payAuctionWinner(token, auction);
+
+                /** Retrieve fees from the vault to be auctioned next.
+                    This function must come after _payAuctionWinner to avoid paying the previous auction winner twice.
+                */
+                totalFees = vault.withdrawFees(token);
+
+                // Do not start a new auction if there are no fees to auction
+                if (totalFees == 0) revert NoFeesCollected();
+
+                // Emit event with the new auction's details
+                emit AuctionStarted(token, totalFees);
+            } else {
+                //  Retrieve WETH from the vault to be distributed as dividends.
+                totalFees = vault.withdrawFees(token);
+
+                // Distribute WETH as ETH dividends
+                bool noDividends = _distributeDividends(totalWinningBids_);
+
+                //  Revert if there is no (W)ETH be to distributed.
+                if (noDividends) revert NoFeesCollected();
             }
-
-            // Retrieve fees from the vault to be auctioned, or distributed if they are WETH
-            totalFeesToStakers = vault.withdrawFees(token); // WONT THIS AMOUNT ALSO BE PAID TO THE AUCTION WINNER?!?!
-
-            /** For non-WETH tokens, do not start an auction if there are no fees to collect.
-                For WETH, we distribute the fees immediately as dividends.
-             */
-            if (totalFeesToStakers == 0 && token != address(_WETH)) revert NoFeesCollectedYet();
-
-            // Distribute dividends from the previous auction even if paying the previous winner fails
-            bool noDividends = _distributeDividends(totalWinningBids_);
-
-            /** For non-WETH tokens, it is possible it was a non-sale auction, but we don't want to revert because want to be able to start a new auction.
-                For WETH, there are no _auctions. Fees are distributed immediately as dividends unless no-one is staking or there are no dividends.
-                    No dividends => no fees.
-             */
-            if (noDividends && token == address(_WETH)) revert NoFeesCollectedYet();
-
-            /** The auction winner is paid last because
-                it makes external calls that could be used for reentrancy attacks. 
-             */
-            if (token != address(_WETH)) _payAuctionWinner(token, auction);
         }
     }
 
@@ -490,7 +492,7 @@ contract Staker {
         if (tokenAmount == 0) return true;
 
         /** Pay the winner if tokenAmount > 0
-            Low-level call to avoid revert if the ERC20 token has some problems.
+            Low-level call to avoid revert in case the destination has been banned from receiving tokens.
          */
         (success, data) = token.call(abi.encodeWithSignature("transfer(address,uint256)", auction.bidder, tokenAmount));
 

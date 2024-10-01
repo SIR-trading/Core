@@ -88,11 +88,24 @@ contract Auxiliary is Test {
                 );
             }
         } else {
+            tokenBalances.vaultTotalFees = _bound(
+                tokenBalances.vaultTotalFees,
+                0,
+                type(uint256).max - IERC20(token).totalSupply()
+            );
             tokenBalances.vaultTotalReserves = _bound(
                 tokenBalances.vaultTotalReserves,
                 0,
-                type(uint256).max - tokenBalances.vaultTotalFees
+                type(uint256).max - IERC20(token).totalSupply() - tokenBalances.vaultTotalFees
             );
+            if (IERC20(token).balanceOf(vault) > tokenBalances.vaultTotalReserves + tokenBalances.vaultTotalFees) {
+                tokenBalances.vaultTotalReserves = IERC20(token).balanceOf(vault) - tokenBalances.vaultTotalFees;
+                tokenBalances.vaultTotalFees = _bound(
+                    tokenBalances.vaultTotalFees,
+                    0,
+                    type(uint256).max - tokenBalances.vaultTotalReserves
+                );
+            }
         }
 
         // Set reserves in Vault
@@ -128,8 +141,9 @@ contract Auxiliary is Test {
         tokenBalances.stakerDonations = _bound(
             tokenBalances.stakerDonations,
             0,
-            type(uint256).max - tokenBalances.vaultTotalReserves - tokenBalances.vaultTotalFees
+            type(uint256).max - IERC20(token).totalSupply()
         );
+        console.log(type(uint256).max - IERC20(token).totalSupply(), tokenBalances.stakerDonations);
         if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenBalances.stakerDonations);
         else _dealToken(token, address(staker), tokenBalances.stakerDonations);
     }
@@ -195,7 +209,7 @@ contract Auxiliary is Test {
 
     function _dealToken(address token, address to, uint256 amount) internal {
         if (amount == 0) return;
-        deal(token, address(1), amount);
+        deal(token, address(1), amount, true);
         vm.prank(address(1));
         TransferHelper.safeTransfer(token, to, amount);
     }
@@ -215,7 +229,7 @@ contract StakerTest is Auxiliary {
         uint80 stakeAmount;
     }
 
-    error NoFeesCollectedYet();
+    error NoFeesCollected();
     error NoAuctionLot();
     error AuctionIsNotOver();
     error BidTooLow();
@@ -226,7 +240,7 @@ contract StakerTest is Auxiliary {
     event Staked(address indexed staker, uint256 amount);
     event DividendsPaid(uint256 amount);
     event Unstaked(address indexed staker, uint256 amount);
-    event AuctionStarted(address indexed token);
+    event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
 
@@ -514,7 +528,7 @@ contract StakerTest is Auxiliary {
             vm.expectEmit();
             emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH);
         } else {
-            vm.expectRevert(NoFeesCollectedYet.selector);
+            vm.expectRevert(NoFeesCollected.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -609,7 +623,7 @@ contract StakerTest is Auxiliary {
     }
 
     function test_collectNoFeesAndStartAuction() public {
-        vm.expectRevert(NoFeesCollectedYet.selector);
+        vm.expectRevert(NoFeesCollected.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_FRAX);
     }
 
@@ -634,7 +648,7 @@ contract StakerTest is Auxiliary {
             vm.expectEmit();
             emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH);
         } else {
-            vm.expectRevert(NoFeesCollectedYet.selector);
+            vm.expectRevert(NoFeesCollected.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -714,7 +728,7 @@ contract StakerTest is Auxiliary {
             vm.expectEmit();
             emit DividendsPaid(dividends);
         } else {
-            vm.expectRevert(NoFeesCollectedYet.selector);
+            vm.expectRevert(NoFeesCollected.selector);
         }
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
@@ -870,7 +884,7 @@ contract StakerTest is Auxiliary {
             0 ||
             user.stakeAmount == 0;
         if (noFees) {
-            vm.expectRevert(NoFeesCollectedYet.selector);
+            vm.expectRevert(NoFeesCollected.selector);
         } else {
             if (tokenBalances.vaultTotalFees > 0) {
                 // Transfer event if there are WETH fees
@@ -915,7 +929,7 @@ contract StakerTest is Auxiliary {
             0 ||
             user.stakeAmount == 0;
         if (noFees) {
-            vm.expectRevert(NoFeesCollectedYet.selector);
+            vm.expectRevert(NoFeesCollected.selector);
         } else {
             if (tokenBalances2.vaultTotalFees > 0) {
                 // Transfer event if there are WETH fees
@@ -945,7 +959,7 @@ contract StakerTest is Auxiliary {
         vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_WETH);
 
-        vm.expectRevert(NoFeesCollectedYet.selector);
+        vm.expectRevert(NoFeesCollected.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
     }
 
@@ -966,17 +980,15 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Start auction
-        vm.expectEmit();
-        emit AuctionStarted(Addresses.ADDR_BNB);
-        vm.expectEmit();
-        emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
         if (user.stakeAmount > 0 && donations.stakerDonationsETH + donations.stakerDonationsWETH > 0) {
             vm.expectEmit();
             emit DividendsPaid(donations.stakerDonationsETH + donations.stakerDonationsWETH);
         }
-        console.log("Staker ETH balance is", address(staker).balance);
+        vm.expectEmit();
+        emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
+        vm.expectEmit();
+        emit AuctionStarted(Addresses.ADDR_BNB, tokenBalances.vaultTotalFees);
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
-        console.log("Staker ETH balance is", address(staker).balance);
     }
 
     function testFuzz_auctionOfWETHFails(
@@ -1033,7 +1045,7 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Start auction
-        vm.expectRevert(NoFeesCollectedYet.selector);
+        vm.expectRevert(NoFeesCollected.selector);
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
     }
 
@@ -1239,6 +1251,37 @@ contract StakerTest is Auxiliary {
         vm.warp(timeStamp);
         vm.expectRevert(NewAuctionCannotStartYet.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
+    }
+
+    function testFuzz_2ndAuctionOfBNB(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3,
+        TokenBalances memory tokenBalances2
+    ) public {
+        testFuzz_auctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
+        vm.assume(bidder1.amount + bidder2.amount > 0);
+
+        // Set up fees for 2nd auction
+        _setFees(Addresses.ADDR_BNB, tokenBalances2);
+        vm.assume(tokenBalances2.vaultTotalFees > 0);
+
+        // Skip time
+        skip(SystemConstants.AUCTION_COOLDOWN);
+
+        // Start 2nd auction
+        staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
+
+        // Make sure the fees for the 2nd auction are correct
+        assertEq(
+            IERC20(Addresses.ADDR_BNB).balanceOf(address(staker)),
+            tokenBalances2.vaultTotalFees,
+            "Wrong BNB balance in Staker"
+        );
     }
 }
 
