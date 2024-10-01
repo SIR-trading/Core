@@ -1223,6 +1223,9 @@ contract StakerTest is Auxiliary {
         skip(SystemConstants.AUCTION_DURATION + 1);
 
         vm.expectRevert(NoAuctionLot.selector);
+        staker.payAuctionWinner(Addresses.ADDR_WETH);
+
+        vm.expectRevert(NoAuctionLot.selector);
         staker.payAuctionWinner(Addresses.ADDR_BNB);
     }
 

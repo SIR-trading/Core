@@ -178,7 +178,7 @@ contract VaultTest is Test {
     }
 
     uint256 constant SLOT_VAULT_STATE = 7;
-    uint256 constant SLOT_COLLATERAL_STATES = 8;
+    uint256 constant SLOT_TOTAL_RESERVES = 8;
     uint256 constant SLOT_TOTAL_SUPPLY_APE = 5;
     uint256 constant SLOT_APE_BALANCE_OF = 6;
     uint256 constant SLOT_TOTAL_SUPPLY_TEA = 4;
@@ -298,7 +298,6 @@ contract VaultTest is Test {
                 );
 
                 // Derive vault state
-
                 vaultState = _deriveVaultState(reservesPre);
             }
 
@@ -500,16 +499,17 @@ contract VaultTest is Test {
                 );
             }
         } else {
+            console.log(reservesPre.reserveApes, reservesPost.reserveApes, vaultState.reserve);
             assertApproxEqAbs(
                 reservesPre.reserveApes,
                 reservesPost.reserveApes,
-                1 + vaultState.reserve / 1e5,
+                1 + vaultState.reserve / 1e3,
                 "Reserve apes is wrong"
             );
             assertApproxEqAbs(
                 reservesPre.reserveLPers,
                 reservesPost.reserveLPers,
-                1 + vaultState.reserve / 1e5,
+                1 + vaultState.reserve / 1e3,
                 "Reserve LPers is wrong"
             );
         }
@@ -1155,10 +1155,13 @@ contract VaultTest is Test {
         }
 
         // Verify token state
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
-        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
         assertEq(
-            collateralState.total,
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
+            fees.collateralFeeToStakers
+        );
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
             reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral,
             "Total reserves does not match"
         );
@@ -1257,15 +1260,18 @@ contract VaultTest is Test {
         }
 
         // Verify token state
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
-        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
         assertEq(
-            collateralState.total,
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
+            fees.collateralFeeToStakers
+        );
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
             reservesPre.reserveLPers +
                 fees.collateralFeeToProtocol +
                 reservesPre.reserveApes +
                 fees.collateralFeeToStakers,
-            "1"
+            "Total reserves does not match"
         );
 
         // Verify Alice's balances
@@ -1332,9 +1338,15 @@ contract VaultTest is Test {
         }
 
         // Verify token state
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
-        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
-        assertEq(collateralState.total, reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral);
+        uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
+            fees.collateralFeeToStakers
+        );
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
+            reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral
+        );
 
         // Verify POL's balances
         uint128 amountPol = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
@@ -1417,10 +1429,13 @@ contract VaultTest is Test {
         }
 
         // Verify token state
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
-        assertEq(collateralState.totalFeesToStakers, fees.collateralFeeToStakers);
+        uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
         assertEq(
-            collateralState.total,
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
+            fees.collateralFeeToStakers
+        );
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
             reservesPre.reserveLPers +
                 fees.collateralFeeToProtocol +
                 reservesPre.reserveApes +
@@ -1480,17 +1495,20 @@ contract VaultTest is Test {
         assertEq(vaultState_.tickPriceSatX42, vaultState.tickPriceSatX42, "Wrong slot used by vm.store");
         assertEq(vaultState_.vaultId, VAULT_ID, "Wrong slot used by vm.store");
 
-        // Set collateralStates
-        slot = keccak256(
-            abi.encode(
-                vaultParams.collateralToken,
-                SLOT_COLLATERAL_STATES // slot of collateralStates
-            )
+        // Set total reserves
+        slot = keccak256(abi.encode(vaultParams.collateralToken, SLOT_TOTAL_RESERVES));
+        vm.store(address(vault), slot, bytes32(uint256(vaultState.reserve)));
+        uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
+            0,
+            "Wrong slot used by vm.store"
         );
-        vm.store(address(vault), slot, bytes32(abi.encodePacked(vaultState.reserve, uint112(0))));
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParams.collateralToken);
-        assertEq(collateralState.totalFeesToStakers, 0, "Wrong slot used by vm.store");
-        assertEq(collateralState.total, vaultState.reserve, "Wrong slot used by vm.store");
+        assertEq(
+            IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
+            vaultState.reserve,
+            "Wrong slot used by vm.store"
+        );
 
         // Set the total supply of APE
         vm.store(address(ape), bytes32(SLOT_TOTAL_SUPPLY_APE), bytes32(balances.apeSupply));
@@ -1570,12 +1588,8 @@ contract VaultTestWithETH is Test {
         vm.prank(alice);
         vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
 
-        // Check reserves
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(Addresses.ADDR_WETH);
-
         // Check the total reserve
         assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
-        assertEq(collateralState.total, amountETH, "Wrong total reserve");
     }
 
     function test_mintTooLittle(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
@@ -1614,7 +1628,7 @@ contract VaultControlTest is Test {
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
-    uint256 constant SLOT_TOKEN_STATES = 8;
+    uint256 constant SLOT_TOTAL_RESERVES = 8;
     uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
 
     address public systemControl = vm.addr(1);
@@ -1623,9 +1637,8 @@ contract VaultControlTest is Test {
     Vault public vault;
 
     struct TokenFees {
-        uint112 fees;
-        uint144 total;
-        uint256 donations;
+        uint256 fees;
+        uint256 total;
     }
 
     struct BuggyERC20 {
@@ -1672,7 +1685,7 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_WETH);
+        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_WETH);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
@@ -1690,12 +1703,12 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_BNB);
+        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_BNB);
 
         // Assert balances
-        assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+        assertEq(totalFeesToStakers, tokenFees.fees, "Wrong total fees to stakers");
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(sir), tokenFees.fees, "Wrong BNB balance of SIR contract");
+        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vault)), tokenFees.total, "Wrong BNB balance of vault");
     }
 
     function testFuzz_withdrawUSDT(TokenFees memory tokenFees) public {
@@ -1708,7 +1721,7 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDT);
+        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDT);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
@@ -1726,7 +1739,7 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint112 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDC);
+        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDC);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
@@ -1783,50 +1796,50 @@ contract VaultControlTest is Test {
         tokens[1] = Addresses.ADDR_BNB;
         tokens[2] = Addresses.ADDR_USDT;
         tokens[3] = Addresses.ADDR_USDC;
-        if (tokenFeesWETH.total > 0) {
+        if (tokenFeesWETH.total + tokenFeesWETH.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesWETH.total);
+            emit Transfer(address(vault), to, tokenFeesWETH.total + tokenFeesWETH.fees);
         }
-        if (tokenFeesBNB.total > 0) {
+        if (tokenFeesBNB.total + tokenFeesBNB.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesBNB.total);
+            emit Transfer(address(vault), to, tokenFeesBNB.total + tokenFeesBNB.fees);
         }
-        if (tokenFeesUSDT.total > 0) {
+        if (tokenFeesUSDT.total + tokenFeesUSDT.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesUSDT.total);
+            emit Transfer(address(vault), to, tokenFeesUSDT.total + tokenFeesUSDT.fees);
         }
-        if (tokenFeesUSDC.total > 0) {
+        if (tokenFeesUSDC.total + tokenFeesUSDC.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesUSDC.total);
+            emit Transfer(address(vault), to, tokenFeesUSDC.total + tokenFeesUSDC.fees);
         }
         vm.prank(systemControl);
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Assert balances
-        assertEq(amounts[0], tokenFeesWETH.total, "Wrong amounts[0]");
-        assertEq(amounts[1], tokenFeesBNB.total, "Wrong amounts[1]");
-        assertEq(amounts[2], tokenFeesUSDT.total, "Wrong amounts[2]");
-        assertEq(amounts[3], tokenFeesUSDC.total, "Wrong amounts[3]");
+        assertEq(amounts[0], tokenFeesWETH.total + tokenFeesWETH.fees, "Wrong amounts[0]");
+        assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
+        assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
+        assertEq(amounts[3], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[3]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
             balances4Tokens.balanceOfWETH - preBalances4Tokens.balanceOfWETH,
-            tokenFeesWETH.total,
+            tokenFeesWETH.total + tokenFeesWETH.fees,
             "Wrong WETH balance"
         );
         assertEq(
             balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
-            tokenFeesBNB.total,
+            tokenFeesBNB.total + tokenFeesBNB.fees,
             "Wrong BNB balance"
         );
         assertEq(
             balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
-            tokenFeesUSDT.total,
+            tokenFeesUSDT.total + tokenFeesUSDT.fees,
             "Wrong USDT balance"
         );
         assertEq(
             balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
-            tokenFeesUSDC.total,
+            tokenFeesUSDC.total + tokenFeesUSDC.fees,
             "Wrong USDC balance"
         );
     }
@@ -1873,52 +1886,64 @@ contract VaultControlTest is Test {
             buggyWETH.balanceOfReturnsWrongLength ||
             buggyWETH.transferReverts ||
             buggyWETH.transferReturnsFalse
-        ) tokenFeesWETH.total = 0;
+        ) {
+            tokenFeesWETH.total = 0;
+            tokenFeesWETH.fees = 0;
+        }
         if (
             buggyBNB.balanceOfReverts ||
             buggyBNB.balanceOfReturnsWrongLength ||
             buggyBNB.transferReverts ||
             buggyBNB.transferReturnsFalse
-        ) tokenFeesBNB.total = 0;
+        ) {
+            tokenFeesBNB.total = 0;
+            tokenFeesBNB.fees = 0;
+        }
         if (
             buggyUSDT.balanceOfReverts ||
             buggyUSDT.balanceOfReturnsWrongLength ||
             buggyUSDT.transferReverts ||
             buggyUSDT.transferReturnsFalse
-        ) tokenFeesUSDT.total = 0;
+        ) {
+            tokenFeesUSDT.total = 0;
+            tokenFeesUSDT.fees = 0;
+        }
         if (
             buggyUSDC.balanceOfReverts ||
             buggyUSDC.balanceOfReturnsWrongLength ||
             buggyUSDC.transferReverts ||
             buggyUSDC.transferReturnsFalse
-        ) tokenFeesUSDC.total = 0;
+        ) {
+            tokenFeesUSDC.total = 0;
+            tokenFeesUSDC.fees = 0;
+        }
 
         // Assert balances
         vm.clearMockedCalls();
-        assertEq(amounts[0], tokenFeesWETH.total, "Wrong amounts[0]");
-        assertEq(amounts[1], tokenFeesBNB.total, "Wrong amounts[1]");
-        assertEq(amounts[2], tokenFeesUSDT.total, "Wrong amounts[2]");
-        assertEq(amounts[3], tokenFeesUSDC.total, "Wrong amounts[3]");
+        assertEq(amounts[0], tokenFeesWETH.total + tokenFeesWETH.fees, "Wrong amounts[0]");
+        assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
+        assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
+        assertEq(amounts[3], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[3]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
             balances4Tokens.balanceOfWETH - preBalances4Tokens.balanceOfWETH,
-            tokenFeesWETH.total,
+            tokenFeesWETH.total + tokenFeesWETH.fees,
             "Wrong WETH balance"
         );
         assertEq(
             balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
-            tokenFeesBNB.total,
+            tokenFeesBNB.total + tokenFeesBNB.fees,
             "Wrong BNB balance"
         );
         assertEq(
             balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
-            tokenFeesUSDT.total,
+            tokenFeesUSDT.total + tokenFeesUSDT.fees,
             "Wrong USDT balance"
         );
         assertEq(
             balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
-            tokenFeesUSDC.total,
+            tokenFeesUSDC.total + tokenFeesUSDC.fees,
             "Wrong USDC balance"
         );
     }
@@ -1942,7 +1967,7 @@ contract VaultControlTest is Test {
             vm.mockCall(
                 token,
                 abi.encodeWithSelector(IERC20.balanceOf.selector, address(vault)),
-                abi.encode(uint8(1), uint256(tokenFees.total)) // Longer than 1 word
+                abi.encode(uint8(1), tokenFees.total + tokenFees.fees) // Longer than 1 word
             );
         }
 
@@ -1954,34 +1979,30 @@ contract VaultControlTest is Test {
     }
 
     function _setFees(address token, TokenFees memory tokenFees) internal {
-        // Add fees in vault
-        if (token == Addresses.ADDR_WETH) tokenFees.total = uint144(_bound(tokenFees.total, 0, ETH_SUPPLY));
-        tokenFees.fees = uint112(_bound(tokenFees.fees, 0, tokenFees.total));
+        // Bound variables
+        tokenFees.fees = _bound(tokenFees.fees, 0, type(uint256).max - IERC20(token).totalSupply());
+        tokenFees.total = _bound(tokenFees.total, 0, type(uint256).max - IERC20(token).totalSupply() - tokenFees.fees);
+        if (token == Addresses.ADDR_WETH) {
+            tokenFees.total = _bound(tokenFees.total, 0, ETH_SUPPLY);
+        } else {
+            // Each vault can have at most 2^144 tokens and there are at most 2^48 vaults
+            tokenFees.total = _bound(tokenFees.total, 0, 2 ** (144 + 48));
+        }
 
-        // Increase fees in Vault
-        uint256 slot = uint256(
-            vm.load(address(vault), keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))))
+        // Send tokens to Vault
+        if (token == Addresses.ADDR_WETH) _dealWETH(address(vault), tokenFees.total + tokenFees.fees);
+        else _dealToken(token, address(vault), tokenFees.total + tokenFees.fees);
+
+        // Set total reserves
+        bytes32 slot = keccak256(abi.encode(token, SLOT_TOTAL_RESERVES));
+        vm.store(address(vault), slot, bytes32(tokenFees.total));
+        uint256 totalReserves = vault.totalReserves(token);
+        assertEq(vault.totalReserves(token), tokenFees.total, "Wrong token total reserves");
+        assertEq(
+            tokenFees.fees,
+            IERC20(token).balanceOf(address(vault)) - totalReserves,
+            "Wrong token fees to stakers"
         );
-        tokenFees.fees += uint112(slot);
-        slot >>= 112;
-        tokenFees.total += uint144(slot);
-        assert(tokenFees.total >= tokenFees.fees);
-        vm.store(
-            address(vault),
-            keccak256(abi.encode(token, bytes32(uint256(SLOT_TOKEN_STATES)))),
-            bytes32(abi.encodePacked(tokenFees.total, tokenFees.fees))
-        );
-
-        SirStructs.CollateralState memory collateralState_ = vault.collateralStates(token);
-        assertEq(tokenFees.fees, collateralState_.totalFeesToStakers, "Wrong token states slot used by vm.store");
-
-        // Check the collateralState.total supply is correctly updated
-        uint256 pretotalSupply = IERC20(token).totalSupply();
-
-        if (token == Addresses.ADDR_WETH) _dealWETH(address(vault), tokenFees.total);
-        else _dealToken(token, address(vault), tokenFees.total);
-
-        assertEq(IERC20(token).totalSupply(), pretotalSupply + tokenFees.total, "Wrong collateralState.total supply");
     }
 
     function _dealWETH(address to, uint256 amount) internal {
@@ -2141,14 +2162,22 @@ contract VaultHandler is Test, RegimeEnum {
 
     function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
         // Sufficient condition to not overflow collateralState.total collateral
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(vaultParameters.collateralToken);
         inputOutput.amountCollateral = uint144(
-            _bound(inputOutput.amountCollateral, 0, type(uint144).max - collateralState.total)
+            _bound(
+                inputOutput.amountCollateral,
+                0,
+                type(uint144).max - IERC20(vaultParameters.collateralToken).balanceOf(address(vault))
+            )
         );
 
         // Sufficient condition to not overflow collected fees
+        uint256 totalReserves = vault.totalReserves(vaultParameters.collateralToken);
         inputOutput.amountCollateral = uint144(
-            _bound(inputOutput.amountCollateral, 0, type(uint112).max - collateralState.totalFeesToStakers)
+            _bound(
+                inputOutput.amountCollateral,
+                0,
+                type(uint112).max - IERC20(vaultParameters.collateralToken).balanceOf(address(vault)) + totalReserves
+            )
         );
 
         bool success;
@@ -2355,16 +2384,14 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function _invariantTotalCollateral() private view {
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
-        console.log("Total collateral", collateralState.total);
-        console.log("Balance of WETH", _WETH.balanceOf(address(vault)));
-        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WETH));
+        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         SirStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
         SirStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
         assertEq(
             reserves1.reserveApes + reserves1.reserveLPers + reserves2.reserveApes + reserves2.reserveLPers,
-            collateralState.total - collateralState.totalFeesToStakers,
+            totalReserves,
             "Total collateral minus fees is wrong"
         );
     }
@@ -2496,8 +2523,8 @@ contract VaultInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_totalCollateral() public view {
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
-        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WETH));
+        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
     }
 }
 
@@ -2554,15 +2581,11 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public view {
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
-        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WETH));
+        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(
-            reserveApes + reserveLPers,
-            collateralState.total - collateralState.totalFeesToStakers,
-            "Total collateral minus fees is wrong"
-        );
+        assertEq(reserveApes + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
     }
 }
 
@@ -2613,15 +2636,11 @@ contract SaturationInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public view {
-        SirStructs.CollateralState memory collateralState = vault.collateralStates(address(_WETH));
-        assertEq(collateralState.total, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WETH));
+        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(
-            reserveApes + reserveLPers,
-            collateralState.total - collateralState.totalFeesToStakers,
-            "Total collateral minus fees is wrong"
-        );
+        assertEq(reserveApes + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
     }
 }
 

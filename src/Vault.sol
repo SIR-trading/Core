@@ -40,7 +40,6 @@ contract Vault is TEA {
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers
     );
-    event FeesSentToStakers(address indexed collateralToken, uint256 amount);
 
     Oracle private immutable _ORACLE;
     address private immutable _APE_IMPLEMENTATION;
