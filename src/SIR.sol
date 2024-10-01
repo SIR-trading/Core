@@ -9,6 +9,8 @@ import {Staker} from "./Staker.sol";
 
 // Contracts
 contract SIR is Staker {
+    event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
+
     mapping(address => uint40) internal timestampLastMint;
 
     /*////////////////////////////////////////////////////////////////
@@ -81,5 +83,7 @@ contract SIR is Staker {
         // Mint if there are any unclaimed rewards
         require(rewards > 0);
         _mint(msg.sender, rewards);
+
+        emit RewardsClaimed(msg.sender, vaultId, rewards);
     }
 }
