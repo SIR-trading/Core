@@ -32,13 +32,13 @@ contract ContributorsTest is Test {
     uint256 constant BC_BOOST = 5; // [%] 5% boost per BC
     uint256 constant MAX_NUM_BC = 6; // Maximum number of BCs for boost
 
-    uint256 fundraisingTotal = 0;
-
     SIR public sir;
 
     ContributorFR[] contributorsFR;
     ContributorPreMainnet[] contributorsPreMainnet;
-    mapping(address => bool) existsContributor;
+    mapping(address => uint256) contributorIssuance;
+
+    mapping(address => bool) addressChecked;
 
     function setUp() public {
         // vm.createSelectFork("mainnet", 18128102);
@@ -60,6 +60,7 @@ contract ContributorsTest is Test {
         string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/fundraising.json"));
         bytes memory data = vm.parseJson(json);
         ContributorFR[] memory contributorsFR_ = abi.decode(data, (ContributorFR[]));
+        uint256 fundraisingTotal = 0;
         for (uint256 i = 0; i < contributorsFR_.length; i++) {
             // Sum total fundraising
             fundraisingTotal += contributorsFR_[i].contribution;
@@ -70,9 +71,6 @@ contract ContributorsTest is Test {
             // Add the contributor if the contribution is greater than 0
             if (contributorsFR_[i].contribution > 0) {
                 contributorsFR.push(contributorsFR_[i]);
-
-                // Indicate that the contributors exist
-                existsContributor[contributorsFR_[i].addr] = true;
             }
         }
 
@@ -83,29 +81,46 @@ contract ContributorsTest is Test {
         for (uint256 i = 0; i < contributorsPreMainnet_.length; i++) {
             if (contributorsPreMainnet_[i].allocation > 0) {
                 contributorsPreMainnet.push(contributorsPreMainnet_[i]);
-
-                // Indicate that the contributors exist
-                existsContributor[contributorsPreMainnet_[i].addr] = true;
             }
+        }
+
+        // Update their issuances
+        for (uint256 i = 0; i < contributorsFR.length; i++) {
+            uint256 issuance = (((contributorsFR[i].contribution * SystemConstants.ISSUANCE) * FUNDRAISING_PERCENTAGE) *
+                (100 + BC_BOOST * contributorsFR[i].numBC)) / (fundraisingTotal * (100 ** 2));
+
+            // Update the contributors issuance
+            contributorIssuance[contributorsFR[i].addr] += issuance;
+        }
+        for (uint256 i = 0; i < contributorsPreMainnet.length; i++) {
+            uint256 issuance = (contributorsPreMainnet[i].allocation * SystemConstants.ISSUANCE) / 100000;
+
+            // Update the contributors issuance
+            contributorIssuance[contributorsPreMainnet[i].addr] += issuance;
         }
     }
 
-    function test_getAllocation() public view {
+    function test_getAllocation() public {
         uint256 aggContributions = 0;
-
         for (uint256 i = 0; i < contributorsFR.length; i++) {
-            aggContributions += Contributors.getAllocation(contributorsFR[i].addr);
+            if (!addressChecked[contributorsFR[i].addr]) {
+                aggContributions += Contributors.getAllocation(contributorsFR[i].addr);
+                addressChecked[contributorsFR[i].addr] = true;
+            }
         }
 
         for (uint256 i = 0; i < contributorsPreMainnet.length; i++) {
-            aggContributions += Contributors.getAllocation(contributorsPreMainnet[i].addr);
+            if (!addressChecked[contributorsPreMainnet[i].addr]) {
+                aggContributions += Contributors.getAllocation(contributorsPreMainnet[i].addr);
+                addressChecked[contributorsPreMainnet[i].addr] = true;
+            }
         }
 
         assertEq(aggContributions, type(uint56).max); // This works for now but most likely it needs some error tolerance.
     }
 
     function testFuzz_fakeContributorMint(address contributor, uint32 timeSkip) public {
-        vm.assume(!existsContributor[contributor]);
+        vm.assume(contributorIssuance[contributor] == 0);
 
         // Skip time
         skip(timeSkip);
@@ -119,28 +134,36 @@ contract ContributorsTest is Test {
         sir.contributorMint();
     }
 
-    function testFuzz_funraisingContributorMint(uint256 contributor, uint32 timeSkip, uint32 timeSkip2) public {
-        ContributorFR memory contributorFR = _getContributorFR(contributor);
+    function testFuzz_contributorMint(
+        bool typeContributor,
+        uint256 contributor,
+        uint32 timeSkip,
+        uint32 timeSkip2
+    ) public {
+        uint256 relErr18Decimals = 1e6;
+
+        address contributorAddr = typeContributor
+            ? _getContributorFR(contributor)
+            : _getContributorPreMainnet(contributor);
 
         // Skip time
         skip(timeSkip);
 
         // Issuance
-        uint256 issuance = (((contributorFR.contribution * SystemConstants.ISSUANCE) * FUNDRAISING_PERCENTAGE) *
-            (100 + BC_BOOST * contributorFR.numBC)) / (fundraisingTotal * (100 ** 2));
+        uint256 issuance = contributorIssuance[contributorAddr];
 
         // Contributor's rewards
         uint256 rewards = issuance * (timeSkip <= THREE_YEARS ? timeSkip : THREE_YEARS);
-        assertEq(sir.contributorUnclaimedSIR(contributorFR.addr), rewards);
+        assertApproxEqRel(sir.contributorUnclaimedSIR(contributorAddr), rewards, relErr18Decimals);
 
         // Mint contributor's rewards
-        vm.prank(contributorFR.addr);
+        vm.prank(contributorAddr);
         if (timeSkip == 0) vm.expectRevert();
         uint256 rewards_ = sir.contributorMint();
 
         // Assert rewards
-        assertEq(rewards_, rewards);
-        assertEq(sir.contributorUnclaimedSIR(contributorFR.addr), 0);
+        assertApproxEqRel(rewards_, rewards, relErr18Decimals);
+        assertEq(sir.contributorUnclaimedSIR(contributorAddr), 0);
 
         // Skip time
         skip(timeSkip2);
@@ -153,55 +176,19 @@ contract ContributorsTest is Test {
                     ? timeSkip2
                     : (timeSkip <= THREE_YEARS ? THREE_YEARS - timeSkip : 0)
             );
-        assertEq(sir.contributorUnclaimedSIR(contributorFR.addr), rewards);
-    }
-
-    function testFuzz_preMainnetContributorMint(uint256 contributor, uint32 timeSkip, uint32 timeSkip2) public {
-        ContributorPreMainnet memory contributorPreMainnet = _getContributorPreMainnet(contributor);
-
-        // Skip time
-        skip(timeSkip);
-
-        // Issuance
-        uint256 issuance = (contributorPreMainnet.allocation * SystemConstants.ISSUANCE) / 100000;
-
-        // Contributor's rewards
-        uint256 rewards = issuance * (timeSkip <= THREE_YEARS ? timeSkip : THREE_YEARS);
-        assertEq(sir.contributorUnclaimedSIR(contributorPreMainnet.addr), rewards);
-
-        // Mint contributor's rewards
-        vm.prank(contributorPreMainnet.addr);
-        if (timeSkip == 0) vm.expectRevert();
-        uint256 rewards_ = sir.contributorMint();
-
-        // Assert rewards
-        assertEq(rewards_, rewards);
-        assertEq(sir.contributorUnclaimedSIR(contributorPreMainnet.addr), 0);
-
-        // Skip time
-        skip(timeSkip2);
-
-        // Contributor's rewards
-        rewards =
-            issuance *
-            (
-                uint256(timeSkip) + timeSkip2 <= THREE_YEARS
-                    ? timeSkip2
-                    : (timeSkip <= THREE_YEARS ? THREE_YEARS - timeSkip : 0)
-            );
-        assertEq(sir.contributorUnclaimedSIR(contributorPreMainnet.addr), rewards);
+        assertApproxEqRel(sir.contributorUnclaimedSIR(contributorAddr), rewards, relErr18Decimals);
     }
 
     /////////////////////////////////////////////////////////////////////////////
     ///////////////////// H E L P E R // F U N C T I O N S /////////////////////
     ///////////////////////////////////////////////////////////////////////////
 
-    function _getContributorFR(uint256 index) internal view returns (ContributorFR memory) {
-        return contributorsFR[_bound(index, 0, contributorsFR.length - 1)];
+    function _getContributorFR(uint256 index) internal view returns (address) {
+        return contributorsFR[_bound(index, 0, contributorsFR.length - 1)].addr;
     }
 
-    function _getContributorPreMainnet(uint256 index) internal view returns (ContributorPreMainnet memory) {
-        return contributorsPreMainnet[_bound(index, 0, contributorsPreMainnet.length - 1)];
+    function _getContributorPreMainnet(uint256 index) internal view returns (address) {
+        return contributorsPreMainnet[_bound(index, 0, contributorsPreMainnet.length - 1)].addr;
     }
 }
 

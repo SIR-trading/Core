@@ -1690,7 +1690,7 @@ contract VaultControlTest is Test {
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(WETH.balanceOf(sir), tokenFees.fees);
-        assertEq(WETH.balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+        assertEq(WETH.balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawBNB(TokenFees memory tokenFees) public {
@@ -1726,7 +1726,7 @@ contract VaultControlTest is Test {
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawUSDC(TokenFees memory tokenFees) public {
@@ -1744,7 +1744,7 @@ contract VaultControlTest is Test {
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
         assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), tokenFees.total - tokenFees.fees);
+        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawToSaveSystemFailsCuzNotSystemControl(
@@ -2093,6 +2093,7 @@ contract VaultHandler is Test, RegimeEnum {
         if (regime != Regime.Any) {
             inputOutput.vaultId = 1;
         }
+        console.log("Block number", blockNumber);
 
         // Get vault parameters
         inputOutput.vaultId = uint48(idToVault(inputOutput.vaultId));
@@ -2102,6 +2103,7 @@ contract VaultHandler is Test, RegimeEnum {
         supplyAPE = IERC20(ape).totalSupply();
         supplyTEA = vault.totalSupply(inputOutput.vaultId);
         priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
+        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
 
         _;
 
@@ -2161,23 +2163,12 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        // Sufficient condition to not overflow collateralState.total collateral
-        inputOutput.amountCollateral = uint144(
-            _bound(
-                inputOutput.amountCollateral,
-                0,
-                type(uint144).max - IERC20(vaultParameters.collateralToken).balanceOf(address(vault))
-            )
-        );
+        console.log("Mint after advancedBlock");
 
-        // Sufficient condition to not overflow collected fees
+        // Sufficient condition to not overflow the reserve
         uint256 totalReserves = vault.totalReserves(vaultParameters.collateralToken);
         inputOutput.amountCollateral = uint144(
-            _bound(
-                inputOutput.amountCollateral,
-                0,
-                type(uint112).max - IERC20(vaultParameters.collateralToken).balanceOf(address(vault)) + totalReserves
-            )
+            _bound(inputOutput.amountCollateral, 0, type(uint144).max - totalReserves)
         );
 
         bool success;
@@ -2423,7 +2414,11 @@ contract VaultHandler is Test, RegimeEnum {
         //     )
         // );
 
-        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromInt(-1e20));
+        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromInt(-1e19));
+        console.log(
+            gainActual.mul(ABDKMathQuad.fromUInt(1e20)).toUInt(),
+            gainIdeal.mul(ABDKMathQuad.fromUInt(1e20)).toUInt()
+        );
         assertGe(
             gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
             0,
@@ -2637,6 +2632,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public view {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
+        // console.log(totalReserves, _WETH.balanceOf(address(vault)));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();

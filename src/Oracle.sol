@@ -341,6 +341,7 @@ contract Oracle {
                 }
             }
 
+            console.log("Score:", score);
             if (score == 0) revert NoUniswapPool();
             oracleState.indexFeeTierProbeNext = (oracleState.indexFeeTier + 1) % uint8(numUniswapFeeTiers); // Safe because indexFeeTier+1 < 9+1 < 2^8-1
             oracleState.initialized = true;

@@ -91,7 +91,7 @@ contract VaultExternalTest is Test {
     function testFuzz_deployWrongTokens(address debtToken, address collateralToken, int8 leverageTier) public {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)); // Only accepted values in the system
 
-        vm.expectRevert(abi.encodeWithSelector(NoUniswapPool.selector));
+        vm.expectRevert(NoUniswapPool.selector);
         VaultExternal.deploy(
             oracle,
             vaultState[debtToken][collateralToken][leverageTier],
@@ -104,7 +104,7 @@ contract VaultExternalTest is Test {
     function testFuzz_deployETHvsUSDCWrongLeverage(int8 leverageTier) public {
         vm.assume(leverageTier < SystemConstants.MIN_LEVERAGE_TIER || leverageTier > SystemConstants.MAX_LEVERAGE_TIER); // Non accepted values in the system
 
-        vm.expectRevert(abi.encodeWithSelector(LeverageTierOutOfRange.selector));
+        vm.expectRevert(LeverageTierOutOfRange.selector);
         VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
@@ -162,7 +162,7 @@ contract VaultExternalTest is Test {
     function test_deploy1TooManyVaultsPerTokenTuple() public {
         int8 leverageTier = test_deployMaxNumberOfVaultsPerTokenTuple();
 
-        vm.expectRevert(abi.encodeWithSelector(LeverageTierOutOfRange.selector));
+        vm.expectRevert(LeverageTierOutOfRange.selector);
         VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
@@ -176,7 +176,7 @@ contract VaultExternalTest is Test {
         );
 
         leverageTier--;
-        vm.expectRevert(abi.encodeWithSelector(VaultAlreadyInitialized.selector));
+        vm.expectRevert(VaultAlreadyInitialized.selector);
         VaultExternal.deploy(
             oracle,
             vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
@@ -225,6 +225,11 @@ contract VaultExternalTest is Test {
 contract VaultExternalGetReserves is Test {
     using ABDKMathQuad for bytes16;
 
+    struct CollateralState {
+        uint256 totalReserves;
+        uint256 totalFeesToStakers;
+    }
+
     error VaultDoesNotExist();
 
     bytes16 log2Point0001; // 1.0001 in IEEE-754 Quadruple Precision Floating Point Numbers
@@ -233,7 +238,7 @@ contract VaultExternalGetReserves is Test {
     address alice;
     Oracle oracle;
 
-    mapping(address collateral => SirStructs.CollateralState) collateralStates;
+    mapping(address collateral => uint256) public totalReserves;
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState))) vaultStates;
     SirStructs.VaultParameters vaultParams;
 
@@ -249,22 +254,28 @@ contract VaultExternalGetReserves is Test {
     }
 
     modifier Preprocess(
-        SirStructs.CollateralState memory collateralState,
+        CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
     ) {
         // Constraint reserve
-        vaultState.reserve = uint144(_bound(vaultState.reserve, 0, collateralState.total));
+        collateralState.totalReserves = _bound(collateralState.totalReserves, 0, type(uint144).max);
+        vaultState.reserve = uint144(collateralState.totalReserves);
+        collateralState.totalFeesToStakers = _bound(
+            collateralState.totalFeesToStakers,
+            0,
+            type(uint256).max - collateralState.totalReserves
+        );
         vm.assume(vaultState.reserve != 1); // Min reserve is always 2 (or 0 if no mint has occured)
 
         // Constraint vaultId
         vaultState.vaultId = uint48(_bound(vaultState.vaultId, 1, type(uint48).max));
 
         // Mint tokens
-        _collateralToken.mint(address(this), collateralState.total);
+        _collateralToken.mint(address(this), collateralState.totalReserves + collateralState.totalFeesToStakers);
 
         // Save token state
-        collateralStates[vaultParams.collateralToken] = collateralState;
+        totalReserves[vaultParams.collateralToken] = collateralState.totalReserves;
 
         // Save vault state
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
@@ -289,37 +300,61 @@ contract VaultExternalGetReserves is Test {
     }
 
     function _assertUnchangedParameters(
-        SirStructs.CollateralState memory collateralState,
-        SirStructs.CollateralState memory collateralState_,
+        CollateralState memory collateralState,
+        CollateralState memory collateralState_,
         SirStructs.VaultState memory vaultState,
         SirStructs.VaultState memory vaultState_
-    ) private pure {
-        assertEq(collateralState_.total, collateralState.total);
-        assertEq(collateralState_.totalFeesToStakers, collateralState.totalFeesToStakers);
+    ) private view {
+        assertEq(
+            collateralState_.totalReserves,
+            collateralState.totalReserves,
+            "totalReserves in collateralState do not match"
+        );
+        assertEq(
+            collateralState_.totalFeesToStakers,
+            collateralState.totalFeesToStakers,
+            "totalFeesToStakers do not match"
+        );
+        assertEq(
+            collateralState_.totalReserves,
+            totalReserves[vaultParams.collateralToken],
+            "totalReserves do not match"
+        );
 
-        assertEq(vaultState_.reserve, vaultState.reserve);
-        assertEq(vaultState_.tickPriceSatX42, vaultState.tickPriceSatX42);
-        assertEq(vaultState_.vaultId, vaultState.vaultId);
+        assertEq(vaultState_.reserve, vaultState.reserve, "reserve do not match");
+        assertEq(vaultState_.tickPriceSatX42, vaultState.tickPriceSatX42, "tickPriceSatX42 do not match");
+        assertEq(vaultState_.vaultId, vaultState.vaultId, "vaultId do not match");
     }
 
-    function testFuzz_getReservesNoReserves(
+    function testFuzz_getNoReserves(
         bool isAPE,
-        SirStructs.CollateralState memory collateralState,
+        uint256 totalFeesToStakers,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    ) public Preprocess(collateralState, vaultState, tickPriceX42) {
-        // No collateral in the vault
-        vaultState.reserve = 0;
+    )
+        public
+        Preprocess(
+            CollateralState({totalReserves: 0, totalFeesToStakers: totalFeesToStakers}),
+            vaultState,
+            tickPriceX42
+        )
+    {
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
-        (
-            SirStructs.CollateralState memory collateralState_,
-            SirStructs.VaultState memory vaultState_,
-            SirStructs.Reserves memory reserves,
-            address ape
-        ) = VaultExternal.getReserves(isAPE, collateralStates, vaultStates, oracle, vaultParams);
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, vaultStates, oracle, vaultParams);
 
-        _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
+        CollateralState memory collateralState_ = CollateralState({
+            totalReserves: vaultState_.reserve,
+            totalFeesToStakers: _collateralToken.balanceOf(address(this)) - totalReserves[vaultParams.collateralToken]
+        });
+
+        _assertUnchangedParameters(
+            CollateralState({totalReserves: 0, totalFeesToStakers: totalFeesToStakers}),
+            collateralState_,
+            vaultState,
+            vaultState_
+        );
 
         assertTrue(isAPE ? ape != address(0) : ape == address(0));
 
@@ -330,7 +365,7 @@ contract VaultExternalGetReserves is Test {
 
     function testFuzz_getReservesAllAPE(
         bool isAPE,
-        SirStructs.CollateralState memory collateralState,
+        CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
     ) public Preprocess(collateralState, vaultState, tickPriceX42) {
@@ -339,12 +374,13 @@ contract VaultExternalGetReserves is Test {
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         vm.assume(vaultState.reserve > 0);
 
-        (
-            SirStructs.CollateralState memory collateralState_,
-            SirStructs.VaultState memory vaultState_,
-            SirStructs.Reserves memory reserves,
-            address ape
-        ) = VaultExternal.getReserves(isAPE, collateralStates, vaultStates, oracle, vaultParams);
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, vaultStates, oracle, vaultParams);
+
+        CollateralState memory collateralState_ = CollateralState({
+            totalReserves: vaultState_.reserve,
+            totalFeesToStakers: _collateralToken.balanceOf(address(this)) - totalReserves[vaultParams.collateralToken]
+        });
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
@@ -357,7 +393,7 @@ contract VaultExternalGetReserves is Test {
 
     function testFuzz_getReservesAllTEA(
         bool isAPE,
-        SirStructs.CollateralState memory collateralState,
+        CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
     ) public Preprocess(collateralState, vaultState, tickPriceX42) {
@@ -366,12 +402,13 @@ contract VaultExternalGetReserves is Test {
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         vm.assume(vaultState.reserve > 0);
 
-        (
-            SirStructs.CollateralState memory collateralState_,
-            SirStructs.VaultState memory vaultState_,
-            SirStructs.Reserves memory reserves,
-            address ape
-        ) = VaultExternal.getReserves(isAPE, collateralStates, vaultStates, oracle, vaultParams);
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, vaultStates, oracle, vaultParams);
+
+        CollateralState memory collateralState_ = CollateralState({
+            totalReserves: vaultState_.reserve,
+            totalFeesToStakers: _collateralToken.balanceOf(address(this)) - totalReserves[vaultParams.collateralToken]
+        });
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
@@ -384,7 +421,7 @@ contract VaultExternalGetReserves is Test {
 
     function testFuzz_getReserves(
         bool isAPE,
-        SirStructs.CollateralState memory collateralState,
+        CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
     ) public Preprocess(collateralState, vaultState, tickPriceX42) {
@@ -394,12 +431,13 @@ contract VaultExternalGetReserves is Test {
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
         vm.assume(vaultState.reserve > 0);
 
-        (
-            SirStructs.CollateralState memory collateralState_,
-            SirStructs.VaultState memory vaultState_,
-            SirStructs.Reserves memory reserves,
-            address ape
-        ) = VaultExternal.getReserves(isAPE, collateralStates, vaultStates, oracle, vaultParams);
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, vaultStates, oracle, vaultParams);
+
+        CollateralState memory collateralState_ = CollateralState({
+            totalReserves: vaultState_.reserve,
+            totalFeesToStakers: _collateralToken.balanceOf(address(this)) - totalReserves[vaultParams.collateralToken]
+        });
 
         _assertUnchangedParameters(collateralState, collateralState_, vaultState, vaultState_);
 
@@ -418,15 +456,15 @@ contract VaultExternalGetReserves is Test {
 
     function testFuzz_getReservesVaultDoesNotExist(
         bool isAPE,
-        SirStructs.CollateralState memory collateralState,
+        CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
     ) public Preprocess(collateralState, vaultState, tickPriceX42) {
         vaultState.vaultId = 0;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
-        vm.expectRevert(abi.encodeWithSelector(VaultDoesNotExist.selector));
-        VaultExternal.getReserves(isAPE, collateralStates, vaultStates, oracle, vaultParams);
+        vm.expectRevert(VaultDoesNotExist.selector);
+        VaultExternal.getReserves(isAPE, vaultStates, oracle, vaultParams);
     }
 
     function _getReservesWithFloatingPoint(
