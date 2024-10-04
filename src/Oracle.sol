@@ -323,10 +323,10 @@ contract Oracle {
 
                 if (oracleData.avLiquidity > 0) {
                     /** Compute scores.
-                    We weight the average liquidity by the duration of the TWAP because
-                    we do not want to select a fee tier whose liquidity is easy manipulated.
-                        avLiquidity * period = aggregate Liquidity
-                 */
+                        We weight the average liquidity by the duration of the TWAP because
+                        we do not want to select a fee tier whose liquidity is easy manipulated.
+                            avLiquidity * period = aggregate Liquidity
+                    */
                     uint256 scoreTemp = _feeTierScore(
                         uint256(oracleData.avLiquidity) * oracleData.period, // Safe because avLiquidity * period < 2^136 * 2^40 = 2^170
                         uniswapFeeTiers[i]
