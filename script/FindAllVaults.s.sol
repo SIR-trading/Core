@@ -73,7 +73,9 @@ contract FindAllVaults is Script {
                     "Apes:",
                     GRatio >= 1.25 * 2 ** 112 ? "Healthy, more than enough liquidity" : GRatio >= 2 ** 112
                         ? "Borderline, just enough liquidity"
-                        : "Degraded, insufficient liquidity for constant leverage"
+                        : "Degraded, insufficient liquidity for constant leverage. Real leverage:",
+                    ((uint256(reserves.reserveApes) + reserves.reserveLPers) * 100) / reserves.reserveApes,
+                    "%x"
                 );
                 console.log(
                     "Gentlemen:",
@@ -81,6 +83,9 @@ contract FindAllVaults is Script {
                         ? "Moderately profitable"
                         : "Highly profitable"
                 );
+            } else {
+                console.log("Apes: Healthy, more than enough liquidity");
+                console.log("Gentlemen: Highly profitable");
             }
         }
     }
