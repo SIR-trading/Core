@@ -76,7 +76,7 @@ contract SIR is Staker {
         timestampLastMint[msg.sender] = uint40(block.timestamp);
     }
 
-    function lPerMint(uint256 vaultId) external returns (uint80 rewards) {
+    function lPerMint(uint256 vaultId) public returns (uint80 rewards) {
         // Get LPer issuance parameters
         rewards = vault.claimSIR(vaultId, msg.sender);
 
@@ -85,5 +85,13 @@ contract SIR is Staker {
         _mint(msg.sender, rewards);
 
         emit RewardsClaimed(msg.sender, vaultId, rewards);
+    }
+
+    function lPerMintAndStake(uint256 vaultId) external returns (uint80 rewards) {
+        // Get unclaimed rewards
+        rewards = lPerMint(vaultId);
+
+        // Stake them immediately
+        stake(rewards);
     }
 }

@@ -231,7 +231,7 @@ contract Staker {
                             STAKING FUNCTIONS 
     ////////////////////////////////////////////////////////////////*/
 
-    function stake(uint80 amount) external {
+    function stake(uint80 amount) public {
         Balance memory balance = balances[msg.sender];
         SirStructs.StakingParams memory stakingParams_ = stakingParams;
         SirStructs.StakingParams memory stakerParams = _stakersParams[msg.sender];

@@ -57,6 +57,8 @@ interface ISIR {
 
     function lPerMint(uint256 vaultId) external returns (uint80 rewards);
 
+    function lPerMintAndStake(uint256 vaultId) external returns (uint80 rewards);
+
     function maxTotalSupply() external view returns (uint256);
 
     function name() external view returns (string memory);
