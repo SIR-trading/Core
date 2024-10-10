@@ -6,6 +6,7 @@ import "forge-std/Script.sol";
 
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
@@ -38,10 +39,20 @@ contract FindAllVaults is Script {
         uint256 Nvaults = vault.numberOfVaults();
         console.log("Number of vaults: ", Nvaults);
 
-        // Check 1st vault
+        console.log("");
+        console.log("");
+        console.log("------ WETH Total Reserves ------");
+        console.log("");
+        uint256 wethReserves = vault.totalReserves(Addresses.ADDR_WETH);
+        console.log("WETH reserves:", wethReserves);
+        console.log("WETH fees:", IERC20(Addresses.ADDR_WETH).balanceOf(address(vault)) - wethReserves);
+
+        // Check vaults
         for (uint48 i = 1; i <= Nvaults; i++) {
             console.log("");
+            console.log("");
             console.log("------ Vault ID: ", i, " ------");
+            console.log("");
             SirStructs.VaultParameters memory vaultParams = vault.paramsById(i);
             console.log("debtToken:", vaultParams.debtToken);
             console.log("collateralToken:", vaultParams.collateralToken);
@@ -87,6 +98,24 @@ contract FindAllVaults is Script {
                 console.log("Apes: Healthy, more than enough liquidity");
                 console.log("Gentlemen: Highly profitable");
             }
+
+            // SIR rewards?
+            uint8 tax = vault.vaultTax(i);
+            SirStructs.SystemParameters memory systemParams = vault.systemParams();
+            console.log(
+                "Rewards for the first 3 years:",
+                (uint256(tax) * 1 days * SystemConstants.LP_ISSUANCE_FIRST_3_YEARS) /
+                    systemParams.cumulativeTax /
+                    10 ** (SystemConstants.SIR_DECIMALS),
+                "SIR/day"
+            );
+            console.log(
+                "Rewards after the first 3 years:",
+                (uint256(tax) * 1 days * SystemConstants.ISSUANCE) /
+                    systemParams.cumulativeTax /
+                    10 ** (SystemConstants.SIR_DECIMALS),
+                "SIR/day"
+            );
         }
     }
 }
