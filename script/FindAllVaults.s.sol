@@ -59,19 +59,27 @@ contract FindAllVaults is Script {
             address ape = AddressClone.getAddress(address(vault), i);
             console.log("ape token:", ape);
             console.log("leverageTier:", vm.toString(vaultParams.leverageTier));
+            console.log("");
 
             SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
             string memory collateralSymbol = IERC20(vaultParams.collateralToken).symbol();
             uint256 teaTotalSupply = vault.totalSupply(i);
             console.log("Supply of TEA:", teaTotalSupply);
-            console.log("LP reserve:", reserves.reserveLPers, collateralSymbol);
-
             console.log("Supply of APE:", IERC20(ape).totalSupply());
+            console.log("LP reserve:", reserves.reserveLPers, collateralSymbol);
             console.log("Apes reserve:", reserves.reserveApes, collateralSymbol);
+            console.log("Reserve:", reserves.reserveLPers + reserves.reserveApes, collateralSymbol);
+            console.log(
+                "Reserve (in human units):",
+                (reserves.reserveLPers + reserves.reserveApes) / 10 ** IERC20(vaultParams.collateralToken).decimals(),
+                collateralSymbol
+            );
+            console.log("");
 
             uint256 teaBalanceOfVault = vault.balanceOf(address(vault), i);
             console.log("Vault TEA balance:", teaBalanceOfVault);
             console.log("POL:", teaTotalSupply == 0 ? 0 : (teaBalanceOfVault * 100) / teaTotalSupply, "%");
+            console.log("");
 
             uint256 minReserveLPers = vaultParams.leverageTier >= 0
                 ? uint256(reserves.reserveApes) << uint256(int256(vaultParams.leverageTier))
