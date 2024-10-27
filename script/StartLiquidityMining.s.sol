@@ -40,10 +40,12 @@ contract StartLiquidityMining is Script {
 
         // Start liquidity mining if not already started
         if (systemControl.hashActiveVaults() == 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470) {
-            uint48[] memory newVaults = new uint48[](1);
-            uint8[] memory newTaxes = new uint8[](1);
+            uint48[] memory newVaults = new uint48[](2);
+            uint8[] memory newTaxes = new uint8[](2);
             newVaults[0] = 1; // 1st vault
-            newTaxes[0] = type(uint8).max;
+            newVaults[1] = 2; // 2nd vault
+            newTaxes[0] = 128;
+            newTaxes[1] = 220;
             systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
         }
 
