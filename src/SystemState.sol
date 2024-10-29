@@ -69,7 +69,7 @@ abstract contract SystemState is SystemControlAccess {
         // SIR is issued as soon as the protocol is deployed
         _systemParams = SirStructs.SystemParameters({
             baseFee: 4000, // Test start base fee with 40%. At 1.5 leverage tier, the price has to double for apes to be in profit.
-            lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≤ (1-baseFee/10000).
+            lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≥ (1+baseFee/10000).
             mintingStopped: false,
             cumulativeTax: 0
         });

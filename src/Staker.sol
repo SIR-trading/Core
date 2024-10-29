@@ -27,7 +27,7 @@ contract Staker {
 
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
-    event DividendsPaid(uint256 amountETH);
+    event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event DividendsClaimed(address indexed staker, uint96 amount);
 
@@ -469,7 +469,7 @@ contract Staker {
             _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
 
             // Dividends are considered paid after unclaimedETH is updated
-            emit DividendsPaid(dividends_);
+            emit DividendsPaid(uint96(dividends_), stakingParams_.stake);
         }
     }
 

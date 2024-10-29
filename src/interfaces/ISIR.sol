@@ -17,7 +17,7 @@ interface ISIR {
     event AuctionStarted(address indexed token);
     event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
-    event DividendsPaid(uint256 amountETH);
+    event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
     event Staked(address indexed staker, uint256 amount);
     event Transfer(address indexed from, address indexed to, uint256 amount);

@@ -238,7 +238,7 @@ contract StakerTest is Auxiliary {
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Staked(address indexed staker, uint256 amount);
-    event DividendsPaid(uint256 amount);
+    event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event Unstaked(address indexed staker, uint256 amount);
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
@@ -526,7 +526,10 @@ contract StakerTest is Auxiliary {
             user1.stakeAmount + user2.stakeAmount > 0
         ) {
             vm.expectEmit();
-            emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            emit DividendsPaid(
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                user1.stakeAmount + user2.stakeAmount
+            );
         } else {
             vm.expectRevert(NoFeesCollected.selector);
         }
@@ -646,7 +649,7 @@ contract StakerTest is Auxiliary {
         console.log(donations.stakerDonationsWETH, donations.stakerDonationsETH, user.stakeAmount);
         if (donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0) {
             vm.expectEmit();
-            emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH, user.stakeAmount);
         } else {
             vm.expectRevert(NoFeesCollected.selector);
         }
@@ -726,7 +729,7 @@ contract StakerTest is Auxiliary {
         uint96 dividends = donations.stakerDonationsWETH + donations.stakerDonationsETH;
         if (dividends > 0 && user.stakeAmount > 0) {
             vm.expectEmit();
-            emit DividendsPaid(dividends);
+            emit DividendsPaid(dividends, user.stakeAmount);
         } else {
             vm.expectRevert(NoFeesCollected.selector);
         }
@@ -894,7 +897,8 @@ contract StakerTest is Auxiliary {
             // DividendsPaid event if there are any WETH fees or (W)ETH donations
             vm.expectEmit();
             emit DividendsPaid(
-                uint256(tokenBalances.vaultTotalFees) + donations.stakerDonationsWETH + donations.stakerDonationsETH
+                uint96(tokenBalances.vaultTotalFees) + donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                user.stakeAmount
             );
         }
 
@@ -939,7 +943,8 @@ contract StakerTest is Auxiliary {
             // DividendsPaid event if there are any WETH fees or (W)ETH donations
             vm.expectEmit();
             emit DividendsPaid(
-                uint256(tokenBalances2.vaultTotalFees) + donations2.stakerDonationsWETH + donations2.stakerDonationsETH
+                uint96(tokenBalances2.vaultTotalFees) + donations2.stakerDonationsWETH + donations2.stakerDonationsETH,
+                user.stakeAmount
             );
         }
         uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
@@ -982,7 +987,7 @@ contract StakerTest is Auxiliary {
         // Start auction
         if (user.stakeAmount > 0 && donations.stakerDonationsETH + donations.stakerDonationsWETH > 0) {
             vm.expectEmit();
-            emit DividendsPaid(donations.stakerDonationsETH + donations.stakerDonationsWETH);
+            emit DividendsPaid(donations.stakerDonationsETH + donations.stakerDonationsWETH, user.stakeAmount);
         }
         vm.expectEmit();
         emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
@@ -1196,7 +1201,8 @@ contract StakerTest is Auxiliary {
                         _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
                             ? bidder1.amount + bidder2.amount
                             : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
-                    ) + bidder3.amount
+                    ) + bidder3.amount,
+                    user.stakeAmount
                 );
             }
             vm.expectEmit();
