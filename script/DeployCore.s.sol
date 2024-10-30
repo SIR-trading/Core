@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 
 import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SystemControl} from "src/SystemControl.sol";
 import {SIR} from "src/SIR.sol";
@@ -38,7 +39,9 @@ contract DeployCore is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy oracle
-        address oracle = address(new Oracle());
+        address oracle = address(
+            new Oracle(block.chainid == 1 ? Addresses.ADDR_UNISWAPV3_FACTORY : AddressesSepolia.ADDR_UNISWAPV3_FACTORY)
+        );
         console.log("Oracle deployed at: ", oracle);
 
         // Deploy SystemControl
@@ -46,7 +49,9 @@ contract DeployCore is Script {
         console.log("SystemControl deployed at: ", systemControl);
 
         // Deploy SIR
-        address payable sir = payable(address(new SIR()));
+        address payable sir = payable(
+            address(new SIR((block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH)))
+        );
         console.log("SIR deployed at: ", sir);
 
         // Deploy APE implementation
@@ -54,7 +59,15 @@ contract DeployCore is Script {
         console.log("APE implementation deployed at: ", apeImplementation);
 
         // Deploy Vault
-        address vault = address(new Vault(systemControl, sir, oracle, apeImplementation));
+        address vault = address(
+            new Vault(
+                systemControl,
+                sir,
+                oracle,
+                apeImplementation,
+                block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH
+            )
+        );
         console.log("Vault deployed at: ", vault);
 
         // Initialize SIR

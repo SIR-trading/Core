@@ -45,12 +45,12 @@ contract VaultInitializeTest is Test {
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
-        address oracle = address(new Oracle());
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         address apeImplementation = address(new APE());
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, oracle, apeImplementation);
+        vault = new Vault(systemControl, sir, oracle, apeImplementation, Addresses.ADDR_WETH);
     }
 
     function testFuzz_InitializeVault(int8 leverageTier) public {
@@ -209,7 +209,7 @@ contract VaultTest is Test {
         // vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        oracle = address(new Oracle());
+        oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Mock oracle initialization
         vm.mockCall(
@@ -227,7 +227,7 @@ contract VaultTest is Test {
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, oracle, address(apeImplementation));
+        vault = new Vault(systemControl, sir, oracle, address(apeImplementation), Addresses.ADDR_WETH);
 
         // Derive APE address
         ape = IERC20(AddressClone.getAddress(address(vault), VAULT_ID));
@@ -1567,13 +1567,13 @@ contract VaultTestWithETH is Test {
         vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        address oracle = address(new Oracle());
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(vm.addr(1), vm.addr(2), oracle, address(apeImplementation));
+        vault = new Vault(vm.addr(1), vm.addr(2), oracle, address(apeImplementation), Addresses.ADDR_WETH);
 
         // Initialize vault
         vault.initialize(vaultParams);
@@ -1662,7 +1662,7 @@ contract VaultControlTest is Test {
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, vm.addr(3), address(apeImplementation));
+        vault = new Vault(systemControl, sir, vm.addr(3), address(apeImplementation), Addresses.ADDR_WETH);
     }
 
     function testFuzz_withdrawFeesFailsCuzNotSIR(address user, TokenFees memory tokenFees) public {
@@ -2138,9 +2138,9 @@ contract VaultHandler is Test, RegimeEnum {
         blockNumber = blockNumber_;
         regime = regime_;
 
-        oracle = new Oracle();
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         apeImplementation = address(new APE());
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation);
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation, Addresses.ADDR_WETH);
 
         // Set tax between 2 vaults
         vm.prank(vm.addr(100));

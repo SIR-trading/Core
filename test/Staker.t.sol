@@ -251,11 +251,11 @@ contract StakerTest is Auxiliary {
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
-        staker = new Staker();
+        staker = new Staker(Addresses.ADDR_WETH);
 
         APE ape = new APE();
 
-        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), address(ape)));
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), address(ape), Addresses.ADDR_WETH));
         staker.initialize(vault);
 
         alice = vm.addr(1);
@@ -1308,11 +1308,11 @@ contract StakerHandler is Auxiliary {
         // vm.writeFile("./InvariantStaker.log", "");
         currentTime = 1694616791;
 
-        staker = new Staker();
+        staker = new Staker(Addresses.ADDR_WETH);
 
         address ape = address(new APE());
 
-        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), ape));
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), ape, Addresses.ADDR_WETH));
         staker.initialize(vault);
     }
 

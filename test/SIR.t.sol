@@ -45,13 +45,13 @@ contract ContributorsTest is Test {
         vm.warp(4269);
 
         // Deploy SIR
-        sir = new SIR();
+        sir = new SIR(Addresses.ADDR_WETH);
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        address vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape));
+        address vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape, Addresses.ADDR_WETH));
 
         // Initialize SIR
         sir.initialize(vault);
@@ -214,16 +214,16 @@ contract GentlemenTest is Test {
         vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        address oracle = address(new Oracle());
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy SIR
-        sir = new SIR();
+        sir = new SIR(Addresses.ADDR_WETH);
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(vm.addr(10), address(sir), oracle, ape);
+        vault = new Vault(vm.addr(10), address(sir), oracle, ape, Addresses.ADDR_WETH);
 
         // Initialize SIR
         sir.initialize(address(vault));

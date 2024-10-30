@@ -21,10 +21,10 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
 
-    constructor() {
+    constructor() Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
         vm.createSelectFork("mainnet", 18128102);
 
-        _oracle = new Oracle();
+        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
     }
 
     function test_GetUniswapFeeTiers() public view {
@@ -117,10 +117,10 @@ contract OracleInitializeTest is Test, Oracle {
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
 
-    constructor() {
+    constructor() Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {
         vm.createSelectFork("mainnet", 18128102);
 
-        _oracle = new Oracle();
+        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
     }
@@ -477,11 +477,13 @@ contract OracleGetPrice is Test, Oracle {
     MockERC20 private _tokenB;
     UniswapPoolAddress.PoolKey private _poolKey;
 
+    constructor() Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {}
+
     function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
         vm.createSelectFork("mainnet", 18149275);
 
-        _oracle = new Oracle();
+        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -774,11 +776,13 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
     uint24 newFeeTier = 69;
 
+    constructor() Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {}
+
     function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
         vm.createSelectFork("mainnet", 18149275);
 
-        _oracle = new Oracle();
+        _oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         _oracle.initialize(Addresses.ADDR_WETH, Addresses.ADDR_USDC); // It picks feeTier = 500
     }
 
@@ -1304,7 +1308,7 @@ contract SirOracleHandler is Test {
 
         _oracleInvariantTest = IOracleInvariantTest(msg.sender);
         _uniswapHandler = uniswapHandler_;
-        oracle = new Oracle();
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
         oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
@@ -1347,6 +1351,8 @@ contract OracleInvariantTest is Test, Oracle {
     MockERC20 private _tokenB;
 
     uint40 private _currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
+
+    constructor() Oracle(Addresses.ADDR_UNISWAPV3_FACTORY) {}
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18149275);

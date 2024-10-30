@@ -55,8 +55,8 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         ape = new APE();
 
-        Oracle oracle = new Oracle();
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), address(ape));
+        Oracle oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), address(ape), Addresses.ADDR_WETH);
 
         // Set tax between 2 vaults
         {

@@ -10,7 +10,6 @@ import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
-import {Addresses} from "./libraries/Addresses.sol";
 
 // Contracts
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -43,6 +42,7 @@ contract Vault is TEA {
 
     Oracle private immutable _ORACLE;
     address private immutable _APE_IMPLEMENTATION;
+    IWETH9 private immutable _WETH;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
@@ -53,12 +53,21 @@ contract Vault is TEA {
      */
     mapping(address collateral => uint256) public totalReserves;
 
-    constructor(address systemControl, address sir, address oracle, address apeImplementation) TEA(systemControl, sir) {
+    constructor(
+        address systemControl,
+        address sir,
+        address oracle,
+        address apeImplementation,
+        address weth
+    ) TEA(systemControl, sir) {
         // Price _ORACLE
         _ORACLE = Oracle(oracle);
 
         // Save the address of the APE implementation
         _APE_IMPLEMENTATION = apeImplementation;
+
+        // WETH
+        _WETH = IWETH9(weth);
 
         // Push empty parameters to avoid vaultId 0
         _paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
@@ -91,13 +100,13 @@ contract Vault is TEA {
         unchecked {
             if (msg.value != 0) {
                 // This is an ETH mint but so we need to check that this is a WETH vault
-                if (vaultParams.collateralToken != Addresses.ADDR_WETH) revert NotAWETHVault();
+                if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
 
                 // collateralToDeposit is the amount of ETH received
                 collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
 
                 // We must wrap it to WETH
-                IWETH9(Addresses.ADDR_WETH).deposit{value: msg.value}();
+                _WETH.deposit{value: msg.value}();
             }
 
             SirStructs.SystemParameters memory systemParams_ = _systemParams;

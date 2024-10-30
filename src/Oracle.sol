@@ -8,159 +8,8 @@ import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 // Libraries
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
-import {Addresses} from "./libraries/Addresses.sol";
 
 import "forge-std/console.sol";
-
-/**
- *     @dev Some alternative partial implementation @ https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
- *     @dev Gas cost: Around 10k gas for calling Uniswap v3 oracle, plus 10k gas for each different fee pool, making a min gas of approx 20k. For reference a Uniswap trade costs around 120k.
- *     @dev Extending the TWAP memory costs 20k per slot, so divide TWAPinSeconds / 12 * 20k. So 5h TWAP at 10 gwei/gas woulc cost 0.3 ETH.
- *
- *
- *     ON MULTI-BLOCK ORALCE ATTACK
- *
- *     Oracle manipulation is a problem that has plagued the DeFi space since the beginning.
- *     The problem is that a malicious actor can manipulate the price of an asset by front-running a transaction and then reverting it.
- *     This is a problem because the price oracle is used to determine the price of an asset,
- *     and the price of an asset is used to determine the amount of collateral that is required to mint a synthetic token.
- *     If the price of an asset is manipulated, then the amount of collateral required to mint a synthetic token can be manipulated.
- *
- *     The solution to this problem is to use a TWAP (time-weighted average price) instead of a single price point.
- *     The TWAP is calculated by taking the average price of an asset over a certain amount of time.
- *     This means that the price of an asset is less susceptible to manipulation because the price of an asset is the average price over a certain amount of time.
- *     The longer the TWAP, the less susceptible the price is to manipulation.
- *
- *     However, the TWAP solution is not as good as it used to be in Uniswap v2 because of the concetrated liquidity idiosyncratic to v3.
- *     For example, if all the liquidity in a hypothetical pool was concentrated around the current market price, once an attacker manages
- *     to pierce throught the current price, he can the move the price of the pool to the most extreme tick at no cost. This is different to v2
- *     where the liquidity is spread in the price range 0 to ∞.
- *     For more information read https://uniswap.org/blog/uniswap-v3-oracles
- *
- *
- *     SOLUTION : TWAP WITH PRICE TRUNCATION
- *
- *     To mitigate multi-block oracle attacks in Ethereum PoS, we implement price bounds for the TWAP. That is we allow price to increase
- *     (or decrease) up to a maximum factor. However, we still want to allow for normal market fluctuations so the bounds have to be
- *     chosen very careffuly. Assume 12s blocks, and denote
- *          h = maximum organic price increase in 1 minute [min^-1]
- *          D = duration of the TWAP
- *          p & p' = TWAP price before and after 1 minute
- *     Given that h is the max price increase in 1 minute, h^(1/5) is the maximum price increase in a 12s block because 5 blocks are mined in 1 minute,
- *     or alternatively, in the "tick domain", it is log_1.0001(h^(1/5)) = log_1.0001(h)/5.
- *     With this in mind the maximum TWAP price increase is
- *          g ≥ p'/p = 1.0001^[12s/D*Σ_{i=1}^5 i*log_1.0001(h)/5] = 1.0001^[45s/D*log_1.0001(h)] = h^(45s/D)
- *     where g is the gain where truncation occurs, or
- *          G ≥ log_1.0001(p'/p) = 45s/D*log_1.0001(h)
- *     in the "tick domain".
- *
- *     For example, if we believe that the maximum price increase in 1 minute is 10% and the TWAP duration is 1h
- *          h=1.1 |
- *                |=> G ≥ 11.91 tick/min or g ≥ 1.0012 min^-1
- *          D=1h  |
- *     where g denotes the maximum TWAP organic price increase, and G in the "tick domain". More examples,
- *          h=1.1 |
- *                |=> G ≥ 5.96 tick/min
- *          D=2h  |
- *
- *          h=1.2 |
- *                |=> G ≥ 22.79 tick/min
- *          D=1h  |
- *
- *          h=1.1   |
- *                  |=> G ≥ 23.83 tick/min
- *          D=30min |
- *
- *
- *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS TEA
- *
- *     Sequence of actions for an attacker that wishes to mint TEA at a cheaper price:
- *     1. Attacker moves oracle price up to its highest tick, moving the TWAP price up
- *     2. Attacker mints TEA (no previous TEA minted, so attacker will receive all fees)
- *     3. Attacker returns price to market price, profiting from the apes' losses.
- *
- *     Alternative similar attack:
- *     1. Attacker moves oracle price to its lowest tick for 5 consecutive blocks, moving the TWAP price down,
- *        profiting from the apes' losses.
- *     2. Attacker burns his TEA (we assume he was the only LPer).
- *     3. Attacker returns price to market price, profiting from the apes' losses.
- *
- *     Assumptions:
- *     - Gas fees are negligible
- *     - The fees paid to Uniswap are negligible.
- *     - The missed profits from not taking Uniswap transactions as block builder are negligible.
- *     - The attacker has inifinite capital.
- *     - The attacker performs a multi-block attack, and because of the design of Uniswap v3,
- *       it can keep the price for up to 5 blocks (1 minute) in the most extreme tick.
- *
- *     The best case scenario for the attacker is when no TEA has been minted before him, and so he is the receiver of all apes' losses.
- *     There exist two scenarios, let's tackle them separately. In the first case, the vault operates in the power zone,
- *     and in the second case it operates in the saturation zone.
- *
- *     Power Zone
- *     ──────────
- *     In the power zone, the apes' reserves follow
- *          A' = (p'/p)^(l-1)A
- *     where l>1. The attacker deposits a total of L to mint TEA and manipulates the price down so that apes lose
- *          Attacker wins = A-A' = A-A/g^(l-1) = A(1-1/g^(l-1))
- *     The cost of this attack are the fees paid when minting/burning TEA. In order to
- *     to operate in the power zone, we know L ≥ (l-1)A. Two cases:
- *          1) Attacker loses = L'*f_lp = (L+A-A')*f_lp ≥ L*f_lp ≥ (l-1)A*f_lp
- *          2) Attacker loses = L*f_lp ≥ (l-1)A*f_lp
- *     To ensure the attacker is not profitable, we must enforce:
- *          (l-1)A*f_lp ≥ A(1-1/g^(l-1))
- *     We know by Taylor series that 1/g^(l-1) ≥ 1+(l-1)(1/g-1) around g≈1, and so a tighter condition is
- *          (l-1)A*f_lp ≥ A(l-1)(1-1/g)
- *     Which results in the following equivalent conditions:
- *          f_lp ≥ 1-1/g      OR      g ≤ 1/(1-f_lp)      G ≤ -log_1.0001(1-f_lp)
- *
- *     For example,
- *          f_lp=0.01 (1% charged upon burning TEA) |=> G ≤ 100.5 tick/min
- *          f_lp=0.001 (0.1%) |=> G ≤ 10.0 tick/min
- *
- *     Saturation Zone
- *     ───────────────
- *     In the saturation zone, the LP reserve follows
- *          L' = (p/p')L
- *     The attacker deposits a total of L to mint TEA and manipulates the price down so that apes lose
- *          Attacker wins = L'-L = L(g-1)
- *     The attacker pays some fees proportional to L' to withdraw his collateral:
- *          1) Attacker loses = L'*f_lp = g*L*f_lp
- *          2) Attacker loses = L*f_lp = L*f_lp
- *     Thus, the condition for an unprofitable attack is
- *          g*L*f_lp ≥ L(g-1)  OR  L*f_lp ≥ L(g-1)
- *     Which results in the same conditions than the previous section.
- *
- *
- *     ANALYSIS OF 5-BLOCK ORACLE ATTACK WHERE ATTACKERS MINTS AND BURNS APE
- *
- *     Sequence of actions of the attacker:
- *     1. Attacker mints APE
- *     2. Attacker moves oracle price to its highest tick for 5 consecutive blocks, moving the TWAP price up,
- *        and consequently, causing apes to win over the LPers.
- *     3. Attacker burns APE getting more collateral in return.
- *     4. Attacker returns price to market price.
- *
- *     We assume the price is in the power zone where it increases polynomially,
- *          A' = (p'/p)^(l-1)A
- *     where l>1 and A is minted by the attacker.
- *          Attacker wins = A'-A = A*g^(l-1)-A = A(g^(l-1)-1)
- *     The cost of this attack are the fees paid upon minting and burning APE.
- *          Attacker loses = (A'+A)(l-1)fbase = A((g^(l-1)+1))(l-1)fbase
- *     To ensure the attacker is not profitable, we must enforce:
- *          A((g^(l-1)+1))(l-1)fbase ≥ A(g^(l-1)-1)
- *     Given that g^(l-1)≈1+(l-1)(g-1), the condition simplifies to
- *          fbase ≥ (g-1) / [2+(l-1)(g-1)]
- *     where l,g>1. A simpler sufficient condition is
- *          fbase ≥ (g-1)/2
- *     which is easily satisfied given that the values we are contemplating are around g=0.5 (50%)
- *
- *     ABOUT PRICE CALCULATION ACROSS FEE TIERS
- *
- *     A TWAP weighted across pools of different liquidity is just as weak as the weakest pool (pool with least liquiity).
- *     For this reason, we select the best pool acrooss all fee tiers with the highest liquidity by tick weighted by fee, because as
- *     shown in the previous section, the fee has a direct impact on the price manipulation cost.
- */
 
 contract Oracle {
     error NoUniswapPool();
@@ -198,21 +47,22 @@ contract Oracle {
         uint16 cardinalityToIncrease; // Cardinality suggested for increase
     }
 
-    /**
-     * Constants
-     */
+    // Constants
+    address private immutable UNISWAPV3_FACTORY;
     uint256 internal constant DURATION_UPDATE_FEE_TIER = 24 hours; // No need to test if there is a better fee tier more often than this
     int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
     uint16 internal constant CARDINALITY_DELTA = uint16((TWAP_DELTA - 1) / (12 seconds)) + 1;
     uint40 public constant TWAP_DURATION = 30 minutes;
 
-    /**
-     * State variables
-     */
+    // State variables
     mapping(address token0 => mapping(address token1 => SirStructs.OracleState)) internal _state;
     // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier, which implies a maximum of 5 extra fee tiers.
     uint private _uniswapExtraFeeTiers;
+
+    constructor(address uniswapV3Factory) {
+        UNISWAPV3_FACTORY = uniswapV3Factory;
+    }
 
     /*////////////////////////////////////////////////////////////////
                             READ-ONLY FUNCTIONS
@@ -378,7 +228,7 @@ contract Oracle {
         require(numUniswapFeeTiers < 9); // 4 basic fee tiers + 5 extra fee tiers max
 
         // Check fee tier actually exists in Uniswap v3
-        int24 tickSpacing = IUniswapV3Factory(Addresses.ADDR_UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
+        int24 tickSpacing = IUniswapV3Factory(UNISWAPV3_FACTORY).feeAmountTickSpacing(fee);
         require(tickSpacing > 0);
 
         // Check fee tier has not been added yet
@@ -720,13 +570,10 @@ contract Oracle {
         return (((aggOrAvLiquidity * uniswapFeeTier.fee) << 72) - 1) / uint24(uniswapFeeTier.tickSpacing) + 1;
     }
 
-    function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private pure returns (IUniswapV3Pool) {
+    function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private view returns (IUniswapV3Pool) {
         return
             IUniswapV3Pool(
-                UniswapPoolAddress.computeAddress(
-                    Addresses.ADDR_UNISWAPV3_FACTORY,
-                    UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee)
-                )
+                UniswapPoolAddress.computeAddress(UNISWAPV3_FACTORY, UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee))
             );
     }
 

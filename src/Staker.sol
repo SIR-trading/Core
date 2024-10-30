@@ -5,7 +5,6 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
-import {Addresses} from "./libraries/Addresses.sol";
 // import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 
 import "forge-std/console.sol";
@@ -37,7 +36,7 @@ contract Staker {
     event Unstaked(address indexed staker, uint256 amount);
 
     address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
-    IWETH9 private constant _WETH = IWETH9(payable(Addresses.ADDR_WETH));
+    IWETH9 private immutable _WETH;
     Vault internal vault;
 
     string public constant name = "Synthetics Implemented Right";
@@ -65,7 +64,9 @@ contract Staker {
 
     mapping(address => uint256) public nonces;
 
-    constructor() {
+    constructor(address weth) {
+        _WETH = IWETH9(payable(weth));
+
         deployer = msg.sender;
 
         INITIAL_CHAIN_ID = block.chainid;

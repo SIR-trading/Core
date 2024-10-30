@@ -29,7 +29,7 @@ contract SystemControlInitializationTest is Test {
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = address(new Vault(address(systemControl), vm.addr(10), vm.addr(11), ape));
+        vault = address(new Vault(address(systemControl), vm.addr(10), vm.addr(11), ape, Addresses.ADDR_WETH));
     }
 
     function testFuzz_initializationWrongCaller(address caller) public {
@@ -92,19 +92,19 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // vm.writeFile("./numNewVaults.log", "");
 
         // Deploy Oracle
-        address oracle = address(new Oracle());
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy SystemControl
         systemControl = new SystemControl();
 
         // Deploy SIR
-        sir = payable(address(new SIR()));
+        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, oracle, ape);
+        vault = new Vault(address(systemControl), sir, oracle, ape, Addresses.ADDR_WETH);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));
@@ -480,13 +480,13 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl = new SystemControl();
 
         // Deploy SIR
-        sir = payable(address(new SIR()));
+        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, vm.addr(10), ape);
+        vault = new Vault(address(systemControl), sir, vm.addr(10), ape, Addresses.ADDR_WETH);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));
