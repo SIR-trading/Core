@@ -16,7 +16,7 @@ import {AddressClone} from "src/libraries/AddressClone.sol";
 */
 contract FindAllBalances is Script {
     uint256 privateKey;
-    address queryAddress = 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc;
+    address queryAddress = 0x349DC3AcFb99ddACd3D00F1AEFC297eE8108Cb44;
 
     Vault vault;
     SIR sir;

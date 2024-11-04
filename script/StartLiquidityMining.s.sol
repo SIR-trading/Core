@@ -16,7 +16,6 @@ contract StartLiquidityMining is Script {
     uint256 privateKey;
 
     SystemControl systemControl;
-    Initialize1Vault initialize1Vault;
 
     function setUp() public {
         if (block.chainid == 1) {
@@ -28,14 +27,9 @@ contract StartLiquidityMining is Script {
         }
 
         systemControl = SystemControl(vm.envAddress("SYSTEM_CONTROL"));
-        initialize1Vault = new Initialize1Vault();
-        initialize1Vault.setUp();
     }
 
     function run() public {
-        // Initialize vault if not already initialized
-        initialize1Vault.run();
-
         vm.startBroadcast(privateKey);
 
         // Start liquidity mining if not already started
