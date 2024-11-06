@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 // import "forge-std/console.sol";
 
 import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
@@ -43,9 +44,15 @@ contract FindAllVaults is Script {
         console.log("");
         console.log("------ WETH Total Reserves ------");
         console.log("");
-        uint256 wethReserves = vault.totalReserves(Addresses.ADDR_WETH);
+        uint256 wethReserves = vault.totalReserves(
+            block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH
+        );
         console.log("WETH reserves:", wethReserves);
-        console.log("WETH fees:", IERC20(Addresses.ADDR_WETH).balanceOf(address(vault)) - wethReserves);
+        console.log(
+            "WETH fees:",
+            IERC20(block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH).balanceOf(address(vault)) -
+                wethReserves
+        );
 
         // Check vaults
         for (uint48 i = 1; i <= Nvaults; i++) {
