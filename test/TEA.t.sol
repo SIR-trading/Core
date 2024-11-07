@@ -727,7 +727,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
         TestMintParams memory testMintParams,
         uint256 collateralTotalSupply0
     ) private view returns (SirStructs.Fees memory fees, uint256 senderAmount) {
-        fees = Fees.hiddenFeeTEA(
+        fees = Fees.feeMintTEA(
             testMintParams.collateralDeposited,
             _systemParams.lpFee,
             vaultIssuanceParams[VAULT_ID].tax
@@ -802,7 +802,7 @@ contract TEATestInternal is TEA(address(0), address(0)), Test {
             FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
         );
 
-        fees = Fees.hiddenFeeTEA(collateralOut, _systemParams.lpFee, vaultIssuanceParams[VAULT_ID].tax);
+        fees = Fees.feeMintTEA(collateralOut, _systemParams.lpFee, vaultIssuanceParams[VAULT_ID].tax);
 
         uint256 senderAmount = senderBalance[tsBalance.length - 2] - senderBalance[tsBalance.length - 1];
         uint256 POLAmount = POLBalance[POLBalance.length - 1] - POLBalance[POLBalance.length - 2];

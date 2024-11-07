@@ -234,7 +234,7 @@ contract APETest is Test {
         vm.assume(collateralDeposited + reserveApesInitial >= 1);
 
         // Expected fees
-        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.feeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
 
         // Mint
         vm.expectEmit();
@@ -289,7 +289,7 @@ contract APETest is Test {
             );
 
         // Expected fees
-        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.feeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
 
         // Expected fees
         uint256 amount_ = FullMath.mulDiv(totalSupplyInitial, fees_.collateralInOrWithdrawn, reserveApesInitial);
@@ -387,7 +387,7 @@ contract APETest is Test {
 
         // Expected fees
         uint144 collateralOut_ = uint144(FullMath.mulDiv(reserveApesInitial, amountBurnt, totalSupplyInitial));
-        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralOut_, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.feeAPE(collateralOut_, baseFee, LEVERAGE_TIER, tax);
 
         // Burn
         vm.expectEmit();

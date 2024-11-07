@@ -17,7 +17,7 @@ contract FeesTest is Test {
         // Constraint leverageTier to supported values
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
-        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(collateralDepositedOrOut, baseFee, leverageTier, tax);
+        SirStructs.Fees memory fees = Fees.feeAPE(collateralDepositedOrOut, baseFee, leverageTier, tax);
 
         uint256 totalFee = uint256(fees.collateralFeeToStakers) +
             fees.collateralFeeToGentlemen +
@@ -62,7 +62,7 @@ contract FeesTest is Test {
     }
 
     function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public pure {
-        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralDepositedOrOut, lpFee, tax);
+        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralDepositedOrOut, lpFee, tax);
 
         uint256 totalFee = uint256(fees.collateralFeeToStakers) +
             fees.collateralFeeToGentlemen +

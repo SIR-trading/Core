@@ -194,18 +194,13 @@ contract APE is Clone {
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
     ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
-        // returns (SirStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
-
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
         // Substract fees
-        fees = Fees.hiddenFeeAPE(collateralDeposited, baseFee, leverageTier(), tax);
+        fees = Fees.feeAPE(collateralDeposited, baseFee, leverageTier(), tax);
 
         unchecked {
-            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += fees.collateralFeeToGentlemen;
-
             // Mint APE
             amount = supplyAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
                 ? fees.collateralInOrWithdrawn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
@@ -238,7 +233,7 @@ contract APE is Clone {
             emit Transfer(from, address(0), amount);
 
             // Substract fees
-            fees = Fees.hiddenFeeAPE(collateralOut, baseFee, leverageTier(), tax);
+            fees = Fees.feeAPE(collateralOut, baseFee, leverageTier(), tax);
 
             // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
             reserves.reserveLPers += fees.collateralFeeToGentlemen;

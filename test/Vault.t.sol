@@ -1077,7 +1077,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private view returns (uint144 collateralOut) {
         collateralOut = uint144(FullMath.mulDiv(reservesPre.reserveApes, inputsOutputs.amount, balances.apeSupply));
-        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
+        SirStructs.Fees memory fees = Fees.feeAPE(
             collateralOut,
             systemParams.baseFee,
             vaultParams.leverageTier,
@@ -1098,7 +1098,7 @@ contract VaultTest is Test {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, systemParams.tax);
+        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralOut, systemParams.lpFee, systemParams.tax);
 
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
@@ -1113,7 +1113,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private view {
         // Verify amounts
-        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
+        SirStructs.Fees memory fees = Fees.feeAPE(
             inputsOutputs.collateral,
             systemParams.baseFee,
             vaultParams.leverageTier,
@@ -1219,7 +1219,7 @@ contract VaultTest is Test {
         );
 
         // Verify amounts
-        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(
+        SirStructs.Fees memory fees = Fees.feeAPE(
             collateralOut,
             systemParams.baseFee,
             vaultParams.leverageTier,
@@ -1303,7 +1303,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private view {
         // Verify amounts
-        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(inputsOutputs.collateral, systemParams.lpFee, systemParams.tax);
+        SirStructs.Fees memory fees = Fees.feeMintTEA(inputsOutputs.collateral, systemParams.lpFee, systemParams.tax);
 
         // Get collateralState.total reserve
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
@@ -1393,7 +1393,7 @@ contract VaultTest is Test {
         );
 
         // Verify amounts
-        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralOut, systemParams.lpFee, systemParams.tax);
+        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralOut, systemParams.lpFee, systemParams.tax);
         reservesPre.reserveLPers -= collateralOut;
         reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
 

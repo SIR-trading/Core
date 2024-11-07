@@ -30,14 +30,16 @@ contract Vault is TEA {
         bool isAPE,
         uint144 collateralIn,
         uint144 collateralFeeToStakers,
-        uint144 collateralFeeToLPers
+        uint144 collateralFeeToGentlemen,
+        uint144 collateralFeeToProtocol
     );
     event Burn(
         uint48 indexed vaultId,
         bool isAPE,
         uint144 collateralWithdrawn,
         uint144 collateralFeeToStakers,
-        uint144 collateralFeeToLPers
+        uint144 collateralFeeToGentlemen,
+        uint144 collateralFeeToProtocol
     );
 
     Oracle private immutable _ORACLE;
@@ -128,17 +130,12 @@ contract Vault is TEA {
                     collateralToDeposit
                 );
 
-                // Mint TEA for protocol owned liquidity (POL)
-                if (fees.collateralFeeToProtocol > 0) {
-                    mintToProtocol(
-                        vaultParams.collateralToken,
-                        vaultState.vaultId,
-                        reserves,
-                        fees.collateralFeeToProtocol
-                    );
+                // Distribute APE fees to genlemen
+                if (fees.collateralFeeToGentlemen > 0) {
+                    distributeFeesToGentlemen(vaultParams.collateralToken, vaultState.vaultId, reserves, fees);
                 }
             } else {
-                // Mint TEA for user and protocol owned liquidity (POL)
+                // Mint TEA and distribute fees to protocol owned liquidity (POL)
                 (fees, amount) = mint(
                     vaultParams.collateralToken,
                     vaultState.vaultId,
@@ -161,7 +158,8 @@ contract Vault is TEA {
                 isAPE,
                 fees.collateralInOrWithdrawn,
                 fees.collateralFeeToStakers,
-                fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+                fees.collateralFeeToGentlemen,
+                fees.collateralFeeToProtocol
             );
 
             if (msg.value == 0) {
@@ -217,12 +215,21 @@ contract Vault is TEA {
                 amount
             );
 
-            // Mint TEA for protocol owned liquidity (POL)
-            if (fees.collateralFeeToProtocol > 0) {
-                mintToProtocol(vaultParams.collateralToken, vaultState.vaultId, reserves, fees.collateralFeeToProtocol);
+            // // Mint TEA for protocol owned liquidity (POL)
+            // if (fees.collateralFeeToProtocol > 0) {
+            //     mintToProtocol(vaultParams.collateralToken, vaultState.vaultId, reserves, fees.collateralFeeToProtocol);
+            // }
+            // Give fees to gentlemen by burning TEA from protocol owned liquidity (POL)
+            if (fees.collateralFeeToGentlemen > 0) {
+                distributeFeesToGentlemen(
+                    vaultParams.collateralToken,
+                    vaultState.vaultId,
+                    reserves,
+                    fees.collateralFeeToGentlemen
+                );
             }
         } else {
-            // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
+            // Burn TEA (no fees paid)
             fees = burn(
                 vaultParams.collateralToken,
                 vaultState.vaultId,
@@ -285,8 +292,10 @@ contract Vault is TEA {
         unchecked {
             vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
 
-            // To ensure division by 0 does not occur when recoverying the reserves
-            require(vaultState.reserve >= 2);
+            /** We enforce that the reserve must be at least 10^6 to avoid division by zero, and
+                to mitigate inflation attacks.
+             */
+            require(vaultState.reserve >= 1e6);
 
             // Compute tickPriceSatX42
             if (reserves.reserveApes == 0) {
