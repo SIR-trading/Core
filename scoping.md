@@ -57,4 +57,5 @@ contracts/libraries/TickMathPrecision.sol
 - Malicious user actions.
 - Contract Oracle is a wrap around the Uniswap v3 oracle that allows us to get data from Uniswap v3 without having to manually control any parameters. It can autonomously change the fee tier it gets the price from. Verify it's complexity does not introduce any vulnerabilities.
 - Verify leveraged positions are really convex assuming sufficient liquidity is available.
+- Large gas optimizations
 ```
