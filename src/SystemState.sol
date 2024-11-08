@@ -65,7 +65,7 @@ abstract contract SystemState is SystemControlAccess {
          */
         _systemParams = SirStructs.SystemParameters({
             baseFee: 4000, // At 1.5 leverage tier, the price has to double for apes to be in profit.
-            lpFee: 0989, // To mitigate LP sandwich attacks.
+            lpFee: 989, // To mitigate LP sandwich attacks.
             mintingStopped: false,
             cumulativeTax: 0
         });
