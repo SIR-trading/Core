@@ -21,6 +21,7 @@ import "forge-std/console.sol";
 
 contract Vault is TEA {
     error NotAWETHVault();
+    error AmountTooLow();
 
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
         i.e., collateralFeeToLPers = collateralFeeToGentlemen + collateralFeeToProtocol
@@ -146,6 +147,9 @@ contract Vault is TEA {
                 );
             }
 
+            // Do not let users deposit collateral in exchange for nothing
+            if (amount == 0) revert AmountTooLow();
+
             // Update _vaultStates from new reserves
             _updateVaultState(vaultState, reserves, vaultParams);
 
@@ -215,29 +219,13 @@ contract Vault is TEA {
                 amount
             );
 
-            // // Mint TEA for protocol owned liquidity (POL)
-            // if (fees.collateralFeeToProtocol > 0) {
-            //     mintToProtocol(vaultParams.collateralToken, vaultState.vaultId, reserves, fees.collateralFeeToProtocol);
-            // }
-            // Give fees to gentlemen by burning TEA from protocol owned liquidity (POL)
+            // Distribute APE fees to genlemen
             if (fees.collateralFeeToGentlemen > 0) {
-                distributeFeesToGentlemen(
-                    vaultParams.collateralToken,
-                    vaultState.vaultId,
-                    reserves,
-                    fees.collateralFeeToGentlemen
-                );
+                distributeFeesToGentlemen(vaultParams.collateralToken, vaultState.vaultId, reserves, fees);
             }
         } else {
-            // Burn TEA (no fees paid)
-            fees = burn(
-                vaultParams.collateralToken,
-                vaultState.vaultId,
-                systemParams_,
-                vaultIssuanceParams_,
-                reserves,
-                amount
-            );
+            // Burn TEA (no fees are actually paid)
+            fees = burn(vaultState.vaultId, systemParams_, vaultIssuanceParams_, reserves, amount);
         }
 
         // Update _vaultStates from new reserves
@@ -252,7 +240,8 @@ contract Vault is TEA {
             isAPE,
             fees.collateralInOrWithdrawn,
             fees.collateralFeeToStakers,
-            fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+            fees.collateralFeeToGentlemen,
+            fees.collateralFeeToProtocol
         );
 
         // Send collateral

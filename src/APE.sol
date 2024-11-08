@@ -230,15 +230,12 @@ contract APE is Clone {
         unchecked {
             totalSupply = supplyAPE - amount;
             reserves.reserveApes -= collateralOut;
-            emit Transfer(from, address(0), amount);
 
             // Substract fees
             fees = Fees.feeAPE(collateralOut, baseFee, leverageTier(), tax);
 
-            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += fees.collateralFeeToGentlemen;
-
             newReserves = reserves; // Important because memory is not persistent across external calls
         }
+        emit Transfer(from, address(0), amount);
     }
 }
