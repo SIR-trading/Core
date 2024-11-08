@@ -51,25 +51,21 @@ abstract contract SystemState is SystemControlAccess {
 
     SirStructs.SystemParameters internal _systemParams;
 
-    /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
-        before new issuance parameters are stored. This is more gas efficient that storing all active vaults
-        in an arry, but it requires that system control keeps track of the active vaults.
-        If the vaults were in an unknown order, it maybe be problem because the hash would change.
-        So by default the vaults must be ordered in increasing order.
-
-        The default value is the hash of an empty array.
-     */
-    // bytes32 private _hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
-
     constructor(address systemControl, address sir_) SystemControlAccess(systemControl) {
         TIMESTAMP_ISSUANCE_START = uint40(block.timestamp);
 
         _SIR = sir_;
 
-        // SIR is issued as soon as the protocol is deployed
+        /** Apes pay fees to the gentlemen for their liquidity when minting or burning APE. They are paid twice to encourage LPers to
+            continue to provide liqduidity after a mint of APE.
+
+            Gentlemen pay a fee when minting TEA given to the protocol. Protocol will never touch these fees and act as its own pool of liquidity.
+            These fee is very important because it mitigate an LP sandwich attack. If there were no fees charge to the gentlemen, when an ape mints
+            (or burns) APE, the attacker could mint before the ape and burn after the ape, earning the fees risk-free.
+         */
         _systemParams = SirStructs.SystemParameters({
-            baseFee: 4000, // Test start base fee with 40%. At 1.5 leverage tier, the price has to double for apes to be in profit.
-            lpFee: 2345, // 23.45% LP fee to start with. To avoid LP sandwich attacks, it must satisfy (1+lpFee/10000)^2 ≥ (1+baseFee/10000).
+            baseFee: 4000, // At 1.5 leverage tier, the price has to double for apes to be in profit.
+            lpFee: 0989, // To mitigate LP sandwich attacks.
             mintingStopped: false,
             cumulativeTax: 0
         });
