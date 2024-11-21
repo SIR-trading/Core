@@ -205,9 +205,9 @@ contract APE is Clone {
             amount = supplyAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
                 ? fees.collateralInOrWithdrawn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
                 : FullMath.mulDiv(supplyAPE, fees.collateralInOrWithdrawn, reserves.reserveApes);
-            balanceOf[to] += amount;
-            reserves.reserveApes += fees.collateralInOrWithdrawn;
+            balanceOf[to] += amount; // If it OF, so will totalSupply
         }
+        reserves.reserveApes += fees.collateralInOrWithdrawn;
         totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
         emit Transfer(address(0), to, amount);
 

@@ -98,95 +98,93 @@ contract Vault is TEA {
         SirStructs.VaultParameters calldata vaultParams,
         uint144 collateralToDeposit
     ) external payable returns (uint256 amount) {
-        unchecked {
-            if (msg.value != 0) {
-                // This is an ETH mint but so we need to check that this is a WETH vault
-                if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
+        if (msg.value != 0) {
+            // This is an ETH mint but so we need to check that this is a WETH vault
+            if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
 
-                // collateralToDeposit is the amount of ETH received
-                collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
+            // collateralToDeposit is the amount of ETH received
+            collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
 
-                // We must wrap it to WETH
-                _WETH.deposit{value: msg.value}();
-            }
+            // We must wrap it to WETH
+            _WETH.deposit{value: msg.value}();
+        }
 
-            SirStructs.SystemParameters memory systemParams_ = _systemParams;
-            require(!systemParams_.mintingStopped);
+        SirStructs.SystemParameters memory systemParams_ = _systemParams;
+        require(!systemParams_.mintingStopped);
 
-            // Get reserves
-            (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
-                .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
+        // Get reserves
+        (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
 
-            SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-            SirStructs.Fees memory fees;
-            if (isAPE) {
-                // Mint APE
-                (reserves, fees, amount) = APE(ape).mint(
-                    msg.sender,
-                    systemParams_.baseFee,
-                    vaultIssuanceParams_.tax,
-                    reserves,
-                    collateralToDeposit
-                );
-
-                // Distribute APE fees to LPers
-                reserves.reserveLPers += fees.collateralFeeToLPers;
-            } else {
-                // Mint TEA and distribute fees to protocol owned liquidity (POL)
-                (fees, amount) = mint(
-                    vaultParams.collateralToken,
-                    vaultState.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    reserves,
-                    collateralToDeposit
-                );
-            }
-
-            // Do not let users deposit collateral in exchange for nothing
-            if (amount == 0) revert AmountTooLow();
-
-            // Update _vaultStates from new reserves
-            _updateVaultState(vaultState, reserves, vaultParams);
-
-            // Update total reserves
-            totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
-
-            // Emit event
-            emit Mint(
-                vaultState.vaultId,
-                isAPE,
-                fees.collateralInOrWithdrawn,
-                fees.collateralFeeToStakers,
-                fees.collateralFeeToLPers
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+        SirStructs.Fees memory fees;
+        if (isAPE) {
+            // Mint APE
+            (reserves, fees, amount) = APE(ape).mint(
+                msg.sender,
+                systemParams_.baseFee,
+                vaultIssuanceParams_.tax,
+                reserves,
+                collateralToDeposit
             );
 
-            if (msg.value == 0) {
-                // If it is not an ETH mint, auto transfer the ERC20 collateral token
-                TransferHelper.safeTransferFrom(
-                    vaultParams.collateralToken,
-                    msg.sender,
-                    address(this),
-                    collateralToDeposit
-                );
-            }
+            // Distribute APE fees to LPers
+            reserves.reserveLPers += fees.collateralFeeToLPers;
+        } else {
+            // Mint TEA and distribute fees to protocol owned liquidity (POL)
+            (fees, amount) = mint(
+                vaultParams.collateralToken,
+                vaultState.vaultId,
+                systemParams_,
+                vaultIssuanceParams_,
+                reserves,
+                collateralToDeposit
+            );
+        }
 
-            /** Check if recipient is enabled for receiving TEA.
+        // Do not let users deposit collateral in exchange for nothing
+        if (amount == 0) revert AmountTooLow();
+
+        // Update _vaultStates from new reserves
+        _updateVaultState(vaultState, reserves, vaultParams);
+
+        // Update total reserves
+        totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
+
+        // Emit event
+        emit Mint(
+            vaultState.vaultId,
+            isAPE,
+            fees.collateralInOrWithdrawn,
+            fees.collateralFeeToStakers,
+            fees.collateralFeeToLPers
+        );
+
+        if (msg.value == 0) {
+            // If it is not an ETH mint, auto transfer the ERC20 collateral token
+            TransferHelper.safeTransferFrom(
+                vaultParams.collateralToken,
+                msg.sender,
+                address(this),
+                collateralToDeposit
+            );
+        }
+
+        /** Check if recipient is enabled for receiving TEA.
                 This check is done last to avoid reentrancy attacks because it may call an external contract.
              */
-            if (
-                !isAPE &&
-                msg.sender.code.length > 0 &&
-                ERC1155TokenReceiver(msg.sender).onERC1155Received(
-                    msg.sender,
-                    address(0),
-                    vaultState.vaultId,
-                    amount,
-                    ""
-                ) !=
-                ERC1155TokenReceiver.onERC1155Received.selector
-            ) revert UnsafeRecipient();
-        }
+        if (
+            !isAPE &&
+            msg.sender.code.length > 0 &&
+            ERC1155TokenReceiver(msg.sender).onERC1155Received(
+                msg.sender,
+                address(0),
+                vaultState.vaultId,
+                amount,
+                ""
+            ) !=
+            ERC1155TokenReceiver.onERC1155Received.selector
+        ) revert UnsafeRecipient();
     }
 
     /** @notice Function for burning APE or TEA
@@ -225,7 +223,9 @@ contract Vault is TEA {
         _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update total reserves
-        totalReserves[vaultParams.collateralToken] -= fees.collateralInOrWithdrawn + fees.collateralFeeToStakers;
+        unchecked {
+            totalReserves[vaultParams.collateralToken] -= fees.collateralInOrWithdrawn + fees.collateralFeeToStakers;
+        }
 
         // Emit event
         emit Burn(

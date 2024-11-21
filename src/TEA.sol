@@ -182,6 +182,7 @@ contract TEA is SystemState {
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
     ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
+        uint256 amountToPOL;
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -212,7 +213,7 @@ contract TEA is SystemState {
             fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee);
 
             // TEA to protocol owned liquidity (POL)
-            uint256 amountToPOL = FullMath.mulDiv(
+            amountToPOL = FullMath.mulDiv(
                 amount,
                 fees.collateralFeeToLPers,
                 fees.collateralInOrWithdrawn + fees.collateralFeeToLPers
@@ -228,14 +229,14 @@ contract TEA is SystemState {
 
             // Store total supply
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
-
-            // Update reserves
-            reserves.reserveLPers += collateralDeposited;
-
-            // Emit (mint) transfer events
-            emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
-            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToPOL);
         }
+
+        // Update reserves
+        reserves.reserveLPers += collateralDeposited;
+
+        // Emit (mint) transfer events
+        emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
+        emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToPOL);
     }
 
     function burn(

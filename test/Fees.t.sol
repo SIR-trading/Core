@@ -55,16 +55,13 @@ contract FeesTest is Test {
             (uint256(totalFee) * tax) / (uint256(10) * type(uint8).max),
             "Treasury fee incorrect"
         );
-        assertEq(fees.collateralFeeToGentlemen, totalFee - fees.collateralFeeToStakers, "LPers fee incorrect");
-        assertEq(fees.collateralFeeToProtocol, 0);
+        assertEq(fees.collateralFeeToLPers, totalFee - fees.collateralFeeToStakers, "LPers fee incorrect");
     }
 
     function testFuzz_feeMintTEA(uint144 collateralDeposited, uint16 lpFee) public pure {
         SirStructs.Fees memory fees = Fees.feeMintTEA(collateralDeposited, lpFee);
 
-        uint256 totalFee = uint256(fees.collateralFeeToStakers) +
-            fees.collateralFeeToGentlemen +
-            fees.collateralFeeToProtocol;
+        uint256 totalFee = uint256(fees.collateralFeeToStakers) + fees.collateralFeeToLPers;
 
         assertEq(fees.collateralInOrWithdrawn + totalFee, collateralDeposited, "wrong collateral + fee");
 
@@ -78,7 +75,6 @@ contract FeesTest is Test {
         assertLe(totalFeeLowerBound, totalFee, "Total fee too low");
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
         assertEq(fees.collateralFeeToStakers, 0);
-        assertEq(fees.collateralFeeToGentlemen, 0);
-        assertEq(fees.collateralFeeToProtocol, totalFee);
+        assertEq(fees.collateralFeeToLPers, totalFee);
     }
 }

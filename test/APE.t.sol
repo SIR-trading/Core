@@ -234,7 +234,7 @@ contract APETest is Test {
 
         // Check reserves
         assertEq(reserves.reserveApes, reserveApesInitial + fees_.collateralInOrWithdrawn);
-        assertEq(reserves.reserveLPers, fees_.collateralFeeToLPers);
+        assertEq(reserves.reserveLPers, 0);
 
         // Check amounts
         assertEq(amount, reserveApesInitial + fees_.collateralInOrWithdrawn);
@@ -296,7 +296,7 @@ contract APETest is Test {
 
         // Check reserves
         assertEq(reserves.reserveApes, reserveApesInitial + fees_.collateralInOrWithdrawn);
-        assertEq(reserves.reserveLPers, fees_.collateralFeeToLPers);
+        assertEq(reserves.reserveLPers, 0);
 
         // Check amounts
         assertEq(amount, amount_);
@@ -386,12 +386,12 @@ contract APETest is Test {
         );
 
         // Check reserves
-        assertEq(reserves.reserveApes, reserveApesInitial - collateralOut_);
-        assertEq(reserves.reserveLPers, fees_.collateralFeeToLPers);
+        assertEq(reserves.reserveApes, reserveApesInitial - collateralOut_, "Reserve apes is wrong");
+        assertEq(reserves.reserveLPers, 0, "Reserve LPers is wrong");
 
         // Check amounts
-        assertEq(amountBalance - amountBurnt, ape.balanceOf(alice));
-        assertEq(totalSupplyInitial - amountBurnt, ape.totalSupply());
+        assertEq(amountBalance - amountBurnt, ape.balanceOf(alice), "Balance of alice is wrong");
+        assertEq(totalSupplyInitial - amountBurnt, ape.totalSupply(), "Total supply is wrong");
 
         // Verify fees
         assertEq32(keccak256(abi.encode(fees_)), keccak256(abi.encode(fees)));

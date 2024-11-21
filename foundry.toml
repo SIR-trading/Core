@@ -4,7 +4,7 @@ out = "out"
 libs = ["lib"]
 optimizer = true
 optimizer_runs = 4294967295 # 2^32-1
-# solc = "0.8.28"
+solc = "0.8.28"
 fs_permissions = [{ access = "read-write", path = "./"}, { access = "read-write", path = "./src/interfaces"}]
 # libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4"]
 gas_reports = ["Vault","Oracle"]
