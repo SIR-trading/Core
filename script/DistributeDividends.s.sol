@@ -7,7 +7,8 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {SIR} from "src/SIR.sol";
 import {Vault} from "src/Vault.sol";
 
-/** @notice cli: forge script script/DistributeDividends.s.sol --rpc-url tarp_testnet --broadcast
+/** @dev cli: forge script script/DistributeDividends.s.sol --rpc-url tarp_testnet --broadcast
+    @dev cli for Sepolia:        forge script script/DistributeDividends.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
  */
 contract DistributeDividends is Script {
     uint256 donatorPrivateKey;

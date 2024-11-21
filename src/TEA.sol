@@ -214,8 +214,8 @@ contract TEA is SystemState {
             // TEA to protocol owned liquidity (POL)
             uint256 amountToPOL = FullMath.mulDiv(
                 amount,
-                fees.collateralFeeToProtocol,
-                fees.collateralInOrWithdrawn + fees.collateralFeeToProtocol
+                fees.collateralFeeToLPers,
+                fees.collateralInOrWithdrawn + fees.collateralFeeToLPers
             );
 
             // TEA to minter
@@ -235,75 +235,6 @@ contract TEA is SystemState {
             // Emit (mint) transfer events
             emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
             emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToPOL);
-        }
-    }
-
-    function distributeFeesToGentlemen(
-        address collateral,
-        uint48 vaultId,
-        SirStructs.Reserves memory reserves,
-        SirStructs.Fees memory fees
-    ) internal {
-        unchecked {
-            // Loads supply and balance of TEA
-            TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
-
-            // Check if there are any gentlemen to distribute fees to
-            if (totalSupplyAndBalanceVault_.totalSupply == totalSupplyAndBalanceVault_.balanceVault) {
-                // If no gentlemen, all fees go to POL instead
-                fees.collateralFeeToProtocol = fees.collateralFeeToGentlemen;
-                fees.collateralFeeToGentlemen = 0;
-
-                // Mint TEA to POL
-                uint256 amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                    ? _amountFirstMint(collateral, fees.collateralFeeToProtocol + reserves.reserveLPers)
-                    : FullMath.mulDiv(
-                        totalSupplyAndBalanceVault_.totalSupply,
-                        fees.collateralFeeToProtocol,
-                        reserves.reserveLPers
-                    );
-
-                // Check that total supply does not overflow
-                if (amount > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
-                    revert TEAMaxSupplyExceeded();
-                }
-
-                // Update balance and total supply
-                totalSupplyAndBalanceVault_.balanceVault += uint128(amount);
-                totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
-
-                // Update reserves
-                reserves.reserveLPers += fees.collateralFeeToProtocol;
-
-                // Emit (mint) transfer event
-                emit TransferSingle(msg.sender, address(0), address(this), vaultId, amount);
-            } else {
-                // Fees from apes go to gentlemen by default
-
-                /** Burn TEA from POL
-                    To distribute collateral to gentlemen but not to POL, we can increase the LP reserve and
-                    A) Mint TEA to all gentlemen (unfeasible), or
-                    B) Burn TEA from POL to dilute its share (feasible)
-                 */
-                uint256 amount = FullMath.mulDiv(
-                    totalSupplyAndBalanceVault_.balanceVault,
-                    fees.collateralFeeToGentlemen,
-                    (reserves.reserveLPers + fees.collateralFeeToGentlemen)
-                );
-
-                // Update balance and total supply
-                totalSupplyAndBalanceVault_.balanceVault -= uint128(amount);
-                totalSupplyAndBalanceVault_.totalSupply -= uint128(amount);
-
-                // Update reserves
-                reserves.reserveLPers += fees.collateralFeeToGentlemen;
-
-                // Emit (burn) transfer event
-                emit TransferSingle(msg.sender, address(this), address(0), vaultId, amount);
-            }
-
-            // Store total supply and vault balance
-            totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
         }
     }
 

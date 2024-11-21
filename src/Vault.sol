@@ -24,23 +24,21 @@ contract Vault is TEA {
     error AmountTooLow();
 
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
-        i.e., collateralFeeToLPers = collateralFeeToGentlemen + collateralFeeToProtocol
+        i.e., collateralFeeToLPers = collateralFeeToLPers + collateralFeeToProtocol
      */
     event Mint(
         uint48 indexed vaultId,
         bool isAPE,
         uint144 collateralIn,
         uint144 collateralFeeToStakers,
-        uint144 collateralFeeToGentlemen,
-        uint144 collateralFeeToProtocol
+        uint144 collateralFeeToLPers
     );
     event Burn(
         uint48 indexed vaultId,
         bool isAPE,
         uint144 collateralWithdrawn,
         uint144 collateralFeeToStakers,
-        uint144 collateralFeeToGentlemen,
-        uint144 collateralFeeToProtocol
+        uint144 collateralFeeToLPers
     );
 
     Oracle private immutable _ORACLE;
@@ -131,10 +129,8 @@ contract Vault is TEA {
                     collateralToDeposit
                 );
 
-                // Distribute APE fees to genlemen
-                if (fees.collateralFeeToGentlemen > 0) {
-                    distributeFeesToGentlemen(vaultParams.collateralToken, vaultState.vaultId, reserves, fees);
-                }
+                // Distribute APE fees to LPers
+                reserves.reserveLPers += fees.collateralFeeToLPers;
             } else {
                 // Mint TEA and distribute fees to protocol owned liquidity (POL)
                 (fees, amount) = mint(
@@ -162,8 +158,7 @@ contract Vault is TEA {
                 isAPE,
                 fees.collateralInOrWithdrawn,
                 fees.collateralFeeToStakers,
-                fees.collateralFeeToGentlemen,
-                fees.collateralFeeToProtocol
+                fees.collateralFeeToLPers
             );
 
             if (msg.value == 0) {
@@ -219,10 +214,8 @@ contract Vault is TEA {
                 amount
             );
 
-            // Distribute APE fees to genlemen
-            if (fees.collateralFeeToGentlemen > 0) {
-                distributeFeesToGentlemen(vaultParams.collateralToken, vaultState.vaultId, reserves, fees);
-            }
+            // Distribute APE fees to LPers
+            reserves.reserveLPers += fees.collateralFeeToLPers;
         } else {
             // Burn TEA (no fees are actually paid)
             fees = burn(vaultState.vaultId, systemParams_, vaultIssuanceParams_, reserves, amount);
@@ -240,8 +233,7 @@ contract Vault is TEA {
             isAPE,
             fees.collateralInOrWithdrawn,
             fees.collateralFeeToStakers,
-            fees.collateralFeeToGentlemen,
-            fees.collateralFeeToProtocol
+            fees.collateralFeeToLPers
         );
 
         // Send collateral

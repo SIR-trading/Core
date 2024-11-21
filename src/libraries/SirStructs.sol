@@ -57,14 +57,13 @@ library SirStructs {
         or taken out by the user (in the case of a burn).
         collateralInOrWithdrawn: Amount of collateral deposited by the user (in the case of a mint) or taken out by the user (in the case of a burn).
         collateralFeeToStakers: Amount of collateral paid to the stakers.
-        collateralFeeToGentlemen: Amount of collateral paid to the gentlemen.
+        collateralFeeToLPers: Amount of collateral paid to the gentlemen.
         collateralFeeToProtocol: Amount of collateral paid to the protocol.
      */
     struct Fees {
         uint144 collateralInOrWithdrawn;
         uint144 collateralFeeToStakers;
-        uint144 collateralFeeToGentlemen;
-        uint144 collateralFeeToProtocol; // Protocol owned liquidity
+        uint144 collateralFeeToLPers; // Sometimes all LPers and sometimes only protocol owned liquidity
     }
 
     struct StakingParams {

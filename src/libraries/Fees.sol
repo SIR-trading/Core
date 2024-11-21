@@ -29,7 +29,7 @@ library Fees {
                 feeDen = temp + uint256(baseFee);
             }
 
-            // collateralDepositedOrOut = collateralInOrWithdrawn + collateralFeeToGentlemen + collateralFeeToStakers
+            // collateralDepositedOrOut = collateralInOrWithdrawn + collateralFeeToLPers + collateralFeeToStakers
             fees.collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
             uint256 totalFees = collateralDepositedOrOut - fees.collateralInOrWithdrawn;
 
@@ -37,20 +37,21 @@ library Fees {
             fees.collateralFeeToStakers = uint144((totalFees * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
 
             // The rest is sent to the gentlemen, if there are none, then it is POL
-            fees.collateralFeeToGentlemen = uint144(totalFees) - fees.collateralFeeToStakers;
+            fees.collateralFeeToLPers = uint144(totalFees) - fees.collateralFeeToStakers;
         }
     }
 
     /** @notice LPers pay a fee to the protocol when they mint TEA
+        @notice collateralFeeToLPers is the fee paid to the protocol (not all LPers)
      */
     function feeMintTEA(uint144 collateralDeposited, uint16 lpFee) internal pure returns (SirStructs.Fees memory fees) {
         unchecked {
             uint256 feeNum = 10000;
             uint256 feeDen = 10000 + uint256(lpFee);
 
-            // collateralDeposited = collateralIn + collateralFeeToProtocol
+            // collateralDeposited = collateralIn + collateralFeeToLPers
             fees.collateralInOrWithdrawn = uint144((uint256(collateralDeposited) * feeNum) / feeDen);
-            fees.collateralFeeToProtocol = collateralDeposited - fees.collateralInOrWithdrawn;
+            fees.collateralFeeToLPers = collateralDeposited - fees.collateralInOrWithdrawn;
         }
     }
 }
