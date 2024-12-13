@@ -702,8 +702,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
     address alice;
 
     uint256[] tsBalance;
-    uint256[] senderBalance;
-    uint256[] POLBalance;
+    uint256[] senderTeaBalance;
+    uint256[] polTeaBalance;
 
     struct TestMintParams {
         uint144 reserveLPers;
@@ -730,98 +730,83 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         fees = Fees.feeMintTEA(testMintParams.collateralDeposited, _systemParams.lpFee);
 
         senderAmount =
-            senderBalance[tsBalance.length - 1] -
-            (tsBalance.length == 1 ? 0 : senderBalance[tsBalance.length - 2]);
-        uint256 POLAmount = POLBalance[POLBalance.length - 1] -
-            (POLBalance.length == 1 ? 0 : POLBalance[POLBalance.length - 2]);
+            senderTeaBalance[tsBalance.length - 1] -
+            (tsBalance.length == 1 ? 0 : senderTeaBalance[tsBalance.length - 2]);
+        uint256 POLAmount = polTeaBalance[polTeaBalance.length - 1] -
+            (polTeaBalance.length == 1 ? 0 : polTeaBalance[polTeaBalance.length - 2]);
 
+        uint256 totalTeaMinted;
+        uint256 collateralFeeToProtocol;
         if (tsBalance.length == 1) {
+            // First TEA mint
             uint256 newCollateralTotalSupply = testMintParams.collateralDeposited + collateralTotalSupply0;
-            uint256 collateralFeeToProtocols = uint256(testMintParams.reserveLPers) + fees.collateralFeeToLPers;
 
-            // First mint
-            if (newCollateralTotalSupply <= SystemConstants.TEA_MAX_SUPPLY) {
-                assertEq(senderAmount, fees.collateralInOrWithdrawn);
-                assertEq(POLAmount, collateralFeeToProtocols);
+            // POL gets fee charged to the gentleman + whatever was already from the apes
+            collateralFeeToProtocol = uint256(testMintParams.reserveLPers) + fees.collateralFeeToLPers;
+
+            if (newCollateralTotalSupply <= SystemConstants.TEA_MAX_SUPPLY / 1e6) {
+                uint256 totalTeaMinted = 1e6 * uint256(fees.collateralInOrWithdrawn + collateralFeeToProtocol);
             } else {
-                // When the token supply is larger than TEA_MAX_SUPPLY, we scale down the ratio of TEA minted to collateral
-                uint256 senderAmountE = FullMath.mulDiv(
+                // When the token supply is larger than TEA_MAX_SUPPLY/1e6, we scale down the ratio of TEA minted to collateral
+                uint256 totalTeaMinted = FullMath.mulDiv(
                     SystemConstants.TEA_MAX_SUPPLY,
-                    fees.collateralInOrWithdrawn,
+                    fees.collateralInOrWithdrawn + collateralFeeToProtocol,
                     newCollateralTotalSupply
-                );
-
-                if (collateralFeeToProtocols == 0) assertEq(senderAmount, senderAmountE);
-                else if (fees.collateralInOrWithdrawn == 0) assertEq(senderAmount, 0);
-                else {
-                    // Bounds for the error
-                    assertLe(senderAmount, senderAmountE + 1);
-                    uint256 maxErr = uint256(fees.collateralInOrWithdrawn - 1) / collateralFeeToProtocols + 1;
-                    assertApproxEqAbs(senderAmount, senderAmountE, maxErr);
-                }
-
-                assertEq(
-                    POLAmount,
-                    FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralFeeToProtocols, newCollateralTotalSupply)
                 );
             }
         } else {
-            assertEq(
-                POLAmount,
-                FullMath.mulDiv(
-                    totalSupplyAndBalanceVault[VAULT_ID].totalSupply - senderAmount - POLAmount,
-                    fees.collateralFeeToLPers,
-                    testMintParams.reserveLPers + fees.collateralFeeToLPers
-                ),
-                "Wrong POL amount"
-            );
-            uint256 senderAmountE = FullMath.mulDiv(
+            // Not the first mint
+            totalTeaMinted = FullMath.mulDiv(
                 totalSupplyAndBalanceVault[VAULT_ID].totalSupply - senderAmount - POLAmount,
-                fees.collateralInOrWithdrawn,
-                testMintParams.reserveLPers + fees.collateralFeeToLPers
+                fees.collateralInOrWithdrawn + fees.collateralFeeToLPers,
+                testMintParams.reserveLPers
             );
-            assertLe(senderAmount, senderAmountE);
-            uint256 maxErr = fees.collateralInOrWithdrawn /
-                (testMintParams.reserveLPers + fees.collateralFeeToLPers + fees.collateralFeeToLPers) +
-                1;
-            assertApproxEqAbs(senderAmount, senderAmountE, maxErr);
+
+            // POL gets fee charged to the gentleman
+            collateralFeeToProtocol = fees.collateralFeeToLPers;
         }
+
+        // Ensure that the total minted TEA is split correctly between sender and POL
+        assertEq(
+            senderAmount,
+            FullMath.mulDivRoundingUp(
+                fees.collateralInOrWithdrawn,
+                totalTeaMinted,
+                fees.collateralInOrWithdrawn + collateralFeeToProtocol
+            )
+        );
+        assertEq(
+            POLAmount,
+            FullMath.mulDiv(
+                collateralFeeToProtocol,
+                totalTeaMinted,
+                fees.collateralInOrWithdrawn + collateralFeeToProtocol
+            )
+        );
     }
 
     function _verifyBurnAmounts(
         TestBurnParams memory testBurnParams,
         uint256 totalSupply0
     ) private view returns (SirStructs.Fees memory fees) {
-        uint144 collateralOut = uint144(
-            FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
-        );
-
-        fees = Fees.feeMintTEA(collateralOut, _systemParams.lpFee);
-
-        uint256 senderAmount = senderBalance[tsBalance.length - 2] - senderBalance[tsBalance.length - 1];
-        uint256 POLAmount = POLBalance[POLBalance.length - 1] - POLBalance[POLBalance.length - 2];
-
+        uint256 senderAmount = senderTeaBalance[tsBalance.length - 2] - senderTeaBalance[tsBalance.length - 1];
+        uint256 POLAmount = polTeaBalance[polTeaBalance.length - 1] - polTeaBalance[polTeaBalance.length - 2];
+        assertLe(POLAmount, 0);
         assertEq(senderAmount, testBurnParams.tokensBurnt);
-        if (senderAmount != totalSupply0) {
-            uint256 POLAmountE = FullMath.mulDiv(totalSupply0, fees.collateralFeeToLPers, testBurnParams.reserveLPers);
-            assertLe(POLAmount, POLAmountE);
-            // vm.writeLine(
-            //     "debug.log",
-            //     string.concat("POLAmount: ", vm.toString(POLAmount), ", POLAmountE: ", vm.toString(POLAmountE))
-            // );
-        } else if (collateral.totalSupply() <= SystemConstants.TEA_MAX_SUPPLY) {
-            assertEq(POLAmount, fees.collateralFeeToLPers + fees.collateralFeeToLPers);
-        }
+
+        // // SHOULD WE ALSO CHECK THAT collateralOut IS CORRECT?
+        // uint144 collateralOut = uint144(
+        //     FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
+        // );
     }
 
     function _verifyReserveLPers(
         SirStructs.Reserves memory reserves,
-        TestMintParams memory testMintParams,
-        uint144 collateralFeeToStakers
+        TestMintParams memory testMintParams
     ) private pure {
         assertEq(
             reserves.reserveLPers,
-            testMintParams.reserveLPers + testMintParams.collateralDeposited - collateralFeeToStakers,
+            testMintParams.reserveLPers + testMintParams.collateralDeposited,
             "LP reserve wrong"
         );
     }
@@ -831,12 +816,12 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
 
         uint256 aggBalanceSender;
         for (uint256 i = 0; i < tsBalance.length; i++) {
-            if (tsBalance[i] <= tsCheck) aggBalanceSender += senderBalance[i];
+            if (tsBalance[i] <= tsCheck) aggBalanceSender += senderTeaBalance[i];
         }
         uint80 rewardsSender = unclaimedRewards(
             VAULT_ID,
             msg.sender,
-            senderBalance[tsBalance.length - 1],
+            senderTeaBalance[tsBalance.length - 1],
             cumulativeSIRPerTEA(VAULT_ID)
         );
 
@@ -846,19 +831,19 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             uint256 rewardsE;
             uint256 maxErr;
             for (uint256 i = 0; i < tsBalance.length; i++) {
-                if (tsBalance[i] <= tsCheck && senderBalance[i] > 0) {
+                if (tsBalance[i] <= tsCheck && senderTeaBalance[i] > 0) {
                     uint256 timestampStart = tsBalance[i];
                     uint256 tsEnd = i == tsBalance.length - 1 ? tsCheck : tsBalance[i + 1];
                     if (timestampStart <= timestamp3Years && tsEnd >= timestamp3Years) {
                         rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (timestamp3Years - timestampStart);
                         rewardsE += SystemConstants.ISSUANCE * (tsEnd - timestamp3Years);
-                        maxErr += ErrorComputation.maxErrorBalance(96, senderBalance[i], 2);
+                        maxErr += ErrorComputation.maxErrorBalance(96, senderTeaBalance[i], 2);
                     } else if (timestampStart <= timestamp3Years && tsEnd <= timestamp3Years) {
                         rewardsE += SystemConstants.LP_ISSUANCE_FIRST_3_YEARS * (tsEnd - timestampStart);
-                        maxErr += ErrorComputation.maxErrorBalance(96, senderBalance[i], 1);
+                        maxErr += ErrorComputation.maxErrorBalance(96, senderTeaBalance[i], 1);
                     } else {
                         rewardsE += SystemConstants.ISSUANCE * (tsEnd - timestampStart);
-                        maxErr += ErrorComputation.maxErrorBalance(96, senderBalance[i], 1);
+                        maxErr += ErrorComputation.maxErrorBalance(96, senderTeaBalance[i], 1);
                     }
                 }
             }
@@ -918,8 +903,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             testMintParams.collateralDeposited
         );
         tsBalance.push(block.timestamp);
-        senderBalance.push(balanceOf(msg.sender, VAULT_ID));
-        POLBalance.push(balanceOf(address(this), VAULT_ID));
+        senderTeaBalance.push(balanceOf(msg.sender, VAULT_ID));
+        polTeaBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
         (SirStructs.Fees memory fees_, uint256 amount_) = _verifyMintAmounts(testMintParams, collateralTotalSupply0);
@@ -1054,8 +1039,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             testMintParams.collateralDeposited
         );
         tsBalance.push(block.timestamp);
-        senderBalance.push(balanceOf(msg.sender, VAULT_ID));
-        POLBalance.push(balanceOf(address(this), VAULT_ID));
+        senderTeaBalance.push(balanceOf(msg.sender, VAULT_ID));
+        polTeaBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
         (SirStructs.Fees memory fees_, uint256 amount_) = _verifyMintAmounts(testMintParams, 0);
@@ -1220,8 +1205,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             testBurnParams.tokensBurnt
         );
         tsBalance.push(block.timestamp);
-        senderBalance.push(balanceOf(msg.sender, VAULT_ID));
-        POLBalance.push(balanceOf(address(this), VAULT_ID));
+        senderTeaBalance.push(balanceOf(msg.sender, VAULT_ID));
+        polTeaBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
         SirStructs.Fees memory fees_ = _verifyBurnAmounts(testBurnParams, totalSupply0);

@@ -212,11 +212,11 @@ contract TEA is SystemState {
             // Split collateralDeposited between minter and POL
             fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee);
 
-            // TEA to protocol owned liquidity (POL)
+            // Part of the new minted TEA to protocol owned liquidity (POL)
             amountToPOL = FullMath.mulDiv(
                 amount,
-                fees.collateralFeeToLPers,
-                fees.collateralInOrWithdrawn + fees.collateralFeeToLPers
+                fees.collateralFeeToLPers + reserves.reserveLPers,
+                collateralDeposited + reserves.reserveLPers
             );
 
             // TEA to minter
@@ -251,6 +251,9 @@ contract TEA is SystemState {
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
             uint256 balanceOfFrom = balances[msg.sender][vaultId];
 
+            // Check we are not burning more than the balance
+            require(amount <= balanceOfFrom);
+
             // Update SIR issuance
             LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfFrom, address(this), 0);
             updateLPerIssuanceParams(
@@ -266,9 +269,6 @@ contract TEA is SystemState {
             fees.collateralInOrWithdrawn = uint144(
                 FullMath.mulDiv(reserves.reserveLPers, amount, totalSupplyAndBalanceVault_.totalSupply)
             ); // Compute amount of collateral
-
-            // Check we are not burning more than the balance
-            require(amount <= balanceOfFrom);
 
             // Update balance and total supply
             balances[msg.sender][vaultId] = balanceOfFrom - amount;
@@ -292,14 +292,14 @@ contract TEA is SystemState {
     /** @notice Make sure that even if the entire supply of the collateral token was deposited into the vault,
         the amount of TEA minted is less than the maximum supply of TEA.
      */
-    function _amountFirstMint(address collateral, uint144 collateralIn) private view returns (uint256 amount) {
+    function _amountFirstMint(address collateral, uint144 collateralDeposited) private view returns (uint256 amount) {
         uint256 collateralTotalSupply = IERC20(collateral).totalSupply();
-        /** When possible assign 6 more 0's to the TEA balance to mitigate inflation attacks.
-            If not possible as much as TEA as possible while forcing that if all collateral was minted, it would not overflow the TEA maximum supply.
+        /** When possible assign siz 0's to the TEA balance per unit of collateral to mitigate inflation attacks.
+            If not possible mint as much as TEA as possible while forcing that if all collateral was minted, it would not overflow the TEA maximum supply.
          */
         amount = collateralTotalSupply > SystemConstants.TEA_MAX_SUPPLY / 1e6
-            ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply)
-            : collateralIn * 1e6;
+            ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralDeposited, collateralTotalSupply)
+            : collateralDeposited * 1e6;
     }
 
     function _setBalance(address account, uint256 vaultId, uint256 balance) private {
