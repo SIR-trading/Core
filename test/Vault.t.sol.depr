@@ -987,7 +987,7 @@ contract VaultTest is Test {
             vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
 
             // To ensure division by 0 does not occur when recoverying the reserves
-            require(vaultState.reserve >= 2);
+            require(vaultState.reserve >= 1e6);
 
             // Compute tickPriceSatX42
             if (reserves.reserveApes == 0) {
@@ -2317,7 +2317,7 @@ contract VaultHandler is Test, RegimeEnum {
                     ? FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)
                     : FullMath.mulDiv(reserves.reserveLPers, amount, supplyTEA);
 
-                if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox >= 2) {
+                if (reserves.reserveApes + reserves.reserveLPers - collateralOutApprox >= 1e6) {
                     // Burn
                     vm.startPrank(user);
                     console.log("Burning", amount, isAPE ? "of APE" : "of TEA ");

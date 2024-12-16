@@ -64,7 +64,7 @@ abstract contract SystemState is SystemControlAccess {
             (or burns) APE, the attacker could mint before the ape and burn after the ape, earning the fees risk-free.
          */
         _systemParams = SirStructs.SystemParameters({
-            baseFee: 4000, // At 1.5 leverage tier, the price has to double for apes to be in profit.
+            baseFee: 3000, // At 1.5 leverage tier, apes would pay 24% of their deposit as upfront fee.
             lpFee: 989, // To mitigate LP sandwich attacks.
             mintingStopped: false,
             cumulativeTax: 0

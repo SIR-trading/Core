@@ -745,10 +745,10 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             collateralFeeToProtocol = uint256(testMintParams.reserveLPers) + fees.collateralFeeToLPers;
 
             if (newCollateralTotalSupply <= SystemConstants.TEA_MAX_SUPPLY / 1e6) {
-                uint256 totalTeaMinted = 1e6 * uint256(fees.collateralInOrWithdrawn + collateralFeeToProtocol);
+                totalTeaMinted = 1e6 * uint256(fees.collateralInOrWithdrawn + collateralFeeToProtocol);
             } else {
                 // When the token supply is larger than TEA_MAX_SUPPLY/1e6, we scale down the ratio of TEA minted to collateral
-                uint256 totalTeaMinted = FullMath.mulDiv(
+                totalTeaMinted = FullMath.mulDiv(
                     SystemConstants.TEA_MAX_SUPPLY,
                     fees.collateralInOrWithdrawn + collateralFeeToProtocol,
                     newCollateralTotalSupply
@@ -773,7 +773,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
                 fees.collateralInOrWithdrawn,
                 totalTeaMinted,
                 fees.collateralInOrWithdrawn + collateralFeeToProtocol
-            )
+            ),
+            "Sender minted TEA amount is wrong"
         );
         assertEq(
             POLAmount,
@@ -781,23 +782,22 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
                 collateralFeeToProtocol,
                 totalTeaMinted,
                 fees.collateralInOrWithdrawn + collateralFeeToProtocol
-            )
+            ),
+            "POL minted TEA amount is wrong"
         );
     }
 
     function _verifyBurnAmounts(
         TestBurnParams memory testBurnParams,
         uint256 totalSupply0
-    ) private view returns (SirStructs.Fees memory fees) {
+    ) private view returns (uint144 collateralOut) {
         uint256 senderAmount = senderTeaBalance[tsBalance.length - 2] - senderTeaBalance[tsBalance.length - 1];
         uint256 POLAmount = polTeaBalance[polTeaBalance.length - 1] - polTeaBalance[polTeaBalance.length - 2];
-        assertLe(POLAmount, 0);
-        assertEq(senderAmount, testBurnParams.tokensBurnt);
+        assertLe(POLAmount, 0, "POL minted TEA amount is wrong");
+        assertEq(senderAmount, testBurnParams.tokensBurnt, "Sender burnt TEA amount is wrong");
 
-        // // SHOULD WE ALSO CHECK THAT collateralOut IS CORRECT?
-        // uint144 collateralOut = uint144(
-        //     FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0)
-        // );
+        // Check collateral received by the sender is correct
+        collateralOut = uint144(FullMath.mulDiv(testBurnParams.reserveLPers, testBurnParams.tokensBurnt, totalSupply0));
     }
 
     function _verifyReserveLPers(
@@ -867,9 +867,11 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public returns (SirStructs.Reserves memory reserves) {
+        collateralTotalSupply0 = _bound(collateralTotalSupply0, 0, type(uint256).max - 1);
+
         // Bounds the amounts
         testMintParams.collateralDeposited = uint144(
-            _bound(testMintParams.collateralDeposited, 0, type(uint256).max - collateralTotalSupply0)
+            _bound(testMintParams.collateralDeposited, 1, type(uint256).max - collateralTotalSupply0)
         );
         testMintParams.reserveLPers = uint144(
             _bound(testMintParams.reserveLPers, 0, type(uint144).max - testMintParams.collateralDeposited)
@@ -912,71 +914,10 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         assertEq32(keccak256(abi.encode(fees)), keccak256(abi.encode(fees_)));
 
         // Assert the LP reserve is correct
-        _verifyReserveLPers(reserves, testMintParams, fees.collateralFeeToStakers);
+        _verifyReserveLPers(reserves, testMintParams);
 
         // Assert SIR rewards are correct
         _verifySIRRewards(testMintParams.tsCheck);
-    }
-
-    function testFuzz_mintPOL1stTime(
-        TestMintParams memory testMintParams,
-        uint256 collateralTotalSupply0
-    ) public returns (SirStructs.Reserves memory reserves) {
-        // Bounds the amounts
-        testMintParams.collateralDeposited = uint144(
-            _bound(testMintParams.collateralDeposited, 0, type(uint256).max - collateralTotalSupply0)
-        );
-        testMintParams.reserveLPers = uint144(
-            _bound(testMintParams.reserveLPers, 0, type(uint144).max - testMintParams.collateralDeposited)
-        );
-        testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 0, collateralTotalSupply0));
-        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TIMESTAMP_ISSUANCE_START, MAX_TS));
-
-        // Initialize reserves
-        reserves = SirStructs.Reserves({reserveApes: 0, reserveLPers: testMintParams.reserveLPers, tickPriceX42: 0});
-
-        // Mint collateral
-        collateral.mint(alice, collateralTotalSupply0 - testMintParams.reserveLPers);
-
-        // Simulate new deposit
-        collateral.mint(address(this), testMintParams.reserveLPers + testMintParams.collateralDeposited);
-
-        // Compute the amount of TEA minted by the protocol
-        uint256 newCollateralTotalSupply = testMintParams.collateralDeposited + collateralTotalSupply0;
-        uint256 amountToProtocol;
-        if (newCollateralTotalSupply <= SystemConstants.TEA_MAX_SUPPLY) {
-            amountToProtocol = testMintParams.reserveLPers + testMintParams.collateralDeposited;
-        } else {
-            // When the token supply is larger than TEA_MAX_SUPPLY, we scale down the ratio of TEA minted to collateral
-            amountToProtocol = FullMath.mulDiv(
-                SystemConstants.TEA_MAX_SUPPLY,
-                testMintParams.reserveLPers + testMintParams.collateralDeposited,
-                newCollateralTotalSupply
-            );
-        }
-
-        // // Mint for the first time
-        // mintToProtocol(address(collateral), VAULT_ID, reserves, testMintParams.collateralDeposited);
-
-        // Assert POL is correct
-        assertEq(balanceOf(address(this), VAULT_ID), amountToProtocol);
-
-        // Assert the LP reserve is correct
-        assertEq(
-            reserves.reserveLPers,
-            testMintParams.reserveLPers + testMintParams.collateralDeposited,
-            "LP reserve wrong"
-        );
-
-        // Assert SIR rewards are correct
-        vm.warp(testMintParams.tsCheck);
-        uint80 rewardsVault = unclaimedRewards(
-            VAULT_ID,
-            address(this),
-            amountToProtocol,
-            cumulativeSIRPerTEA(VAULT_ID)
-        );
-        assertEq(rewardsVault, 0);
     }
 
     function testFuzz_mint(
@@ -986,14 +927,15 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         uint8 tax,
         uint256 collateralTotalSupply0
     ) public returns (SirStructs.Reserves memory reserves) {
+        collateralTotalSupply0 = _bound(collateralTotalSupply0, 0, type(uint256).max - 1);
         reserves = testFuzz_mint1stTime(testMintParams0, lpFee, tax, collateralTotalSupply0);
 
         // In some rare cases collateral deposited could be non-zero and yet mint no TEA (we are not testing the 1st mint)
         vm.assume(totalSupplyAndBalanceVault[VAULT_ID].totalSupply > 0);
 
-        // After the first mint, there must be at least 2 units of collateral in the reserve
+        // After the first mint, there must be at least 1e6 units of collateral in the reserve
         uint144 reserve = reserves.reserveApes + reserves.reserveLPers;
-        vm.assume(reserve >= 2);
+        vm.assume(reserve >= 1e6);
 
         // Bound amounts
         testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 1, reserve - 1)); // this simulates any price fluctuation
@@ -1007,6 +949,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         testMintParams.collateralDeposited = uint144(
             _bound(testMintParams.collateralDeposited, 0, type(uint144).max - collateral.balanceOf(address(this)))
         );
+
         testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, block.timestamp, MAX_TS));
 
         // Update reserves
@@ -1025,6 +968,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
                     _bound(testMintParams.collateralDeposited, 0, collateralDepositedUpperBound)
                 );
         }
+        vm.assume(testMintParams.collateralDeposited > 0);
 
         // Simulate new deposit
         collateral.mint(address(this), testMintParams.collateralDeposited);
@@ -1038,6 +982,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             reserves,
             testMintParams.collateralDeposited
         );
+
         tsBalance.push(block.timestamp);
         senderTeaBalance.push(balanceOf(msg.sender, VAULT_ID));
         polTeaBalance.push(balanceOf(address(this), VAULT_ID));
@@ -1048,94 +993,10 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         assertEq32(keccak256(abi.encode(fees_)), keccak256(abi.encode(fees)));
 
         // Assert the LP reserve is correct
-        _verifyReserveLPers(reserves, testMintParams, fees.collateralFeeToStakers);
+        _verifyReserveLPers(reserves, testMintParams);
 
         // Assert SIR rewards are correct
         _verifySIRRewards(testMintParams.tsCheck);
-    }
-
-    function testFuzz_mintPOL(
-        TestMintParams memory testMintParams0,
-        TestMintParams memory testMintParams,
-        uint16 lpFee,
-        uint8 tax,
-        uint256 collateralTotalSupply0
-    ) public {
-        SirStructs.Reserves memory reserves = testFuzz_mint1stTime(testMintParams0, lpFee, tax, collateralTotalSupply0);
-
-        // In some rare cases collateral deposited could be non-zero and yet mint no TEA (we are not testing the 1st mint)
-        vm.assume(totalSupplyAndBalanceVault[VAULT_ID].totalSupply > 0);
-
-        // After the first mint, there must be at least 2 units of collateral in the reserve
-        uint144 reserve = reserves.reserveApes + reserves.reserveLPers;
-        vm.assume(reserve >= 2);
-
-        // Bound amounts
-        testMintParams.reserveLPers = uint144(_bound(testMintParams.reserveLPers, 1, reserve - 1)); // this simulates any price fluctuation
-        testMintParams.collateralDeposited = uint144(
-            _bound(
-                testMintParams.collateralDeposited,
-                0,
-                type(uint256).max - collateralTotalSupply0 - testMintParams0.collateralDeposited
-            )
-        );
-        testMintParams.collateralDeposited = uint144(
-            _bound(testMintParams.collateralDeposited, 0, type(uint144).max - collateral.balanceOf(address(this)))
-        );
-        testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, block.timestamp, MAX_TS));
-
-        // Update reserves
-        reserves.reserveLPers = testMintParams.reserveLPers;
-        reserves.reserveApes = reserve - testMintParams.reserveLPers;
-
-        // Condition for not reaching TEA_MAX_SUPPLY
-        {
-            (bool success, uint256 collateralDepositedUpperBound) = FullMath.tryMulDiv(
-                reserves.reserveLPers,
-                SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-                totalSupplyAndBalanceVault[VAULT_ID].totalSupply
-            );
-            if (success)
-                testMintParams.collateralDeposited = uint144(
-                    _bound(testMintParams.collateralDeposited, 0, collateralDepositedUpperBound)
-                );
-        }
-
-        // Simulate new deposit
-        collateral.mint(address(this), testMintParams.collateralDeposited);
-
-        // Compute the amount of TEA minted by the protocol
-        uint256 amountToProtocol = FullMath.mulDiv(
-            totalSupplyAndBalanceVault[VAULT_ID].totalSupply,
-            testMintParams.collateralDeposited,
-            testMintParams.reserveLPers
-        );
-
-        // Balance of the protocol before minting
-        uint256 balanceBefore = balanceOf(address(this), VAULT_ID);
-
-        // // Mint for protocol
-        // mintToProtocol(address(collateral), VAULT_ID, reserves, testMintParams.collateralDeposited);
-
-        // Assert POL is correct
-        assertEq(balanceOf(address(this), VAULT_ID) - balanceBefore, amountToProtocol);
-
-        // Assert the LP reserve is correct
-        assertEq(
-            reserves.reserveLPers,
-            testMintParams.reserveLPers + testMintParams.collateralDeposited,
-            "LP reserve wrong"
-        );
-
-        // Assert SIR rewards are correct
-        vm.warp(testMintParams.tsCheck);
-        uint80 rewardsVault = unclaimedRewards(
-            VAULT_ID,
-            address(this),
-            amountToProtocol,
-            cumulativeSIRPerTEA(VAULT_ID)
-        );
-        assertEq(rewardsVault, 0);
     }
 
     function testFuzz_mintOverflows(uint16 lpFee, uint8 tax) public {
@@ -1181,9 +1042,9 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             collateralTotalSupply0
         );
 
-        // After the first mint, there must be at least 2 units of collateral in the reserve
+        // After the first mint, there must be at least 1e6 units of collateral in the reserve
         uint144 reserve = reserves.reserveApes + reserves.reserveLPers;
-        vm.assume(reserve >= 2);
+        vm.assume(reserve >= 1e6);
 
         // Bound amounts
         testBurnParams.reserveLPers = uint144(_bound(testBurnParams.reserveLPers, 1, reserve - 1)); // this simulates any price fluctuation
@@ -1209,15 +1070,11 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         polTeaBalance.push(balanceOf(address(this), VAULT_ID));
 
         // Assert balances are correct
-        SirStructs.Fees memory fees_ = _verifyBurnAmounts(testBurnParams, totalSupply0);
-        assertEq32(keccak256(abi.encode(fees_)), keccak256(abi.encode(fees)));
+        uint144 collateralOut = _verifyBurnAmounts(testBurnParams, totalSupply0);
+        assertEq(collateralOut, fees.collateralInOrWithdrawn);
 
         // Assert the LP reserve is correct
-        assertEq(
-            reserves.reserveLPers,
-            testBurnParams.reserveLPers - fees.collateralInOrWithdrawn - fees.collateralFeeToStakers,
-            "LP reserve wrong"
-        );
+        assertEq(reserves.reserveLPers, testBurnParams.reserveLPers - collateralOut, "LP reserve wrong");
 
         // Assert SIR rewards are correct
         _verifySIRRewards(testBurnParams.tsCheck);
@@ -1239,9 +1096,9 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             collateralTotalSupply0
         );
 
-        // After the first mint, there must be at least 2 units of collateral in the reserve
+        // After the first mint, there must be at least 1e6 units of collateral in the reserve
         uint144 reserve = reserves.reserveApes + reserves.reserveLPers;
-        vm.assume(reserve >= 2);
+        vm.assume(reserve >= 1e6);
 
         // Bound amounts
         testBurnParams.reserveLPers = uint144(_bound(testBurnParams.reserveLPers, 1, reserve - 1)); // this simulates any price fluctuation

@@ -109,6 +109,9 @@ contract Vault is TEA {
             _WETH.deposit{value: msg.value}();
         }
 
+        // Cannot deposit 0 collateral
+        if (collateralToDeposit == 0) revert AmountTooLow();
+
         SirStructs.SystemParameters memory systemParams_ = _systemParams;
         require(!systemParams_.mintingStopped);
 
@@ -194,6 +197,8 @@ contract Vault is TEA {
         SirStructs.VaultParameters calldata vaultParams,
         uint256 amount
     ) external returns (uint144) {
+        if (amount == 0) revert AmountTooLow();
+
         SirStructs.SystemParameters memory systemParams_ = _systemParams;
 
         // Get reserves
