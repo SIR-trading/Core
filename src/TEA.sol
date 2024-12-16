@@ -15,6 +15,8 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemState} from "./SystemState.sol";
 
+import "forge-std/console.sol";
+
 /** @notice Modified from Solmate
  */
 contract TEA is SystemState {
@@ -201,8 +203,9 @@ contract TEA is SystemState {
 
             // Total amount of TEA to mint (and to split between minter and POL)
             amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, collateralDeposited + reserves.reserveLPers)
+                ? _amountFirstMint(collateral, collateralDeposited + reserves.reserveLPers) // In the first mint, reserveLPers contains orphaned fees from apes
                 : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralDeposited, reserves.reserveLPers);
+            console.log("CONTRACT: total TEA minted:", amount);
 
             // Check that total supply does not overflow
             if (amount > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
@@ -213,11 +216,13 @@ contract TEA is SystemState {
             fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee);
 
             // Part of the new minted TEA to protocol owned liquidity (POL)
-            amountToPOL = FullMath.mulDiv(
-                amount,
-                fees.collateralFeeToLPers + reserves.reserveLPers,
-                collateralDeposited + reserves.reserveLPers
-            );
+            amountToPOL = totalSupplyAndBalanceVault_.totalSupply == 0
+                ? FullMath.mulDiv(
+                    amount,
+                    fees.collateralFeeToLPers + reserves.reserveLPers, // In the first mint, orphaned fees from apes are distributed to POL
+                    collateralDeposited + reserves.reserveLPers
+                )
+                : FullMath.mulDiv(amount, fees.collateralFeeToLPers, collateralDeposited);
 
             // TEA to minter
             amount -= amountToPOL;
