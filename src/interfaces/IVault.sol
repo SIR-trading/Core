@@ -127,7 +127,7 @@ interface IVault {
 
     function vaultTax(uint48 vaultId) external view returns (uint8);
 
-    function withdrawFees(address token) external returns (uint112 totalFeesToStakers);
+    function withdrawFees(address token) external returns (uint256 totalFeesToStakers);
 
     function withdrawToSaveSystem(address[] calldata tokens, address to) external returns (uint256[] memory amounts);
 }
