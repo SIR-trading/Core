@@ -292,23 +292,24 @@ contract VaultTest is Test {
         {
             SirStructs.VaultState memory vaultState;
             if (!isFirst) {
+                // LP and APE reserves must be at least have 1 unit
                 reservesPre.reserveApes = uint144(_bound(reservesPre.reserveApes, 1, type(uint144).max - 1));
                 reservesPre.reserveLPers = uint144(
                     _bound(reservesPre.reserveLPers, 1, type(uint144).max - reservesPre.reserveApes)
                 );
+
+                // Combined reserves must be at least 1M
+                vm.assume(reservesPre.reserveApes + reservesPre.reserveLPers >= 1e6);
 
                 // Derive vault state
                 vaultState = _deriveVaultState(reservesPre);
             }
 
             if (isMint) {
+                // I SHOULDNT USE UINT122 ANYMORE!!
                 // Sufficient condition for the minting to not overflow the TEA max supply
                 inputsOutputs.collateral = uint144(
-                    _bound(inputsOutputs.collateral, isFirst ? 2 : 0, uint256(10) * type(uint112).max)
-                );
-
-                inputsOutputs.collateral = uint144(
-                    _bound(inputsOutputs.collateral, 0, type(uint144).max - vaultState.reserve)
+                    _bound(inputsOutputs.collateral, isFirst ? 1e6 : 1, type(uint144).max - vaultState.reserve)
                 );
 
                 inputsOutputs.amount = 0;
@@ -636,8 +637,8 @@ contract VaultTest is Test {
             if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
         }
 
-        // Constraint so it leaves at least 2 units in the reserve
-        _constraintReserveBurnTEA(systemParams, reservesPre, inputsOutputs, balances);
+        // Constraint so it leaves at least 1M units in the reserve
+        _constraintReserveBurnTEA(reservesPre, inputsOutputs, balances);
 
         // Alice burns TEA
         vm.prank(alice);
@@ -647,7 +648,7 @@ contract VaultTest is Test {
         SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
 
         // Verify amounts
-        _verifyAmountsBurnTEA(systemParams, inputsOutputs, reservesPre, reservesPost, balances);
+        _verifyAmountsBurnTEA(inputsOutputs, reservesPre, reservesPost, balances);
     }
 
     function testFuzz_mintWrongVaultParameters(
@@ -797,8 +798,8 @@ contract VaultTest is Test {
                 if (success) inputsOutputs.amount = _bound(inputsOutputs.amount, 0, amountToBurnUpperbound);
             }
 
-            // Constraint so it leaves at least 2 units in the reserve
-            _constraintReserveBurnTEA(systemParams, reservesPre, inputsOutputs, balances);
+            // Constraint so it leaves at least  1M units in the reserve
+            _constraintReserveBurnTEA(reservesPre, inputsOutputs, balances);
         }
 
         // Alice mints APE
@@ -1086,11 +1087,10 @@ contract VaultTest is Test {
 
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
-        vm.assume(vaultState.reserve >= uint256(2) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
+        vm.assume(vaultState.reserve >= uint256(1e6) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
     }
 
     function _constraintReserveBurnTEA(
-        SystemParams calldata systemParams,
         SirStructs.Reserves memory reservesPre,
         InputsOutputs memory inputsOutputs,
         Balances memory balances
@@ -1098,11 +1098,10 @@ contract VaultTest is Test {
         uint144 collateralOut = uint144(
             FullMath.mulDiv(reservesPre.reserveLPers, inputsOutputs.amount, balances.teaSupply)
         );
-        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralOut, systemParams.lpFee, systemParams.tax);
 
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
 
-        vm.assume(vaultState.reserve >= uint256(2) + fees.collateralInOrWithdrawn + fees.collateralFeeToStakers);
+        vm.assume(vaultState.reserve >= uint256(1e6) + collateralOut);
     }
 
     function _verifyAmountsMintAPE(
@@ -1148,7 +1147,7 @@ contract VaultTest is Test {
             );
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol,
+                reservesPre.reserveLPers + fees.collateralFeeToLPers,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1185,25 +1184,9 @@ contract VaultTest is Test {
         assertEq(inputsOutputs.amount, ape.balanceOf(alice) - balances.apeAlice);
         assertEq(vault.balanceOf(alice, VAULT_ID), balances.teaAlice);
 
-        // Verify POL's balances
+        // Verify POL TEA balance stays the same
         assertEq(ape.balanceOf(address(vault)), 0);
-        inputsOutputs.amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
-        if (fees.collateralFeeToProtocol == 0) {
-            assertEq(inputsOutputs.amount, 0);
-        } else if (balances.teaSupply > 0) {
-            if (reservesPre.reserveLPers + fees.collateralFeeToGentlemen > 0) {
-                assertEq(
-                    inputsOutputs.amount,
-                    FullMath.mulDiv(
-                        balances.teaSupply,
-                        fees.collateralFeeToProtocol,
-                        reservesPre.reserveLPers + fees.collateralFeeToGentlemen
-                    )
-                );
-            } else {
-                revert("Invalid state");
-            }
-        }
+        assertEq(vault.balanceOf(address(vault), VAULT_ID), balances.teaVault);
     }
 
     function _verifyAmountsBurnAPE(
@@ -1250,10 +1233,9 @@ contract VaultTest is Test {
             else err = 1 + vaultState.reserve / 1e5;
 
             assertApproxEqAbs(reservesPost.reserveApes, reservesPre.reserveApes, err, "Ape's reserve is wrong");
-            reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + fees.collateralFeeToProtocol,
+                reservesPre.reserveLPers + fees.collateralFeeToLPers,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1268,7 +1250,7 @@ contract VaultTest is Test {
         assertEq(
             IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
             reservesPre.reserveLPers +
-                fees.collateralFeeToProtocol +
+                fees.collateralFeeToLPers +
                 reservesPre.reserveApes +
                 fees.collateralFeeToStakers,
             "Total reserves does not match"
@@ -1280,19 +1262,7 @@ contract VaultTest is Test {
 
         // Verify POL's balances
         assertEq(ape.balanceOf(address(vault)), 0);
-        inputsOutputs.amount = vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault;
-        if (fees.collateralFeeToProtocol == 0) {
-            assertEq(inputsOutputs.amount, 0);
-        } else if (balances.teaSupply > 0) {
-            if (reservesPre.reserveLPers > 0) {
-                assertEq(
-                    inputsOutputs.amount,
-                    FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
-                );
-            } else {
-                revert("Invalid state");
-            }
-        }
+        assertEq(vault.balanceOf(address(vault), VAULT_ID), balances.teaVault);
     }
 
     function _verifyAmountsMintTEA(
@@ -1303,7 +1273,7 @@ contract VaultTest is Test {
         Balances memory balances
     ) private view {
         // Verify amounts
-        SirStructs.Fees memory fees = Fees.feeMintTEA(inputsOutputs.collateral, systemParams.lpFee, systemParams.tax);
+        SirStructs.Fees memory fees = Fees.feeMintTEA(inputsOutputs.collateral, systemParams.lpFee);
 
         // Get collateralState.total reserve
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
@@ -1327,10 +1297,7 @@ contract VaultTest is Test {
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers +
-                    fees.collateralInOrWithdrawn +
-                    fees.collateralFeeToGentlemen +
-                    fees.collateralFeeToProtocol,
+                reservesPre.reserveLPers + fees.collateralInOrWithdrawn + fees.collateralFeeToLPers,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1339,10 +1306,7 @@ contract VaultTest is Test {
 
         // Verify token state
         uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
-        assertEq(
-            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
-            fees.collateralFeeToStakers
-        );
+        assertEq(IERC20(vaultParams.collateralToken).balanceOf(address(vault)), totalReserves);
         assertEq(
             IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
             reservesPre.reserveLPers + reservesPre.reserveApes + inputsOutputs.collateral
@@ -1350,24 +1314,24 @@ contract VaultTest is Test {
 
         // Verify POL's balances
         uint128 amountPol = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
-        reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
         if (balances.teaSupply == 0) {
-            if (fees.collateralFeeToProtocol + reservesPre.reserveLPers == 0) {
+            if (fees.collateralFeeToLPers + reservesPre.reserveLPers == 0) {
                 assertEq(amountPol, 0, "Amount of POL is not 0");
+            } else {
+                assertGt(amountPol, 0, "Amount of POL is 0");
             }
         } else if (reservesPre.reserveLPers == 0) {
             revert("Invalid state");
         } else {
             assertEq(
                 amountPol,
-                FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
+                FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToLPers, reservesPre.reserveLPers)
             );
         }
         assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
 
         // Verify Alice's balances
         balances.teaSupply += amountPol;
-        reservesPre.reserveLPers += fees.collateralFeeToProtocol;
         if (fees.collateralInOrWithdrawn == 0) {
             assertEq(inputsOutputs.amount, 0, "1");
         } else if (balances.teaSupply > 0) {
@@ -1377,11 +1341,10 @@ contract VaultTest is Test {
             );
         }
         assertEq(inputsOutputs.amount, vault.balanceOf(alice, VAULT_ID) - balances.teaAlice, "3");
-        assertEq(ape.balanceOf(alice) - balances.apeAlice, 0, "4");
+        assertEq(ape.balanceOf(alice), balances.apeAlice, "4");
     }
 
     function _verifyAmountsBurnTEA(
-        SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
         SirStructs.Reserves memory reservesPost,
@@ -1393,11 +1356,7 @@ contract VaultTest is Test {
         );
 
         // Verify amounts
-        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralOut, systemParams.lpFee, systemParams.tax);
-        reservesPre.reserveLPers -= collateralOut;
-        reservesPre.reserveLPers += fees.collateralFeeToGentlemen;
-
-        assertEq(inputsOutputs.collateral, fees.collateralInOrWithdrawn);
+        assertEq(inputsOutputs.collateral, collateralOut);
 
         // Get collateralState.total reserve
         SirStructs.VaultState memory vaultState = vault.vaultStates(vaultParams);
@@ -1413,15 +1372,15 @@ contract VaultTest is Test {
             if (
                 // Condition to avoid OF/UFing tickPriceSatX42
                 reservesPre.reserveApes > 1 &&
-                reservesPost.reserveApes > 1 &&
                 reservesPre.reserveLPers > 1 &&
+                reservesPost.reserveApes > 1 &&
                 reservesPost.reserveLPers > 1
             ) err = 1 + vaultState.reserve / 1e16;
             else err = 1 + vaultState.reserve / 1e5;
 
             assertApproxEqAbs(
                 reservesPost.reserveLPers,
-                reservesPre.reserveLPers + fees.collateralFeeToProtocol,
+                reservesPre.reserveLPers - collateralOut,
                 err,
                 "LPers's reserve is wrong"
             );
@@ -1430,35 +1389,18 @@ contract VaultTest is Test {
 
         // Verify token state
         uint256 totalReserves = vault.totalReserves(vaultParams.collateralToken);
-        assertEq(
-            IERC20(vaultParams.collateralToken).balanceOf(address(vault)) - totalReserves,
-            fees.collateralFeeToStakers
-        );
+        assertEq(IERC20(vaultParams.collateralToken).balanceOf(address(vault)), totalReserves);
         assertEq(
             IERC20(vaultParams.collateralToken).balanceOf(address(vault)),
-            reservesPre.reserveLPers +
-                fees.collateralFeeToProtocol +
-                reservesPre.reserveApes +
-                fees.collateralFeeToStakers
+            reservesPre.reserveLPers - collateralOut + reservesPre.reserveApes
         );
 
         // Verify Alice's balances
         assertEq(inputsOutputs.amount, balances.teaAlice - vault.balanceOf(alice, VAULT_ID));
         assertEq(ape.balanceOf(alice), balances.apeAlice);
 
-        // Verify POL's balances
-        balances.teaSupply -= uint128(inputsOutputs.amount);
-        inputsOutputs.amount = uint128(vault.balanceOf(address(vault), VAULT_ID) - balances.teaVault);
-        if (balances.teaSupply > 0) {
-            if (reservesPre.reserveLPers == 0) {
-                revert("Invalid state");
-            } else {
-                assertEq(
-                    inputsOutputs.amount,
-                    FullMath.mulDiv(balances.teaSupply, fees.collateralFeeToProtocol, reservesPre.reserveLPers)
-                );
-            }
-        }
+        // Verify POL balance hasn not changed
+        assertEq(vault.balanceOf(address(vault), VAULT_ID), balances.teaVault);
         assertEq(ape.balanceOf(address(vault)), 0, "Vault's APE balance is not 0");
     }
 
@@ -2168,7 +2110,7 @@ contract VaultHandler is Test, RegimeEnum {
         // Sufficient condition to not overflow the reserve
         uint256 totalReserves = vault.totalReserves(vaultParameters.collateralToken);
         inputOutput.amountCollateral = uint144(
-            _bound(inputOutput.amountCollateral, 0, type(uint144).max - totalReserves)
+            _bound(inputOutput.amountCollateral, 1, type(uint144).max - totalReserves)
         );
 
         bool success;

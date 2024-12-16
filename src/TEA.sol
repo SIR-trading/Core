@@ -269,10 +269,10 @@ contract TEA is SystemState {
                 lpersBalances
             );
 
-            // Burn TEA
+            // Compute amount of collateral
             fees.collateralInOrWithdrawn = uint144(
                 FullMath.mulDiv(reserves.reserveLPers, amount, totalSupplyAndBalanceVault_.totalSupply)
-            ); // Compute amount of collateral
+            );
 
             // Update balance and total supply
             balances[msg.sender][vaultId] = balanceOfFrom - amount;
