@@ -118,6 +118,7 @@ contract Vault is TEA {
         // Get reserves
         (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
             .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
+        console.log("here");
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
@@ -131,7 +132,7 @@ contract Vault is TEA {
                 collateralToDeposit
             );
 
-            // Distribute APE fees to LPers
+            // Distribute APE fees to LPers. Checks that it does not overflow
             reserves.reserveLPers += fees.collateralFeeToLPers;
         } else {
             // Mint TEA and distribute fees to protocol owned liquidity (POL)
@@ -147,6 +148,7 @@ contract Vault is TEA {
 
         // Do not let users deposit collateral in exchange for nothing
         if (amount == 0) revert AmountTooLow();
+        console.log("there");
 
         // Update _vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
@@ -174,8 +176,8 @@ contract Vault is TEA {
         }
 
         /** Check if recipient is enabled for receiving TEA.
-                This check is done last to avoid reentrancy attacks because it may call an external contract.
-             */
+            This check is done last to avoid reentrancy attacks because it may call an external contract.
+        */
         if (
             !isAPE &&
             msg.sender.code.length > 0 &&
@@ -275,12 +277,14 @@ contract Vault is TEA {
         SirStructs.Reserves memory reserves,
         SirStructs.VaultParameters calldata vaultParams
     ) private {
-        unchecked {
-            vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
+        // Checks that the reserve does not overflow uint144
+        vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
 
+        unchecked {
             /** We enforce that the reserve must be at least 10^6 to avoid division by zero, and
                 to mitigate inflation attacks.
              */
+            console.log("vaultState.reserve", vaultState.reserve);
             require(vaultState.reserve >= 1e6);
 
             // Compute tickPriceSatX42

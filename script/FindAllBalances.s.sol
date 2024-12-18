@@ -38,8 +38,8 @@ contract FindAllBalances is Script {
         vm.startBroadcast(privateKey);
 
         console.log("---------------------------");
-        console.log("Balance of ustaked SIR:", sir.balanceOf(queryAddress));
-        console.log("Balance of ustaked SIR (human readable):", sir.balanceOf(queryAddress) / 10 ** sir.decimals());
+        console.log("Balance of unstaked SIR:", sir.balanceOf(queryAddress));
+        console.log("Balance of unstaked SIR (human readable):", sir.balanceOf(queryAddress) / 10 ** sir.decimals());
         console.log("Balance of staked SIR:", sir.totalBalanceOf(queryAddress) - sir.balanceOf(queryAddress));
         console.log(
             "Balance of staked SIR (human readable):",

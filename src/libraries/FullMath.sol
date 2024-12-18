@@ -208,4 +208,16 @@ library FullMath {
             result++;
         }
     }
+
+    function tryMulDivRoundingUp(
+        uint256 a,
+        uint256 b,
+        uint256 denominator
+    ) internal pure returns (bool success, uint256 result) {
+        (success, result) = tryMulDiv(a, b, denominator);
+        if (success && mulmod(a, b, denominator) > 0) {
+            if (result == type(uint256).max) return (false, 0);
+            result++;
+        }
+    }
 }
