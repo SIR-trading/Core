@@ -131,6 +131,7 @@ contract Vault is TEA {
                 reserves,
                 collateralToDeposit
             );
+            console.log("there");
 
             // Distribute APE fees to LPers. Checks that it does not overflow
             reserves.reserveLPers += fees.collateralFeeToLPers;
@@ -148,7 +149,6 @@ contract Vault is TEA {
 
         // Do not let users deposit collateral in exchange for nothing
         if (amount == 0) revert AmountTooLow();
-        console.log("there");
 
         // Update _vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
