@@ -118,7 +118,6 @@ contract Vault is TEA {
         // Get reserves
         (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
             .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
-        console.log("here");
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
@@ -131,7 +130,6 @@ contract Vault is TEA {
                 reserves,
                 collateralToDeposit
             );
-            console.log("there");
 
             // Distribute APE fees to LPers. Checks that it does not overflow
             reserves.reserveLPers += fees.collateralFeeToLPers;

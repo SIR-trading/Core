@@ -185,6 +185,7 @@ contract TEA is SystemState {
         uint144 collateralDeposited
     ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
         uint256 amountToPOL;
+        console.log("there");
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -200,6 +201,7 @@ contract TEA is SystemState {
                 totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
                 lpersBalances
             );
+            console.log("here");
 
             // Total amount of TEA to mint (and to split between minter and POL)
             amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
@@ -222,9 +224,11 @@ contract TEA is SystemState {
                     collateralDeposited + reserves.reserveLPers
                 )
                 : FullMath.mulDiv(amount, fees.collateralFeeToLPers, collateralDeposited);
+            console.log("POL amount", amountToPOL);
 
             // TEA to minter
             amount -= amountToPOL;
+            console.log("TEA amount", amount);
 
             // Update total supply and protocol balance
             balances[msg.sender][vaultId] = balanceOfTo + amount;
@@ -301,9 +305,11 @@ contract TEA is SystemState {
         /** When possible assign siz 0's to the TEA balance per unit of collateral to mitigate inflation attacks.
             If not possible mint as much as TEA as possible while forcing that if all collateral was minted, it would not overflow the TEA maximum supply.
          */
+        console.log("CONTRACT", SystemConstants.TEA_MAX_SUPPLY, collateralDeposited, collateralTotalSupply);
         amount = collateralTotalSupply > SystemConstants.TEA_MAX_SUPPLY / 1e6
             ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralDeposited, collateralTotalSupply)
             : collateralDeposited * 1e6;
+        console.log("CONTRACT, amount", amount);
     }
 
     function _setBalance(address account, uint256 vaultId, uint256 balance) private {
