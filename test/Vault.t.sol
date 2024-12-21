@@ -387,11 +387,9 @@ contract VaultTest is Test {
                 reservesPre.reserveLPers = 0;
             } else {
                 // Even if it is the first time to mint APE, because of the LPers, the reserves could be anything; and same when minting TEA
-
-                // LP and APE reserves must be at least have 1 unit
-                reservesPre.reserveApes = uint144(_bound(reservesPre.reserveApes, 1, type(uint144).max - 1));
+                reservesPre.reserveApes = uint144(_bound(reservesPre.reserveApes, 0, type(uint144).max - 1));
                 reservesPre.reserveLPers = uint144(
-                    _bound(reservesPre.reserveLPers, 1, type(uint144).max - reservesPre.reserveApes)
+                    _bound(reservesPre.reserveLPers, 0, type(uint144).max - 1 - reservesPre.reserveApes)
                 );
 
                 // Combined reserves must be at least 1M
@@ -517,13 +515,14 @@ contract VaultTest is Test {
                     );
                 } else if (isAPE) {
                     // Any non-zero amount of collateral is fine when minting APE
+                    console.log(1, type(uint144).max - reserveTotal);
                     inputsOutputs.collateral = uint144(
                         _bound(inputsOutputs.collateral, 1, type(uint144).max - reserveTotal)
                     );
                 } else {
                     // Ensure first time minting TEA, gentleman receives at least 1 unit.
                     // APE does not have this problem because it is always minted 1-to-1 to the amount of collateral, and does not use _amountFirstMint
-                    uint256 collateralLowerbound = (reserveTotal - 1) / SystemConstants.TEA_MAX_SUPPLY + 1; // reserveTotal is the minimum collateral supply
+                    uint256 collateralLowerbound = (uint256(2) * reserveTotal - 1) / SystemConstants.TEA_MAX_SUPPLY + 1; // reserveTotal is the minimum collateral supply
                     if (collateralLowerbound > reservesPre.reserveLPers) {
                         collateralLowerbound -= reservesPre.reserveLPers + 1;
 
@@ -538,6 +537,9 @@ contract VaultTest is Test {
                             _bound(inputsOutputs.collateral, 1, type(uint144).max - reserveTotal)
                         );
                     }
+
+                    // Ensure that after substracting the fee, the gentleman is still receiving 1 unit
+                    vm.assume((uint256(inputsOutputs.collateral) * 10000) / (10000 + uint256(systemParams.lpFee)) > 0);
                 }
             }
         } else {
@@ -555,7 +557,12 @@ contract VaultTest is Test {
             (bool success, uint256 collateralSupplyUpperbound) = FullMath.tryMulDiv(
                 SystemConstants.TEA_MAX_SUPPLY,
                 (uint256(inputsOutputs.collateral) + reservesPre.reserveLPers),
-                1
+                1 +
+                    FullMath.mulDivRoundingUp(
+                        (uint256(inputsOutputs.collateral) + reservesPre.reserveLPers),
+                        1,
+                        (uint256(inputsOutputs.collateral) * 10000) / (10000 + uint256(systemParams.lpFee))
+                    )
             );
 
             // Check product did not overflow
