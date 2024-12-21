@@ -769,7 +769,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         // Ensure that the total minted TEA is split correctly between sender and POL
         assertEq(
             senderAmount,
-            FullMath.mulDivRoundingUp(
+            FullMath.mulDiv(
                 fees.collateralInOrWithdrawn,
                 totalTeaMinted,
                 fees.collateralInOrWithdrawn + collateralFeeToProtocol
@@ -778,7 +778,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         );
         assertEq(
             POLAmount,
-            FullMath.mulDiv(
+            FullMath.mulDivRoundingUp(
                 collateralFeeToProtocol,
                 totalTeaMinted,
                 fees.collateralInOrWithdrawn + collateralFeeToProtocol

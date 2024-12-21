@@ -523,8 +523,7 @@ contract VaultTest is Test {
                 } else {
                     // Ensure first time minting TEA, gentleman receives at least 1 unit.
                     // APE does not have this problem because it is always minted 1-to-1 to the amount of collateral, and does not use _amountFirstMint
-                    //////// WRONG NOT AT 2!!!
-                    uint256 collateralLowerbound = (uint256(2) * reserveTotal - 1) / SystemConstants.TEA_MAX_SUPPLY + 1; // reserveTotal is the minimum collateral supply
+                    uint256 collateralLowerbound = (reserveTotal - 1) / SystemConstants.TEA_MAX_SUPPLY + 1; // reserveTotal is the minimum collateral supply
                     if (collateralLowerbound > reservesPre.reserveLPers) {
                         collateralLowerbound -= reservesPre.reserveLPers + 1;
 
@@ -556,7 +555,7 @@ contract VaultTest is Test {
             (bool success, uint256 collateralSupplyUpperbound) = FullMath.tryMulDiv(
                 SystemConstants.TEA_MAX_SUPPLY,
                 (uint256(inputsOutputs.collateral) + reservesPre.reserveLPers),
-                2 //////// WRONG NOT AT 2!!!
+                1
             );
 
             // Check product did not overflow

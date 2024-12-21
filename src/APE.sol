@@ -207,8 +207,7 @@ contract APE is Clone {
                 : FullMath.mulDiv(supplyAPE, fees.collateralInOrWithdrawn, reserves.reserveApes);
             balanceOf[to] += amount; // If it OF, so will totalSupply
         }
-        console.log("CONTRACT: reserveApes", reserves.reserveApes);
-        console.log("CONTRACT: collateralIn", fees.collateralInOrWithdrawn);
+
         reserves.reserveApes += fees.collateralInOrWithdrawn;
         totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
         emit Transfer(address(0), to, amount);
