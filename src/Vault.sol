@@ -282,7 +282,6 @@ contract Vault is TEA {
             /** We enforce that the reserve must be at least 10^6 to avoid division by zero, and
                 to mitigate inflation attacks.
              */
-            console.log("vaultState.reserve", vaultState.reserve);
             require(vaultState.reserve >= 1e6);
 
             // Compute tickPriceSatX42
