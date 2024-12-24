@@ -185,7 +185,6 @@ contract TEA is SystemState {
         uint144 collateralDeposited
     ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
         uint256 amountToPOL;
-        console.log("there");
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -201,7 +200,6 @@ contract TEA is SystemState {
                 totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
                 lpersBalances
             );
-            console.log("here");
 
             // Total amount of TEA to mint (to split between minter and POL)
             // We use variable amountToPOL for efficiency, not because it is just for POL
