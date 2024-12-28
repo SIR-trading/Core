@@ -43,7 +43,7 @@ interface ISIR {
 
     function claim() external returns (uint96 dividends_);
 
-    function collectFeesAndStartAuction(address token) external returns (uint112 totalFeesToStakers);
+    function collectFeesAndStartAuction(address token) external returns (uint256 totalFees);
 
     function contributorMint() external returns (uint80 rewards);
 

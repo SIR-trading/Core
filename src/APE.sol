@@ -194,25 +194,21 @@ contract APE is Clone {
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
     ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
-        // returns (SirStructs.Reserves memory newReserves, uint144 collectedFee, uint144 polFee, uint256 amount)
-
         // Loads supply of APE
         uint256 supplyAPE = totalSupply;
 
         // Substract fees
-        fees = Fees.hiddenFeeAPE(collateralDeposited, baseFee, leverageTier(), tax);
+        fees = Fees.feeAPE(collateralDeposited, baseFee, leverageTier(), tax);
 
         unchecked {
-            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += fees.collateralFeeToGentlemen;
-
             // Mint APE
             amount = supplyAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
                 ? fees.collateralInOrWithdrawn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
                 : FullMath.mulDiv(supplyAPE, fees.collateralInOrWithdrawn, reserves.reserveApes);
-            balanceOf[to] += amount;
-            reserves.reserveApes += fees.collateralInOrWithdrawn;
+            balanceOf[to] += amount; // If it OF, so will totalSupply
         }
+
+        reserves.reserveApes += fees.collateralInOrWithdrawn;
         totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
         emit Transfer(address(0), to, amount);
 
@@ -235,15 +231,12 @@ contract APE is Clone {
         unchecked {
             totalSupply = supplyAPE - amount;
             reserves.reserveApes -= collateralOut;
-            emit Transfer(from, address(0), amount);
 
             // Substract fees
-            fees = Fees.hiddenFeeAPE(collateralOut, baseFee, leverageTier(), tax);
-
-            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += fees.collateralFeeToGentlemen;
+            fees = Fees.feeAPE(collateralOut, baseFee, leverageTier(), tax);
 
             newReserves = reserves; // Important because memory is not persistent across external calls
         }
+        emit Transfer(from, address(0), amount);
     }
 }

@@ -253,11 +253,11 @@ contract VaultExternalGetReserves is Test {
         oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
     }
 
-    modifier Preprocess(
+    function _preprocess(
         CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    ) {
+    ) internal {
         // Constraint reserve
         collateralState.totalReserves = _bound(collateralState.totalReserves, 0, type(uint144).max);
         vaultState.reserve = uint144(collateralState.totalReserves);
@@ -266,7 +266,7 @@ contract VaultExternalGetReserves is Test {
             0,
             type(uint256).max - collateralState.totalReserves
         );
-        vm.assume(vaultState.reserve != 1); // Min reserve is always 2 (or 0 if no mint has occured)
+        vm.assume(vaultState.reserve == 0 || vaultState.reserve >= 1e6); // Min reserve is always 1M (or 0 if no mint has occured)
 
         // Constraint vaultId
         vaultState.vaultId = uint48(_bound(vaultState.vaultId, 1, type(uint48).max));
@@ -295,8 +295,6 @@ contract VaultExternalGetReserves is Test {
             ),
             abi.encode(tickPriceX42)
         );
-
-        _;
     }
 
     function _assertUnchangedParameters(
@@ -331,14 +329,13 @@ contract VaultExternalGetReserves is Test {
         uint256 totalFeesToStakers,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    )
-        public
-        Preprocess(
+    ) public {
+        _preprocess(
             CollateralState({totalReserves: 0, totalFeesToStakers: totalFeesToStakers}),
             vaultState,
             tickPriceX42
-        )
-    {
+        );
+
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
         (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
@@ -368,11 +365,13 @@ contract VaultExternalGetReserves is Test {
         CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    ) public Preprocess(collateralState, vaultState, tickPriceX42) {
+    ) public {
+        _preprocess(collateralState, vaultState, tickPriceX42);
+        vm.assume(vaultState.reserve > 0);
+
         // type(int64).min represents -∞ => reserveLPers is empty
         vaultState.tickPriceSatX42 = type(int64).min;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
-        vm.assume(vaultState.reserve > 0);
 
         (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
@@ -396,11 +395,13 @@ contract VaultExternalGetReserves is Test {
         CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    ) public Preprocess(collateralState, vaultState, tickPriceX42) {
+    ) public {
+        _preprocess(collateralState, vaultState, tickPriceX42);
+        vm.assume(vaultState.reserve > 0);
+
         // type(int64).max represents +∞ => reserveApes is empty
         vaultState.tickPriceSatX42 = type(int64).max;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
-        vm.assume(vaultState.reserve > 0);
 
         (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
@@ -424,12 +425,14 @@ contract VaultExternalGetReserves is Test {
         CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    ) public Preprocess(collateralState, vaultState, tickPriceX42) {
+    ) public {
+        _preprocess(collateralState, vaultState, tickPriceX42);
+        vm.assume(vaultState.reserve > 0);
+
         vaultState.tickPriceSatX42 = int64(
             _bound(vaultState.tickPriceSatX42, type(int64).min + 1, type(int64).max - 1)
         );
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
-        vm.assume(vaultState.reserve > 0);
 
         (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
@@ -459,7 +462,9 @@ contract VaultExternalGetReserves is Test {
         CollateralState memory collateralState,
         SirStructs.VaultState memory vaultState,
         int64 tickPriceX42
-    ) public Preprocess(collateralState, vaultState, tickPriceX42) {
+    ) public {
+        _preprocess(collateralState, vaultState, tickPriceX42);
+
         vaultState.vaultId = 0;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 

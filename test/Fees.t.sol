@@ -8,7 +8,7 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import "forge-std/Test.sol";
 
 contract FeesTest is Test {
-    function testFuzz_FeeAPE(
+    function testFuzz_feeAPE(
         uint144 collateralDepositedOrOut,
         uint16 baseFee,
         int8 leverageTier,
@@ -17,12 +17,9 @@ contract FeesTest is Test {
         // Constraint leverageTier to supported values
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER));
 
-        SirStructs.Fees memory fees = Fees.hiddenFeeAPE(collateralDepositedOrOut, baseFee, leverageTier, tax);
+        SirStructs.Fees memory fees = Fees.feeAPE(collateralDepositedOrOut, baseFee, leverageTier, tax);
 
-        uint256 totalFee = uint256(fees.collateralFeeToStakers) +
-            fees.collateralFeeToGentlemen +
-            fees.collateralFeeToProtocol;
-
+        uint256 totalFee = uint256(fees.collateralFeeToStakers) + fees.collateralFeeToLPers;
         assertEq(fees.collateralInOrWithdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
 
         uint256 totalFeeLowerBound;
@@ -58,17 +55,15 @@ contract FeesTest is Test {
             (uint256(totalFee) * tax) / (uint256(10) * type(uint8).max),
             "Treasury fee incorrect"
         );
-        assertEq(fees.collateralFeeToProtocol, totalFee / 10, "LPers fee incorrect");
+        assertEq(fees.collateralFeeToLPers, totalFee - fees.collateralFeeToStakers, "LPers fee incorrect");
     }
 
-    function testFuzz_FeeTEA(uint144 collateralDepositedOrOut, uint16 lpFee, uint8 tax) public pure {
-        SirStructs.Fees memory fees = Fees.hiddenFeeTEA(collateralDepositedOrOut, lpFee, tax);
+    function testFuzz_feeMintTEA(uint144 collateralDeposited, uint16 lpFee) public pure {
+        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralDeposited, lpFee);
 
-        uint256 totalFee = uint256(fees.collateralFeeToStakers) +
-            fees.collateralFeeToGentlemen +
-            fees.collateralFeeToProtocol;
+        uint256 totalFee = uint256(fees.collateralFeeToStakers) + fees.collateralFeeToLPers;
 
-        assertEq(fees.collateralInOrWithdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
+        assertEq(fees.collateralInOrWithdrawn + totalFee, collateralDeposited, "wrong collateral + fee");
 
         uint256 totalFeeLowerBound = FullMath.mulDiv(fees.collateralInOrWithdrawn, lpFee, 10000);
         uint256 totalFeeUpperBound = FullMath.mulDivRoundingUp(
@@ -79,11 +74,7 @@ contract FeesTest is Test {
 
         assertLe(totalFeeLowerBound, totalFee, "Total fee too low");
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
-        assertEq(
-            fees.collateralFeeToStakers,
-            (uint256(totalFee) * tax) / (uint256(10) * type(uint8).max),
-            "Treasury fee incorrect"
-        );
-        assertEq(fees.collateralFeeToProtocol, totalFee / 10, "LPers fee incorrect");
+        assertEq(fees.collateralFeeToStakers, 0);
+        assertEq(fees.collateralFeeToLPers, totalFee);
     }
 }

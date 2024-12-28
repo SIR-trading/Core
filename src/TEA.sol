@@ -15,6 +15,8 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemState} from "./SystemState.sol";
 
+import "forge-std/console.sol";
+
 /** @notice Modified from Solmate
  */
 contract TEA is SystemState {
@@ -182,12 +184,13 @@ contract TEA is SystemState {
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
     ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
+        uint256 amountToPOL;
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
             uint256 balanceOfTo = balances[msg.sender][vaultId];
 
-            // Update SIR issuance if it is not POL
+            // Update SIR issuance of gentlemen
             LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfTo, address(this), 0);
             updateLPerIssuanceParams(
                 false,
@@ -198,87 +201,50 @@ contract TEA is SystemState {
                 lpersBalances
             );
 
-            // Substract fees and distribute them across SIR stakers, LPers and protocol
-            fees = _distributeFees(
-                collateral,
-                vaultId,
-                totalSupplyAndBalanceVault_,
-                systemParams_.lpFee,
-                vaultIssuanceParams_.tax,
-                reserves,
-                collateralDeposited
-            );
-
-            // Mint TEA
-            amount = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, fees.collateralInOrWithdrawn + reserves.reserveLPers)
-                : FullMath.mulDiv(
-                    totalSupplyAndBalanceVault_.totalSupply,
-                    fees.collateralInOrWithdrawn,
-                    reserves.reserveLPers
-                );
+            // Total amount of TEA to mint (to split between minter and POL)
+            // We use variable amountToPOL for efficiency, not because it is just for POL
+            amountToPOL = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
+                ? _amountFirstMint(collateral, collateralDeposited + reserves.reserveLPers) // In the first mint, reserveLPers contains orphaned fees from apes
+                : FullMath.mulDiv(totalSupplyAndBalanceVault_.totalSupply, collateralDeposited, reserves.reserveLPers);
 
             // Check that total supply does not overflow
-            if (amount > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
+            if (amountToPOL > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
                 revert TEAMaxSupplyExceeded();
             }
 
-            // Update balance and total supply
-            balances[msg.sender][vaultId] = balanceOfTo + amount;
-            totalSupplyAndBalanceVault_.totalSupply += uint128(amount);
+            // Split collateralDeposited between minter and POL
+            fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee);
 
-            // Update reserves
-            reserves.reserveLPers += fees.collateralInOrWithdrawn;
+            // Minter's share of TEA
+            amount = FullMath.mulDiv(
+                amountToPOL,
+                fees.collateralInOrWithdrawn,
+                totalSupplyAndBalanceVault_.totalSupply == 0
+                    ? collateralDeposited + reserves.reserveLPers // In the first mint, reserveLPers contains orphaned fees from apes
+                    : collateralDeposited
+            );
+
+            // POL's share of TEA
+            amountToPOL -= amount;
+
+            // Update total supply and protocol balance
+            balances[msg.sender][vaultId] = balanceOfTo + amount;
+            totalSupplyAndBalanceVault_.balanceVault += uint128(amountToPOL);
+            totalSupplyAndBalanceVault_.totalSupply += uint128(amount + amountToPOL);
 
             // Store total supply
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
-
-            // Emit transfer event
-            emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
         }
-    }
 
-    function mintToProtocol(
-        address collateral,
-        uint48 vaultId,
-        SirStructs.Reserves memory reserves,
-        uint144 collateralFeeToProtocol
-    ) internal {
-        unchecked {
-            // Loads supply and balance of TEA
-            TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
+        // Update reserves
+        reserves.reserveLPers += collateralDeposited;
 
-            // Mint TEA
-            uint256 amountToProtocol = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, collateralFeeToProtocol + reserves.reserveLPers)
-                : FullMath.mulDiv(
-                    totalSupplyAndBalanceVault_.totalSupply,
-                    collateralFeeToProtocol,
-                    reserves.reserveLPers
-                );
-
-            // Check that total supply does not overflow
-            if (amountToProtocol > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
-                revert TEAMaxSupplyExceeded();
-            }
-
-            // Update balance and total supply
-            totalSupplyAndBalanceVault_.balanceVault += uint128(amountToProtocol);
-            totalSupplyAndBalanceVault_.totalSupply += uint128(amountToProtocol);
-
-            // Update reserves
-            reserves.reserveLPers += collateralFeeToProtocol;
-
-            // Store total supply and vault balance
-            totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
-
-            // Emit transfer event
-            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToProtocol);
-        }
+        // Emit (mint) transfer events
+        emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
+        emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToPOL);
     }
 
     function burn(
-        address collateral,
         uint48 vaultId,
         SirStructs.SystemParameters memory systemParams_,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
@@ -289,6 +255,9 @@ contract TEA is SystemState {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
             uint256 balanceOfFrom = balances[msg.sender][vaultId];
+
+            // Check we are not burning more than the balance
+            require(amount <= balanceOfFrom);
 
             // Update SIR issuance
             LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfFrom, address(this), 0);
@@ -301,31 +270,17 @@ contract TEA is SystemState {
                 lpersBalances
             );
 
-            // Burn TEA
-            uint144 collateralOut = uint144(
+            // Compute amount of collateral
+            fees.collateralInOrWithdrawn = uint144(
                 FullMath.mulDiv(reserves.reserveLPers, amount, totalSupplyAndBalanceVault_.totalSupply)
-            ); // Compute amount of collateral
-
-            // Check we are not burning more than the balance
-            require(amount <= balanceOfFrom);
+            );
 
             // Update balance and total supply
             balances[msg.sender][vaultId] = balanceOfFrom - amount;
             totalSupplyAndBalanceVault_.totalSupply -= uint128(amount);
 
             // Update reserves
-            reserves.reserveLPers -= collateralOut;
-
-            // Substract fees and distribute them across SIR stakers, LPers and POL
-            fees = _distributeFees(
-                collateral,
-                vaultId,
-                totalSupplyAndBalanceVault_,
-                systemParams_.lpFee,
-                vaultIssuanceParams_.tax,
-                reserves,
-                collateralOut
-            );
+            reserves.reserveLPers -= fees.collateralInOrWithdrawn;
 
             // Update total supply and vault balance
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
@@ -342,57 +297,19 @@ contract TEA is SystemState {
     /** @notice Make sure that even if the entire supply of the collateral token was deposited into the vault,
         the amount of TEA minted is less than the maximum supply of TEA.
      */
-    function _amountFirstMint(address collateral, uint144 collateralIn) private view returns (uint256 amount) {
+    function _amountFirstMint(address collateral, uint144 collateralDeposited) private view returns (uint256 amount) {
         uint256 collateralTotalSupply = IERC20(collateral).totalSupply();
-        amount = collateralTotalSupply > SystemConstants.TEA_MAX_SUPPLY
-            ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralIn, collateralTotalSupply)
-            : collateralIn;
+        /** When possible assign siz 0's to the TEA balance per unit of collateral to mitigate inflation attacks.
+            If not possible mint as much as TEA as possible while forcing that if all collateral was minted, it would not overflow the TEA maximum supply.
+         */
+        amount = collateralTotalSupply > SystemConstants.TEA_MAX_SUPPLY / 1e6
+            ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralDeposited, collateralTotalSupply)
+            : collateralDeposited * 1e6;
     }
 
     function _setBalance(address account, uint256 vaultId, uint256 balance) private {
         if (account == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault = uint128(balance);
         else balances[account][vaultId] = balance;
-    }
-
-    function _distributeFees(
-        address collateral,
-        uint48 vaultId,
-        TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_,
-        uint16 lpFee,
-        uint8 tax,
-        SirStructs.Reserves memory reserves,
-        uint144 collateralDepositedOrOut
-    ) private returns (SirStructs.Fees memory fees) {
-        unchecked {
-            // Substract fees
-            fees = Fees.hiddenFeeTEA(collateralDepositedOrOut, lpFee, tax);
-
-            // Pay some fees to LPers by increasing the LP reserve so that each share (TEA unit) is worth more
-            reserves.reserveLPers += fees.collateralFeeToGentlemen;
-
-            // Mint some TEA as protocol owned liquidity (POL)
-            uint256 amountToProtocol = totalSupplyAndBalanceVault_.totalSupply == 0 // By design reserveLPers can never be 0 unless it is the first mint ever
-                ? _amountFirstMint(collateral, fees.collateralFeeToProtocol + reserves.reserveLPers) // Any ownless LP reserve is minted as POL too
-                : FullMath.mulDiv(
-                    totalSupplyAndBalanceVault_.totalSupply,
-                    fees.collateralFeeToProtocol,
-                    reserves.reserveLPers
-                );
-
-            // Check that total supply does not overflow
-            if (amountToProtocol > SystemConstants.TEA_MAX_SUPPLY - totalSupplyAndBalanceVault_.totalSupply) {
-                revert TEAMaxSupplyExceeded();
-            }
-
-            // Update total supply and protocol balance
-            totalSupplyAndBalanceVault_.balanceVault += uint128(amountToProtocol);
-            totalSupplyAndBalanceVault_.totalSupply += uint128(amountToProtocol);
-
-            // Update reserves
-            reserves.reserveLPers += fees.collateralFeeToProtocol;
-
-            emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToProtocol);
-        }
     }
 
     function _updateBalances(address from, address to, uint256 vaultId, uint256 amount) private {

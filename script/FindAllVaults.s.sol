@@ -13,7 +13,7 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 
 /** @dev cli for local testnet:  forge script script/FindAllVaults.s.sol --rpc-url tarp_testnet --broadcast --legacy
-    @dev cli for Sepolia:        forge script script/FindAllVaults.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
+    @dev cli for Sepolia:        forge script script/FindAllVaults.s.sol --rpc-url sepolia --chain sepolia --broadcast
 */
 contract FindAllVaults is Script {
     uint256 privateKey;
@@ -92,6 +92,7 @@ contract FindAllVaults is Script {
                 ? uint256(reserves.reserveApes) << uint256(int256(vaultParams.leverageTier))
                 : uint256(reserves.reserveApes) >> uint256(int256(-vaultParams.leverageTier));
 
+            console.log("Gmin =", minReserveLPers);
             if (minReserveLPers != 0) {
                 console.log("G =", (uint256(reserves.reserveLPers) * 100) / minReserveLPers, "% of Gmin");
                 uint256 GRatio = (uint256(reserves.reserveLPers) * 2 ** 112) / minReserveLPers;
@@ -103,14 +104,9 @@ contract FindAllVaults is Script {
                     ((uint256(reserves.reserveApes) + reserves.reserveLPers) * 100) / reserves.reserveApes,
                     "%x"
                 );
-                console.log(
-                    "Gentlemen:",
-                    GRatio >= 1.25 * 2 ** 112 ? "Minimally profitable" : GRatio >= 2 ** 112
-                        ? "Moderately profitable"
-                        : "Highly profitable"
-                );
+                console.log("Gentlemen:", GRatio >= 1.25 * 2 ** 112 ? "Moderately profitable" : "Highly profitable");
             } else {
-                console.log("Apes: Healthy, more than enough liquidity");
+                console.log("Apes: Degraded, insufficient liquidity for constant leverage");
                 console.log("Gentlemen: Highly profitable");
             }
 

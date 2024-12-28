@@ -29,8 +29,7 @@ contract APETest is Test {
 
     struct FeesWrapper {
         uint144 collateralFeeToStakers;
-        uint144 collateralFeeToGentlemen;
-        uint144 collateralFeeToProtocol;
+        uint144 collateralFeeToLPers;
     }
 
     /// @dev Auxiliary function for minting APE tokens
@@ -46,25 +45,11 @@ contract APETest is Test {
         assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
     }
 
-    // /// @dev Auxiliary function for burning APE tokens
-    // function _burn(address account, uint256 amount) private {
-    //     uint256 totalSupply = uint256(vm.load(address(ape), bytes32(SLOT_TOTAL_SUPPLY)));
-    //     totalSupply -= amount;
-    //     vm.store(address(ape), bytes32(SLOT_TOTAL_SUPPLY), bytes32(totalSupply));
-    //     assertEq(ape.totalSupply(), totalSupply, "Wrong slot used by vm.store");
-
-    //     uint256 balance = uint256(vm.load(address(ape), keccak256(abi.encode(account, bytes32(SLOT_BALANCE_OF)))));
-    //     balance -= amount;
-    //     vm.store(address(ape), keccak256(abi.encode(account, bytes32(SLOT_BALANCE_OF))), bytes32(balance));
-    //     assertEq(ape.balanceOf(account), balance, "Wrong slot used by vm.store");
-    // }
-
     function setUp() public {
         // Deploy APE implementation
         apeImplentation = new APE();
 
         // Deploy APE clone
-        console.log("Tester:", address(this));
         ape = APE(
             ClonesWithImmutableArgs.clone3(
                 address(apeImplentation),
@@ -234,7 +219,7 @@ contract APETest is Test {
         vm.assume(collateralDeposited + reserveApesInitial >= 1);
 
         // Expected fees
-        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.feeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
 
         // Mint
         vm.expectEmit();
@@ -249,7 +234,7 @@ contract APETest is Test {
 
         // Check reserves
         assertEq(reserves.reserveApes, reserveApesInitial + fees_.collateralInOrWithdrawn);
-        assertEq(reserves.reserveLPers, fees_.collateralFeeToGentlemen);
+        assertEq(reserves.reserveLPers, 0);
 
         // Check amounts
         assertEq(amount, reserveApesInitial + fees_.collateralInOrWithdrawn);
@@ -289,7 +274,7 @@ contract APETest is Test {
             );
 
         // Expected fees
-        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.feeAPE(collateralDeposited, baseFee, LEVERAGE_TIER, tax);
 
         // Expected fees
         uint256 amount_ = FullMath.mulDiv(totalSupplyInitial, fees_.collateralInOrWithdrawn, reserveApesInitial);
@@ -311,7 +296,7 @@ contract APETest is Test {
 
         // Check reserves
         assertEq(reserves.reserveApes, reserveApesInitial + fees_.collateralInOrWithdrawn);
-        assertEq(reserves.reserveLPers, fees_.collateralFeeToGentlemen);
+        assertEq(reserves.reserveLPers, 0);
 
         // Check amounts
         assertEq(amount, amount_);
@@ -387,7 +372,7 @@ contract APETest is Test {
 
         // Expected fees
         uint144 collateralOut_ = uint144(FullMath.mulDiv(reserveApesInitial, amountBurnt, totalSupplyInitial));
-        SirStructs.Fees memory fees_ = Fees.hiddenFeeAPE(collateralOut_, baseFee, LEVERAGE_TIER, tax);
+        SirStructs.Fees memory fees_ = Fees.feeAPE(collateralOut_, baseFee, LEVERAGE_TIER, tax);
 
         // Burn
         vm.expectEmit();
@@ -401,12 +386,12 @@ contract APETest is Test {
         );
 
         // Check reserves
-        assertEq(reserves.reserveApes, reserveApesInitial - collateralOut_);
-        assertEq(reserves.reserveLPers, fees_.collateralFeeToGentlemen);
+        assertEq(reserves.reserveApes, reserveApesInitial - collateralOut_, "Reserve apes is wrong");
+        assertEq(reserves.reserveLPers, 0, "Reserve LPers is wrong");
 
         // Check amounts
-        assertEq(amountBalance - amountBurnt, ape.balanceOf(alice));
-        assertEq(totalSupplyInitial - amountBurnt, ape.totalSupply());
+        assertEq(amountBalance - amountBurnt, ape.balanceOf(alice), "Balance of alice is wrong");
+        assertEq(totalSupplyInitial - amountBurnt, ape.totalSupply(), "Total supply is wrong");
 
         // Verify fees
         assertEq32(keccak256(abi.encode(fees_)), keccak256(abi.encode(fees)));
@@ -591,7 +576,7 @@ contract APEHandler is Test {
         uint256 amount;
         (reserves[rndAPE], fees, amount) = ape[rndAPE].mint(to, baseFee, tax, reserves[rndAPE], collateralDeposited);
         totalCollateralFeeToStakers += fees.collateralFeeToStakers;
-        reserves[rndAPE].reserveLPers += fees.collateralFeeToProtocol;
+        reserves[rndAPE].reserveLPers += fees.collateralFeeToLPers;
 
         _changeReserves(finalApesReserve, rndAPE);
         trueIfMintFalseIfBurn[rndAPE] = true;
@@ -632,7 +617,7 @@ contract APEHandler is Test {
         SirStructs.Fees memory fees;
         (reserves[rndAPE], fees) = ape[rndAPE].burn(from, baseFee, tax, reserves[rndAPE], amount);
         totalCollateralFeeToStakers += fees.collateralFeeToStakers;
-        reserves[rndAPE].reserveLPers += fees.collateralFeeToProtocol;
+        reserves[rndAPE].reserveLPers += fees.collateralFeeToLPers;
 
         // Update totalCollateralDeposited
         totalCollateralDeposited -= fees.collateralInOrWithdrawn;

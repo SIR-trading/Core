@@ -21,9 +21,10 @@ import "forge-std/console.sol";
 
 contract Vault is TEA {
     error NotAWETHVault();
+    error AmountTooLow();
 
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
-        i.e., collateralFeeToLPers = collateralFeeToGentlemen + collateralFeeToProtocol
+        i.e., collateralFeeToLPers = collateralFeeToLPers + collateralFeeToProtocol
      */
     event Mint(
         uint48 indexed vaultId,
@@ -97,99 +98,96 @@ contract Vault is TEA {
         SirStructs.VaultParameters calldata vaultParams,
         uint144 collateralToDeposit
     ) external payable returns (uint256 amount) {
-        unchecked {
-            if (msg.value != 0) {
-                // This is an ETH mint but so we need to check that this is a WETH vault
-                if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
+        if (msg.value != 0) {
+            // This is an ETH mint but so we need to check that this is a WETH vault
+            if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
 
-                // collateralToDeposit is the amount of ETH received
-                collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
+            // collateralToDeposit is the amount of ETH received
+            collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
 
-                // We must wrap it to WETH
-                _WETH.deposit{value: msg.value}();
-            }
+            // We must wrap it to WETH
+            _WETH.deposit{value: msg.value}();
+        }
 
-            SirStructs.SystemParameters memory systemParams_ = _systemParams;
-            require(!systemParams_.mintingStopped);
+        // Cannot deposit 0 collateral
+        if (collateralToDeposit == 0) revert AmountTooLow();
 
-            // Get reserves
-            (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
-                .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
+        SirStructs.SystemParameters memory systemParams_ = _systemParams;
+        require(!systemParams_.mintingStopped);
 
-            SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
-            SirStructs.Fees memory fees;
-            if (isAPE) {
-                // Mint APE
-                (reserves, fees, amount) = APE(ape).mint(
-                    msg.sender,
-                    systemParams_.baseFee,
-                    vaultIssuanceParams_.tax,
-                    reserves,
-                    collateralToDeposit
-                );
+        // Get reserves
+        (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+            .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
 
-                // Mint TEA for protocol owned liquidity (POL)
-                if (fees.collateralFeeToProtocol > 0) {
-                    mintToProtocol(
-                        vaultParams.collateralToken,
-                        vaultState.vaultId,
-                        reserves,
-                        fees.collateralFeeToProtocol
-                    );
-                }
-            } else {
-                // Mint TEA for user and protocol owned liquidity (POL)
-                (fees, amount) = mint(
-                    vaultParams.collateralToken,
-                    vaultState.vaultId,
-                    systemParams_,
-                    vaultIssuanceParams_,
-                    reserves,
-                    collateralToDeposit
-                );
-            }
-
-            // Update _vaultStates from new reserves
-            _updateVaultState(vaultState, reserves, vaultParams);
-
-            // Update total reserves
-            totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
-
-            // Emit event
-            emit Mint(
-                vaultState.vaultId,
-                isAPE,
-                fees.collateralInOrWithdrawn,
-                fees.collateralFeeToStakers,
-                fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+        SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+        SirStructs.Fees memory fees;
+        if (isAPE) {
+            // Mint APE
+            (reserves, fees, amount) = APE(ape).mint(
+                msg.sender,
+                systemParams_.baseFee,
+                vaultIssuanceParams_.tax,
+                reserves,
+                collateralToDeposit
             );
 
-            if (msg.value == 0) {
-                // If it is not an ETH mint, auto transfer the ERC20 collateral token
-                TransferHelper.safeTransferFrom(
-                    vaultParams.collateralToken,
-                    msg.sender,
-                    address(this),
-                    collateralToDeposit
-                );
-            }
-
-            /** Check if recipient is enabled for receiving TEA.
-                This check is done last to avoid reentrancy attacks because it may call an external contract.
-             */
-            if (
-                !isAPE &&
-                msg.sender.code.length > 0 &&
-                ERC1155TokenReceiver(msg.sender).onERC1155Received(
-                    msg.sender,
-                    address(0),
-                    vaultState.vaultId,
-                    amount,
-                    ""
-                ) !=
-                ERC1155TokenReceiver.onERC1155Received.selector
-            ) revert UnsafeRecipient();
+            // Distribute APE fees to LPers. Checks that it does not overflow
+            reserves.reserveLPers += fees.collateralFeeToLPers;
+        } else {
+            // Mint TEA and distribute fees to protocol owned liquidity (POL)
+            (fees, amount) = mint(
+                vaultParams.collateralToken,
+                vaultState.vaultId,
+                systemParams_,
+                vaultIssuanceParams_,
+                reserves,
+                collateralToDeposit
+            );
         }
+
+        // Do not let users deposit collateral in exchange for nothing
+        if (amount == 0) revert AmountTooLow();
+
+        // Update _vaultStates from new reserves
+        _updateVaultState(vaultState, reserves, vaultParams);
+
+        // Update total reserves
+        totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
+
+        // Emit event
+        emit Mint(
+            vaultState.vaultId,
+            isAPE,
+            fees.collateralInOrWithdrawn,
+            fees.collateralFeeToStakers,
+            fees.collateralFeeToLPers
+        );
+
+        if (msg.value == 0) {
+            // If it is not an ETH mint, auto transfer the ERC20 collateral token
+            TransferHelper.safeTransferFrom(
+                vaultParams.collateralToken,
+                msg.sender,
+                address(this),
+                collateralToDeposit
+            );
+        }
+
+        /** Check if recipient is enabled for receiving TEA.
+            This check is done last to avoid reentrancy attacks because it may call an external contract.
+        */
+        if (
+            !isAPE &&
+            msg.sender.code.length > 0 &&
+            ERC1155TokenReceiver(msg.sender).onERC1155Received(
+                msg.sender,
+                address(0),
+                vaultState.vaultId,
+                amount,
+                ""
+            ) !=
+            ERC1155TokenReceiver.onERC1155Received.selector
+        ) revert UnsafeRecipient();
     }
 
     /** @notice Function for burning APE or TEA
@@ -199,6 +197,8 @@ contract Vault is TEA {
         SirStructs.VaultParameters calldata vaultParams,
         uint256 amount
     ) external returns (uint144) {
+        if (amount == 0) revert AmountTooLow();
+
         SirStructs.SystemParameters memory systemParams_ = _systemParams;
 
         // Get reserves
@@ -217,27 +217,20 @@ contract Vault is TEA {
                 amount
             );
 
-            // Mint TEA for protocol owned liquidity (POL)
-            if (fees.collateralFeeToProtocol > 0) {
-                mintToProtocol(vaultParams.collateralToken, vaultState.vaultId, reserves, fees.collateralFeeToProtocol);
-            }
+            // Distribute APE fees to LPers
+            reserves.reserveLPers += fees.collateralFeeToLPers;
         } else {
-            // Burn TEA for user and mint TEA for protocol owned liquidity (POL)
-            fees = burn(
-                vaultParams.collateralToken,
-                vaultState.vaultId,
-                systemParams_,
-                vaultIssuanceParams_,
-                reserves,
-                amount
-            );
+            // Burn TEA (no fees are actually paid)
+            fees = burn(vaultState.vaultId, systemParams_, vaultIssuanceParams_, reserves, amount);
         }
 
         // Update _vaultStates from new reserves
         _updateVaultState(vaultState, reserves, vaultParams);
 
         // Update total reserves
-        totalReserves[vaultParams.collateralToken] -= fees.collateralInOrWithdrawn + fees.collateralFeeToStakers;
+        unchecked {
+            totalReserves[vaultParams.collateralToken] -= fees.collateralInOrWithdrawn + fees.collateralFeeToStakers;
+        }
 
         // Emit event
         emit Burn(
@@ -245,7 +238,7 @@ contract Vault is TEA {
             isAPE,
             fees.collateralInOrWithdrawn,
             fees.collateralFeeToStakers,
-            fees.collateralFeeToGentlemen + fees.collateralFeeToProtocol
+            fees.collateralFeeToLPers
         );
 
         // Send collateral
@@ -282,11 +275,14 @@ contract Vault is TEA {
         SirStructs.Reserves memory reserves,
         SirStructs.VaultParameters calldata vaultParams
     ) private {
-        unchecked {
-            vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
+        // Checks that the reserve does not overflow uint144
+        vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
 
-            // To ensure division by 0 does not occur when recoverying the reserves
-            require(vaultState.reserve >= 2);
+        unchecked {
+            /** We enforce that the reserve must be at least 10^6 to avoid division by zero, and
+                to mitigate inflation attacks.
+             */
+            require(vaultState.reserve >= 1e6);
 
             // Compute tickPriceSatX42
             if (reserves.reserveApes == 0) {
