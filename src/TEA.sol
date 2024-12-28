@@ -302,11 +302,9 @@ contract TEA is SystemState {
         /** When possible assign siz 0's to the TEA balance per unit of collateral to mitigate inflation attacks.
             If not possible mint as much as TEA as possible while forcing that if all collateral was minted, it would not overflow the TEA maximum supply.
          */
-        console.log("CONTRACT", SystemConstants.TEA_MAX_SUPPLY, collateralDeposited, collateralTotalSupply);
         amount = collateralTotalSupply > SystemConstants.TEA_MAX_SUPPLY / 1e6
             ? FullMath.mulDiv(SystemConstants.TEA_MAX_SUPPLY, collateralDeposited, collateralTotalSupply)
             : collateralDeposited * 1e6;
-        console.log("CONTRACT, amount", amount);
     }
 
     function _setBalance(address account, uint256 vaultId, uint256 balance) private {
