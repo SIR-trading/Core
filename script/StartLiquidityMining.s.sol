@@ -6,7 +6,6 @@ import "forge-std/Script.sol";
 import {Addresses} from "src/libraries/Addresses.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemControl} from "src/SystemControl.sol";
-
 import {Initialize1Vault} from "script/Initialize1Vault.s.sol";
 
 /** @dev cli for local testnet:  forge script script/StartLiquidityMining.s.sol --rpc-url tarp_testnet --broadcast --legacy
