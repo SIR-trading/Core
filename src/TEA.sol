@@ -195,7 +195,7 @@ contract TEA is SystemState {
             updateLPerIssuanceParams(
                 false,
                 vaultId,
-                systemParams_,
+                systemParams_.cumulativeTax,
                 vaultIssuanceParams_,
                 totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
                 lpersBalances
@@ -213,7 +213,7 @@ contract TEA is SystemState {
             }
 
             // Split collateralDeposited between minter and POL
-            fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee);
+            fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee.fee);
 
             // Minter's share of TEA
             amount = FullMath.mulDiv(
@@ -264,7 +264,7 @@ contract TEA is SystemState {
             updateLPerIssuanceParams(
                 false,
                 vaultId,
-                systemParams_,
+                systemParams_.cumulativeTax,
                 vaultIssuanceParams_,
                 totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
                 lpersBalances
@@ -318,7 +318,7 @@ contract TEA is SystemState {
         updateLPerIssuanceParams(
             false,
             vaultId,
-            _systemParams,
+            _systemParams.cumulativeTax,
             vaultIssuanceParams[vaultId],
             supplyExcludeVault(vaultId),
             lpersBalances
@@ -339,6 +339,7 @@ contract TEA is SystemState {
     ////////////////////////////////////////////////////////////////*/
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumulativeSIRPerTEAx96) {
-        return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
+        return
+            cumulativeSIRPerTEA(_systemParams.cumulativeTax, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));
     }
 }

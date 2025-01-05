@@ -25,7 +25,11 @@ library SystemConstants {
     // Approximately 10 days. We did not choose 10 days precisely to avoid auctions always ending on the same day and time of the week.
     uint40 internal constant AUCTION_COOLDOWN = 247 hours; // 247h & 240h have no common factors
 
+    // Duration of an auction
     uint40 internal constant AUCTION_DURATION = 24 hours;
+
+    // Time it takes for a change of LP or base fee to take effect
+    uint40 internal constant FEE_CHANGE_DELAY = 10 days;
 
     int8 internal constant MAX_LEVERAGE_TIER = 2;
 

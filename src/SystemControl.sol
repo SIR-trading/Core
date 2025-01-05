@@ -44,9 +44,6 @@ contract SystemControl is Ownable {
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
     uint40 public timestampStatusChanged; // Timestamp when the status last changed
 
-    uint16 private _oldBaseFee;
-    uint16 private _oldLpFee;
-
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
         in an array, but it requires that system control keeps track of the active vaults.
@@ -92,15 +89,7 @@ contract SystemControl is Ownable {
         timestampStatusChanged = uint40(block.timestamp);
 
         // Retrieve parameters
-        Vault vault_ = vault;
-        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
-
-        // Store fee parameters for later
-        _oldBaseFee = systemParams.baseFee;
-        _oldLpFee = systemParams.lpFee;
-
-        // Set fees to 0 for emergency withdrawals
-        vault_.updateSystemState(0, 0, true);
+        vault.updateSystemState(0, 0, true);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
@@ -113,7 +102,7 @@ contract SystemControl is Ownable {
         timestampStatusChanged = uint40(block.timestamp);
 
         // Restore fees
-        vault.updateSystemState(_oldBaseFee, _oldLpFee, false);
+        vault.updateSystemState(0, 0, false);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
     }
@@ -145,10 +134,7 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        Vault vault_ = vault;
-        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
-
-        vault_.updateSystemState(baseFee_, systemParams.lpFee, false);
+        vault.updateSystemState(baseFee_, 0, false);
 
         emit NewBaseFee(baseFee_);
     }
@@ -157,10 +143,7 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        Vault vault_ = vault;
-        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
-
-        vault_.updateSystemState(systemParams.baseFee, lpFee_, false);
+        vault.updateSystemState(0, lpFee_, false);
 
         emit NewLPFee(lpFee_);
     }
