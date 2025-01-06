@@ -278,15 +278,15 @@ abstract contract SystemState is SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     /// @dev All checks and balances to be done at system control
-    function updateSystemState(uint16 baseFee, uint16 feeNew, bool mintingStopped) external onlySystemControl {
+    function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
 
         if (baseFee != 0) {
             systemParams_.baseFee.timestampUpdate = uint40(block.timestamp);
-            systemParams_.baseFee.feeNew = feeNew;
-        } else if (feeNew != 0) {
+            systemParams_.baseFee.feeNew = baseFee;
+        } else if (lpFee != 0) {
             systemParams_.lpFee.timestampUpdate = uint40(block.timestamp);
-            systemParams_.lpFee.feeNew = feeNew;
+            systemParams_.lpFee.feeNew = lpFee;
         } else {
             systemParams_.mintingStopped = mintingStopped;
         }

@@ -141,8 +141,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Check fees are 0
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
-        assertEq(systemParams_.baseFee, 0, "baseFee not set to 0");
-        assertEq(systemParams_.lpFee, 0, "lpFee not set to 0");
+        assertEq(systemParams_.baseFee.fee, 0, "baseFee not set to 0");
+        assertEq(systemParams_.lpFee.fee, 0, "lpFee not set to 0");
         assertEq(systemParams_.mintingStopped, true, "mintingStopped not set to true");
         assertEq(systemParams_.cumulativeTax, systemParams.cumulativeTax, "cumulativeTax not saved correctly");
 
@@ -164,7 +164,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Burn TEA
         vault.burn(false, vaultParameters, teaAmount);
 
-        return (systemParams.baseFee, systemParams.lpFee);
+        return (systemParams.baseFee.fee, systemParams.lpFee.fee);
     }
 
     function test_resumeMinting() public {
@@ -187,8 +187,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Check fees are restored
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
-        assertEq(baseFee, systemParams_.baseFee, "baseFee not restored");
-        assertEq(lpFee, systemParams_.lpFee, "lpFee not restored");
+        assertEq(baseFee, systemParams_.baseFee.fee, "baseFee not restored");
+        assertEq(lpFee, systemParams_.lpFee.fee, "lpFee not restored");
         assertTrue(!systemParams_.mintingStopped, "mintingStopped not set to false");
     }
 
@@ -705,8 +705,8 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
 
         // Check if base fee is set correctly
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
-        assertEq(systemParams_.baseFee, baseFee, "baseFee not set correctly");
-        assertEq(systemParams_.lpFee, systemParams.lpFee, "lpFee not changed");
+        assertEq(systemParams_.baseFee.fee, baseFee, "baseFee not set correctly");
+        assertEq(systemParams_.lpFee.fee, systemParams.lpFee.fee, "lpFee not changed");
     }
 
     function testFuzz_setLpFeeWrongCaller(address caller, uint16 lpFee) public {
@@ -763,8 +763,8 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
 
         // Check if lp fee is set correctly
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
-        assertEq(systemParams_.baseFee, systemParams.baseFee, "baseFee not changed");
-        assertEq(systemParams_.lpFee, lpFee, "lpFee not set correctly");
+        assertEq(systemParams_.baseFee.fee, systemParams.baseFee.fee, "baseFee not changed");
+        assertEq(systemParams_.lpFee.fee, lpFee, "lpFee not set correctly");
     }
 
     function testFuzz_updateVaultsIssuancesFirstTime(

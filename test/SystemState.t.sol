@@ -30,7 +30,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            _systemParams,
+            _systemParams.cumulativeTax,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -49,7 +49,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            _systemParams,
+            _systemParams.cumulativeTax,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -79,7 +79,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            _systemParams,
+            _systemParams.cumulativeTax,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -111,7 +111,7 @@ contract SystemStateWrapper is SystemState {
         updateLPerIssuanceParams(
             false,
             VAULT_ID,
-            _systemParams,
+            _systemParams.cumulativeTax,
             vaultIssuanceParams[VAULT_ID],
             supplyExcludeVault(VAULT_ID),
             lpersBalances
@@ -151,7 +151,12 @@ contract SystemStateWrapper is SystemState {
 
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176) {
         if (vaultId == VAULT_ID)
-            return cumulativeSIRPerTEA(_systemParams, vaultIssuanceParams[vaultId], supplyExcludeVault(VAULT_ID));
+            return
+                cumulativeSIRPerTEA(
+                    _systemParams.cumulativeTax,
+                    vaultIssuanceParams[vaultId],
+                    supplyExcludeVault(VAULT_ID)
+                );
         return type(uint176).max / uint176(vaultId); // To make it somewhat arbitrary
     }
 }
@@ -160,6 +165,8 @@ contract SystemStateTest is Test {
     uint48 constant VAULT_ID = 42;
     uint40 constant MAX_TS = 599 * 365 days; // See SystemState.sol comments for explanation
     SystemStateWrapper systemState;
+    SirStructs.SystemParameters systemParams0;
+    SirStructs.SystemParameters systemParams_;
 
     uint40 timestampStart;
 
@@ -247,6 +254,8 @@ contract SystemStateTest is Test {
 
         systemState = new SystemStateWrapper(systemControl, sir);
         timestampStart = uint40(block.timestamp);
+
+        systemParams0 = systemState.systemParams();
     }
 
     function testFuzz_noMint(uint40 tsUpdateTax, uint40 tsCheckRewards) public {
@@ -844,14 +853,263 @@ contract SystemStateTest is Test {
         systemState.claimSIR(VAULT_ID, alice);
     }
 
-    function testFuzz_updateSystem(uint16 baseFee, uint16 lpFee, bool mintingStopped, uint16 numVaults) public {
-        numVaults = uint16(_bound(numVaults, 0, uint16(type(uint8).max) ** 2));
+    function testFuzz_updateBaseFee(uint16 baseFee, uint16 lpFee, bool mintingStopped, uint40 delay) public {
+        vm.assume(baseFee != 0);
+        delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+
+        systemParams_ = systemState.systemParams();
+        console.log("BaseFee is", systemParams_.baseFee.fee);
 
         // Update system vaultState
         vm.prank(systemControl);
         systemState.updateSystemState(baseFee, lpFee, mintingStopped);
 
-        // Update vaults
+        systemParams_ = systemState.systemParams();
+        console.log("BaseFee is", systemParams_.baseFee.fee);
+
+        // Skip delay
+        skip(delay);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+        console.log("BaseFee is", systemParams_.baseFee.fee);
+
+        assertEq(systemParams_.baseFee.fee, baseFee); // Only base fee is updated
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateBaseFeeCheckTooEarly(
+        uint16 baseFee,
+        uint16 lpFee,
+        bool mintingStopped,
+        uint40 delay
+    ) public {
+        vm.assume(baseFee != 0);
+        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(baseFee, lpFee, mintingStopped);
+
+        // Skip delay
+        skip(delay);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        // Nothing changed
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateBaseFeeTwice(
+        uint16 baseFee1,
+        uint16 lpFee1,
+        bool mintingStopped1,
+        uint40 delay1,
+        uint16 baseFee2,
+        uint16 lpFee2,
+        bool mintingStopped2,
+        uint40 delay2
+    ) public {
+        vm.assume(baseFee1 != 0);
+        vm.assume(baseFee2 != 0);
+        delay2 = uint40(_bound(delay2, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+
+        if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
+            testFuzz_updateBaseFeeCheckTooEarly(baseFee1, lpFee1, mintingStopped1, delay1);
+        else testFuzz_updateBaseFee(baseFee1, lpFee1, mintingStopped1, delay1);
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(baseFee2, lpFee2, mintingStopped2);
+
+        // Skip delay
+        skip(delay2);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        assertEq(
+            systemParams_.baseFee.fee,
+            delay2 <= SystemConstants.FEE_CHANGE_DELAY
+                ? (delay1 <= SystemConstants.FEE_CHANGE_DELAY ? systemParams0.baseFee.fee : baseFee1)
+                : baseFee2
+        ); // Only base fee is updated
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateLpFee(uint16 lpFee, bool mintingStopped, uint40 delay) public {
+        vm.assume(lpFee != 0);
+        delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(0, lpFee, mintingStopped);
+
+        // Skip delay
+        skip(delay);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(systemParams_.lpFee.fee, lpFee); // Only LP fee is updated
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateLpFeeCheckTooEarly(uint16 lpFee, bool mintingStopped, uint40 delay) public {
+        vm.assume(lpFee != 0);
+        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(0, lpFee, mintingStopped);
+
+        // Skip delay
+        skip(delay);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        // Nothing changed
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateLpFeeTwice(
+        uint16 lpFee1,
+        bool mintingStopped1,
+        uint40 delay1,
+        uint16 lpFee2,
+        bool mintingStopped2,
+        uint40 delay2
+    ) public {
+        vm.assume(lpFee1 != 0);
+        vm.assume(lpFee2 != 0);
+        if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
+            testFuzz_updateLpFeeCheckTooEarly(lpFee1, mintingStopped1, delay1);
+        else testFuzz_updateLpFee(lpFee1, mintingStopped1, delay1);
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(0, lpFee2, mintingStopped2);
+
+        // Skip delay
+        skip(delay2);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(
+            systemParams_.lpFee.fee,
+            delay2 <= SystemConstants.FEE_CHANGE_DELAY
+                ? (delay1 <= SystemConstants.FEE_CHANGE_DELAY ? systemParams0.lpFee.fee : lpFee1)
+                : lpFee2
+        ); // Only LP fee is updated
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateMintingStopped(bool mintingStopped, uint40 delay) public {
+        delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(0, 0, mintingStopped);
+
+        // Skip delay
+        skip(delay);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(systemParams_.mintingStopped, mintingStopped); // Only mintingStopped is updatedsystem
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateMintingStoppedCheckTooEarly(bool mintingStopped, uint40 delay) public {
+        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(0, 0, mintingStopped);
+
+        // Skip delay
+        skip(delay);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        // Nothing changed
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateMintingStoppedTwice(
+        bool mintingStopped1,
+        uint40 delay1,
+        bool mintingStopped2,
+        uint40 delay2
+    ) public {
+        if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
+            testFuzz_updateMintingStoppedCheckTooEarly(mintingStopped1, delay1);
+        else testFuzz_updateMintingStopped(mintingStopped1, delay1);
+
+        // Update system vaultState
+        vm.prank(systemControl);
+        systemState.updateSystemState(0, 0, mintingStopped2);
+
+        // Skip delay
+        skip(delay2);
+
+        // Check system vaultState
+        systemParams_ = systemState.systemParams();
+
+        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
+        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
+        assertEq(
+            systemParams_.mintingStopped,
+            delay2 <= SystemConstants.FEE_CHANGE_DELAY
+                ? (delay1 <= SystemConstants.FEE_CHANGE_DELAY ? systemParams0.mintingStopped : mintingStopped1)
+                : mintingStopped2
+        ); // Only mintingStopped is updatedsystem
+        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
+    }
+
+    function testFuzz_updateSystem(uint16 baseFee, uint16 lpFee, bool mintingStopped, uint16 numVaults) public {
+        numVaults = uint16(_bound(numVaults, 0, uint16(type(uint8).max) ** 2));
+
+        // Random fake variables
+        uint256 rndVal = uint256(keccak256(abi.encodePacked(baseFee, lpFee, mintingStopped, numVaults)));
+        uint16 lpFeeFake = uint16(rndVal >> 16);
+        bool mintingStoppedFake = (rndVal >> 32) % 2 == 0;
+
+        // Update system state
+        vm.startPrank(systemControl);
+        systemState.updateSystemState(baseFee, lpFeeFake, mintingStoppedFake);
+        systemState.updateSystemState(0, lpFee, mintingStoppedFake);
+        systemState.updateSystemState(0, 0, mintingStopped);
+        vm.stopPrank();
+
+        // Skip delay to apply the new fees
+        skip(SystemConstants.FEE_CHANGE_DELAY);
+
+        // Update vaults with the minimum tax (1)
         uint48[] memory oldVaults = new uint48[](0);
         uint48[] memory newVaults = new uint48[](numVaults); // Max # of vaults
         uint8[] memory newTaxes = new uint8[](numVaults);
@@ -863,15 +1121,15 @@ contract SystemStateTest is Test {
         systemState.updateVaults(oldVaults, newVaults, newTaxes, numVaults);
 
         // Check system vaultState
-        SirStructs.SystemParameters memory systemParams_ = systemState.systemParams();
+        systemParams_ = systemState.systemParams();
 
-        assertEq(systemParams_.baseFee, baseFee);
-        assertEq(systemParams_.lpFee, lpFee);
+        assertEq(systemParams_.baseFee.fee, baseFee);
+        assertEq(systemParams_.lpFee.fee, lpFee);
         assertEq(systemParams_.mintingStopped, mintingStopped);
         assertEq(systemParams_.cumulativeTax, numVaults);
 
-        // Update vaults to only 1 with max tax
-        uint48[] memory veryNewVaults = new uint48[](1); // Max # of vaults
+        // New update, only 1 vault with max tax
+        uint48[] memory veryNewVaults = new uint48[](1);
         uint8[] memory veryNewTaxes = new uint8[](1);
         veryNewVaults[0] = 1;
         veryNewTaxes[0] = type(uint8).max;
@@ -881,8 +1139,8 @@ contract SystemStateTest is Test {
         // Check system vaultState
         systemParams_ = systemState.systemParams();
 
-        assertEq(systemParams_.baseFee, baseFee);
-        assertEq(systemParams_.lpFee, lpFee);
+        assertEq(systemParams_.baseFee.fee, baseFee);
+        assertEq(systemParams_.lpFee.fee, lpFee);
         assertEq(systemParams_.mintingStopped, mintingStopped);
         assertEq(systemParams_.cumulativeTax, type(uint8).max);
     }
