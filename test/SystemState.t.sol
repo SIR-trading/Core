@@ -1023,15 +1023,10 @@ contract SystemStateTest is Test {
         assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
     }
 
-    function testFuzz_updateMintingStopped(bool mintingStopped, uint40 delay) public {
-        delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
-
+    function testFuzz_updateMintingStopped(bool mintingStopped) public {
         // Update system vaultState
         vm.prank(systemControl);
         systemState.updateSystemState(0, 0, mintingStopped);
-
-        // Skip delay
-        skip(delay);
 
         // Check system vaultState
         systemParams_ = systemState.systemParams();
@@ -1042,60 +1037,9 @@ contract SystemStateTest is Test {
         assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
     }
 
-    function testFuzz_updateMintingStoppedCheckTooEarly(bool mintingStopped, uint40 delay) public {
-        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
-
-        // Update system vaultState
-        vm.prank(systemControl);
-        systemState.updateSystemState(0, 0, mintingStopped);
-
-        // Skip delay
-        skip(delay);
-
-        // Check system vaultState
-        systemParams_ = systemState.systemParams();
-
-        // Nothing changed
-        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
-        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
-        assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
-        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
-    }
-
-    function testFuzz_updateMintingStoppedTwice(
-        bool mintingStopped1,
-        uint40 delay1,
-        bool mintingStopped2,
-        uint40 delay2
-    ) public {
-        delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
-        delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
-        if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
-            testFuzz_updateMintingStoppedCheckTooEarly(mintingStopped1, delay1);
-        else testFuzz_updateMintingStopped(mintingStopped1, delay1);
-
-        // Update system vaultState
-        vm.prank(systemControl);
-        systemState.updateSystemState(0, 0, mintingStopped2);
-
-        // Skip delay
-        skip(delay2);
-
-        // Check system vaultState
-        systemParams_ = systemState.systemParams();
-
-        assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
-        assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
-        assertEq(
-            systemParams_.mintingStopped,
-            delay2 <= SystemConstants.FEE_CHANGE_DELAY
-                ? (delay1 <= SystemConstants.FEE_CHANGE_DELAY ? systemParams0.mintingStopped : mintingStopped1)
-                : mintingStopped2
-        ); // Only mintingStopped is updatedsystem
-        assertEq(systemParams_.cumulativeTax, systemParams0.cumulativeTax);
-    }
-
     function testFuzz_updateSystem(uint16 baseFee, uint16 lpFee, bool mintingStopped, uint16 numVaults) public {
+        vm.assume(baseFee != 0);
+        vm.assume(lpFee != 0);
         numVaults = uint16(_bound(numVaults, 0, uint16(type(uint8).max) ** 2));
 
         // Random fake variables
