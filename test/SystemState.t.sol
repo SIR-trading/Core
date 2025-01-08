@@ -858,21 +858,18 @@ contract SystemStateTest is Test {
         delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
 
         systemParams_ = systemState.systemParams();
-        console.log("BaseFee is", systemParams_.baseFee.fee);
 
         // Update system vaultState
         vm.prank(systemControl);
         systemState.updateSystemState(baseFee, lpFee, mintingStopped);
 
         systemParams_ = systemState.systemParams();
-        console.log("BaseFee is", systemParams_.baseFee.fee);
 
         // Skip delay
         skip(delay);
 
         // Check system vaultState
         systemParams_ = systemState.systemParams();
-        console.log("BaseFee is", systemParams_.baseFee.fee);
 
         assertEq(systemParams_.baseFee.fee, baseFee); // Only base fee is updated
         assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
@@ -918,7 +915,8 @@ contract SystemStateTest is Test {
     ) public {
         vm.assume(baseFee1 != 0);
         vm.assume(baseFee2 != 0);
-        delay2 = uint40(_bound(delay2, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+        delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
+        delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
 
         if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
             testFuzz_updateBaseFeeCheckTooEarly(baseFee1, lpFee1, mintingStopped1, delay1);
@@ -932,7 +930,9 @@ contract SystemStateTest is Test {
         skip(delay2);
 
         // Check system vaultState
+        console.log("here");
         systemParams_ = systemState.systemParams();
+        console.log("there");
 
         assertEq(
             systemParams_.baseFee.fee,
@@ -996,6 +996,8 @@ contract SystemStateTest is Test {
     ) public {
         vm.assume(lpFee1 != 0);
         vm.assume(lpFee2 != 0);
+        delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
+        delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
         if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
             testFuzz_updateLpFeeCheckTooEarly(lpFee1, mintingStopped1, delay1);
         else testFuzz_updateLpFee(lpFee1, mintingStopped1, delay1);
@@ -1066,6 +1068,8 @@ contract SystemStateTest is Test {
         bool mintingStopped2,
         uint40 delay2
     ) public {
+        delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
+        delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
         if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
             testFuzz_updateMintingStoppedCheckTooEarly(mintingStopped1, delay1);
         else testFuzz_updateMintingStopped(mintingStopped1, delay1);

@@ -29,7 +29,7 @@ library SystemConstants {
     uint40 internal constant AUCTION_DURATION = 24 hours;
 
     // Time it takes for a change of LP or base fee to take effect
-    uint40 internal constant FEE_CHANGE_DELAY = 10 days;
+    uint256 internal constant FEE_CHANGE_DELAY = 10 days;
 
     int8 internal constant MAX_LEVERAGE_TIER = 2;
 
