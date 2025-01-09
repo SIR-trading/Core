@@ -61,7 +61,6 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
     uint256 constant SLOT_SYSTEM_STATUS = 1;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
-    uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
@@ -113,7 +112,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.initialize(address(vault));
     }
 
-    function test_haultMinting() public returns (uint16 baseFee, uint16 lpFee) {
+    function test_haultMinting() public {
         // Initialize vault
         _initializeVault();
 
@@ -141,8 +140,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Check fees are 0
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
-        assertEq(systemParams_.baseFee.fee, 0, "baseFee not set to 0");
-        assertEq(systemParams_.lpFee.fee, 0, "lpFee not set to 0");
+        assertEq(systemParams_.baseFee.fee, systemParams.baseFee.fee, "baseFee changed");
+        assertEq(systemParams_.lpFee.fee, systemParams.lpFee.fee, "lpFee changed");
         assertEq(systemParams_.mintingStopped, true, "mintingStopped not set to true");
         assertEq(systemParams_.cumulativeTax, systemParams.cumulativeTax, "cumulativeTax not saved correctly");
 
@@ -163,17 +162,19 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Burn TEA
         vault.burn(false, vaultParameters, teaAmount);
-
-        return (systemParams.baseFee.fee, systemParams.lpFee.fee);
     }
 
     function test_resumeMinting() public {
-        (uint16 baseFee, uint16 lpFee) = test_haultMinting();
+        test_haultMinting();
+
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
 
         // Resume minting
         vm.expectEmit();
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
         systemControl.resumeMinting();
+
+        skip(SystemConstants.FEE_CHANGE_DELAY);
 
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
@@ -187,13 +188,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Check fees are restored
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
-        assertEq(baseFee, systemParams_.baseFee.fee, "baseFee not restored");
-        assertEq(lpFee, systemParams_.lpFee.fee, "lpFee not restored");
+        assertEq(systemParams.baseFee.fee, systemParams_.baseFee.fee, "baseFee changed");
+        assertEq(systemParams.lpFee.fee, systemParams_.lpFee.fee, "lpFee changed");
         assertTrue(!systemParams_.mintingStopped, "mintingStopped not set to false");
     }
 
     function testFuzz_shutdownSystemTooEarly(uint40 skipTime) public {
-        skipTime = uint40(_bound(skipTime, 0, SHUTDOWN_WITHDRAWAL_DELAY - 1));
+        skipTime = uint40(_bound(skipTime, 0, SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY - 1));
 
         // Hault minting
         test_haultMinting();
@@ -207,7 +208,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     }
 
     function testFuzz_shutdownSystem(uint40 skipTime) public {
-        skipTime = uint40(_bound(skipTime, SHUTDOWN_WITHDRAWAL_DELAY, type(uint40).max));
+        skipTime = uint40(_bound(skipTime, SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY, type(uint40).max));
 
         // Initialize vault
         _initializeVault();
@@ -226,7 +227,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.haultMinting();
 
         // Skip time
-        skip(SHUTDOWN_WITHDRAWAL_DELAY);
+        skip(SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY);
 
         // Shutdown system
         vm.expectEmit();
@@ -301,7 +302,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.haultMinting();
 
         // Skip time
-        skip(SHUTDOWN_WITHDRAWAL_DELAY);
+        skip(SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY);
 
         // Shutdown system
         systemControl.shutdownSystem();
@@ -355,7 +356,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.haultMinting();
 
         // Skip time
-        skip(SHUTDOWN_WITHDRAWAL_DELAY);
+        skip(SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY);
 
         // Shutdown system
         systemControl.shutdownSystem();
@@ -454,8 +455,6 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
 
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
-
-    uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
 
     uint256 constant SLOT_SYSTEM_STATUS = 1;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
@@ -692,6 +691,27 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setBaseFee(0);
     }
 
+    function testFuzz_setBaseFeeAndCheckTooEarly(uint16 baseFee, uint40 delay) public {
+        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+
+        baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
+
+        // Retrieve current lp fee
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
+
+        // Set base fee
+        vm.expectEmit();
+        emit NewBaseFee(baseFee);
+        systemControl.setBaseFee(baseFee);
+
+        skip(delay);
+
+        // Check if base fee is set correctly
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        assertEq(systemParams_.baseFee.fee, systemParams.baseFee.fee, "baseFee not set correctly");
+        assertEq(systemParams_.lpFee.fee, systemParams.lpFee.fee, "lpFee not changed");
+    }
+
     function testFuzz_setBaseFee(uint16 baseFee) public {
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
 
@@ -702,6 +722,8 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         vm.expectEmit();
         emit NewBaseFee(baseFee);
         systemControl.setBaseFee(baseFee);
+
+        skip(SystemConstants.FEE_CHANGE_DELAY);
 
         // Check if base fee is set correctly
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
@@ -750,6 +772,27 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setLPFee(0);
     }
 
+    function testFuzz_setLpFeeAndCheckTooEarly(uint16 lpFee, uint40 delay) public {
+        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+
+        lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
+
+        // Retrieve current lp fee
+        SirStructs.SystemParameters memory systemParams = vault.systemParams();
+
+        // Set lp fee
+        vm.expectEmit();
+        emit NewLPFee(lpFee);
+        systemControl.setLPFee(lpFee);
+
+        skip(delay);
+
+        // Check if lp fee is set correctly
+        SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
+        assertEq(systemParams_.baseFee.fee, systemParams.baseFee.fee, "baseFee not changed");
+        assertEq(systemParams_.lpFee.fee, systemParams.lpFee.fee, "lpFee not set correctly");
+    }
+
     function testFuzz_setLpFee(uint16 lpFee) public {
         lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
 
@@ -760,6 +803,8 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         vm.expectEmit();
         emit NewLPFee(lpFee);
         systemControl.setLPFee(lpFee);
+
+        skip(SystemConstants.FEE_CHANGE_DELAY);
 
         // Check if lp fee is set correctly
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();

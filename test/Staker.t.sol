@@ -33,7 +33,7 @@ contract Auxiliary is Test {
     uint256 constant SLOT_SUPPLY = 2;
     uint256 constant SLOT_BALANCES = 5;
     uint256 constant SLOT_INITIALIZED = 3;
-    uint256 constant SLOT_TOTAL_RESERVES = 8;
+    uint256 constant SLOT_TOTAL_RESERVES = 10;
 
     uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
 

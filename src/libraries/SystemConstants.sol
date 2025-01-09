@@ -31,6 +31,8 @@ library SystemConstants {
     // Time it takes for a change of LP or base fee to take effect
     uint256 internal constant FEE_CHANGE_DELAY = 10 days;
 
+    uint40 internal constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
+
     int8 internal constant MAX_LEVERAGE_TIER = 2;
 
     int8 internal constant MIN_LEVERAGE_TIER = -4;

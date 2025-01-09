@@ -6,13 +6,12 @@ import {Vault} from "./Vault.sol";
 
 // Libraries
 import {SirStructs} from "./libraries/SirStructs.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
 contract SystemControl is Ownable {
-    uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
-
     /** Flow chart of the system 4 possible states:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
@@ -88,7 +87,7 @@ contract SystemControl is Ownable {
         systemStatus = SystemStatus.Emergency;
         timestampStatusChanged = uint40(block.timestamp);
 
-        // Retrieve parameters
+        // Hault minting
         vault.updateSystemState(0, 0, true);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
@@ -115,7 +114,8 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
 
         // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
-        if (block.timestamp - timestampStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownTooEarly();
+        if (block.timestamp - timestampStatusChanged < SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY)
+            revert ShutdownTooEarly();
 
         // Change status
         systemStatus = SystemStatus.Shutdown;

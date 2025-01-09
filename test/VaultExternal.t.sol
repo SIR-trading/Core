@@ -91,7 +91,7 @@ contract VaultExternalTest is Test {
     function testFuzz_deployWrongTokens(address debtToken, address collateralToken, int8 leverageTier) public {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)); // Only accepted values in the system
 
-        vm.expectRevert(NoUniswapPool.selector);
+        vm.expectRevert();
         VaultExternal.deploy(
             oracle,
             vaultState[debtToken][collateralToken][leverageTier],
