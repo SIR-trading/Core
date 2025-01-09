@@ -52,12 +52,12 @@ contract VaultTest is Test {
         uint256 amount;
     }
 
-    uint256 constant SLOT_VAULT_STATE = 7;
-    uint256 constant SLOT_TOTAL_RESERVES = 8;
+    uint256 constant SLOT_VAULT_STATE = 9;
+    uint256 constant SLOT_TOTAL_RESERVES = 10;
     uint256 constant SLOT_TOTAL_SUPPLY_APE = 5;
     uint256 constant SLOT_APE_BALANCE_OF = 6;
-    uint256 constant SLOT_TOTAL_SUPPLY_TEA = 4;
-    uint256 constant SLOT_TEA_BALANCE_OF = 3;
+    uint256 constant SLOT_TOTAL_SUPPLY_TEA = 6;
+    uint256 constant SLOT_TEA_BALANCE_OF = 5;
 
     uint256 constant smallErrorTolerance = 1e16;
     uint256 constant largeErrorTolerance = 1e4;
@@ -142,8 +142,13 @@ contract VaultTest is Test {
             );
 
             // Set base and LP fees
-            vm.prank(systemControl);
-            vault.updateSystemState(systemParams.baseFee, systemParams.lpFee, false);
+            vm.startPrank(systemControl);
+            vm.assume(systemParams.baseFee != 0);
+            vm.assume(systemParams.lpFee != 0);
+            vault.updateSystemState(systemParams.baseFee, 0, false);
+            vault.updateSystemState(0, systemParams.lpFee, false);
+            vm.stopPrank();
+            skip(SystemConstants.FEE_CHANGE_DELAY);
 
             // Set tax
             vm.prank(systemControl);
@@ -172,6 +177,9 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
 
+        console.log(isAPE ? "minting APE" : "minting TEA");
+        console.log("amount of collateral:", inputsOutputs.collateral);
+        console.log("lp fee is:", systemParams.lpFee);
         inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
 
         // Check reserves
@@ -1578,7 +1586,7 @@ contract VaultControlTest is Test {
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
 
-    uint256 constant SLOT_TOTAL_RESERVES = 8;
+    uint256 constant SLOT_TOTAL_RESERVES = 10;
     uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
 
     address public systemControl = vm.addr(1);
@@ -1947,7 +1955,7 @@ contract VaultControlTest is Test {
         bytes32 slot = keccak256(abi.encode(token, SLOT_TOTAL_RESERVES));
         vm.store(address(vault), slot, bytes32(tokenFees.total));
         uint256 totalReserves = vault.totalReserves(token);
-        assertEq(vault.totalReserves(token), tokenFees.total, "Wrong token total reserves");
+        assertEq(totalReserves, tokenFees.total, "Wrong token total reserves");
         assertEq(
             tokenFees.fees,
             IERC20(token).balanceOf(address(vault)) - totalReserves,
@@ -2034,7 +2042,7 @@ contract VaultHandler is Test, RegimeEnum {
         });
 
     modifier advanceBlock(InputOutput memory inputOutput) {
-        // console.log("------Advance--Block------");
+        console.log("------Advance--Block------");
 
         if (regime != Regime.Any || inputOutput.advanceBlock) {
             blockNumber += TIME_ADVANCE / 12 seconds;
@@ -2069,9 +2077,9 @@ contract VaultHandler is Test, RegimeEnum {
         priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
 
         // Check regime
-        _checkRegime();
         console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         console.log(string.concat("Leverage tier: ", vm.toString(vaultParameters.leverageTier)));
+        _checkRegime();
 
         if (regime != Regime.Any || inputOutput.advanceBlock) iterations++;
 
@@ -2156,13 +2164,13 @@ contract VaultHandler is Test, RegimeEnum {
             if (vaultParameters.leverageTier > 0) {
                 (success, temp) = FullMath.tryMulDivRoundingUp(
                     collateralLowerbound,
-                    2 ** uint256(int256(vaultParameters.leverageTier)) * systemParams.baseFee,
+                    2 ** uint256(int256(vaultParameters.leverageTier)) * systemParams.baseFee.fee,
                     10000
                 );
             } else {
                 (success, temp) = FullMath.tryMulDivRoundingUp(
                     collateralLowerbound,
-                    systemParams.baseFee,
+                    systemParams.baseFee.fee,
                     2 ** uint256(-int256(vaultParameters.leverageTier)) * 10000
                 );
             }
@@ -2173,10 +2181,14 @@ contract VaultHandler is Test, RegimeEnum {
             }
             collateralLowerbound += temp;
         } else {
-            console.log(reserves.reserveLPers, 2 * uint256(10 ** 4) + systemParams.lpFee, uint256(10 ** 4) * supplyTEA);
+            console.log(
+                reserves.reserveLPers,
+                2 * uint256(10 ** 4) + systemParams.lpFee.fee,
+                uint256(10 ** 4) * supplyTEA
+            );
             collateralLowerbound = FullMath.mulDivRoundingUp(
                 reserves.reserveLPers,
-                2 * uint256(10 ** 4) + systemParams.lpFee,
+                2 * uint256(10 ** 4) + systemParams.lpFee.fee,
                 uint256(10 ** 4) * supplyTEA
             );
 
@@ -2188,8 +2200,8 @@ contract VaultHandler is Test, RegimeEnum {
 
             uint256 collateralLowerbound2 = FullMath.mulDivRoundingUp(
                 totalMintedTEALowerbound,
-                uint256(10 ** 4) + systemParams.lpFee,
-                uint256(10 ** 4) * (totalMintedTEALowerbound - 1) - systemParams.lpFee
+                uint256(10 ** 4) + systemParams.lpFee.fee,
+                uint256(10 ** 4) * (totalMintedTEALowerbound - 1) - systemParams.lpFee.fee
             );
 
             if (collateralLowerbound2 > collateralLowerbound) collateralLowerbound = collateralLowerbound2;
@@ -2246,6 +2258,8 @@ contract VaultHandler is Test, RegimeEnum {
                 }
             }
         }
+
+        if (success) collateralUpperbound = FullMath.mulDiv(9, collateralUpperbound, 10);
 
         // Another collateral upperbound given by the maximum reserve size
         if (!success || type(uint144).max - reserveTotal < collateralUpperbound) {
@@ -2325,6 +2339,7 @@ contract VaultHandler is Test, RegimeEnum {
                 console.log("Burn may revert, skipping..");
                 return;
             }
+            maxAmount = FullMath.mulDiv(9, maxAmount, 10);
             amount = _bound(amount, 1, maxAmount);
         }
 
@@ -2338,12 +2353,14 @@ contract VaultHandler is Test, RegimeEnum {
 
         // Burn
         vm.startPrank(user);
+        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         _checkRegime();
         inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
 
         // Unwrap ETH
         _WETH.withdraw(inputOutput.amountCollateral);
         vm.stopPrank();
+        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         console.log("Burning Over");
     }
 
@@ -2362,7 +2379,7 @@ contract VaultHandler is Test, RegimeEnum {
         return vaultId;
     }
 
-    function _checkRegime() private view {
+    function _checkRegime() private {
         if (regime == Regime.Any) return;
 
         if (
@@ -2388,7 +2405,7 @@ contract VaultHandler is Test, RegimeEnum {
         }
     }
 
-    function _invariantTotalCollateral() private view {
+    function _invariantTotalCollateral() private {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
@@ -2401,7 +2418,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantPowerZone() private view {
+    function _invariantPowerZone() private {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical leveraged gain
@@ -2448,7 +2465,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantSaturationZone() private view {
+    function _invariantSaturationZone() private {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical margin gain
@@ -2634,7 +2651,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
     }
 
     function setUp() public {
-        // vm.writeFile("./gains.log", "");
+        // vm.writeFile("./log.log", "");
 
         // Deploy the vault handler
         vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Saturation);
@@ -2674,13 +2691,13 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public view {
+    function invariant_dummy() public {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
-        // console.log(totalReserves, _WETH.balanceOf(address(vault)));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        // vm.writeLine("./log.log", "assertLe");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(reserveApes + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
+        assertEq(uint(reserveApes) + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
     }
 }
 

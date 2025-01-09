@@ -112,7 +112,7 @@ contract Vault is TEA {
         // Cannot deposit 0 collateral
         if (collateralToDeposit == 0) revert AmountTooLow();
 
-        SirStructs.SystemParameters memory systemParams_ = _systemParams;
+        SirStructs.SystemParameters memory systemParams_ = systemParams();
         require(!systemParams_.mintingStopped);
 
         // Get reserves
@@ -125,7 +125,7 @@ contract Vault is TEA {
             // Mint APE
             (reserves, fees, amount) = APE(ape).mint(
                 msg.sender,
-                systemParams_.baseFee,
+                systemParams_.baseFee.fee,
                 vaultIssuanceParams_.tax,
                 reserves,
                 collateralToDeposit
@@ -199,7 +199,7 @@ contract Vault is TEA {
     ) external returns (uint144) {
         if (amount == 0) revert AmountTooLow();
 
-        SirStructs.SystemParameters memory systemParams_ = _systemParams;
+        SirStructs.SystemParameters memory systemParams_ = systemParams();
 
         // Get reserves
         (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
@@ -211,7 +211,7 @@ contract Vault is TEA {
             // Burn APE
             (reserves, fees) = APE(ape).burn(
                 msg.sender,
-                systemParams_.baseFee,
+                systemParams_.baseFee.fee,
                 vaultIssuanceParams_.tax,
                 reserves,
                 amount

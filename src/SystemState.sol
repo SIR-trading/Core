@@ -64,8 +64,8 @@ abstract contract SystemState is SystemControlAccess {
             (or burns) APE, the attacker could mint before the ape and burn after the ape, earning the fees risk-free.
          */
         _systemParams = SirStructs.SystemParameters({
-            baseFee: 3000, // At 1.5 leverage tier, apes would pay 24% of their deposit as upfront fee.
-            lpFee: 989, // To mitigate LP sandwich attacks.
+            baseFee: SirStructs.FeeStructure({fee: 3000, feeNew: 0, timestampUpdate: 0}), // At 1.5 leverage tier, apes would pay 24% of their deposit as upfront fee.
+            lpFee: SirStructs.FeeStructure({fee: 989, feeNew: 0, timestampUpdate: 0}), // To mitigate LP sandwich attacks. LPers would pay 9% of their deposit as upfront fee.
             mintingStopped: false,
             cumulativeTax: 0
         });
@@ -90,7 +90,7 @@ abstract contract SystemState is SystemControlAccess {
         @return cumulativeSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
     */
     function cumulativeSIRPerTEA(
-        SirStructs.SystemParameters memory systemParams_,
+        uint16 cumulativeTax,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 supplyExcludeVault_
     ) internal view returns (uint176 cumulativeSIRPerTEAx96) {
@@ -104,7 +104,7 @@ abstract contract SystemState is SystemControlAccess {
                 vaultIssuanceParams_.timestampLastUpdate != uint40(block.timestamp) &&
                 supplyExcludeVault_ != 0
             ) {
-                assert(vaultIssuanceParams_.tax <= systemParams_.cumulativeTax);
+                assert(vaultIssuanceParams_.tax <= cumulativeTax);
 
                 // Starting time for the issuance in this vault
                 uint40 timestampStart = vaultIssuanceParams_.timestampLastUpdate;
@@ -113,7 +113,7 @@ abstract contract SystemState is SystemControlAccess {
                 uint40 timestamp3Years = TIMESTAMP_ISSUANCE_START + SystemConstants.THREE_YEARS;
                 if (timestampStart < timestamp3Years) {
                     uint256 issuance = (uint256(SystemConstants.LP_ISSUANCE_FIRST_3_YEARS) * vaultIssuanceParams_.tax) /
-                        systemParams_.cumulativeTax;
+                        cumulativeTax;
                     // Cannot OF because 80 bits for the non-decimal part is enough to store the balance even if all SIR issued in 599 years went to a single LPer
                     cumulativeSIRPerTEAx96 += uint176(
                         ((issuance *
@@ -124,8 +124,7 @@ abstract contract SystemState is SystemControlAccess {
 
                 // Aggregate SIR issued after the first 3 years
                 if (uint40(block.timestamp) > timestamp3Years) {
-                    uint256 issuance = (uint256(SystemConstants.ISSUANCE) * vaultIssuanceParams_.tax) /
-                        systemParams_.cumulativeTax;
+                    uint256 issuance = (uint256(SystemConstants.ISSUANCE) * vaultIssuanceParams_.tax) / cumulativeTax;
                     cumulativeSIRPerTEAx96 += uint176(
                         (((issuance *
                             (block.timestamp -
@@ -185,8 +184,26 @@ abstract contract SystemState is SystemControlAccess {
         return vaultIssuanceParams[vaultId].tax;
     }
 
-    function systemParams() external view returns (SirStructs.SystemParameters memory) {
-        return _systemParams;
+    function systemParams() public view returns (SirStructs.SystemParameters memory systemParams_) {
+        systemParams_ = _systemParams;
+
+        // Check if baseFee needs to be updated
+        if (
+            systemParams_.baseFee.timestampUpdate != 0 &&
+            block.timestamp >= systemParams_.baseFee.timestampUpdate + SystemConstants.FEE_CHANGE_DELAY
+        ) {
+            systemParams_.baseFee.fee = systemParams_.baseFee.feeNew;
+            systemParams_.baseFee.timestampUpdate = 0;
+        }
+
+        // Check if lpFee needs to be updated
+        if (
+            systemParams_.lpFee.timestampUpdate != 0 &&
+            block.timestamp >= systemParams_.lpFee.timestampUpdate + SystemConstants.FEE_CHANGE_DELAY
+        ) {
+            systemParams_.lpFee.fee = systemParams_.lpFee.feeNew;
+            systemParams_.lpFee.timestampUpdate = 0;
+        }
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -202,7 +219,7 @@ abstract contract SystemState is SystemControlAccess {
             updateLPerIssuanceParams(
                 true,
                 vaultId,
-                _systemParams,
+                _systemParams.cumulativeTax,
                 vaultIssuanceParams[vaultId],
                 supplyExcludeVault(vaultId),
                 lpersBalances
@@ -215,13 +232,13 @@ abstract contract SystemState is SystemControlAccess {
     function updateLPerIssuanceParams(
         bool sirIsCaller,
         uint256 vaultId,
-        SirStructs.SystemParameters memory systemParams_,
+        uint16 cumulativeTax,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         uint256 supplyExcludeVault_,
         LPersBalances memory lpersBalances
     ) internal returns (uint80 unclaimedRewards0) {
         // Retrieve cumulative SIR per unit of TEA
-        uint176 cumulativeSIRPerTEAx96 = cumulativeSIRPerTEA(systemParams_, vaultIssuanceParams_, supplyExcludeVault_);
+        uint176 cumulativeSIRPerTEAx96 = cumulativeSIRPerTEA(cumulativeTax, vaultIssuanceParams_, supplyExcludeVault_);
 
         // Retrieve updated LPer0 issuance parameters
         unclaimedRewards0 = unclaimedRewards(
@@ -262,13 +279,19 @@ abstract contract SystemState is SystemControlAccess {
 
     /// @dev All checks and balances to be done at system control
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
-        SirStructs.SystemParameters memory systemParams_ = _systemParams;
-        _systemParams = SirStructs.SystemParameters({
-            baseFee: baseFee,
-            lpFee: lpFee,
-            mintingStopped: mintingStopped,
-            cumulativeTax: systemParams_.cumulativeTax
-        });
+        SirStructs.SystemParameters memory systemParams_ = systemParams();
+
+        if (baseFee != 0) {
+            systemParams_.baseFee.timestampUpdate = uint40(block.timestamp);
+            systemParams_.baseFee.feeNew = baseFee;
+        } else if (lpFee != 0) {
+            systemParams_.lpFee.timestampUpdate = uint40(block.timestamp);
+            systemParams_.lpFee.feeNew = lpFee;
+        } else {
+            systemParams_.mintingStopped = mintingStopped;
+        }
+
+        _systemParams = systemParams_;
     }
 
     function updateVaults(

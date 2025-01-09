@@ -727,7 +727,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         TestMintParams memory testMintParams,
         uint256 collateralTotalSupply0
     ) private view returns (SirStructs.Fees memory fees, uint256 senderAmount) {
-        fees = Fees.feeMintTEA(testMintParams.collateralDeposited, _systemParams.lpFee);
+        fees = Fees.feeMintTEA(testMintParams.collateralDeposited, _systemParams.lpFee.fee);
 
         senderAmount =
             senderTeaBalance[tsBalance.length - 1] -
@@ -880,7 +880,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         testMintParams.tsCheck = uint40(_bound(testMintParams.tsCheck, TIMESTAMP_ISSUANCE_START, MAX_TS));
 
         // Initialize system parameters
-        _systemParams.lpFee = lpFee;
+        _systemParams.lpFee.fee = lpFee;
         _systemParams.cumulativeTax = tax;
 
         // Initialize vault issuance parameters

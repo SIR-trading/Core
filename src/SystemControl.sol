@@ -6,13 +6,12 @@ import {Vault} from "./Vault.sol";
 
 // Libraries
 import {SirStructs} from "./libraries/SirStructs.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
 contract SystemControl is Ownable {
-    uint40 public constant SHUTDOWN_WITHDRAWAL_DELAY = 20 days;
-
     /** Flow chart of the system 4 possible states:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
@@ -43,9 +42,6 @@ contract SystemControl is Ownable {
 
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
     uint40 public timestampStatusChanged; // Timestamp when the status last changed
-
-    uint16 private _oldBaseFee;
-    uint16 private _oldLpFee;
 
     /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
         before new issuance parameters are stored. This is more gas efficient that storing all active vaults
@@ -91,16 +87,8 @@ contract SystemControl is Ownable {
         systemStatus = SystemStatus.Emergency;
         timestampStatusChanged = uint40(block.timestamp);
 
-        // Retrieve parameters
-        Vault vault_ = vault;
-        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
-
-        // Store fee parameters for later
-        _oldBaseFee = systemParams.baseFee;
-        _oldLpFee = systemParams.lpFee;
-
-        // Set fees to 0 for emergency withdrawals
-        vault_.updateSystemState(0, 0, true);
+        // Hault minting
+        vault.updateSystemState(0, 0, true);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
@@ -113,7 +101,7 @@ contract SystemControl is Ownable {
         timestampStatusChanged = uint40(block.timestamp);
 
         // Restore fees
-        vault.updateSystemState(_oldBaseFee, _oldLpFee, false);
+        vault.updateSystemState(0, 0, false);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
     }
@@ -126,7 +114,8 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
 
         // Only allow the shutdown of the system after enough time has been given to LPers and apes to withdraw their funds
-        if (block.timestamp - timestampStatusChanged < SHUTDOWN_WITHDRAWAL_DELAY) revert ShutdownTooEarly();
+        if (block.timestamp - timestampStatusChanged < SystemConstants.SHUTDOWN_WITHDRAWAL_DELAY)
+            revert ShutdownTooEarly();
 
         // Change status
         systemStatus = SystemStatus.Shutdown;
@@ -145,10 +134,7 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        Vault vault_ = vault;
-        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
-
-        vault_.updateSystemState(baseFee_, systemParams.lpFee, false);
+        vault.updateSystemState(baseFee_, 0, false);
 
         emit NewBaseFee(baseFee_);
     }
@@ -157,10 +143,7 @@ contract SystemControl is Ownable {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        Vault vault_ = vault;
-        SirStructs.SystemParameters memory systemParams = vault_.systemParams();
-
-        vault_.updateSystemState(systemParams.baseFee, lpFee_, false);
+        vault.updateSystemState(0, lpFee_, false);
 
         emit NewLPFee(lpFee_);
     }

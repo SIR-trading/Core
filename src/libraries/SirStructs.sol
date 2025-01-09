@@ -14,12 +14,15 @@ library SirStructs {
         int8 leverageTier;
     }
 
+    struct FeeStructure {
+        uint16 fee; // Fee in basis points.
+        uint16 feeNew; // New fee to replace fee if current time exceeds FEE_CHANGE_DELAY since timestampUpdate
+        uint40 timestampUpdate; // Timestamp fee change was made. If 0, feeNew is not used.
+    }
+
     struct SystemParameters {
-        /** Base fee in basis points charged to apes per unit of liquidity, so fee = baseFee/1e4*(l-1).
-            For example, in a vaultId with 3x target leverage, apes are charged 2*baseFee/1e4 on minting and on burning.
-         */
-        uint16 baseFee; // Base fee in basis points. Given type(uint16).max, the max baseFee is 655.35%.
-        uint16 lpFee; // Base fee in basis points.
+        FeeStructure baseFee;
+        FeeStructure lpFee;
         bool mintingStopped; // If true, no minting of TEA/APE
         /** Aggregated taxes for all vaults. Choice of uint16 type.
             For vault i, (tax_i / type(uint8).max)*10% is charged, where tax_i is of type uint8.
