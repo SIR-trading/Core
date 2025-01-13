@@ -108,7 +108,7 @@ contract Staker {
         return stakingParams.stake + _supply.balanceOfSIR;
     }
 
-    // Return supply if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
+    // Return supply as if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
     function maxTotalSupply() external view returns (uint256) {
         return SystemConstants.ISSUANCE * (block.timestamp - vault.TIMESTAMP_ISSUANCE_START());
     }

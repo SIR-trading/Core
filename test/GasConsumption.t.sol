@@ -23,13 +23,13 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
     /**
 |------------------------------|-----------------|--------|--------|--------|---------|
 | Deployment Cost              | Deployment Size |        |        |        |         |
-| 5116273                      | 23982           |        |        |        |         |
+| 5124467                      | 24119           |        |        |        |         |
 | Function Name                | min             | avg    | median | max    | # calls |
 | balanceOf                    | 706             | 706    | 706    | 706    | 4       |
-| burn                         | 101531          | 109326 | 109202 | 117368 | 8       |
-| initialize                   | 480731          | 545685 | 545661 | 610688 | 4       |
-| mint                         | 129417          | 181440 | 177347 | 249354 | 8       |
-| updateVaults                 | 85430           | 85430  | 85430  | 85430  | 4       |
+| burn                         | 102552          | 107490 | 107524 | 112361 | 8       |
+| initialize                   | 477585          | 542539 | 542515 | 607541 | 4       |
+| mint                         | 153416          | 178383 | 178497 | 203121 | 8       |
+| updateVaults                 | 102227          | 102227 | 102227 | 102227 | 4       |
      */
 
     // WETH/USDT's Uniswap TWAP has a long cardinality

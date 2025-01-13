@@ -50,7 +50,7 @@ contract DeployCore is Script {
 
         // Deploy SIR
         address payable sir = payable(
-            address(new SIR((block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH)))
+            address(new SIR((block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH), systemControl))
         );
         console.log("SIR deployed at: ", sir);
 
@@ -75,7 +75,7 @@ contract DeployCore is Script {
         console.log("SIR initialized.");
 
         // Initialize SystemControl
-        SystemControl(systemControl).initialize(vault);
+        SystemControl(systemControl).initialize(vault, sir);
         console.log("SystemControl initialized.");
 
         vm.stopBroadcast();

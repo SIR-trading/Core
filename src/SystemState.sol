@@ -30,8 +30,6 @@ abstract contract SystemState is SystemControlAccess {
 
     event VaultNewTax(uint48 indexed vault, uint8 tax, uint16 cumulativeTax);
 
-    uint40 public immutable TIMESTAMP_ISSUANCE_START;
-
     struct LPerIssuanceParams {
         uint176 cumulativeSIRPerTEAx96; // Q80.96, cumulative SIR minted by an LPer per unit of TEA
         uint80 unclaimedRewards; // SIR owed to the LPer. 80 bits is enough to store the balance even if all SIR issued in +1000 years went to a single LPer
@@ -43,6 +41,8 @@ abstract contract SystemState is SystemControlAccess {
         address lper1;
         uint256 balance1;
     }
+
+    uint40 public immutable TIMESTAMP_ISSUANCE_START;
 
     address internal immutable _SIR;
 

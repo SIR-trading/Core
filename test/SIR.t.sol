@@ -45,7 +45,7 @@ contract ContributorsTest is Test {
         vm.warp(4269);
 
         // Deploy SIR
-        sir = new SIR(Addresses.ADDR_WETH);
+        sir = new SIR(Addresses.ADDR_WETH, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());
@@ -217,7 +217,7 @@ contract GentlemenTest is Test {
         address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy SIR
-        sir = new SIR(Addresses.ADDR_WETH);
+        sir = new SIR(Addresses.ADDR_WETH, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());

@@ -20,6 +20,7 @@ import {APE} from "src/APE.sol";
 contract SystemControlInitializationTest is Test {
     address public vault;
     SystemControl public systemControl;
+    address payable sir = payable(vm.addr(10));
 
     function setUp() public {
         // Deploy SystemControl
@@ -29,7 +30,7 @@ contract SystemControlInitializationTest is Test {
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = address(new Vault(address(systemControl), vm.addr(10), vm.addr(11), ape, Addresses.ADDR_WETH));
+        vault = address(new Vault(address(systemControl), sir, vm.addr(11), ape, Addresses.ADDR_WETH));
     }
 
     function testFuzz_initializationWrongCaller(address caller) public {
@@ -38,16 +39,16 @@ contract SystemControlInitializationTest is Test {
         // Initialize SystemControl
         vm.prank(caller);
         vm.expectRevert();
-        systemControl.initialize(vault);
+        systemControl.initialize(vault, sir);
     }
 
     function test_alreadyInitialized() public {
         // Initialize SystemControl
-        systemControl.initialize(vault);
+        systemControl.initialize(vault, sir);
 
         // Initialize SystemControl again
         vm.expectRevert();
-        systemControl.initialize(vault);
+        systemControl.initialize(vault, sir);
     }
 }
 
@@ -59,7 +60,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);
     event NewLPFee(uint16 lpFee);
 
-    uint256 constant SLOT_SYSTEM_STATUS = 1;
+    struct ContributorPreMainnet {
+        uint256 allocation;
+        address addr;
+    }
+
+    uint256 constant SLOT_SYSTEM_STATUS = 2;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
@@ -86,6 +92,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
     mapping(uint48 => bool) private _seen;
 
+    address oneContributor;
+
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
         // vm.writeFile("./numNewVaults.log", "");
@@ -97,7 +105,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl = new SystemControl();
 
         // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
+        sir = payable(address(new SIR(Addresses.ADDR_WETH, address(systemControl))));
 
         // Deploy APE implementation
         address ape = address(new APE());
@@ -109,7 +117,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         SIR(sir).initialize(address(vault));
 
         // Initialize SystemControl
-        systemControl.initialize(address(vault));
+        systemControl.initialize(address(vault), sir);
+
+        // Get 1 pre-mainnet contributor
+        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/pre_mainnet.json"));
+        bytes memory data = vm.parseJson(json);
+        ContributorPreMainnet[] memory contributorsPreMainnet = abi.decode(data, (ContributorPreMainnet[]));
+        oneContributor = contributorsPreMainnet[0].addr;
     }
 
     function test_haultMinting() public {
@@ -130,12 +144,20 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         WETH.approve(address(vault), 1 ether);
         uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether);
 
-        // Exit Beta
+        // Successfully mint SIR
+        skip(1 days);
+        vm.prank(oneContributor);
+        SIR(sir).contributorMint();
+
+        // To ensure there are new SIR rewards
+        skip(1 days);
+
+        // Emergency hault
         vm.expectEmit();
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
         systemControl.haultMinting();
 
-        // Check if Beta is exited
+        // Check if minting is haulted
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Emergency));
 
         // Check fees are 0
@@ -156,6 +178,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
         vault.mint(false, vaultParameters, 1 ether);
+
+        // Failure to mint SIR
+        vm.prank(oneContributor);
+        vm.expectRevert();
+        SIR(sir).contributorMint();
 
         // Burn APE
         vault.burn(true, vaultParameters, apeAmount);
@@ -185,6 +212,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
         vault.mint(false, vaultParameters, 1 ether);
+
+        // Successfully mint SIR
+        skip(1 days);
+        vm.prank(oneContributor);
+        SIR(sir).contributorMint();
 
         // Check fees are restored
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
@@ -456,7 +488,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
 
-    uint256 constant SLOT_SYSTEM_STATUS = 1;
+    uint256 constant SLOT_SYSTEM_STATUS = 2;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
 
     enum SystemStatus {
@@ -479,19 +511,19 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl = new SystemControl();
 
         // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH)));
+        sir = payable(address(new SIR(Addresses.ADDR_WETH, address(systemControl))));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, vm.addr(10), ape, Addresses.ADDR_WETH);
+        vault = new Vault(address(systemControl), sir, sir, ape, Addresses.ADDR_WETH);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));
 
         // Initialize SystemControl
-        systemControl.initialize(address(vault));
+        systemControl.initialize(address(vault), sir);
     }
 
     function testFuzz_exitBetaWrongCaller(address caller) public {

@@ -2,18 +2,22 @@
 pragma solidity ^0.8.0;
 
 // Contracts
-import {Vault} from "./Vault.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Contributors} from "./libraries/Contributors.sol";
 import {Staker} from "./Staker.sol";
+import {SystemControlAccess} from "./SystemControlAccess.sol";
+
+import "forge-std/console.sol";
 
 // Contracts
-contract SIR is Staker {
+contract SIR is Staker, SystemControlAccess {
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
 
     mapping(address => uint40) internal timestampLastMint;
 
-    constructor(address weth) Staker(weth) {}
+    bool private _mintingAllowed = true;
+
+    constructor(address weth, address systemControl) Staker(weth) SystemControlAccess(systemControl) {}
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
@@ -67,6 +71,8 @@ contract SIR is Staker {
     ////////////////////////////////////////////////////////////////*/
 
     function contributorMint() external returns (uint80 rewards) {
+        require(_mintingAllowed);
+
         // Get contributor's unclaimed rewards
         rewards = contributorUnclaimedSIR(msg.sender);
 
@@ -79,6 +85,8 @@ contract SIR is Staker {
     }
 
     function lPerMint(uint256 vaultId) public returns (uint80 rewards) {
+        require(_mintingAllowed);
+
         // Get LPer issuance parameters
         rewards = vault.claimSIR(vaultId, msg.sender);
 
@@ -95,5 +103,13 @@ contract SIR is Staker {
 
         // Stake them immediately
         stake(rewards);
+    }
+
+    /*////////////////////////////////////////////////////////////////
+                        SYSTEM CONTROL FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
+
+    function allowMinting(bool mintingOfSIRHalted_) external onlySystemControl {
+        _mintingAllowed = mintingOfSIRHalted_;
     }
 }

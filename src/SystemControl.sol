@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {Vault} from "./Vault.sol";
+import {SIR} from "./SIR.sol";
 
 // Libraries
 import {SirStructs} from "./libraries/SirStructs.sol";
@@ -37,6 +38,7 @@ contract SystemControl is Ownable {
     error WrongVaultsOrOrder();
     error NewTaxesTooHigh();
 
+    SIR public sir;
     Vault public vault;
     bool private _initialized = false;
 
@@ -55,10 +57,11 @@ contract SystemControl is Ownable {
 
     constructor() Ownable(msg.sender) {}
 
-    function initialize(address vault_) external {
+    function initialize(address vault_, address payable sir_) external {
         require(!_initialized && msg.sender == owner());
 
         vault = Vault(vault_);
+        sir = SIR(sir_);
 
         _initialized = true;
     }
@@ -87,8 +90,11 @@ contract SystemControl is Ownable {
         systemStatus = SystemStatus.Emergency;
         timestampStatusChanged = uint40(block.timestamp);
 
-        // Hault minting
+        // Hault minting of TEA and APE
         vault.updateSystemState(0, 0, true);
+
+        // Hault minting of SIR
+        sir.allowMinting(false);
 
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
@@ -100,8 +106,11 @@ contract SystemControl is Ownable {
         systemStatus = SystemStatus.TrainingWheels;
         timestampStatusChanged = uint40(block.timestamp);
 
-        // Restore fees
+        // Restore fees and redume minting of TEA and APE
         vault.updateSystemState(0, 0, false);
+
+        // Restore minting of SIR
+        sir.allowMinting(true);
 
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
     }
