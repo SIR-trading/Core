@@ -57,6 +57,7 @@ contract Oracle {
 
     // State variables
     mapping(address token0 => mapping(address token1 => SirStructs.OracleState)) internal _state;
+
     // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier, which implies a maximum of 5 extra fee tiers.
     uint private _uniswapExtraFeeTiers;
 
@@ -69,7 +70,13 @@ contract Oracle {
     /////////////////////////////////////////////////////////////////*/
 
     function state(address token0, address token1) external view returns (SirStructs.OracleState memory) {
+        require(token0 < token1);
         return _state[token0][token1];
+    }
+
+    function uniswapPool(address token0, address token1) external view returns (IUniswapV3Pool) {
+        (token0, token1) = _orderTokens(token0, token1);
+        return _getUniswapPool(token0, token1, _state[token0][token1].uniswapFeeTier.fee);
     }
 
     function getUniswapFeeTiers() public view returns (SirStructs.UniswapFeeTier[] memory uniswapFeeTiers) {
