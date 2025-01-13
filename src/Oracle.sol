@@ -74,9 +74,9 @@ contract Oracle {
         return _state[token0][token1];
     }
 
-    function uniswapPool(address token0, address token1) external view returns (IUniswapV3Pool) {
+    function uniswapPool(address token0, address token1) external view returns (address) {
         (token0, token1) = _orderTokens(token0, token1);
-        return _getUniswapPool(token0, token1, _state[token0][token1].uniswapFeeTier.fee);
+        return address(_getUniswapPool(token0, token1, _state[token0][token1].uniswapFeeTier.fee));
     }
 
     function getUniswapFeeTiers() public view returns (SirStructs.UniswapFeeTier[] memory uniswapFeeTiers) {

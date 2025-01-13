@@ -4,12 +4,14 @@ pragma solidity ^0.8.0;
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
+import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
+import {TickMath} from "v3-core/libraries/TickMath.sol";
 
 // Contracts
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
@@ -96,22 +98,101 @@ contract Vault is TEA {
     function mint(
         bool isAPE,
         SirStructs.VaultParameters calldata vaultParams,
-        uint144 collateralToDeposit
+        uint256 amountToDeposit, // Collateral amount to deposit if collateralToDepositMin == 0, debt token to deposit if collateralToDepositMin > 0
+        uint144 collateralToDepositMin
     ) external payable returns (uint256 amount) {
         if (msg.value != 0) {
-            // This is an ETH mint but so we need to check that this is a WETH vault
-            if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
+            // Minter sent ETH, so we need to check that this is a WETH vault
+            if (collateralToDepositMin == 0) {
+                if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
+            } else {
+                if (vaultParams.debtToken != address(_WETH)) revert NotAWETHVault();
+            }
 
-            // collateralToDeposit is the amount of ETH received
-            collateralToDeposit = uint144(msg.value); // Safe because the ETH supply will never be greater than 2^144
+            // msg.value is the amount to deposit
+            amountToDeposit = msg.value;
 
             // We must wrap it to WETH
             _WETH.deposit{value: msg.value}();
         }
 
-        // Cannot deposit 0 collateral
-        if (collateralToDeposit == 0) revert AmountTooLow();
+        // Cannot deposit 0
+        if (amountToDeposit == 0) revert AmountTooLow();
 
+        if (collateralToDepositMin == 0) {
+            // Minter deposited collateral
+
+            // Check amount does not exceed max
+            require(amountToDeposit <= type(uint144).max);
+
+            // Rest of the mint logic
+            amount = _mint(isAPE, vaultParams, uint144(amountToDeposit));
+
+            // If the user didn't send ETH, transfer the ERC20 collateral from the minter
+            if (msg.value == 0) {
+                TransferHelper.safeTransferFrom(
+                    vaultParams.collateralToken,
+                    msg.sender,
+                    address(this),
+                    amountToDeposit
+                );
+            }
+        } else {
+            // Minter deposited debt token and requires a Uniswap V3 swap
+
+            // Retrieve Uniswap V3 pool for the swap which is the same used by our price oracle
+            address uniswapPool = _ORACLE.uniswapPool(vaultParams.collateralToken, vaultParams.debtToken);
+            assembly {
+                // Store in transient storage so we can use it in the callback
+                tstore(0, uniswapPool)
+            }
+
+            // Check amount does not exceed max
+            require(amountToDeposit <= type(int256).max);
+
+            // Swap
+            bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
+            bytes calldata data = abi.encode(isAPE, vaultParams, msg.sender, zeroForOne);
+            (int256 amount0, int256 amount1) = uniswapPool.swap(
+                address(msg.sender),
+                zeroForOne,
+                int256(amountToDeposit),
+                zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+                data
+            );
+        }
+    }
+
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        // Check caller is the legit Uniswap pool
+        address uniswapPool;
+        assembly {
+            uniswapPool := tload(0)
+        }
+        require(msg.sender == uniswapPool);
+
+        // Decode data
+        (bool isAPE, SirStructs.VaultParameters calldata vaultParams, address minter, bool zeroForOne) = abi.decode(
+            data,
+            (bool, SirStructs.VaultParameters, address)
+        );
+
+        // Retrieve amount of collateral to deposit and check it does not exceed max
+        uint256 amountToDeposit = zeroForOne ? uint256(-amount1Delta) : uint256(-amount0Delta);
+        require(amountToDeposit <= type(uint144).max);
+
+        // Rest of the mint logic
+        _mint(isAPE, vaultParams, uint144(amountToDeposit), minter);
+        // I MAY NEED TO PASS THE MINTER ADDRESS AS DATA, AND REPLACE THE MSG.SENDER IN ALL MY FUNCTIONS
+
+        // Transfer debt token to the pool
+    }
+
+    function _mint(
+        bool isAPE,
+        SirStructs.VaultParameters calldata vaultParams,
+        uint144 collateralToDeposit
+    ) internal returns (uint256 amount) {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
         require(!systemParams_.mintingStopped);
 
@@ -162,16 +243,6 @@ contract Vault is TEA {
             fees.collateralFeeToStakers,
             fees.collateralFeeToLPers
         );
-
-        if (msg.value == 0) {
-            // If it is not an ETH mint, auto transfer the ERC20 collateral token
-            TransferHelper.safeTransferFrom(
-                vaultParams.collateralToken,
-                msg.sender,
-                address(this),
-                collateralToDeposit
-            );
-        }
 
         /** Check if recipient is enabled for receiving TEA.
             This check is done last to avoid reentrancy attacks because it may call an external contract.

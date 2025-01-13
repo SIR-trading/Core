@@ -2379,7 +2379,7 @@ contract VaultHandler is Test, RegimeEnum {
         return vaultId;
     }
 
-    function _checkRegime() private {
+    function _checkRegime() private view {
         if (regime == Regime.Any) return;
 
         if (
@@ -2405,7 +2405,7 @@ contract VaultHandler is Test, RegimeEnum {
         }
     }
 
-    function _invariantTotalCollateral() private {
+    function _invariantTotalCollateral() private view {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
@@ -2418,7 +2418,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantPowerZone() private {
+    function _invariantPowerZone() private view {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical leveraged gain
@@ -2465,7 +2465,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantSaturationZone() private {
+    function _invariantSaturationZone() private view {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical margin gain
@@ -2691,7 +2691,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public {
+    function invariant_dummy() public view {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
         // vm.writeLine("./log.log", "assertLe");
