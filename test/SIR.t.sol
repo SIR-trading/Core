@@ -247,7 +247,7 @@ contract GentlemenTest is Test {
 
         // Alice mints TEA
         vm.prank(alice);
-        teaBalanceOfAlice = vault.mint(false, vaultParameters, 1 ether);
+        teaBalanceOfAlice = vault.mint(false, vaultParameters, 1 ether, 0);
     }
 
     function testFuzz_fakeLPerMint(address lper, uint32 timeSkip) public {

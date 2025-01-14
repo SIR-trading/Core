@@ -293,7 +293,7 @@ contract VaultExternalGetReserves is Test {
                 vaultParams.collateralToken,
                 vaultParams.debtToken
             ),
-            abi.encode(tickPriceX42)
+            abi.encode(tickPriceX42, address(0))
         );
     }
 
@@ -338,7 +338,7 @@ contract VaultExternalGetReserves is Test {
 
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
-        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
 
         CollateralState memory collateralState_ = CollateralState({
@@ -373,7 +373,7 @@ contract VaultExternalGetReserves is Test {
         vaultState.tickPriceSatX42 = type(int64).min;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
-        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
 
         CollateralState memory collateralState_ = CollateralState({
@@ -403,7 +403,7 @@ contract VaultExternalGetReserves is Test {
         vaultState.tickPriceSatX42 = type(int64).max;
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
-        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
 
         CollateralState memory collateralState_ = CollateralState({
@@ -434,7 +434,7 @@ contract VaultExternalGetReserves is Test {
         );
         vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier] = vaultState;
 
-        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+        (SirStructs.VaultState memory vaultState_, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
             .getReserves(isAPE, vaultStates, oracle, vaultParams);
 
         CollateralState memory collateralState_ = CollateralState({

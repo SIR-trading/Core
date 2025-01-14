@@ -897,6 +897,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
 
         // Mint for the first time
         (SirStructs.Fees memory fees, uint256 amount) = mint(
+            msg.sender,
             address(collateral),
             VAULT_ID,
             _systemParams,
@@ -975,6 +976,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
 
         // Mint
         (SirStructs.Fees memory fees, uint256 amount) = mint(
+            msg.sender,
             address(collateral),
             VAULT_ID,
             _systemParams,
@@ -1017,6 +1019,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         vm.expectRevert(TEAMaxSupplyExceeded.selector);
         vm.prank(msg.sender);
         mint(
+            msg.sender,
             address(collateral),
             VAULT_ID,
             _systemParams,

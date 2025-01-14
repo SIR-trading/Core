@@ -548,7 +548,7 @@ contract OracleGetPrice is Test, Oracle {
         emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.initialize(Addresses.ADDR_FRAX, Addresses.ADDR_ALUSD);
 
-        int64 tickPriceX42 = _oracle.updateOracleState(Addresses.ADDR_FRAX, Addresses.ADDR_ALUSD);
+        (int64 tickPriceX42, ) = _oracle.updateOracleState(Addresses.ADDR_FRAX, Addresses.ADDR_ALUSD);
 
         assertEq(tickPriceX42, _oracle.getPrice(Addresses.ADDR_FRAX, Addresses.ADDR_ALUSD));
     }
@@ -557,7 +557,8 @@ contract OracleGetPrice is Test, Oracle {
         _oracle.initialize(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
 
         int64 tickPriceX42 = _oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
-        assertEq(tickPriceX42, _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC));
+        (int64 tickPriceX42_, ) = _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
+        assertEq(tickPriceX42, tickPriceX42_);
 
         /** Notice that to compute the actual price of ETH/USDC we would do
                 1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
@@ -574,7 +575,8 @@ contract OracleGetPrice is Test, Oracle {
         _oracle.initialize(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
 
         int64 tickPriceX42 = _oracle.getPrice(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
-        assertEq(tickPriceX42, _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDT));
+        (int64 tickPriceX42_, ) = _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDT);
+        assertEq(tickPriceX42, tickPriceX42_);
 
         /** Notice that to compute the actual price of ETH/USDT we would do
                 1 Eth = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT
@@ -595,7 +597,7 @@ contract OracleGetPrice is Test, Oracle {
         periodTick0 = uint16(_bound(periodTick0, 0, maxPeriodTick0));
 
         // Store price in the oracle
-        int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        (int64 tickPriceX42, ) = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
         assertEq(tickPriceX42, 0);
 
         // Skip ahead so Uni v3 oracle can be update in the new positions
@@ -617,7 +619,7 @@ contract OracleGetPrice is Test, Oracle {
             true,
             address(_tokenA) == _poolKey.token0 ? tickPriceX42 : -tickPriceX42
         );
-        tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        (tickPriceX42, ) = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
         assertEq(tickPriceX42, -int40(TWAP_DURATION) * MAX_TICK_INC_PER_SEC);
     }
 
@@ -628,7 +630,7 @@ contract OracleGetPrice is Test, Oracle {
         periodTick0 = uint16(_bound(periodTick0, minPeriodTick0, TWAP_DURATION));
 
         // Store price in the oracle
-        int64 tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        (int64 tickPriceX42, ) = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
         assertEq(tickPriceX42, 0);
 
         // Skip ahead so Uni v3 oracle can be update in the new positions
@@ -649,7 +651,7 @@ contract OracleGetPrice is Test, Oracle {
 
         vm.expectEmit();
         emit PriceUpdated(_poolKey.token0, _poolKey.token1, false, expTickPriceX42);
-        tickPriceX42 = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
+        (tickPriceX42, ) = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
 
         assertEq(tickPriceX42, address(_tokenA) == _poolKey.token0 ? expTickPriceX42 : -expTickPriceX42);
     }

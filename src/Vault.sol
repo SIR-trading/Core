@@ -147,7 +147,7 @@ contract Vault is TEA {
             bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne);
 
             // Swap
-            (int256 amount0, int256 amount1) = IUniswapV3Pool(uniswapPool).swap(
+            IUniswapV3Pool(uniswapPool).swap(
                 address(msg.sender),
                 zeroForOne,
                 int256(amountToDeposit),

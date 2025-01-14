@@ -99,13 +99,13 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters1, 2 ether);
+        vault.mint(true, vaultParameters1, 2 ether, 0);
 
         // Deposit WETH to vault
         _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters1, 2 ether);
+        vault.mint(false, vaultParameters1, 2 ether, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
@@ -125,13 +125,13 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters1, 2 ether);
+        vault.mint(true, vaultParameters1, 2 ether, 0);
 
         // Deposit WETH to vault
         _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters1, 2 ether);
+        vault.mint(false, vaultParameters1, 2 ether, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
@@ -151,13 +151,13 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters2, 2 ether);
+        vault.mint(true, vaultParameters2, 2 ether, 0);
 
         // Deposit WETH to vault
         _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters2, 2 ether);
+        vault.mint(false, vaultParameters2, 2 ether, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
@@ -177,13 +177,13 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         _prepareWETH(2 ether);
 
         // Mint some APE
-        vault.mint(true, vaultParameters2, 2 ether);
+        vault.mint(true, vaultParameters2, 2 ether, 0);
 
         // Deposit WETH to vault
         _prepareWETH(2 ether);
 
         // Mint some TEA
-        vault.mint(false, vaultParameters2, 2 ether);
+        vault.mint(false, vaultParameters2, 2 ether, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));

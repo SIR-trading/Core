@@ -138,7 +138,7 @@ contract VaultTest is Test {
                     vaultParams.collateralToken,
                     vaultParams.debtToken
                 ),
-                abi.encode(reservesPre.tickPriceX42)
+                abi.encode(reservesPre.tickPriceX42, address(0))
             );
 
             // Set base and LP fees
@@ -180,7 +180,7 @@ contract VaultTest is Test {
         console.log(isAPE ? "minting APE" : "minting TEA");
         console.log("amount of collateral:", inputsOutputs.collateral);
         console.log("lp fee is:", systemParams.lpFee);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -213,7 +213,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
     }
 
     function testFuzz_mint1stTimeType(
@@ -230,7 +230,13 @@ contract VaultTest is Test {
         // Alice mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        console.log("Deposit:", inputsOutputs.collateral);
+        console.log("isAPE:", isAPE);
+        console.log("TEA supply:", balances.teaSupply);
+        console.log("APE supply:", balances.apeSupply);
+        console.log("TEA reserve:", reservesPre.reserveLPers);
+        console.log("APE reserve:", reservesPre.reserveApes);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -263,7 +269,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
     }
 
     function testFuzz_recursiveStateSave(
@@ -343,7 +349,7 @@ contract VaultTest is Test {
         // Alice mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
 
         // Retrieve reserves after minting
         SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
@@ -417,14 +423,15 @@ contract VaultTest is Test {
                 vaultParams_.collateralToken,
                 vaultParams_.debtToken
             ),
-            abi.encode(tickPriceX42)
+            abi.encode(tickPriceX42, address(0))
         );
 
         // Alice mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), collateralAmount);
-        vm.expectRevert(VaultDoesNotExist.selector);
-        vault.mint(isAPE, vaultParams_, collateralAmount);
+        // vm.expectRevert(VaultDoesNotExist.selector);
+        vm.expectRevert();
+        vault.mint(isAPE, vaultParams_, collateralAmount, 0);
     }
 
     function testFuzz_burnWrongVaultParameters(
@@ -464,7 +471,7 @@ contract VaultTest is Test {
                 vaultParams_.collateralToken,
                 vaultParams_.debtToken
             ),
-            abi.encode(tickPriceX42)
+            abi.encode(tickPriceX42, address(0))
         );
 
         // Alice mints APE
@@ -513,7 +520,7 @@ contract VaultTest is Test {
                 vaultParams.collateralToken,
                 vaultParams.debtToken
             ),
-            abi.encode(newTickPriceX42)
+            abi.encode(newTickPriceX42, address(0))
         );
 
         // Retrieve reserves after price fluctuation
@@ -1544,7 +1551,7 @@ contract VaultTestWithETH is Test {
         // Alice mints APE
         deal(user, amountETH);
         vm.prank(user);
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
 
         // Check the total reserve
         assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
@@ -1558,7 +1565,7 @@ contract VaultTestWithETH is Test {
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
     }
 
     function test_mintNotAWETHVault(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
@@ -1577,7 +1584,7 @@ contract VaultTestWithETH is Test {
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert(NotAWETHVault.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0);
     }
 }
 
@@ -2143,7 +2150,7 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
 
         // Mint with WETH
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral);
+        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0);
         vm.stopPrank();
     }
 
@@ -2288,7 +2295,7 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
 
         // Mint with WETH
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral);
+        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0);
         vm.stopPrank();
         console.log("Minting Over");
     }

@@ -49,7 +49,7 @@ contract GetSIR is Script {
             weth.deposit{value: 1 ether}(); // Wrap 1 ETH
             weth.approve(address(vault), 1 ether); // Approve 1 WETH to the vault
             SirStructs.VaultParameters memory vaultParams = vault.paramsById(1);
-            vault.mint(false, vaultParams, 1 ether); // Mint TEA
+            vault.mint(false, vaultParams, 1 ether, 0); // Mint TEA
         }
 
         // Time forward
