@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
 
 // Libraries
 import {SirStructs} from "./SirStructs.sol";
@@ -18,6 +19,7 @@ library VaultExternal {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error VaultDoesNotExist();
+    error NotAWETHVault();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -197,6 +199,25 @@ library VaultExternal {
 
             _getReserves(vaultState, reserves, vaultParams.leverageTier);
         }
+    }
+
+    function wrapETH(
+        SirStructs.VaultParameters memory vaultParams,
+        uint144 collateralToDepositMin,
+        address weth
+    ) external returns (uint256 amountToDeposit) {
+        // Minter sent ETH, so we need to check that this is a WETH vault
+        if (collateralToDepositMin == 0) {
+            if (vaultParams.collateralToken != weth) revert NotAWETHVault();
+        } else {
+            if (vaultParams.debtToken != weth) revert NotAWETHVault();
+        }
+
+        // msg.value is the amount to deposit
+        amountToDeposit = msg.value;
+
+        // We must wrap it to WETH
+        IWETH9(weth).deposit{value: msg.value}();
     }
 
     function _getReserves(

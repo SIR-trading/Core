@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
-import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Libraries
@@ -22,7 +21,6 @@ import {TEA} from "./TEA.sol";
 import "forge-std/console.sol";
 
 contract Vault is TEA {
-    error NotAWETHVault();
     error AmountTooLow();
 
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
@@ -45,7 +43,7 @@ contract Vault is TEA {
 
     Oracle private immutable _ORACLE;
     address private immutable _APE_IMPLEMENTATION;
-    IWETH9 private immutable _WETH;
+    address private immutable _WETH;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
@@ -70,7 +68,7 @@ contract Vault is TEA {
         _APE_IMPLEMENTATION = apeImplementation;
 
         // WETH
-        _WETH = IWETH9(weth);
+        _WETH = weth;
 
         // Push empty parameters to avoid vaultId 0
         _paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
@@ -101,20 +99,8 @@ contract Vault is TEA {
         uint256 amountToDeposit, // Collateral amount to deposit if collateralToDepositMin == 0, debt token to deposit if collateralToDepositMin > 0
         uint144 collateralToDepositMin
     ) external payable returns (uint256 amount) {
-        if (msg.value != 0) {
-            // Minter sent ETH, so we need to check that this is a WETH vault
-            if (collateralToDepositMin == 0) {
-                if (vaultParams.collateralToken != address(_WETH)) revert NotAWETHVault();
-            } else {
-                if (vaultParams.debtToken != address(_WETH)) revert NotAWETHVault();
-            }
-
-            // msg.value is the amount to deposit
-            amountToDeposit = msg.value;
-
-            // We must wrap it to WETH
-            _WETH.deposit{value: msg.value}();
-        }
+        // If ETH is received, we wrap it because we assume the user wants to mint with WETH
+        if (msg.value != 0) amountToDeposit = VaultExternal.wrapETH(vaultParams, collateralToDepositMin, _WETH);
 
         // Cannot deposit 0
         if (amountToDeposit == 0) revert AmountTooLow();
@@ -207,6 +193,7 @@ contract Vault is TEA {
         uint256 amount = _mint(minter, ape, vaultParams, uint144(collateralToDeposit), vaultState, reserves);
 
         // Transfer debt token to the pool
+        // This is done last to avoid reentrancy attack from a bogus debt token contract
         TransferHelper.safeTransferFrom(vaultParams.debtToken, minter, uniswapPool, debtTokenToSwap);
 
         // Use the transient storage to return amount of tokens minted to the mint function
