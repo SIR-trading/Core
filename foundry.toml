@@ -9,6 +9,7 @@ fs_permissions = [{ access = "read-write", path = "./"}, { access = "read-write"
 # libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4"]
 gas_reports = ["Vault","Oracle"]
 gas_limit = "18446744073709551615"
+evm_version = "cancun"
 
 [fuzz]
 # seed = "0x10"

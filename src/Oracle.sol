@@ -74,11 +74,6 @@ contract Oracle {
         return _state[token0][token1];
     }
 
-    function uniswapPool(address token0, address token1) external view returns (address) {
-        (token0, token1) = _orderTokens(token0, token1);
-        return address(_getUniswapPool(token0, token1, _state[token0][token1].uniswapFeeTier.fee));
-    }
-
     function getUniswapFeeTiers() public view returns (SirStructs.UniswapFeeTier[] memory uniswapFeeTiers) {
         unchecked {
             // Find out # of all possible fee tiers
@@ -254,12 +249,15 @@ contract Oracle {
         emit UniswapFeeTierAdded(fee);
     }
 
-    /**
-     * @return the TWAP price of the pair of tokens
-     * @notice Update the oracle _state for the pair of tokens
-     * @notice The order of the tokens does not matter for updating the oracle _state, it only matters if we need to retrie the price
+    /** @notice Update the oracle _state for the pair of tokens
+        @notice The order of the tokens does not matter for updating the oracle _state, it only matters if we need to retrie the price
+        @return tickPriceX42 TWAP price of the pair of tokens
+        @return uniswapPoolAddress address of the pool
      */
-    function updateOracleState(address collateralToken, address debtToken) external returns (int64) {
+    function updateOracleState(
+        address collateralToken,
+        address debtToken
+    ) external returns (int64 tickPriceX42, address uniswapPoolAddress) {
         (address token0, address token1) = _orderTokens(collateralToken, debtToken);
 
         // Get oracle _state
@@ -270,6 +268,7 @@ contract Oracle {
         if (oracleState.timeStampPrice != block.timestamp) {
             // Update price
             UniswapOracleData memory oracleData = _uniswapOracleData(token0, token1, oracleState.uniswapFeeTier.fee);
+            uniswapPoolAddress = address(oracleData.uniswapPool);
             emit UniswapOracleProbed(
                 oracleState.uniswapFeeTier.fee,
                 oracleData.aggPriceTick,
@@ -350,6 +349,7 @@ contract Oracle {
                                 oracleState.indexFeeTier = oracleState.indexFeeTierProbeNext;
                                 emit OracleFeeTierChanged(oracleState.uniswapFeeTier.fee, uniswapFeeTierProbed.fee);
                                 oracleState.uniswapFeeTier = uniswapFeeTierProbed;
+                                uniswapPoolAddress = address(oracleDataProbed.uniswapPool);
                             }
                         } else {
                             // If the current tier is still better, then we increase its cardinality if necessary
@@ -378,11 +378,12 @@ contract Oracle {
 
             // Save new oracle _state to storage
             _state[token0][token1] = oracleState;
+        } else {
+            uniswapPoolAddress = address(_getUniswapPool(token0, token1, oracleState.uniswapFeeTier.fee));
         }
 
         // Invert price if necessary
-        if (collateralToken == token1) return -oracleState.tickPriceX42; // Unchecked is safe because |tickPriceX42| ≤ MAX_TICK_X42
-        return oracleState.tickPriceX42;
+        tickPriceX42 = collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42; // Safe to take negative because |tickPriceX42| ≤ MAX_TICK_X42
     }
 
     /*////////////////////////////////////////////////////////////////

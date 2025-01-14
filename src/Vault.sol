@@ -97,7 +97,7 @@ contract Vault is TEA {
      */
     function mint(
         bool isAPE,
-        SirStructs.VaultParameters calldata vaultParams,
+        SirStructs.VaultParameters memory vaultParams,
         uint256 amountToDeposit, // Collateral amount to deposit if collateralToDepositMin == 0, debt token to deposit if collateralToDepositMin > 0
         uint144 collateralToDepositMin
     ) external payable returns (uint256 amount) {
@@ -119,6 +119,14 @@ contract Vault is TEA {
         // Cannot deposit 0
         if (amountToDeposit == 0) revert AmountTooLow();
 
+        // Get reserves
+        (
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
+            address ape,
+            address uniswapPool
+        ) = VaultExternal.getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
+
         if (collateralToDepositMin == 0) {
             // Minter deposited collateral
 
@@ -126,7 +134,7 @@ contract Vault is TEA {
             require(amountToDeposit <= type(uint144).max);
 
             // Rest of the mint logic
-            amount = _mint(isAPE, vaultParams, uint144(amountToDeposit));
+            amount = _mint(msg.sender, ape, vaultParams, uint144(amountToDeposit), vaultState, reserves);
 
             // If the user didn't send ETH, transfer the ERC20 collateral from the minter
             if (msg.value == 0) {
@@ -140,26 +148,31 @@ contract Vault is TEA {
         } else {
             // Minter deposited debt token and requires a Uniswap V3 swap
 
-            // Retrieve Uniswap V3 pool for the swap which is the same used by our price oracle
-            address uniswapPool = _ORACLE.uniswapPool(vaultParams.collateralToken, vaultParams.debtToken);
+            // Store Uniswap v3 pool in transient storage so we can use it in the callback function
             assembly {
-                // Store in transient storage so we can use it in the callback
                 tstore(0, uniswapPool)
             }
 
             // Check amount does not exceed max
-            require(amountToDeposit <= type(int256).max);
+            require(amountToDeposit <= uint256(type(int256).max));
+
+            // Encode data for swap callback
+            bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
+            bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne);
 
             // Swap
-            bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
-            bytes calldata data = abi.encode(isAPE, vaultParams, msg.sender, zeroForOne);
-            (int256 amount0, int256 amount1) = uniswapPool.swap(
+            (int256 amount0, int256 amount1) = IUniswapV3Pool(uniswapPool).swap(
                 address(msg.sender),
                 zeroForOne,
                 int256(amountToDeposit),
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
                 data
             );
+
+            // Get amount of tokens
+            assembly {
+                amount := tload(0)
+            }
         }
     }
 
@@ -172,40 +185,53 @@ contract Vault is TEA {
         require(msg.sender == uniswapPool);
 
         // Decode data
-        (bool isAPE, SirStructs.VaultParameters calldata vaultParams, address minter, bool zeroForOne) = abi.decode(
-            data,
-            (bool, SirStructs.VaultParameters, address)
-        );
+        (
+            address minter,
+            address ape,
+            SirStructs.VaultParameters memory vaultParams,
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
+            bool zeroForOne
+        ) = abi.decode(
+                data,
+                (address, address, SirStructs.VaultParameters, SirStructs.VaultState, SirStructs.Reserves, bool)
+            );
 
         // Retrieve amount of collateral to deposit and check it does not exceed max
-        uint256 amountToDeposit = zeroForOne ? uint256(-amount1Delta) : uint256(-amount0Delta);
-        require(amountToDeposit <= type(uint144).max);
+        (uint256 collateralToDeposit, uint256 debtTokenToSwap) = zeroForOne
+            ? (uint256(-amount1Delta), uint256(amount0Delta))
+            : (uint256(-amount0Delta), uint256(amount1Delta));
 
         // Rest of the mint logic
-        _mint(isAPE, vaultParams, uint144(amountToDeposit), minter);
-        // I MAY NEED TO PASS THE MINTER ADDRESS AS DATA, AND REPLACE THE MSG.SENDER IN ALL MY FUNCTIONS
+        require(collateralToDeposit <= type(uint144).max);
+        uint256 amount = _mint(minter, ape, vaultParams, uint144(collateralToDeposit), vaultState, reserves);
 
         // Transfer debt token to the pool
+        TransferHelper.safeTransferFrom(vaultParams.debtToken, minter, uniswapPool, debtTokenToSwap);
+
+        // Use the transient storage to return amount of tokens minted to the mint function
+        assembly {
+            tstore(0, amount)
+        }
     }
 
     function _mint(
-        bool isAPE,
-        SirStructs.VaultParameters calldata vaultParams,
-        uint144 collateralToDeposit
+        address minter,
+        address ape, // If ape is 0, minting TEA
+        SirStructs.VaultParameters memory vaultParams,
+        uint144 collateralToDeposit,
+        SirStructs.VaultState memory vaultState,
+        SirStructs.Reserves memory reserves
     ) internal returns (uint256 amount) {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
         require(!systemParams_.mintingStopped);
 
-        // Get reserves
-        (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
-            .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
-
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
-        if (isAPE) {
+        if (ape != address(0)) {
             // Mint APE
             (reserves, fees, amount) = APE(ape).mint(
-                msg.sender,
+                minter,
                 systemParams_.baseFee.fee,
                 vaultIssuanceParams_.tax,
                 reserves,
@@ -217,6 +243,7 @@ contract Vault is TEA {
         } else {
             // Mint TEA and distribute fees to protocol owned liquidity (POL)
             (fees, amount) = mint(
+                minter,
                 vaultParams.collateralToken,
                 vaultState.vaultId,
                 systemParams_,
@@ -238,7 +265,7 @@ contract Vault is TEA {
         // Emit event
         emit Mint(
             vaultState.vaultId,
-            isAPE,
+            ape != address(0),
             fees.collateralInOrWithdrawn,
             fees.collateralFeeToStakers,
             fees.collateralFeeToLPers
@@ -248,15 +275,9 @@ contract Vault is TEA {
             This check is done last to avoid reentrancy attacks because it may call an external contract.
         */
         if (
-            !isAPE &&
-            msg.sender.code.length > 0 &&
-            ERC1155TokenReceiver(msg.sender).onERC1155Received(
-                msg.sender,
-                address(0),
-                vaultState.vaultId,
-                amount,
-                ""
-            ) !=
+            ape == address(0) &&
+            minter.code.length > 0 &&
+            ERC1155TokenReceiver(minter).onERC1155Received(minter, address(0), vaultState.vaultId, amount, "") !=
             ERC1155TokenReceiver.onERC1155Received.selector
         ) revert UnsafeRecipient();
     }
@@ -273,7 +294,7 @@ contract Vault is TEA {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
 
         // Get reserves
-        (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) = VaultExternal
+        (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
             .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
@@ -344,7 +365,7 @@ contract Vault is TEA {
     function _updateVaultState(
         SirStructs.VaultState memory vaultState,
         SirStructs.Reserves memory reserves,
-        SirStructs.VaultParameters calldata vaultParams
+        SirStructs.VaultParameters memory vaultParams
     ) private {
         // Checks that the reserve does not overflow uint144
         vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;

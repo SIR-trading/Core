@@ -177,6 +177,7 @@ contract TEA is SystemState {
         @dev It modifies reserves
      */
     function mint(
+        address minter,
         address collateral,
         uint48 vaultId,
         SirStructs.SystemParameters memory systemParams_,
@@ -188,10 +189,10 @@ contract TEA is SystemState {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
-            uint256 balanceOfTo = balances[msg.sender][vaultId];
+            uint256 balanceOfTo = balances[minter][vaultId];
 
             // Update SIR issuance of gentlemen
-            LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfTo, address(this), 0);
+            LPersBalances memory lpersBalances = LPersBalances(minter, balanceOfTo, address(this), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
@@ -228,7 +229,7 @@ contract TEA is SystemState {
             amountToPOL -= amount;
 
             // Update total supply and protocol balance
-            balances[msg.sender][vaultId] = balanceOfTo + amount;
+            balances[minter][vaultId] = balanceOfTo + amount;
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountToPOL);
             totalSupplyAndBalanceVault_.totalSupply += uint128(amount + amountToPOL);
 
@@ -240,8 +241,8 @@ contract TEA is SystemState {
         reserves.reserveLPers += collateralDeposited;
 
         // Emit (mint) transfer events
-        emit TransferSingle(msg.sender, address(0), msg.sender, vaultId, amount);
-        emit TransferSingle(msg.sender, address(0), address(this), vaultId, amountToPOL);
+        emit TransferSingle(minter, address(0), minter, vaultId, amount);
+        emit TransferSingle(minter, address(0), address(this), vaultId, amountToPOL);
     }
 
     function burn(

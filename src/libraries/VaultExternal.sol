@@ -174,12 +174,23 @@ library VaultExternal {
             storage _vaultStates,
         Oracle oracle,
         SirStructs.VaultParameters calldata vaultParams
-    ) external returns (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) {
+    )
+        external
+        returns (
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
+            address ape,
+            address uniswapPool
+        )
+    {
         unchecked {
             vaultState = _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
 
             // Get price and update oracle state if needed
-            reserves.tickPriceX42 = oracle.updateOracleState(vaultParams.collateralToken, vaultParams.debtToken);
+            (reserves.tickPriceX42, uniswapPool) = oracle.updateOracleState(
+                vaultParams.collateralToken,
+                vaultParams.debtToken
+            );
 
             // Derive APE address if needed
             if (isAPE) ape = ClonesWithImmutableArgs.addressOfClone3(bytes32(uint256(vaultState.vaultId)));
