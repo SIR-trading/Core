@@ -147,13 +147,19 @@ contract Vault is TEA {
             bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne);
 
             // Swap
-            IUniswapV3Pool(uniswapPool).swap(
+            (int256 amount0, int256 amount1) = IUniswapV3Pool(uniswapPool).swap(
                 address(msg.sender),
                 zeroForOne,
                 int256(amountToDeposit),
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
                 data
             );
+
+            // Retrieve amount of collateral received from the Uniswap pool
+            uint256 collateralToDeposit = zeroForOne ? uint256(-amount1) : uint256(-amount0);
+
+            // Check collateral is sufficient
+            require(collateralToDeposit >= collateralToDepositMin);
 
             // Get amount of tokens
             assembly {
