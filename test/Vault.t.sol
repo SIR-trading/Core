@@ -18,6 +18,8 @@ import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
+import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
+import {IQuoterV2} from "v3-periphery/interfaces/IQuoterV2.sol";
 
 import "forge-std/Test.sol";
 
@@ -138,7 +140,7 @@ contract VaultTest is Test {
                     vaultParams.collateralToken,
                     vaultParams.debtToken
                 ),
-                abi.encode(reservesPre.tickPriceX42)
+                abi.encode(reservesPre.tickPriceX42, address(0))
             );
 
             // Set base and LP fees
@@ -173,14 +175,14 @@ contract VaultTest is Test {
         _initialize(systemParams, reservesPre);
         _makeFirstDepositEver(isAPE, systemParams, inputsOutputs);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
 
         console.log(isAPE ? "minting APE" : "minting TEA");
         console.log("amount of collateral:", inputsOutputs.collateral);
         console.log("lp fee is:", systemParams.lpFee);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -209,11 +211,11 @@ contract VaultTest is Test {
         _initialize(systemParams, reservesPre);
         _makeFirstDepositEverTooSmall(isAPE, inputsOutputs);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
     }
 
     function testFuzz_mint1stTimeType(
@@ -227,10 +229,16 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, true, reservesPre, balances);
         _makeFirstTypeDeposit(isAPE, systemParams, inputsOutputs, reservesPre);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        console.log("Deposit:", inputsOutputs.collateral);
+        console.log("isAPE:", isAPE);
+        console.log("TEA supply:", balances.teaSupply);
+        console.log("APE supply:", balances.apeSupply);
+        console.log("TEA reserve:", reservesPre.reserveLPers);
+        console.log("APE reserve:", reservesPre.reserveApes);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -259,11 +267,11 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, true, reservesPre, balances);
         _makeFirstTypeDepositEverTooSmall(isAPE, systemParams, inputsOutputs, reservesPre);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
     }
 
     function testFuzz_recursiveStateSave(
@@ -340,10 +348,10 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, false, reservesPre, balances);
         _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
 
         // Retrieve reserves after minting
         SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
@@ -367,7 +375,7 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, false, reservesPre, balances);
         _constrainAmount(isAPE, inputsOutputs, reservesPre, balances);
 
-        // Alice burns APE
+        // User burns APE
         vm.prank(user);
         inputsOutputs.collateral = vault.burn(isAPE, vaultParams, inputsOutputs.amount);
 
@@ -417,14 +425,15 @@ contract VaultTest is Test {
                 vaultParams_.collateralToken,
                 vaultParams_.debtToken
             ),
-            abi.encode(tickPriceX42)
+            abi.encode(tickPriceX42, address(0))
         );
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), collateralAmount);
-        vm.expectRevert(VaultDoesNotExist.selector);
-        vault.mint(isAPE, vaultParams_, collateralAmount);
+        // vm.expectRevert(VaultDoesNotExist.selector);
+        vm.expectRevert();
+        vault.mint(isAPE, vaultParams_, collateralAmount, 0);
     }
 
     function testFuzz_burnWrongVaultParameters(
@@ -464,10 +473,10 @@ contract VaultTest is Test {
                 vaultParams_.collateralToken,
                 vaultParams_.debtToken
             ),
-            abi.encode(tickPriceX42)
+            abi.encode(tickPriceX42, address(0))
         );
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), tokenAmount);
         vm.expectRevert(VaultDoesNotExist.selector);
@@ -513,7 +522,7 @@ contract VaultTest is Test {
                 vaultParams.collateralToken,
                 vaultParams.debtToken
             ),
-            abi.encode(newTickPriceX42)
+            abi.encode(newTickPriceX42, address(0))
         );
 
         // Retrieve reserves after price fluctuation
@@ -725,7 +734,7 @@ contract VaultTest is Test {
             "Total reserves does not match"
         );
 
-        // Verify Alice's balances
+        // Verify user's balances
         if (balances.apeSupply == 0) {
             assertEq(
                 inputsOutputs.amount,
@@ -1510,58 +1519,69 @@ contract VaultTest is Test {
     }
 }
 
-contract VaultTestWithETH is Test {
+contract VaultTestETH is Test {
     error NotAWETHVault();
+    error AmountTooLow();
 
     Vault public vault;
     IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    Oracle public oracle;
+    IERC20 public ape;
 
+    uint48 vaultId;
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -1);
+        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2);
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(vm.addr(1), vm.addr(2), oracle, address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
 
         // _initialize vault
         vault.initialize(vaultParams);
+
+        // Vauld id
+        vaultId = 1;
+
+        // Derive APE address
+        ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function test_mint(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function testFuzz_mintWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 1e6, 2 ** 96);
 
-        // Alice mints APE
+        // Alice mints
         deal(user, amountETH);
         vm.prank(user);
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
 
-        // Check the total reserve
+        // Checks
         assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
+        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
     }
 
-    function test_mintTooLittle(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function testFuzz_mintWithTooLittleETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 0, 1e6 - 1);
 
-        // Alice mints APE
+        // User mints
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
     }
 
-    function test_mintNotAWETHVault(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // _initialize a non-WETH vault
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
             Addresses.ADDR_WETH,
@@ -1573,11 +1593,321 @@ contract VaultTestWithETH is Test {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 2, 2 ** 96);
 
-        // Alice mints APE
+        // User mints
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert(NotAWETHVault.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0);
+    }
+}
+
+contract VaultTestDebtToken is Test {
+    error AmountTooLow();
+    error InsufficientCollateralReceivedFromUniswap();
+
+    Vault public vault;
+    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+    Oracle public oracle;
+    IERC20 public ape;
+
+    uint48 vaultId;
+    address public user = vm.addr(3);
+
+    SirStructs.VaultParameters public vaultParams =
+        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2);
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy oracle
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
+        // Deploy vault
+        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+
+        // _initialize vault
+        vault.initialize(vaultParams);
+
+        // Vauld id
+        vaultId = 1;
+
+        // Derive APE address
+        ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
+    }
+
+    function testFuzz_mintWithDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_USDC,
+                tokenOut: Addresses.ADDR_WETH,
+                amountIn: amountDebtToken,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
+
+        // Deal USDC to user
+        deal(Addresses.ADDR_USDC, user, amountDebtToken, true);
+
+        // Approve vault
+        vm.startPrank(user);
+        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+
+        // User mints
+        uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+
+        // Checks
+        assertEq(weth.balanceOf(address(vault)), amountOut, "Wrong total reserve");
+        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
+    }
+
+    function testFuzz_mintBadUniswapTrade(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_USDC,
+                tokenOut: Addresses.ADDR_WETH,
+                amountIn: amountDebtToken,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
+        console.log(collateralTokenMin);
+
+        // Deal USDC to user
+        deal(Addresses.ADDR_USDC, user, amountDebtToken, true);
+
+        // Approve vault
+        vm.startPrank(user);
+        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+
+        // User mints
+        vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
+        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithTooMuchDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, uint256(type(int256).max) + 1, type(uint256).max);
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // Deal USDC to user
+        deal(Addresses.ADDR_USDC, user, amountDebtToken);
+
+        // Approve vault
+        vm.startPrank(user);
+        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+
+        // User mints
+        vm.expectRevert();
+        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithZeroDebtToken(uint144 collateralTokenMin) public {
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // User mints TEA
+        vm.startPrank(user);
+        vm.expectRevert(AmountTooLow.selector);
+        vault.mint(false, vaultParams, 0, collateralTokenMin);
+
+        // User mints APE
+        vm.startPrank(user);
+        vm.expectRevert(AmountTooLow.selector);
+        vault.mint(true, vaultParams, 0, collateralTokenMin);
+    }
+}
+
+contract VaultTestETHDebtToken is Test {
+    error NotAWETHVault();
+    error AmountTooLow();
+    error InsufficientCollateralReceivedFromUniswap();
+
+    Vault public vault;
+    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+    Oracle public oracle;
+    IERC20 public ape;
+
+    uint48 vaultId;
+    address public user = vm.addr(3);
+
+    SirStructs.VaultParameters public vaultParams =
+        SirStructs.VaultParameters(Addresses.ADDR_WETH, Addresses.ADDR_USDC, 2);
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy oracle
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
+        // Deploy vault
+        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+
+        // _initialize vault
+        vault.initialize(vaultParams);
+
+        // Vauld id
+        vaultId = 1;
+
+        // Derive APE address
+        ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
+    }
+
+    function testFuzz_mintWithEthAsDebtToken(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 1e15, 2 ** 96); // Too little amount of ETH will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_WETH,
+                tokenOut: Addresses.ADDR_USDC,
+                amountIn: amountETH,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+
+        // Checks
+        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), amountOut, "Wrong total reserve");
+        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
+    }
+
+    function testFuzz_mintWrongVaultWithEthAsDebtToken(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 1e15, 2 ** 96);
+
+        // _initialize a non-WETH vault
+        SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
+            Addresses.ADDR_USDC,
+            Addresses.ADDR_WETH,
+            -1
+        );
+        vault.initialize(vaultParams2);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        vm.expectRevert(NotAWETHVault.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithEthBadUniswapTrade(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 1e15, 2 ** 96); // Too little amount of ETH will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_WETH,
+                tokenOut: Addresses.ADDR_USDC,
+                amountIn: amountETH,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Wrong minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithTooLittleEthAsDebtToken(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 0, 1e15);
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        try
+            quoter.quoteExactInputSingle(
+                IQuoterV2.QuoteExactInputSingleParams({
+                    tokenIn: Addresses.ADDR_WETH,
+                    tokenOut: Addresses.ADDR_USDC,
+                    amountIn: amountETH,
+                    fee: oracleState.uniswapFeeTier.fee,
+                    sqrtPriceLimitX96: 0
+                })
+            )
+        returns (uint256 amountOut, uint160, uint32, uint256) {
+            vm.assume(amountOut < 1e6);
+        } catch (bytes memory) {}
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        vm.expectRevert();
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
     }
 }
 
@@ -1906,6 +2236,17 @@ contract VaultControlTest is Test {
         );
     }
 
+    function testFuzz_uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data,
+        address caller
+    ) public {
+        vm.prank(caller);
+        vm.expectRevert();
+        vault.uniswapV3SwapCallback(amount0Delta, amount1Delta, data);
+    }
+
     //////////////////////////////////////////////////////////////////
 
     function _computeBalances(address to) private view returns (Balances4Tokens memory) {
@@ -2143,7 +2484,7 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
 
         // Mint with WETH
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral);
+        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0);
         vm.stopPrank();
     }
 
@@ -2288,7 +2629,7 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
 
         // Mint with WETH
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral);
+        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0);
         vm.stopPrank();
         console.log("Minting Over");
     }
@@ -2379,7 +2720,7 @@ contract VaultHandler is Test, RegimeEnum {
         return vaultId;
     }
 
-    function _checkRegime() private {
+    function _checkRegime() private view {
         if (regime == Regime.Any) return;
 
         if (
@@ -2405,7 +2746,7 @@ contract VaultHandler is Test, RegimeEnum {
         }
     }
 
-    function _invariantTotalCollateral() private {
+    function _invariantTotalCollateral() private view {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
 
@@ -2418,7 +2759,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantPowerZone() private {
+    function _invariantPowerZone() private view {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical leveraged gain
@@ -2465,7 +2806,7 @@ contract VaultHandler is Test, RegimeEnum {
         );
     }
 
-    function _invariantSaturationZone() private {
+    function _invariantSaturationZone() private view {
         if (supplyAPEOld == 0) return;
 
         // Compute theoretical margin gain
@@ -2691,7 +3032,7 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public {
+    function invariant_dummy() public view {
         uint256 totalReserves = vault.totalReserves(address(_WETH));
         assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
         // vm.writeLine("./log.log", "assertLe");

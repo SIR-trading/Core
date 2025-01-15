@@ -9,7 +9,10 @@ import {SystemControlAccess} from "./SystemControlAccess.sol";
 
 import "forge-std/console.sol";
 
-// Contracts
+/** @notice The SIR ERC-20 token is managed partially here and by the Staker contract.
+    @notice In particular this contract handles the external functions for minting SIR by contributors,
+    @notice who have a fixed allocation for the first 3 years, and LPers. 
+ */
 contract SIR is Staker, SystemControlAccess {
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
 
@@ -23,6 +26,9 @@ contract SIR is Staker, SystemControlAccess {
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /** @param contributor whose unclaimed SIR rewards are to be checked
+        @return unclaimed SIR rewards of a contributor
+     */
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
             // Get the contributor's allocation
@@ -70,6 +76,8 @@ contract SIR is Staker, SystemControlAccess {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /** @return rewards in SIR received by a contributor
+     */
     function contributorMint() external returns (uint80 rewards) {
         require(_mintingAllowed);
 
@@ -84,6 +92,9 @@ contract SIR is Staker, SystemControlAccess {
         timestampLastMint[msg.sender] = uint40(block.timestamp);
     }
 
+    /** @param vaultId of the vault for which the LPer wants to claim SIR
+        @return rewards in SIR received by an LPer
+     */
     function lPerMint(uint256 vaultId) public returns (uint80 rewards) {
         require(_mintingAllowed);
 
@@ -97,6 +108,8 @@ contract SIR is Staker, SystemControlAccess {
         emit RewardsClaimed(msg.sender, vaultId, rewards);
     }
 
+    /** @notice Auxiliary function for minting SIR rewards and staking them immediately in one call
+     */
     function lPerMintAndStake(uint256 vaultId) external returns (uint80 rewards) {
         // Get unclaimed rewards
         rewards = lPerMint(vaultId);

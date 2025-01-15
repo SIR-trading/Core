@@ -46,5 +46,8 @@ interface IOracle {
 
     function state(address token0, address token1) external view returns (SirStructs.OracleState memory);
 
-    function updateOracleState(address collateralToken, address debtToken) external returns (int64);
+    function updateOracleState(
+        address collateralToken,
+        address debtToken
+    ) external returns (int64 tickPriceX42, address uniswapPoolAddress);
 }

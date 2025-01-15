@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity >=0.8.0;
+// Solmate mod of its ERC20 implementation
+pragma solidity ^0.8.0;
 
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
@@ -9,7 +10,9 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 
 import "forge-std/console.sol";
 
-/** @notice Solmate mod
+/** @notice The Staker contract handles mostly the staking of SIR tokens, and the token auctions.
+    @notice Collection of fees from the vault can be triggered by anyone and also start an auction to convert them to ETH.
+    @notice Stakers only receive dividends in the form of ETH.
     @dev SIR supply is designed to fit in a 80-bit unsigned integer.
     @dev ETH supply is 120.2M approximately with 18 decimals, which fits in a 88-bit unsigned integer.
     @dev With 96 bits, we can represent 79,2B ETH, which is 659 times more than the current supply. 
@@ -98,7 +101,7 @@ contract Staker {
         return _stakersParams[account].stake + balances[account].balanceOfSIR;
     }
 
-    // Return transferable SIR only
+    // Return transferable (unstaked) SIR only
     function supply() external view returns (uint256) {
         return _supply.balanceOfSIR;
     }
@@ -108,7 +111,7 @@ contract Staker {
         return stakingParams.stake + _supply.balanceOfSIR;
     }
 
-    // Return supply as if all tokens were in circulation (including unminted from LPers and contributors, staked and unstaked)
+    // Return supply as if all tokens were in circulation (i.e., unclaimed SIR from LPers and contributors, staked SIR and unstaked SIR)
     function maxTotalSupply() external view returns (uint256) {
         return SystemConstants.ISSUANCE * (block.timestamp - vault.TIMESTAMP_ISSUANCE_START());
     }
@@ -232,6 +235,11 @@ contract Staker {
                             STAKING FUNCTIONS 
     ////////////////////////////////////////////////////////////////*/
 
+    /** @notice Stakes SIR tokens
+        @notice Tokens can be unstaked at any time.
+        @notice Your tokens must be staked during a dividend payment to receive ETH dividends
+        @param amount of SIR to stake
+     */
     function stake(uint80 amount) public {
         Balance memory balance = balances[msg.sender];
         SirStructs.StakingParams memory stakingParams_ = stakingParams;
@@ -259,6 +267,9 @@ contract Staker {
         }
     }
 
+    /** @notice Unstakes SIR tokens
+        @param amount of SIR to unstake
+     */
     function unstake(uint80 amount) public {
         Balance memory balance = balances[msg.sender];
         SirStructs.StakingParams memory stakingParams_ = stakingParams;
@@ -286,6 +297,10 @@ contract Staker {
         }
     }
 
+    /** @notice Claim ETH dividends.
+        @notice You can claim even if you already unstaked you SIR.
+        @return dividends_ of ETH received
+     */
     function claim() public returns (uint96 dividends_) {
         unchecked {
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
@@ -308,12 +323,18 @@ contract Staker {
         }
     }
 
+    /** @notice Convenient function for unstaking SIR and claim ETH dividens in one call.
+        @param amount of SIR to unstake
+        @return dividends_ received in ETH 
+     */
     function unstakeAndClaim(uint80 amount) external returns (uint96 dividends_) {
         unstake(amount);
         return claim();
     }
 
-    function dividends(address staker) public view returns (uint96) {
+    /** @return amount of unclaimed ETH
+     */
+    function unclaimedDividends(address staker) external view returns (uint96) {
         return _dividends(balances[staker], stakingParams, _stakersParams[staker]);
     }
 

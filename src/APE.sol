@@ -12,8 +12,10 @@ import {Vault} from "./Vault.sol";
 
 import "forge-std/console.sol";
 
-/**
- * @dev Modified from Solmate's ERC20.sol
+/** @notice Every APE token from every vault is its own ERC-20 token.
+    @notice It is deployed during the initialization of the vault.
+    @dev To minimize gas cost we use the ClonesWithImmutableArgs library to replicate the contract.
+    @dev Modified from Solmate's ERC20.sol
  */
 contract APE is Clone {
     error PermitDeadlineExpired();
@@ -187,6 +189,9 @@ contract APE is Clone {
                        MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
+    /** @dev This function is called when a user mints APE.
+        @dev It splits the collateral amount between the minter, stakers and POL and updates the total supply and balances.
+     */
     function mint(
         address to,
         uint16 baseFee,
@@ -215,6 +220,9 @@ contract APE is Clone {
         newReserves = reserves; // Important because memory is not persistent across external calls
     }
 
+    /** @dev This function is called when a user burns APE.
+        @dev It splits the collateral amount between the minter, stakers and POL and updates the total supply and balances.
+     */
     function burn(
         address from,
         uint16 baseFee,

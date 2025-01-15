@@ -930,14 +930,12 @@ contract SystemStateTest is Test {
         skip(delay2);
 
         // Check system vaultState
-        console.log("here");
         systemParams_ = systemState.systemParams();
-        console.log("there");
 
         assertEq(
             systemParams_.baseFee.fee,
-            delay2 <= SystemConstants.FEE_CHANGE_DELAY
-                ? (delay1 <= SystemConstants.FEE_CHANGE_DELAY ? systemParams0.baseFee.fee : baseFee1)
+            delay2 < SystemConstants.FEE_CHANGE_DELAY
+                ? (delay1 < SystemConstants.FEE_CHANGE_DELAY ? systemParams0.baseFee.fee : baseFee1)
                 : baseFee2
         ); // Only base fee is updated
         assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);

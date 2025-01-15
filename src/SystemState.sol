@@ -6,6 +6,9 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
+/** @dev Contract handling the few protocol-wide parameters,
+    @dev and some of the functions for keeping track of the SIR rewards assign to vaults.
+ */
 abstract contract SystemState is SystemControlAccess {
     /** Choice of types for 'cumulativeSIRPerTEAx96' and 'unclaimedRewards'
 
@@ -226,8 +229,7 @@ abstract contract SystemState is SystemControlAccess {
             );
     }
 
-    /**
-     * @dev To be called BEFORE transfering/minting/burning TEA
+    /** @dev To be called BEFORE transfering/minting/burning TEA
      */
     function updateLPerIssuanceParams(
         bool sirIsCaller,
@@ -277,7 +279,11 @@ abstract contract SystemState is SystemControlAccess {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /// @dev All checks and balances to be done at system control
+    /** @notice This function can only be called by the SystemControl contract
+        @notice It updates the base fee charge to apes, the fee charged to LPers when minting or haults all minting.
+        @dev All these parameters are update in a single function for minimize bytecode.
+        @dev All checks and balances to be done at system control
+     */
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
 
@@ -294,6 +300,10 @@ abstract contract SystemState is SystemControlAccess {
         _systemParams = systemParams_;
     }
 
+    /** @notice Updates the tax of the vaults whose fees are distributed to stakers of SIR.
+        @notice The amount of SIR rewards received by LPers of a vault is proportional to the tax of the vault. 0 tax implies no SIR rewards.
+        @notice This function can only be called by the SystemControl contract.
+     */
     function updateVaults(
         uint48[] calldata oldVaults,
         uint48[] calldata newVaults,

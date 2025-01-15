@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
 
 // Libraries
 import {SirStructs} from "./SirStructs.sol";
@@ -18,6 +19,7 @@ library VaultExternal {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error VaultDoesNotExist();
+    error NotAWETHVault();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -174,18 +176,48 @@ library VaultExternal {
             storage _vaultStates,
         Oracle oracle,
         SirStructs.VaultParameters calldata vaultParams
-    ) external returns (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape) {
+    )
+        external
+        returns (
+            SirStructs.VaultState memory vaultState,
+            SirStructs.Reserves memory reserves,
+            address ape,
+            address uniswapPool
+        )
+    {
         unchecked {
             vaultState = _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier];
 
             // Get price and update oracle state if needed
-            reserves.tickPriceX42 = oracle.updateOracleState(vaultParams.collateralToken, vaultParams.debtToken);
+            (reserves.tickPriceX42, uniswapPool) = oracle.updateOracleState(
+                vaultParams.collateralToken,
+                vaultParams.debtToken
+            );
 
             // Derive APE address if needed
             if (isAPE) ape = ClonesWithImmutableArgs.addressOfClone3(bytes32(uint256(vaultState.vaultId)));
 
             _getReserves(vaultState, reserves, vaultParams.leverageTier);
         }
+    }
+
+    function wrapETH(
+        SirStructs.VaultParameters memory vaultParams,
+        uint144 collateralToDepositMin,
+        address weth
+    ) external returns (uint256 amountToDeposit) {
+        // Minter sent ETH, so we need to check that this is a WETH vault
+        if (collateralToDepositMin == 0) {
+            if (vaultParams.collateralToken != weth) revert NotAWETHVault();
+        } else {
+            if (vaultParams.debtToken != weth) revert NotAWETHVault();
+        }
+
+        // msg.value is the amount to deposit
+        amountToDeposit = msg.value;
+
+        // We must wrap it to WETH
+        IWETH9(weth).deposit{value: msg.value}();
     }
 
     function _getReserves(
