@@ -1838,6 +1838,75 @@ contract VaultTestETHDebtToken is Test {
         // User mints
         vm.prank(user);
         vm.expectRevert(NotAWETHVault.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithEthBadUniswapTrade(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 1e15, 2 ** 96); // Too little amount of ETH will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_WETH,
+                tokenOut: Addresses.ADDR_USDC,
+                amountIn: amountETH,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Wrong minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithTooLittleEthAsDebtToken(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 0, 1e15);
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        try
+            quoter.quoteExactInputSingle(
+                IQuoterV2.QuoteExactInputSingleParams({
+                    tokenIn: Addresses.ADDR_WETH,
+                    tokenOut: Addresses.ADDR_USDC,
+                    amountIn: amountETH,
+                    fee: oracleState.uniswapFeeTier.fee,
+                    sqrtPriceLimitX96: 0
+                })
+            )
+        returns (uint256 amountOut, uint160, uint32, uint256) {
+            vm.assume(amountOut < 1e6);
+        } catch (bytes memory) {}
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        vm.expectRevert();
         vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
     }
 }
