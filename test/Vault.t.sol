@@ -1519,19 +1519,20 @@ contract VaultTest is Test {
     }
 }
 
-contract VaultTestSpecial is Test {
+contract VaultTestETH is Test {
     error NotAWETHVault();
+    error AmountTooLow();
 
     Vault public vault;
     IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
-    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
     Oracle public oracle;
+    IERC20 public ape;
 
+    uint48 vaultId;
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -1);
+        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2);
 
     function setUp() public {
         vm.createSelectFork("mainnet", 18128102);
@@ -1547,22 +1548,29 @@ contract VaultTestSpecial is Test {
 
         // _initialize vault
         vault.initialize(vaultParams);
+
+        // Vauld id
+        vaultId = 1;
+
+        // Derive APE address
+        ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function test_mintWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function testFuzz_mintWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 1e6, 2 ** 96);
 
         // Alice mints
         deal(user, amountETH);
         vm.prank(user);
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
 
-        // Check the total reserve
+        // Checks
         assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
+        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
     }
 
-    function test_mintWithTooLittleETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function testFuzz_mintWithTooLittleETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 0, 1e6 - 1);
 
@@ -1573,7 +1581,7 @@ contract VaultTestSpecial is Test {
         vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
     }
 
-    function test_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // _initialize a non-WETH vault
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
             Addresses.ADDR_WETH,
@@ -1591,12 +1599,49 @@ contract VaultTestSpecial is Test {
         vm.expectRevert(NotAWETHVault.selector);
         vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0);
     }
+}
 
-    function test_mintWithDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
-        amountDebtToken = _bound(amountDebtToken, 1e6, uint256(type(int256).max));
+contract VaultTestDebtToken is Test {
+    error AmountTooLow();
+    error InsufficientCollateralReceivedFromUniswap();
 
-        console.log("Depositing", amountDebtToken);
-        console.log("Demanding", collateralTokenMin);
+    Vault public vault;
+    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+    Oracle public oracle;
+    IERC20 public ape;
+
+    uint48 vaultId;
+    address public user = vm.addr(3);
+
+    SirStructs.VaultParameters public vaultParams =
+        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2);
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy oracle
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
+        // Deploy vault
+        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+
+        // _initialize vault
+        vault.initialize(vaultParams);
+
+        // Vauld id
+        vaultId = 1;
+
+        // Derive APE address
+        ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
+    }
+
+    function testFuzz_mintWithDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
 
         // Quote how much collateral we will get
         SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
@@ -1609,10 +1654,9 @@ contract VaultTestSpecial is Test {
                 sqrtPriceLimitX96: 0
             })
         );
-        // vm.assume(amountOut > 0);
-        console.log("Quoter esimates amount out is", amountOut);
+        vm.assume(amountOut >= 1e6);
 
-        // Upperbound minimum collateral required'
+        // Upperbound minimum collateral required
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
 
         // Deal USDC to user
@@ -1624,10 +1668,177 @@ contract VaultTestSpecial is Test {
 
         // User mints
         uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
-        console.log("Amount of tokens minted is", amount);
 
-        // Check the total reserve
+        // Checks
         assertEq(weth.balanceOf(address(vault)), amountOut, "Wrong total reserve");
+        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
+    }
+
+    function testFuzz_mintBadUniswapTrade(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_USDC,
+                tokenOut: Addresses.ADDR_WETH,
+                amountIn: amountDebtToken,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
+        console.log(collateralTokenMin);
+
+        // Deal USDC to user
+        deal(Addresses.ADDR_USDC, user, amountDebtToken, true);
+
+        // Approve vault
+        vm.startPrank(user);
+        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+
+        // User mints
+        vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
+        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithTooMuchDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, uint256(type(int256).max) + 1, type(uint256).max);
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // Deal USDC to user
+        deal(Addresses.ADDR_USDC, user, amountDebtToken);
+
+        // Approve vault
+        vm.startPrank(user);
+        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+
+        // User mints
+        vm.expectRevert();
+        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+    }
+
+    function testFuzz_mintWithZeroDebtToken(uint144 collateralTokenMin) public {
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // User mints TEA
+        vm.startPrank(user);
+        vm.expectRevert(AmountTooLow.selector);
+        vault.mint(false, vaultParams, 0, collateralTokenMin);
+
+        // User mints APE
+        vm.startPrank(user);
+        vm.expectRevert(AmountTooLow.selector);
+        vault.mint(true, vaultParams, 0, collateralTokenMin);
+    }
+}
+
+contract VaultTestETHDebtToken is Test {
+    error NotAWETHVault();
+    error AmountTooLow();
+    error InsufficientCollateralReceivedFromUniswap();
+
+    Vault public vault;
+    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+    Oracle public oracle;
+    IERC20 public ape;
+
+    uint48 vaultId;
+    address public user = vm.addr(3);
+
+    SirStructs.VaultParameters public vaultParams =
+        SirStructs.VaultParameters(Addresses.ADDR_WETH, Addresses.ADDR_USDC, 2);
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 18128102);
+
+        // Deploy oracle
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+
+        // Deploy APE implementation
+        APE apeImplementation = new APE();
+
+        // Deploy vault
+        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+
+        // _initialize vault
+        vault.initialize(vaultParams);
+
+        // Vauld id
+        vaultId = 1;
+
+        // Derive APE address
+        ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
+    }
+
+    function testFuzz_mintWithEthAsDebtToken(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 1e15, 2 ** 96); // Too little amount of ETH will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_WETH,
+                tokenOut: Addresses.ADDR_USDC,
+                amountIn: amountETH,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        vm.assume(amountOut >= 1e6);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+
+        // Checks
+        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), amountOut, "Wrong total reserve");
+        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
+    }
+
+    function testFuzz_mintWrongVaultWithEthAsDebtToken(
+        bool isAPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
+        uint144 collateralTokenMin
+    ) public {
+        amountETH = _bound(amountETH, 1e15, 2 ** 96);
+
+        // _initialize a non-WETH vault
+        SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
+            Addresses.ADDR_USDC,
+            Addresses.ADDR_WETH,
+            -1
+        );
+        vault.initialize(vaultParams2);
+
+        // Upperbound minimum collateral required
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
+
+        // Deal ETH to user
+        deal(user, amountETH);
+
+        // User mints
+        vm.prank(user);
+        vm.expectRevert(NotAWETHVault.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
     }
 }
 

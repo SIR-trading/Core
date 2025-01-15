@@ -101,7 +101,8 @@ contract Vault is TEA {
         uint144 collateralToDepositMin
     ) external payable returns (uint256 amount) {
         // If ETH is received, we wrap it because we assume the user wants to mint with WETH
-        if (msg.value != 0) amountToDeposit = VaultExternal.wrapETH(vaultParams, collateralToDepositMin, _WETH);
+        bool isETH = msg.value != 0;
+        if (isETH) amountToDeposit = VaultExternal.wrapETH(vaultParams, collateralToDepositMin, _WETH);
 
         // Cannot deposit 0
         if (amountToDeposit == 0) revert AmountTooLow();
@@ -145,7 +146,7 @@ contract Vault is TEA {
 
             // Encode data for swap callback
             bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
-            bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne);
+            bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne, isETH);
 
             // Swap
             (int256 amount0, int256 amount1) = IUniswapV3Pool(uniswapPool).swap(
@@ -184,10 +185,11 @@ contract Vault is TEA {
             SirStructs.VaultParameters memory vaultParams,
             SirStructs.VaultState memory vaultState,
             SirStructs.Reserves memory reserves,
-            bool zeroForOne
+            bool zeroForOne,
+            bool isETH
         ) = abi.decode(
                 data,
-                (address, address, SirStructs.VaultParameters, SirStructs.VaultState, SirStructs.Reserves, bool)
+                (address, address, SirStructs.VaultParameters, SirStructs.VaultState, SirStructs.Reserves, bool, bool)
             );
 
         // Retrieve amount of collateral to deposit and check it does not exceed max
@@ -201,7 +203,12 @@ contract Vault is TEA {
 
         // Transfer debt token to the pool
         // This is done last to avoid reentrancy attack from a bogus debt token contract
-        TransferHelper.safeTransferFrom(vaultParams.debtToken, minter, uniswapPool, debtTokenToSwap);
+        TransferHelper.safeTransferFrom(
+            vaultParams.debtToken,
+            isETH ? address(this) : minter,
+            uniswapPool,
+            debtTokenToSwap
+        );
 
         // Use the transient storage to return amount of tokens minted to the mint function
         assembly {
