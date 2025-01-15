@@ -12,6 +12,10 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 // Smart contracts
 import {Ownable} from "openzeppelin/access/Ownable.sol";
 
+/** @notice The SIR protocol is an immutable protocol.
+    @notice However, during the beta phase (TrainingWheels) a few parameters will be tunable,
+    @notice and the protocol has a few safety mechanisms to save users in case of a critical bug.
+ */
 contract SystemControl is Ownable {
     /** Flow chart of the system 4 possible states:
         +---------------+      +---------------+       +---------------+      +---------------+

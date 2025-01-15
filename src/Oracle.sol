@@ -11,6 +11,12 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 
 import "forge-std/console.sol";
 
+/** @notice The Oracle contract is our interface to Uniswap v3 pools and their oracle data.
+    @notice It allows the SIR protocol to retrieve the TWAP of any pair of tokens,
+    @notice without worrying about which fee tier to use, nor whether the pool exists,
+    @notice nor if the TWAP is initialized to the proper length.
+    @notice This oracle is permissionless and requires no administrative access. 
+ */
 contract Oracle {
     error NoUniswapPool();
     error UniswapFeeTierIndexOutOfBounds();
@@ -36,9 +42,7 @@ contract Oracle {
     );
     event OracleFeeTierChanged(uint24 feeTierPrevious, uint24 feeTierSelected);
 
-    /**
-     * This struct is used to pass data between function.
-     */
+    // This struct is used to pass data between functions.
     struct UniswapOracleData {
         IUniswapV3Pool uniswapPool; // Uniswap v3 pool
         int56 aggPriceTick; // Aggregated log price over the period
@@ -69,11 +73,16 @@ contract Oracle {
                             READ-ONLY FUNCTIONS
     /////////////////////////////////////////////////////////////////*/
 
+    /** @return the state of the Oracle for a pair of tokens ordered lexicographically
+     */
     function state(address token0, address token1) external view returns (SirStructs.OracleState memory) {
         require(token0 < token1);
         return _state[token0][token1];
     }
 
+    /** @notice Function for getting all the uniswap fee tiers
+        @notice If a new fee tier is added, anyone can add it using the `newUniswapFeeTier` function
+     */
     function getUniswapFeeTiers() public view returns (SirStructs.UniswapFeeTier[] memory uniswapFeeTiers) {
         unchecked {
             // Find out # of all possible fee tiers
@@ -100,8 +109,7 @@ contract Oracle {
         }
     }
 
-    /**
-     * @return the TWAP price of the pair of tokens
+    /** @return the TWAP price of the pair of tokens
      */
     function getPrice(address collateralToken, address debtToken) external view returns (int64) {
         unchecked {
@@ -218,7 +226,7 @@ contract Oracle {
         }
     }
 
-    // Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
+    /// @notice Anyone can let the SIR factory know that a new fee tier exists in Uniswap V3
     function newUniswapFeeTier(uint24 fee) external {
         require(fee > 0);
 
@@ -249,8 +257,8 @@ contract Oracle {
         emit UniswapFeeTierAdded(fee);
     }
 
-    /** @notice Update the oracle _state for the pair of tokens
-        @notice The order of the tokens does not matter for updating the oracle _state, it only matters if we need to retrie the price
+    /** @notice Update the oracle price for a pair of tokens, so that calls in the same block don't need to call Uniswap again.
+        @notice This function also checks periodically if there is a better fee tier.
         @return tickPriceX42 TWAP price of the pair of tokens
         @return uniswapPoolAddress address of the pool
      */

@@ -44,7 +44,7 @@ contract DistributeDividends is Script {
         sir.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
         // Number of dividends?
-        uint96 dividends = sir.dividends(vm.addr(privateKey));
+        uint96 dividends = sir.unclaimedDividends(vm.addr(privateKey));
         console.log("You own ", dividends, "wei in dividends");
 
         vm.stopBroadcast();

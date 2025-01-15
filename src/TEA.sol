@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity >=0.8.0;
+pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
@@ -17,7 +17,9 @@ import {SystemState} from "./SystemState.sol";
 
 import "forge-std/console.sol";
 
-/** @notice Modified from Solmate
+/** @notice Highly modified contract version from Solmate
+    @dev This is an ERC-1155 token contract.
+    @dev TEA manages all the LP tokens of all vaults in the protocol.
  */
 contract TEA is SystemState {
     error TEAMaxSupplyExceeded();
@@ -50,8 +52,10 @@ contract TEA is SystemState {
     event URI(string value, uint256 indexed id);
 
     mapping(address => mapping(uint256 => uint256)) internal balances;
-    /** Because of the protocol owned liquidity (POL) is updated on every mint/burn of TEA/APE, we packed both values,
-        totalSupply and POL balance, into a single uint256 to save gas on SLOADs.
+
+    /** Because the protocol owned liquidity (POL) is updated on every mint/burn of TEA/APE, we packed both values,
+        totalSupply and the POL balance, into a single uint256 to save gas on SLOADs.
+        POL is TEA owned by this same contract.
         Fortunately, the max supply of TEA fits in 128 bits, so we can use the other 128 bits for POL.
      */
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
@@ -73,10 +77,12 @@ contract TEA is SystemState {
         return uint48(_paramsById.length - 1);
     }
 
+    /// @notice The total circulating supply of TEA
     function totalSupply(uint256 vaultId) external view returns (uint256) {
         return totalSupplyAndBalanceVault[vaultId].totalSupply;
     }
 
+    /// @notice The total circulating supply of TEA excluding POL
     function supplyExcludeVault(uint256 vaultId) internal view override returns (uint256) {
         TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
         return totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault;
@@ -172,9 +178,9 @@ contract TEA is SystemState {
         }
     }
 
-    /**
-        @dev To avoid extra SLOADs, we also mint POL when minting TEA.
-        @dev It modifies reserves
+    /** @dev This function is called when a user mints TEA.
+        @dev It splits the collateral amount between the minter and POL.
+        @dev It also updates SIR rewards in case this vault is elligible for them.
      */
     function mint(
         address minter,
@@ -245,6 +251,9 @@ contract TEA is SystemState {
         emit TransferSingle(minter, address(0), address(this), vaultId, amountToPOL);
     }
 
+    /** @dev This function is called when a user burns TEA.
+        @dev It also updates SIR rewards in case this vault is elligible for them.
+     */
     function burn(
         uint48 vaultId,
         SirStructs.SystemParameters memory systemParams_,
@@ -295,8 +304,8 @@ contract TEA is SystemState {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /** @notice Make sure that even if the entire supply of the collateral token was deposited into the vault,
-        the amount of TEA minted is less than the maximum supply of TEA.
+    /** @dev Make sure that even if the entire supply of the collateral token was deposited into the vault,
+        @dev the amount of TEA minted is less than the maximum supply of TEA.
      */
     function _amountFirstMint(address collateral, uint144 collateralDeposited) private view returns (uint256 amount) {
         uint256 collateralTotalSupply = IERC20(collateral).totalSupply();
@@ -308,11 +317,16 @@ contract TEA is SystemState {
             : collateralDeposited * 1e6;
     }
 
+    /** @dev This helper function ensure, that the balance of the vault (POL)
+        @dev is not stored in the regular variable balances.
+     */
     function _setBalance(address account, uint256 vaultId, uint256 balance) private {
         if (account == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault = uint128(balance);
         else balances[account][vaultId] = balance;
     }
 
+    /** @dev Helper function for updating balances and SIR rewards when transfering TEA between accounts.
+     */
     function _updateBalances(address from, address to, uint256 vaultId, uint256 amount) private {
         // Update SIR issuances
         LPersBalances memory lpersBalances = LPersBalances(from, balances[from][vaultId], to, balanceOf(to, vaultId));
