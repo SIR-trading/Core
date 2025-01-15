@@ -22,6 +22,7 @@ import "forge-std/console.sol";
 
 contract Vault is TEA {
     error AmountTooLow();
+    error InsufficientCollateralReceivedFromUniswap();
 
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
         i.e., collateralFeeToLPers = collateralFeeToLPers + collateralFeeToProtocol
@@ -148,7 +149,7 @@ contract Vault is TEA {
 
             // Swap
             (int256 amount0, int256 amount1) = IUniswapV3Pool(uniswapPool).swap(
-                address(msg.sender),
+                address(this),
                 zeroForOne,
                 int256(amountToDeposit),
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
@@ -158,8 +159,8 @@ contract Vault is TEA {
             // Retrieve amount of collateral received from the Uniswap pool
             uint256 collateralToDeposit = zeroForOne ? uint256(-amount1) : uint256(-amount0);
 
-            // Check collateral is sufficient
-            require(collateralToDeposit >= collateralToDepositMin);
+            // Check collateral received is sufficient
+            if (collateralToDeposit < collateralToDepositMin) revert InsufficientCollateralReceivedFromUniswap();
 
             // Get amount of tokens
             assembly {

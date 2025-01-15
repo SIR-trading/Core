@@ -18,6 +18,8 @@ import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
+import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
+import {IQuoterV2} from "v3-periphery/interfaces/IQuoterV2.sol";
 
 import "forge-std/Test.sol";
 
@@ -173,7 +175,7 @@ contract VaultTest is Test {
         _initialize(systemParams, reservesPre);
         _makeFirstDepositEver(isAPE, systemParams, inputsOutputs);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
 
@@ -209,7 +211,7 @@ contract VaultTest is Test {
         _initialize(systemParams, reservesPre);
         _makeFirstDepositEverTooSmall(isAPE, inputsOutputs);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
@@ -227,7 +229,7 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, true, reservesPre, balances);
         _makeFirstTypeDeposit(isAPE, systemParams, inputsOutputs, reservesPre);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         console.log("Deposit:", inputsOutputs.collateral);
@@ -265,7 +267,7 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, true, reservesPre, balances);
         _makeFirstTypeDepositEverTooSmall(isAPE, systemParams, inputsOutputs, reservesPre);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
@@ -346,7 +348,7 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, false, reservesPre, balances);
         _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
@@ -373,7 +375,7 @@ contract VaultTest is Test {
         _constraintBalances(isAPE, false, reservesPre, balances);
         _constrainAmount(isAPE, inputsOutputs, reservesPre, balances);
 
-        // Alice burns APE
+        // User burns APE
         vm.prank(user);
         inputsOutputs.collateral = vault.burn(isAPE, vaultParams, inputsOutputs.amount);
 
@@ -426,7 +428,7 @@ contract VaultTest is Test {
             abi.encode(tickPriceX42, address(0))
         );
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), collateralAmount);
         // vm.expectRevert(VaultDoesNotExist.selector);
@@ -474,7 +476,7 @@ contract VaultTest is Test {
             abi.encode(tickPriceX42, address(0))
         );
 
-        // Alice mints APE
+        // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), tokenAmount);
         vm.expectRevert(VaultDoesNotExist.selector);
@@ -732,7 +734,7 @@ contract VaultTest is Test {
             "Total reserves does not match"
         );
 
-        // Verify Alice's balances
+        // Verify user's balances
         if (balances.apeSupply == 0) {
             assertEq(
                 inputsOutputs.amount,
@@ -1517,11 +1519,14 @@ contract VaultTest is Test {
     }
 }
 
-contract VaultTestWithETH is Test {
+contract VaultTestSpecial is Test {
     error NotAWETHVault();
 
     Vault public vault;
     IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+    Oracle public oracle;
 
     address public user = vm.addr(3);
 
@@ -1532,23 +1537,23 @@ contract VaultTestWithETH is Test {
         vm.createSelectFork("mainnet", 18128102);
 
         // Deploy oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(vm.addr(1), vm.addr(2), oracle, address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
 
         // _initialize vault
         vault.initialize(vaultParams);
     }
 
-    function test_mint(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function test_mintWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 1e6, 2 ** 96);
 
-        // Alice mints APE
+        // Alice mints
         deal(user, amountETH);
         vm.prank(user);
         vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
@@ -1557,18 +1562,18 @@ contract VaultTestWithETH is Test {
         assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
     }
 
-    function test_mintTooLittle(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function test_mintWithTooLittleETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 0, 1e6 - 1);
 
-        // Alice mints APE
+        // User mints
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert();
         vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
     }
 
-    function test_mintNotAWETHVault(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+    function test_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
         // _initialize a non-WETH vault
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
             Addresses.ADDR_WETH,
@@ -1580,11 +1585,49 @@ contract VaultTestWithETH is Test {
         // Constraint the amount of ETH
         amountETH = _bound(amountETH, 2, 2 ** 96);
 
-        // Alice mints APE
+        // User mints
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert(NotAWETHVault.selector);
         vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0);
+    }
+
+    function test_mintWithDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
+        amountDebtToken = _bound(amountDebtToken, 1e6, uint256(type(int256).max));
+
+        console.log("Depositing", amountDebtToken);
+        console.log("Demanding", collateralTokenMin);
+
+        // Quote how much collateral we will get
+        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
+            IQuoterV2.QuoteExactInputSingleParams({
+                tokenIn: Addresses.ADDR_USDC,
+                tokenOut: Addresses.ADDR_WETH,
+                amountIn: amountDebtToken,
+                fee: oracleState.uniswapFeeTier.fee,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        // vm.assume(amountOut > 0);
+        console.log("Quoter esimates amount out is", amountOut);
+
+        // Upperbound minimum collateral required'
+        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
+
+        // Deal USDC to user
+        deal(Addresses.ADDR_USDC, user, amountDebtToken, true);
+
+        // Approve vault
+        vm.startPrank(user);
+        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+
+        // User mints
+        uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+        console.log("Amount of tokens minted is", amount);
+
+        // Check the total reserve
+        assertEq(weth.balanceOf(address(vault)), amountOut, "Wrong total reserve");
     }
 }
 
