@@ -2236,6 +2236,17 @@ contract VaultControlTest is Test {
         );
     }
 
+    function testFuzz_uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data,
+        address caller
+    ) public {
+        vm.prank(caller);
+        vm.expectRevert();
+        vault.uniswapV3SwapCallback(amount0Delta, amount1Delta, data);
+    }
+
     //////////////////////////////////////////////////////////////////
 
     function _computeBalances(address to) private view returns (Balances4Tokens memory) {
