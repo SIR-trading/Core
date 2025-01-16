@@ -521,7 +521,7 @@ contract Staker {
         /** By the ERC20 standard, the transfer may go through without reverting (success == true),
             but if it returns a boolean that is false, the transfer actually failed.
          */
-        if (data.length > 0 && !abi.decode(data, (bool))) return false;
+        if (!success || (data.length > 0 && !abi.decode(data, (bool)))) return false;
 
         emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
         return true;
