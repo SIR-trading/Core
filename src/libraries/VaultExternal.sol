@@ -241,7 +241,8 @@ library VaultExternal {
                     reserves.reserveApes = 1;
                     reserves.reserveLPers = vaultState.reserve - 1;
                 } else {
-                    uint8 absLeverageTier = leverageTier >= 0 ? uint8(leverageTier) : uint8(-leverageTier);
+                    bool isLeverageTierNonNegative = leverageTier >= 0;
+                    uint8 absLeverageTier = isLeverageTierNonNegative ? uint8(leverageTier) : uint8(-leverageTier);
 
                     if (reserves.tickPriceX42 < vaultState.tickPriceSatX42) {
                         /**
@@ -251,7 +252,7 @@ library VaultExternal {
                          * We use the fact that l = 1+2^leverageTier
                          * reserveApes is rounded up
                          */
-                        int256 poweredTickPriceDiffX42 = leverageTier > 0
+                        int256 poweredTickPriceDiffX42 = isLeverageTierNonNegative
                             ? (int256(vaultState.tickPriceSatX42) - reserves.tickPriceX42) << absLeverageTier
                             : (int256(vaultState.tickPriceSatX42) - reserves.tickPriceX42) >> absLeverageTier;
 
@@ -268,7 +269,8 @@ library VaultExternal {
 
                             reserves.reserveApes = uint144(
                                 _divRoundUp(
-                                    uint256(vaultState.reserve) << (leverageTier >= 0 ? 64 : 64 + absLeverageTier),
+                                    uint256(vaultState.reserve) <<
+                                        (isLeverageTierNonNegative ? 64 : 64 + absLeverageTier),
                                     poweredPriceRatioX64 + (poweredPriceRatioX64 << absLeverageTier)
                                 )
                             );
@@ -300,7 +302,8 @@ library VaultExternal {
 
                             reserves.reserveLPers = uint144(
                                 _divRoundUp(
-                                    uint256(vaultState.reserve) << (leverageTier < 0 ? 64 : 64 + absLeverageTier),
+                                    uint256(vaultState.reserve) <<
+                                        (isLeverageTierNonNegative ? 64 + absLeverageTier : 64),
                                     priceRatioX64 + (priceRatioX64 << absLeverageTier)
                                 )
                             );

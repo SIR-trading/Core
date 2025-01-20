@@ -416,15 +416,17 @@ contract Vault is TEA {
             } else if (reserves.reserveLPers == 0) {
                 vaultState.tickPriceSatX42 = type(int64).min;
             } else {
+                bool isLeverageTierNonNegative = vaultParams.leverageTier >= 0;
+
                 /**
                  * Decide if we are in the power or saturation zone
                  * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
                  */
-                uint8 absLeverageTier = vaultParams.leverageTier >= 0
+                uint8 absLeverageTier = isLeverageTierNonNegative
                     ? uint8(vaultParams.leverageTier)
                     : uint8(-vaultParams.leverageTier);
                 bool isPowerZone;
-                if (vaultParams.leverageTier > 0) {
+                if (isLeverageTierNonNegative) {
                     if (
                         uint256(reserves.reserveApes) << absLeverageTier < reserves.reserveLPers
                     ) // Cannot OF because reserveApes is an uint144, and |leverageTier|<=3
@@ -450,19 +452,13 @@ contract Vault is TEA {
                      */
 
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        vaultParams.leverageTier >= 0
-                            ? vaultState.reserve
-                            : uint256(vaultState.reserve) << absLeverageTier, // Cannot OF cuz reserve is uint144, and |leverageTier|<=3
+                        isLeverageTierNonNegative ? vaultState.reserve : uint256(vaultState.reserve) << absLeverageTier, // Cannot OF cuz reserve is uint144, and |leverageTier|<=3
                         (uint256(reserves.reserveApes) << absLeverageTier) + reserves.reserveApes // Cannot OF cuz reserveApes is uint144, and |leverageTier|<=3
                     );
 
                     // Compute saturation price
                     int256 tempTickPriceSatX42 = reserves.tickPriceX42 +
-                        (
-                            vaultParams.leverageTier >= 0
-                                ? tickRatioX42 >> absLeverageTier
-                                : tickRatioX42 << absLeverageTier
-                        );
+                        (isLeverageTierNonNegative ? tickRatioX42 >> absLeverageTier : tickRatioX42 << absLeverageTier);
 
                     // Check if overflow
                     if (tempTickPriceSatX42 > type(int64).max) vaultState.tickPriceSatX42 = type(int64).max;
@@ -473,9 +469,7 @@ contract Vault is TEA {
                      */
 
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
-                        vaultParams.leverageTier >= 0
-                            ? uint256(vaultState.reserve) << absLeverageTier
-                            : vaultState.reserve,
+                        isLeverageTierNonNegative ? uint256(vaultState.reserve) << absLeverageTier : vaultState.reserve,
                         (uint256(reserves.reserveLPers) << absLeverageTier) + reserves.reserveLPers
                     );
 
