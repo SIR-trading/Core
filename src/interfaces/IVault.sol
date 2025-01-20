@@ -73,7 +73,8 @@ interface IVault {
     function mint(
         bool isAPE,
         SirStructs.VaultParameters calldata vaultParams,
-        uint144 collateralToDeposit
+        uint256 amountToDeposit,
+        uint144 collateralToDepositMin
     ) external payable returns (uint256 amount);
 
     function numberOfVaults() external view returns (uint48);

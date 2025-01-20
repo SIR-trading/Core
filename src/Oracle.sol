@@ -467,9 +467,9 @@ contract Oracle {
                 }
 
                 /** The next index might not be populated if the cardinality is in the process of increasing.
-                        In this case the oldest observation is always in index 0.
-                        Observation at index 0 is always initialized.
-                    */
+                    In this case the oldest observation is always in index 0.
+                    Observation at index 0 is always initialized.
+                */
                 if (!initialized) {
                     (blockTimestampOldest, tickCumulative_, secondsPerLiquidityCumulative_, ) = oracleData
                         .uniswapPool
@@ -529,8 +529,8 @@ contract Oracle {
         int256 tickPriceX42 = (int256(oracleData.aggPriceTick) << 42); // Safe because uint56 << 42 < 2^256-1
 
         /** When period==0, aggPriceTick is in fact the instantaneous price
-                When period==1, dividing by period does not change tickPriceX42
-             */
+            When period==1, dividing by period does not change tickPriceX42
+        */
         if (oracleData.period > 1) tickPriceX42 /= int256(uint256(oracleData.period));
 
         if (oracleState.timeStampPrice == 0) oracleState.tickPriceX42 = int64(tickPriceX42);

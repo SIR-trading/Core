@@ -67,7 +67,7 @@ abstract contract SystemState is SystemControlAccess {
             (or burns) APE, the attacker could mint before the ape and burn after the ape, earning the fees risk-free.
          */
         _systemParams = SirStructs.SystemParameters({
-            baseFee: SirStructs.FeeStructure({fee: 3000, feeNew: 0, timestampUpdate: 0}), // At 1.5 leverage tier, apes would pay 24% of their deposit as upfront fee.
+            baseFee: SirStructs.FeeStructure({fee: 3000, feeNew: 0, timestampUpdate: 0}), // At 1.5 leverage, apes would pay 24% of their deposit as upfront fee.
             lpFee: SirStructs.FeeStructure({fee: 989, feeNew: 0, timestampUpdate: 0}), // To mitigate LP sandwich attacks. LPers would pay 9% of their deposit as upfront fee.
             mintingStopped: false,
             cumulativeTax: 0
