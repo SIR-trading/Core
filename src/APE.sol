@@ -36,7 +36,6 @@ contract APE is Clone {
     mapping(address => mapping(address => uint256)) public allowance;
 
     uint256 private immutable INITIAL_CHAIN_ID;
-    bytes32 private immutable INITIAL_DOMAIN_SEPARATOR;
 
     mapping(address => uint256) public nonces;
 
@@ -52,7 +51,6 @@ contract APE is Clone {
 
     constructor() {
         INITIAL_CHAIN_ID = block.chainid;
-        INITIAL_DOMAIN_SEPARATOR = _computeDomainSeparator();
     }
 
     function initialize(
@@ -168,8 +166,9 @@ contract APE is Clone {
         emit Approval(owner, spender, value);
     }
 
-    function DOMAIN_SEPARATOR() public view returns (bytes32) {
-        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : _computeDomainSeparator();
+    function DOMAIN_SEPARATOR() public view returns (bytes32 domainSeparator) {
+        domainSeparator = bytes32(_getArgUint256(21));
+        if (block.chainid != INITIAL_CHAIN_ID) _computeDomainSeparator();
     }
 
     function _computeDomainSeparator() private view returns (bytes32) {

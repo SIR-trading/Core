@@ -59,12 +59,30 @@ library VaultExternal {
         // Save parameters
         paramsById.push(vaultParams);
 
+        // Derive the name of the APE clone
+        string memory name = _generateName(vaultParams);
+
+        // Derive the future address of the APE clone
+        address ape = ClonesWithImmutableArgs.addressOfClone3(bytes32(vaultId));
+
+        // Compute the default domain separator for the APE clone
+        bytes32 domainSeparator = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name)),
+                keccak256("1"),
+                block.chainid,
+                ape
+            )
+        );
+
         // Deploy APE clone
-        address ape = ClonesWithImmutableArgs.clone3(
+        ClonesWithImmutableArgs.clone3(
             implementationOfAPE,
             abi.encodePacked(
                 vaultParams.leverageTier, // The clone needs to know the leverage tier when minting/burning
-                address(this) // So the clone knows the owner
+                address(this), // So the clone knows the owner
+                domainSeparator // This way the domain separator is stored as a constant
             ),
             bytes32(vaultId)
         );
@@ -73,7 +91,7 @@ library VaultExternal {
         (bool success, ) = ape.call(
             abi.encodeWithSignature(
                 "initialize(string,string,uint8,address,address)",
-                _generateName(vaultParams),
+                name,
                 string.concat("APE-", Strings.toString(vaultId)),
                 IERC20(vaultParams.collateralToken).decimals(),
                 vaultParams.debtToken,
