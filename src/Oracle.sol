@@ -80,6 +80,11 @@ contract Oracle {
         return _state[token0][token1];
     }
 
+    function uniswapFeeTierOf(address tokenA, address tokenB) external view returns (uint24) {
+        (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
+        return _state[tokenA][tokenB].uniswapFeeTier.fee;
+    }
+
     /** @notice Function for getting all the uniswap fee tiers
         @notice If a new fee tier is added, anyone can add it using the `newUniswapFeeTier` function
      */
