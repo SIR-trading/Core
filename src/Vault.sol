@@ -501,9 +501,7 @@ contract Vault is TEA {
         // Surplus above totalReserves is fees to stakers
         totalFeesToStakers = IERC20(token).balanceOf(address(this)) - totalReserves[token];
 
-        if (totalFeesToStakers != 0) {
-            TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
-        }
+        TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
     }
 
     /** @notice This function is only intended to be called as last recourse to save the system from a critical bug or hack

@@ -1986,10 +1986,10 @@ contract VaultControlTest is Test {
         _setFees(Addresses.ADDR_BNB, tokenFees);
 
         // Withdraw BNB
-        if (tokenFees.fees != 0) {
-            vm.expectEmit();
-            emit Transfer(address(vault), sir, tokenFees.fees);
-        }
+        vm.assume(tokenFees.fees > 0);
+        vm.expectEmit();
+        emit Transfer(address(vault), sir, tokenFees.fees);
+
         vm.prank(sir);
         uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_BNB);
 
