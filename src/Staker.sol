@@ -26,9 +26,15 @@ contract Staker {
     error BidTooLow();
     error InvalidSigner();
     error PermitDeadlineExpired();
+    error NotTheAuctionWinner();
 
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
-    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
+    event AuctionedTokensSentToWinner(
+        address indexed winner,
+        address indexed beneficiary,
+        address indexed token,
+        uint256 reward
+    );
     event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event DividendsClaimed(address indexed staker, uint96 amount);
@@ -417,7 +423,7 @@ contract Staker {
                 _distributeDividends(totalWinningBids_);
 
                 // The winner of the previous auction is paid after all state changes have been made to avoid reentrancy attacks.
-                _payAuctionWinner(token, auction);
+                _payAuctionWinner(token, auction, address(0));
 
                 /** Retrieve fees from the vault to be auctioned next.
                     This function must come after _payAuctionWinner to avoid paying the previous auction winner twice.
@@ -442,10 +448,15 @@ contract Staker {
         }
     }
 
-    /// @notice It reverts if the transfer fails and the dividends (WETH) is not distributed, allowing the bidder to try again.
-    function payAuctionWinner(address token) external {
+    /** @notice Winner of the auction can call this function to get the auction lot.
+        @notice If the transfer of the auction lot fails it reverts and the dividends (WETH) are not distributed, allowing the bidder to try again later.
+        @param token of the auction lot
+        @param beneficiary address of the auction lot. If it is 0, the auction lot is sent to the bidder address.
+     */
+    function getAuctionLot(address token, address beneficiary) external {
         SirStructs.Auction memory auction = _auctions[token];
         if (block.timestamp < auction.startTime + SystemConstants.AUCTION_DURATION) revert AuctionIsNotOver();
+        if (msg.sender != auction.bidder) revert NotTheAuctionWinner();
 
         // Update auction
         _auctions[token].bid = 0;
@@ -460,7 +471,7 @@ contract Staker {
         /** The auction winner is paid last because
             it makes external calls that could be used for reentrancy attacks. 
         */
-        if (!_payAuctionWinner(token, auction)) revert NoAuctionLot();
+        if (!_payAuctionWinner(token, auction, beneficiary)) revert NoAuctionLot();
     }
 
     function _distributeDividends(uint96 totalWinningBids_) private returns (bool noDividends) {
@@ -496,7 +507,11 @@ contract Staker {
     }
 
     /// @dev This function must never revert, instead it returns false.
-    function _payAuctionWinner(address token, SirStructs.Auction memory auction) private returns (bool success) {
+    function _payAuctionWinner(
+        address token,
+        SirStructs.Auction memory auction,
+        address beneficiary
+    ) private returns (bool success) {
         // Only pay if there is any bid
         if (auction.bid == 0) return false;
 
@@ -516,14 +531,15 @@ contract Staker {
         /** Pay the winner if tokenAmount > 0
             Low-level call to avoid revert in case the destination has been banned from receiving tokens.
          */
-        (success, data) = token.call(abi.encodeWithSignature("transfer(address,uint256)", auction.bidder, tokenAmount));
+        if (beneficiary == address(0)) beneficiary = auction.bidder;
+        (success, data) = token.call(abi.encodeWithSignature("transfer(address,uint256)", beneficiary, tokenAmount));
 
         /** By the ERC20 standard, the transfer may go through without reverting (success == true),
             but if it returns a boolean that is false, the transfer actually failed.
          */
         if (!success || (data.length > 0 && !abi.decode(data, (bool)))) return false;
 
-        emit AuctionedTokensSentToWinner(auction.bidder, token, tokenAmount);
+        emit AuctionedTokensSentToWinner(auction.bidder, beneficiary, token, tokenAmount);
         return true;
     }
 

@@ -65,7 +65,7 @@ interface ISIR {
 
     function nonces(address) external view returns (uint256);
 
-    function payAuctionWinner(address token) external;
+    function getAuctionLot(address token) external;
 
     function permit(
         address owner,

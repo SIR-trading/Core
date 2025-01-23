@@ -235,6 +235,7 @@ contract StakerTest is Auxiliary {
     error BidTooLow();
     error NoAuction();
     error NewAuctionCannotStartYet();
+    error NotTheAuctionWinner();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Staked(address indexed staker, uint256 amount);
@@ -242,7 +243,12 @@ contract StakerTest is Auxiliary {
     event Unstaked(address indexed staker, uint256 amount);
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
-    event AuctionedTokensSentToWinner(address indexed winner, address indexed token, uint256 reward);
+    event AuctionedTokensSentToWinner(
+        address indexed winner,
+        address indexed beneficiary,
+        address indexed token,
+        uint256 reward
+    );
 
     address alice;
     address bob;
@@ -870,9 +876,10 @@ contract StakerTest is Auxiliary {
     ///////////// AUCTION // AND // DIVIDENDS /////////////
     ///////////////////////////////////////////////////////
 
-    function testFuzz_payAuctionWinnerNoAuction(address token) public {
-        vm.expectRevert(NoAuctionLot.selector);
-        staker.payAuctionWinner(token);
+    function testFuzz_payNoAuctionWinner(address bidder, address token, address beneficiary) public {
+        vm.expectRevert(bidder == address(0) ? NoAuctionLot.selector : NotTheAuctionWinner.selector);
+        vm.prank(bidder);
+        staker.getAuctionLot(token, beneficiary);
     }
 
     function testFuzz_nonAuctionOfWETH(
@@ -965,14 +972,16 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances,
         Donations memory donations,
         User memory user,
-        uint80 totalSupplyOfSIR
+        uint80 totalSupplyOfSIR,
+        address beneficiary
     ) public {
         testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
         vm.assume(tokenBalances.vaultTotalFees > 0);
 
         // Reverts because prize has already been paid
+        vm.prank(address(0)); // WETH does not do auctions
         vm.expectRevert(NoAuctionLot.selector);
-        staker.payAuctionWinner(Addresses.ADDR_WETH);
+        staker.getAuctionLot(Addresses.ADDR_WETH, beneficiary);
 
         vm.expectRevert(NoFeesCollected.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
@@ -1068,28 +1077,47 @@ contract StakerTest is Auxiliary {
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
-        Donations memory donations
+        Donations memory donations,
+        address bidder,
+        uint96 amount,
+        address beneficiary,
+        uint256 delay
     ) public {
         testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
         vm.assume(tokenBalances.vaultTotalFees > 0);
 
-        skip(SystemConstants.AUCTION_DURATION - 1);
+        // Bid
+        amount = uint96(_bound(amount, 1, ETH_SUPPLY));
+        _dealWETH(bidder, amount);
+        vm.prank(bidder);
+        WETH.approve(address(staker), amount);
+        vm.prank(bidder);
+        staker.bid(Addresses.ADDR_BNB, amount);
+
+        // Attempt to get auction lot
+        delay = _bound(delay, 0, SystemConstants.AUCTION_DURATION - 1);
+        skip(delay);
         vm.expectRevert(AuctionIsNotOver.selector);
-        staker.payAuctionWinner(Addresses.ADDR_BNB);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
     }
 
     function testFuzz_payAuctionWinnerNoBids(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
-        Donations memory donations
+        Donations memory donations,
+        address beneficiary,
+        uint256 delay
     ) public {
         testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
         vm.assume(tokenBalances.vaultTotalFees > 0);
 
+        // Attempt to get auction lot
+        delay = _bound(delay, SystemConstants.AUCTION_DURATION, type(uint40).max);
         skip(SystemConstants.AUCTION_DURATION);
+        vm.prank(address(0));
         vm.expectRevert(NoAuctionLot.selector);
-        staker.payAuctionWinner(Addresses.ADDR_BNB);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
     }
 
     function testFuzz_auctionOfBNB(
@@ -1114,7 +1142,6 @@ contract StakerTest is Auxiliary {
         vm.prank(_idToAddress(bidder1.id));
         WETH.approve(address(staker), bidder1.amount);
         if (bidder1.amount > 0) {
-            console.log("bidder1 amount is", bidder1.amount);
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder1.id), Addresses.ADDR_BNB, 0, bidder1.amount);
         } else {
@@ -1135,7 +1162,6 @@ contract StakerTest is Auxiliary {
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 // Bidder increases its own bid
-                console.log("bidder1 increments bid by", bidder2.amount);
                 vm.expectEmit();
                 emit BidReceived(
                     _idToAddress(bidder2.id),
@@ -1149,7 +1175,6 @@ contract StakerTest is Auxiliary {
             }
         } else if (bidder2.amount > bidder1.amount) {
             // Bidder2 outbids bidder1
-            console.log("bidder2 amount is", bidder2.amount);
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder2.id), Addresses.ADDR_BNB, bidder1.amount, bidder2.amount);
         } else {
@@ -1191,21 +1216,28 @@ contract StakerTest is Auxiliary {
         Donations memory donations,
         Bidder memory bidder1,
         Bidder memory bidder2,
-        Bidder memory bidder3
+        Bidder memory bidder3,
+        address fakeBidder,
+        address beneficiary
     ) public {
-        console.log("Staker ETH balance is", address(staker).balance);
         testFuzz_auctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
 
-        console.log("Donations are", donations.stakerDonationsWETH, donations.stakerDonationsETH);
-        console.log("Staker balance is", user.stakeAmount);
-        console.log("Staker ETH balance is", address(staker).balance);
+        // Find the winner
+        address winner = bidder1.amount + bidder2.amount == 0
+            ? address(0)
+            : (bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id));
+
+        // Wrong bidder
+        vm.assume(fakeBidder != winner);
+        vm.prank(fakeBidder);
+        vm.expectRevert(NotTheAuctionWinner.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+
         if (bidder1.amount + bidder2.amount == 0) {
             vm.expectRevert(NoAuctionLot.selector);
         } else {
             if (user.stakeAmount > 0) {
                 vm.expectEmit();
-                console.log(_idToAddress(bidder1.id), _idToAddress(bidder2.id));
-                console.log(bidder1.amount, bidder2.amount, bidder3.amount);
                 emit DividendsPaid(
                     (
                         _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
@@ -1215,34 +1247,45 @@ contract StakerTest is Auxiliary {
                     user.stakeAmount
                 );
             }
+            winner = bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id);
             vm.expectEmit();
             emit AuctionedTokensSentToWinner(
-                bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id),
+                winner,
+                beneficiary == address(0) ? winner : beneficiary,
                 Addresses.ADDR_BNB,
                 tokenBalances.vaultTotalFees + tokenBalances.stakerDonations
             );
         }
-        console.log("Staker ETH balance is", address(staker).balance);
-        staker.payAuctionWinner(Addresses.ADDR_BNB);
-        console.log("Staker ETH balance is", address(staker).balance);
+
+        // Pay auction winner
+        vm.prank(winner);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+
+        // Attempt to pay auction winner again
+        vm.prank(winner);
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
     }
 
-    function testFuzz_payAuctionWinnerWETH(
+    function testFuzz_cannotPayAuctionOfWETH(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
         Donations memory donations,
-        uint96 amount
+        uint96 amount,
+        address beneficiary
     ) public {
         testFuzz_auctionOfWETHFails(user, totalSupplyOfSIR, tokenBalances, donations, amount);
 
         skip(SystemConstants.AUCTION_DURATION + 1);
 
+        vm.prank(address(0));
         vm.expectRevert(NoAuctionLot.selector);
-        staker.payAuctionWinner(Addresses.ADDR_WETH);
+        staker.getAuctionLot(Addresses.ADDR_WETH, beneficiary);
 
+        vm.prank(address(0));
         vm.expectRevert(NoAuctionLot.selector);
-        staker.payAuctionWinner(Addresses.ADDR_BNB);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
     }
 
     function testFuzz_start2ndAuctionOfBNBTooEarly(
@@ -1429,12 +1472,14 @@ contract StakerHandler is Auxiliary {
         staker.collectFeesAndStartAuction(collateral);
     }
 
-    function payAuctionWinner(uint256 timeSkip, bool collateralSelect) external advanceTime(timeSkip) {
+    function getAuctionLot(uint256 timeSkip, bool collateralSelect) external advanceTime(timeSkip) {
         address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
         // vm.writeLine("./InvariantStaker.log", string.concat("Pays winner of ", vm.toString(collateral), " auction"));
 
         // Pay auction winner
-        staker.payAuctionWinner(collateral);
+        SirStructs.Auction memory auction = staker.auctions(collateral);
+        vm.prank(auction.bidder);
+        staker.getAuctionLot(collateral, address(0));
     }
 
     function donate(uint256 timeSkip, Donations memory donations) external advanceTime(timeSkip) {
@@ -1470,7 +1515,7 @@ contract StakerInvariantTest is Test {
         selectors[2] = stakerHandler.claim.selector;
         selectors[3] = stakerHandler.bid.selector;
         selectors[4] = stakerHandler.collectFeesAndStartAuction.selector;
-        selectors[5] = stakerHandler.payAuctionWinner.selector;
+        selectors[5] = stakerHandler.getAuctionLot.selector;
         selectors[6] = stakerHandler.donate.selector;
         targetSelector(FuzzSelector({addr: address(stakerHandler), selectors: selectors}));
     }
