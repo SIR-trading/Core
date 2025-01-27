@@ -40,12 +40,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
             leverageTier: int8(-1)
         });
 
-    // BNB/WETH's Uniswap TWAP is of cardinality 1
+    // WETH/BNB's Uniswap TWAP is of cardinality 1
     SirStructs.VaultParameters public vaultParameters2 =
         SirStructs.VaultParameters({
             debtToken: Addresses.ADDR_BNB,
             collateralToken: address(WETH),
             leverageTier: int8(0)
+        });
+
+    // USDT/WETH to mint with debt token
+    SirStructs.VaultParameters public vaultParameters3 =
+        SirStructs.VaultParameters({
+            debtToken: address(WETH),
+            collateralToken: Addresses.ADDR_USDT,
+            leverageTier: int8(1)
         });
 
     function setUp() public {
@@ -85,6 +93,11 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         WETH.approve(address(vault), amount);
     }
 
+    function _prepareETH(uint256 amount) private {
+        // Deal ETH
+        vm.deal(address(this), amount);
+    }
+
     ///////////////////////////////////////////////
 
     /// @dev Around 205,457 gas
@@ -95,17 +108,21 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Intialize vault
         vault.initialize(vaultParameters1);
 
-        // Deposit WETH to vault
+        // Mint some APE with WETH
         _prepareWETH(2 ether);
-
-        // Mint some APE
         vault.mint(true, vaultParameters1, 2 ether, 0);
 
-        // Deposit WETH to vault
+        // Mint some TEA with WETH
         _prepareWETH(2 ether);
-
-        // Mint some TEA
         vault.mint(false, vaultParameters1, 2 ether, 0);
+
+        // Mint some APE with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0);
+
+        // Mint some TEA with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
@@ -121,17 +138,21 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Skip
         skip(TIME_ADVANCE);
 
-        // Deposit WETH to vault
+        // Mint some APE with WETH
         _prepareWETH(2 ether);
-
-        // Mint some APE
         vault.mint(true, vaultParameters1, 2 ether, 0);
 
-        // Deposit WETH to vault
+        // Mint some TEA with WETH
         _prepareWETH(2 ether);
-
-        // Mint some TEA
         vault.mint(false, vaultParameters1, 2 ether, 0);
+
+        // Mint some APE with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0);
+
+        // Mint some TEA with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
@@ -147,17 +168,21 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Intialize vault
         vault.initialize(vaultParameters2);
 
-        // Deposit WETH to vault
+        // Mint some APE with WETH
         _prepareWETH(2 ether);
-
-        // Mint some APE
         vault.mint(true, vaultParameters2, 2 ether, 0);
 
-        // Deposit WETH to vault
+        // Mint some TEA with WETH
         _prepareWETH(2 ether);
-
-        // Mint some TEA
         vault.mint(false, vaultParameters2, 2 ether, 0);
+
+        // Mint some APE with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0);
+
+        // Mint some TEA with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
@@ -173,22 +198,86 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Skip
         skip(TIME_ADVANCE);
 
-        // Deposit WETH to vault
+        // Mint some APE with WETH
         _prepareWETH(2 ether);
-
-        // Mint some APE
         vault.mint(true, vaultParameters2, 2 ether, 0);
 
-        // Deposit WETH to vault
+        // Mint some TEA with WETH
         _prepareWETH(2 ether);
-
-        // Mint some TEA
         vault.mint(false, vaultParameters2, 2 ether, 0);
+
+        // Mint some APE with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0);
+
+        // Mint some TEA with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0);
 
         // Burn some APE
         vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
 
         // Burn some TEA
         vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1));
+    }
+
+    function test_DoNotProbeFeeTierC() public {
+        // To make sure mint() is done exactly at the same time than other tests
+        skip(TIME_ADVANCE);
+
+        // Intialize vault
+        vault.initialize(vaultParameters3);
+
+        // Mint some APE with WETH
+        _prepareWETH(2 ether);
+        vault.mint(true, vaultParameters3, 2 ether, 1);
+
+        // Mint some TEA with WETH
+        _prepareWETH(2 ether);
+        vault.mint(false, vaultParameters3, 2 ether, 1);
+
+        // Mint some APE with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1);
+
+        // Mint some TEA with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1);
+
+        // Burn some APE
+        vault.burn(true, vaultParameters3, ape.balanceOf(address(this)));
+
+        // Burn some TEA
+        vault.burn(false, vaultParameters3, vault.balanceOf(address(this), 1));
+    }
+
+    function test_ProbeFeeTierC() public {
+        // Intialize vault
+        vault.initialize(vaultParameters3);
+
+        // Skip
+        skip(TIME_ADVANCE);
+
+        // Mint some APE with WETH
+        _prepareWETH(2 ether);
+        vault.mint(true, vaultParameters3, 2 ether, 1);
+
+        // Mint some TEA with WETH
+        _prepareWETH(2 ether);
+        vault.mint(false, vaultParameters3, 2 ether, 1);
+
+        // Mint some APE with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1);
+
+        // Mint some TEA with ETH
+        _prepareETH(2 ether);
+        vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1);
+
+        // Burn some APE
+        vault.burn(true, vaultParameters3, ape.balanceOf(address(this)));
+
+        // Burn some TEA
+        vault.burn(false, vaultParameters3, vault.balanceOf(address(this), 1));
     }
 }
