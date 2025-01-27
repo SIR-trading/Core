@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
+import {IWETH9} from "src/interfaces/IWETH9.sol";
 
 // Libraries
 import {VaultExternal} from "./libraries/VaultExternal.sol";
@@ -32,6 +33,8 @@ import "forge-std/console.sol";
 contract Vault is TEA {
     error AmountTooLow();
     error InsufficientCollateralReceivedFromUniswap();
+    error Locked();
+    error NotAWETHVault();
 
     /** collateralFeeToLPers also includes protocol owned liquidity (POL),
         i.e., collateralFeeToLPers = collateralFeeToLPers + collateralFeeToProtocol
@@ -96,6 +99,30 @@ contract Vault is TEA {
         );
     }
 
+    modifier nonReentrant() {
+        {
+            uint256 locked;
+            assembly {
+                locked := tload(0)
+            }
+
+            if (locked != 0) revert Locked();
+
+            // Lock
+            locked = 1;
+            assembly {
+                tstore(0, locked)
+            }
+        }
+
+        _;
+
+        // Unlock
+        assembly {
+            tstore(0, 0)
+        }
+    }
+
     /*////////////////////////////////////////////////////////////////
                             MINT/BURN FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
@@ -116,10 +143,20 @@ contract Vault is TEA {
         SirStructs.VaultParameters memory vaultParams,
         uint256 amountToDeposit, // Collateral amount to deposit if collateralToDepositMin == 0, debt token to deposit if collateralToDepositMin > 0
         uint144 collateralToDepositMin
-    ) external payable returns (uint256 amount) {
-        // If ETH is received, we wrap it because we assume the user wants to mint with WETH
+    ) external payable nonReentrant returns (uint256 amount) {
+        // Check if user sent vanilla ETH
         bool isETH = msg.value != 0;
-        if (isETH) amountToDeposit = VaultExternal.wrapETH(vaultParams, collateralToDepositMin, _WETH);
+        if (isETH) {
+            // Minter sent ETH, so we need to check that this is a WETH vault
+            if ((collateralToDepositMin == 0 ? vaultParams.collateralToken : vaultParams.debtToken) != _WETH)
+                revert NotAWETHVault();
+
+            // msg.value is the amount to deposit
+            amountToDeposit = msg.value;
+
+            // We must wrap it to WETH
+            IWETH9(_WETH).deposit{value: msg.value}();
+        }
 
         // Cannot deposit 0
         if (amountToDeposit == 0) revert AmountTooLow();
@@ -155,7 +192,7 @@ contract Vault is TEA {
 
             // Store Uniswap v3 pool in transient storage so we can use it in the callback function
             assembly {
-                tstore(0, uniswapPool)
+                tstore(1, uniswapPool)
             }
 
             // Check amount does not exceed max
@@ -182,7 +219,7 @@ contract Vault is TEA {
 
             // Get amount of tokens
             assembly {
-                amount := tload(0)
+                amount := tload(1)
             }
         }
     }
@@ -196,7 +233,7 @@ contract Vault is TEA {
         // Check caller is the legit Uniswap pool
         address uniswapPool;
         assembly {
-            uniswapPool := tload(0)
+            uniswapPool := tload(1)
         }
         require(msg.sender == uniswapPool);
 
@@ -219,22 +256,24 @@ contract Vault is TEA {
             ? (uint256(-amount1Delta), uint256(amount0Delta))
             : (uint256(-amount0Delta), uint256(amount1Delta));
 
+        // If this is an ETH mint, transfer WETH to the pool asap
+        if (isETH) {
+            TransferHelper.safeTransfer(vaultParams.debtToken, uniswapPool, debtTokenToSwap);
+        }
+
         // Rest of the mint logic
         require(collateralToDeposit <= type(uint144).max);
         uint256 amount = _mint(minter, ape, vaultParams, uint144(collateralToDeposit), vaultState, reserves);
 
         // Transfer debt token to the pool
         // This is done last to avoid reentrancy attack from a bogus debt token contract
-        TransferHelper.safeTransferFrom(
-            vaultParams.debtToken,
-            isETH ? address(this) : minter,
-            uniswapPool,
-            debtTokenToSwap
-        );
+        if (!isETH) {
+            TransferHelper.safeTransferFrom(vaultParams.debtToken, minter, uniswapPool, debtTokenToSwap);
+        }
 
         // Use the transient storage to return amount of tokens minted to the mint function
         assembly {
-            tstore(0, amount)
+            tstore(1, amount)
         }
     }
 
@@ -321,7 +360,7 @@ contract Vault is TEA {
         bool isAPE,
         SirStructs.VaultParameters calldata vaultParams,
         uint256 amount
-    ) external returns (uint144) {
+    ) external nonReentrant returns (uint144) {
         if (amount == 0) revert AmountTooLow();
 
         SirStructs.SystemParameters memory systemParams_ = systemParams();
@@ -495,7 +534,7 @@ contract Vault is TEA {
         @param token to be distributed
         @return totalFeesToStakers is the total amount of tokens to be distributed
      */
-    function withdrawFees(address token) external returns (uint256 totalFeesToStakers) {
+    function withdrawFees(address token) external nonReentrant returns (uint256 totalFeesToStakers) {
         require(msg.sender == _SIR);
 
         // Surplus above totalReserves is fees to stakers

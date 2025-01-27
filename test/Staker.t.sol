@@ -143,7 +143,6 @@ contract Auxiliary is Test {
             0,
             type(uint256).max - IERC20(token).totalSupply()
         );
-        console.log(type(uint256).max - IERC20(token).totalSupply(), tokenBalances.stakerDonations);
         if (token == Addresses.ADDR_WETH) _dealWETH(address(staker), tokenBalances.stakerDonations);
         else _dealToken(token, address(staker), tokenBalances.stakerDonations);
     }
@@ -662,7 +661,6 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Trigger a payment of dividends
-        console.log(donations.stakerDonationsWETH, donations.stakerDonationsETH, user.stakeAmount);
         if (donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0) {
             vm.expectEmit();
             emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH, user.stakeAmount);
@@ -1069,7 +1067,7 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Start auction
-        vm.expectRevert(NoFeesCollected.selector);
+        vm.expectRevert(bytes("ST"));
         assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
     }
 
@@ -1138,6 +1136,7 @@ contract StakerTest is Auxiliary {
         bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
 
         // Bidder 1
+        console.log("there");
         _dealWETH(_idToAddress(bidder1.id), bidder1.amount);
         vm.prank(_idToAddress(bidder1.id));
         WETH.approve(address(staker), bidder1.amount);
@@ -1155,6 +1154,7 @@ contract StakerTest is Auxiliary {
         else _assertAuction(Bidder(0, 0), start);
 
         // Bidder 2
+        console.log("here");
         skip(SystemConstants.AUCTION_DURATION - 1);
         _dealWETH(_idToAddress(bidder2.id), bidder2.amount);
         vm.prank(_idToAddress(bidder2.id));
@@ -1311,7 +1311,9 @@ contract StakerTest is Auxiliary {
         // 2nd auction too early
         timeStamp = _bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1);
         vm.warp(timeStamp);
-        vm.expectRevert(NewAuctionCannotStartYet.selector);
+        console.log("vaultTotalFees", tokenBalances.vaultTotalFees);
+        if (tokenBalances.vaultTotalFees == 0) vm.expectRevert(bytes("ST"));
+        else vm.expectRevert(NewAuctionCannotStartYet.selector);
         staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
     }
 

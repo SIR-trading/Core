@@ -23,6 +23,31 @@ import {IQuoterV2} from "v3-periphery/interfaces/IQuoterV2.sol";
 
 import "forge-std/Test.sol";
 
+contract Hacker is ERC1155TokenReceiver {
+    address immutable vault;
+    bytes encodedFunction;
+
+    constructor(address vault_) {
+        vault = vault_;
+    }
+
+    function setFunction(bytes calldata encodedFunction_) external {
+        encodedFunction = encodedFunction_;
+    }
+
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external override returns (bytes4) {
+        (bool success, bytes memory data) = vault.call(encodedFunction);
+        if (!success) {
+            assembly {
+                revert(add(data, 0x20), mload(data))
+            }
+        }
+        // if (!success) revert("Reentry failed");
+
+        return ERC1155TokenReceiver.onERC1155Received.selector;
+    }
+}
+
 contract VaultTest is Test {
     using ABDKMathQuad for bytes16;
     using ExtraABDKMathQuad for int64;
@@ -31,6 +56,7 @@ contract VaultTest is Test {
     error LeverageTierOutOfRange();
     error NoUniswapPool();
     error VaultDoesNotExist();
+    error Locked();
 
     struct SystemParams {
         uint16 baseFee;
@@ -74,6 +100,7 @@ contract VaultTest is Test {
     address user;
     uint48 vaultId;
     IERC20 ape;
+    Hacker hacker;
 
     function setUp() public {
         vaultParams.debtToken = address(new MockERC20("Debt Token", "DBT", 6));
@@ -111,6 +138,9 @@ contract VaultTest is Test {
 
         // User
         user = vm.addr(3);
+
+        // Deploy hacker
+        hacker = new Hacker(address(vault));
     }
 
     function _initialize(SystemParams calldata systemParams, SirStructs.Reserves memory reservesPre) internal {
@@ -548,6 +578,81 @@ contract VaultTest is Test {
             console.log("Price goes from the Saturation Zone to the Power Zone");
             assertSaturationToPowerZone(vaultState, reservesPre, reservesPost, tickPriceX42, newTickPriceX42);
         }
+    }
+
+    function testFuzz_mintIsLocked(
+        bool isAPE,
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        SirStructs.Reserves memory reservesPre,
+        Balances memory balances
+    ) public {
+        _initialize(systemParams, reservesPre);
+        _constraintBalances(isAPE, false, reservesPre, balances);
+        _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
+
+        // Etch hacker contract on user
+        vm.etch(user, address(hacker).code);
+
+        // Set reentrancy function
+        Hacker(user).setFunction(
+            abi.encodeWithSelector(Vault.mint.selector, isAPE, vaultParams, inputsOutputs.collateral, uint144(0))
+        );
+
+        // Hacker mints APE
+        vm.startPrank(user);
+        collateral.approve(address(vault), inputsOutputs.collateral);
+        vm.expectRevert(Locked.selector);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+    }
+
+    function testFuzz_burnIsLocked(
+        bool isAPE,
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        SirStructs.Reserves memory reservesPre,
+        Balances memory balances,
+        uint256 amountToBurn
+    ) public {
+        _initialize(systemParams, reservesPre);
+        _constraintBalances(isAPE, false, reservesPre, balances);
+        _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
+
+        // Etch hacker contract on user
+        vm.etch(user, address(hacker).code);
+
+        // Set reentrancy function
+        Hacker(user).setFunction(abi.encodeWithSelector(Vault.burn.selector, isAPE, vaultParams, amountToBurn));
+
+        // Hacker mints APE
+        vm.startPrank(user);
+        collateral.approve(address(vault), inputsOutputs.collateral);
+        vm.expectRevert(Locked.selector);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+    }
+
+    function testFuzz_withdrawFeesIsLocked(
+        bool isAPE,
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        SirStructs.Reserves memory reservesPre,
+        Balances memory balances
+    ) public {
+        _initialize(systemParams, reservesPre);
+        _constraintBalances(isAPE, false, reservesPre, balances);
+        _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
+
+        // Etch hacker contract on user
+        vm.etch(user, address(hacker).code);
+
+        // Set reentrancy function
+        Hacker(user).setFunction(abi.encodeWithSelector(Vault.withdrawFees.selector, address(0)));
+
+        // Hacker mints APE
+        vm.startPrank(user);
+        collateral.approve(address(vault), inputsOutputs.collateral);
+        vm.expectRevert(Locked.selector);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
     }
 
     /////////////////////////////////////////////////////////////////////////

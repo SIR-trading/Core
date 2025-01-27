@@ -89,8 +89,7 @@ contract TEA is SystemState {
     }
 
     function uri(uint256 vaultId) external view returns (string memory) {
-        uint256 totalSupply_ = totalSupplyAndBalanceVault[vaultId].totalSupply;
-        return VaultExternal.teaURI(_paramsById, vaultId, totalSupply_);
+        return VaultExternal.teaURI(_paramsById, vaultId, totalSupplyAndBalanceVault[vaultId].totalSupply);
     }
 
     function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {
@@ -143,9 +142,9 @@ contract TEA is SystemState {
         if (
             to.code.length == 0
                 ? to == address(0)
-                : to != address(this) &&
+                : (to != address(this) &&
                     ERC1155TokenReceiver(to).onERC1155Received(msg.sender, from, vaultId, amount, data) !=
-                    ERC1155TokenReceiver.onERC1155Received.selector
+                    ERC1155TokenReceiver.onERC1155Received.selector)
         ) revert UnsafeRecipient();
     }
 
@@ -171,9 +170,9 @@ contract TEA is SystemState {
             if (
                 to.code.length == 0
                     ? to == address(0)
-                    : to != address(this) &&
+                    : (to != address(this) &&
                         ERC1155TokenReceiver(to).onERC1155BatchReceived(msg.sender, from, vaultIds, amounts, data) !=
-                        ERC1155TokenReceiver.onERC1155BatchReceived.selector
+                        ERC1155TokenReceiver.onERC1155BatchReceived.selector)
             ) revert UnsafeRecipient();
         }
     }
@@ -270,14 +269,13 @@ contract TEA is SystemState {
             require(amount <= balanceOfFrom);
 
             // Update SIR issuance
-            LPersBalances memory lpersBalances = LPersBalances(msg.sender, balanceOfFrom, address(this), 0);
             updateLPerIssuanceParams(
                 false,
                 vaultId,
                 systemParams_.cumulativeTax,
                 vaultIssuanceParams_,
                 totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
-                lpersBalances
+                LPersBalances(msg.sender, balanceOfFrom, address(this), 0)
             );
 
             // Compute amount of collateral

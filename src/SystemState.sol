@@ -216,8 +216,6 @@ abstract contract SystemState is SystemControlAccess {
     function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
         require(msg.sender == _SIR);
 
-        LPersBalances memory lpersBalances = LPersBalances(lper, balanceOf(lper, vaultId), address(0), 0);
-
         return
             updateLPerIssuanceParams(
                 true,
@@ -225,7 +223,7 @@ abstract contract SystemState is SystemControlAccess {
                 _systemParams.cumulativeTax,
                 vaultIssuanceParams[vaultId],
                 supplyExcludeVault(vaultId),
-                lpersBalances
+                LPersBalances(lper, balanceOf(lper, vaultId), address(0), 0)
             );
     }
 
@@ -310,18 +308,13 @@ abstract contract SystemState is SystemControlAccess {
         uint8[] calldata newTaxes,
         uint16 cumulativeTax
     ) external onlySystemControl {
-        uint176 cumulativeSIRPerTEAx96;
-
         // Stop old issuances
         for (uint256 i = 0; i < oldVaults.length; ++i) {
-            // Retrieve the vault's current cumulative SIR per unit of TEA
-            cumulativeSIRPerTEAx96 = cumulativeSIRPerTEA(oldVaults[i]);
-
             // Update vault issuance parameters
             vaultIssuanceParams[oldVaults[i]] = SirStructs.VaultIssuanceParams({
                 tax: 0, // Nul tax, and consequently nul SIR issuance
                 timestampLastUpdate: uint40(block.timestamp),
-                cumulativeSIRPerTEAx96: cumulativeSIRPerTEAx96
+                cumulativeSIRPerTEAx96: cumulativeSIRPerTEA(oldVaults[i]) // Retrieve the vault's current cumulative SIR per unit of TEA
             });
 
             emit VaultNewTax(oldVaults[i], 0, 0);
@@ -329,14 +322,11 @@ abstract contract SystemState is SystemControlAccess {
 
         // Start new issuances
         for (uint256 i = 0; i < newVaults.length; ++i) {
-            // Retrieve the vault's current cumulative SIR per unit of TEA
-            cumulativeSIRPerTEAx96 = cumulativeSIRPerTEA(newVaults[i]);
-
             // Update vault issuance parameters
             vaultIssuanceParams[newVaults[i]] = SirStructs.VaultIssuanceParams({
                 tax: newTaxes[i],
                 timestampLastUpdate: uint40(block.timestamp),
-                cumulativeSIRPerTEAx96: cumulativeSIRPerTEAx96
+                cumulativeSIRPerTEAx96: cumulativeSIRPerTEA(newVaults[i]) // Retrieve the vault's current cumulative SIR per unit of TEA
             });
 
             emit VaultNewTax(newVaults[i], newTaxes[i], cumulativeTax);

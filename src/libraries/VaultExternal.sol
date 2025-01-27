@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 // Interfaces
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
-import {IWETH9} from "src/interfaces/IWETH9.sol";
 
 // Libraries
 import {SirStructs} from "./SirStructs.sol";
@@ -19,7 +18,6 @@ library VaultExternal {
     error VaultAlreadyInitialized();
     error LeverageTierOutOfRange();
     error VaultDoesNotExist();
-    error NotAWETHVault();
 
     event VaultInitialized(
         address indexed debtToken,
@@ -144,34 +142,6 @@ library VaultExternal {
             );
     }
 
-    /*////////////////////////////////////////////////////////////////
-                            PRIVATE FUNCTIONS
-    ////////////////////////////////////////////////////////////////*/
-
-    function _generateName(SirStructs.VaultParameters calldata vaultParams) private view returns (string memory) {
-        string memory leverageStr;
-        if (vaultParams.leverageTier == -4) leverageStr = "1.0625";
-        else if (vaultParams.leverageTier == -3) leverageStr = "1.125";
-        else if (vaultParams.leverageTier == -2) leverageStr = "1.25";
-        else if (vaultParams.leverageTier == -1) leverageStr = "1.5";
-        else if (vaultParams.leverageTier == 0) leverageStr = "2";
-        else if (vaultParams.leverageTier == 1) leverageStr = "3";
-        else if (vaultParams.leverageTier == 2) leverageStr = "5";
-
-        return
-            string(
-                abi.encodePacked(
-                    "Tokenized ",
-                    IERC20(vaultParams.collateralToken).symbol(),
-                    "/",
-                    IERC20(vaultParams.debtToken).symbol(),
-                    " with ",
-                    leverageStr,
-                    "x leverage"
-                )
-            );
-    }
-
     function getReservesReadOnly(
         mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
             storage _vaultStates,
@@ -219,23 +189,32 @@ library VaultExternal {
         }
     }
 
-    function wrapETH(
-        SirStructs.VaultParameters memory vaultParams,
-        uint144 collateralToDepositMin,
-        address weth
-    ) external returns (uint256 amountToDeposit) {
-        // Minter sent ETH, so we need to check that this is a WETH vault
-        if (collateralToDepositMin == 0) {
-            if (vaultParams.collateralToken != weth) revert NotAWETHVault();
-        } else {
-            if (vaultParams.debtToken != weth) revert NotAWETHVault();
-        }
+    /*////////////////////////////////////////////////////////////////
+                            INTERNAL FUNCTIONS
+    ////////////////////////////////////////////////////////////////*/
 
-        // msg.value is the amount to deposit
-        amountToDeposit = msg.value;
+    function _generateName(SirStructs.VaultParameters calldata vaultParams) private view returns (string memory) {
+        string memory leverageStr;
+        if (vaultParams.leverageTier == -4) leverageStr = "1.0625";
+        else if (vaultParams.leverageTier == -3) leverageStr = "1.125";
+        else if (vaultParams.leverageTier == -2) leverageStr = "1.25";
+        else if (vaultParams.leverageTier == -1) leverageStr = "1.5";
+        else if (vaultParams.leverageTier == 0) leverageStr = "2";
+        else if (vaultParams.leverageTier == 1) leverageStr = "3";
+        else if (vaultParams.leverageTier == 2) leverageStr = "5";
 
-        // We must wrap it to WETH
-        IWETH9(weth).deposit{value: msg.value}();
+        return
+            string(
+                abi.encodePacked(
+                    "Tokenized ",
+                    IERC20(vaultParams.collateralToken).symbol(),
+                    "/",
+                    IERC20(vaultParams.debtToken).symbol(),
+                    " with ",
+                    leverageStr,
+                    "x leverage"
+                )
+            );
     }
 
     function _getReserves(
