@@ -166,9 +166,8 @@ contract APE is Clone {
         emit Approval(owner, spender, value);
     }
 
-    function DOMAIN_SEPARATOR() public view returns (bytes32 domainSeparator) {
-        domainSeparator = bytes32(_getArgUint256(21));
-        if (block.chainid != INITIAL_CHAIN_ID) _computeDomainSeparator();
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
+        return block.chainid == INITIAL_CHAIN_ID ? bytes32(_getArgUint256(21)) : _computeDomainSeparator();
     }
 
     function _computeDomainSeparator() private view returns (bytes32) {
