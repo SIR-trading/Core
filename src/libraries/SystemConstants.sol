@@ -36,4 +36,6 @@ library SystemConstants {
     int8 internal constant MAX_LEVERAGE_TIER = 2;
 
     int8 internal constant MIN_LEVERAGE_TIER = -4;
+
+    uint256 internal constant HALVING_PERIOD = 30 days; // Every 30 days, half of the locked stake is unlocked
 }

@@ -12,6 +12,7 @@ import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
 import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {APE} from "src/APE.sol";
+import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 
 contract Auxiliary is Test {
     struct Bidder {
@@ -222,6 +223,8 @@ contract Auxiliary is Test {
 }
 
 contract StakerTest is Auxiliary {
+    using ABDKMath64x64 for int128;
+
     struct User {
         uint256 id;
         uint80 mintAmount;
@@ -433,7 +436,11 @@ contract StakerTest is Auxiliary {
     /////////////////// STAKING // TESTS ///////////////////
     ///////////////////////////////////////////////////////
 
-    function testFuzz_stake(User memory user, uint80 totalSupplyOfSIR) public {
+    function testFuzz_stake(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        uint256 delayCheck
+    ) public returns (uint80 unlockedStake, uint80 lockedStake) {
         address account = _idToAddress(user.id);
 
         user.mintAmount = uint80(_bound(user.mintAmount, 0, totalSupplyOfSIR));
@@ -449,20 +456,73 @@ contract StakerTest is Auxiliary {
         vm.prank(account);
         staker.stake(user.stakeAmount);
 
+        // Skip some time
+        delayCheck = _bound(delayCheck, 0, 15 * 365 days);
+        skip(delayCheck);
+
         assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount, "Wrong balance");
         assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
+
+        (unlockedStake, lockedStake) = staker.stakeOf(account);
+        uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
+            user.stakeAmount
+        );
+        assertApproxEqAbs(lockedStake, lockedStake_, user.stakeAmount / 1e17, "Wrong locked stake");
+        assertApproxEqAbs(
+            unlockedStake,
+            user.stakeAmount - lockedStake_,
+            user.stakeAmount / 1e17,
+            "Wrong unlocked stake"
+        );
+
         assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount, "Wrong supply");
         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
     }
 
-    function testFuzz_stakeTwice(User memory user1, User memory user2, uint80 totalSupplyOfSIR) public {
+    function test_stakeEdgeCase() public {
+        uint80 stakeAmount = type(uint80).max;
+
+        // Mint
+        _mint(alice, stakeAmount);
+
+        // Stake
+        vm.expectEmit();
+        emit Staked(alice, stakeAmount);
+        vm.prank(alice);
+        staker.stake(stakeAmount);
+
+        // Skip time
+        uint256 delayCheck = 192 * SystemConstants.HALVING_PERIOD - 1;
+        skip(delayCheck); // Maximum value that prb-match can deal with when computing 2^x
+
+        (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(alice);
+        uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
+            stakeAmount
+        );
+        assertApproxEqAbs(lockedStake, lockedStake_, stakeAmount / 1e17, "Wrong locked stake");
+        assertApproxEqAbs(unlockedStake, stakeAmount - lockedStake_, stakeAmount / 1e17, "Wrong unlocked stake");
+
+        // Skip 1s
+        skip(1 seconds);
+
+        (unlockedStake, lockedStake) = staker.stakeOf(alice);
+        assertEq(lockedStake, 0, "Wrong locked stake");
+        assertEq(unlockedStake, stakeAmount, "Wrong unlocked stake");
+    }
+
+    function testFuzz_stakeTwice(
+        User memory user1,
+        User memory user2,
+        uint80 totalSupplyOfSIR,
+        uint256 delayCheck
+    ) public {
         totalSupplyOfSIR = uint80(_bound(totalSupplyOfSIR, user2.mintAmount, type(uint80).max));
 
         address account1 = _idToAddress(user1.id);
         address account2 = _idToAddress(user2.id);
 
         // 1st staker stakes
-        testFuzz_stake(user1, totalSupplyOfSIR - user2.mintAmount);
+        testFuzz_stake(user1, totalSupplyOfSIR - user2.mintAmount, SystemConstants.HALVING_PERIOD);
 
         // 2nd staker stakes
         user2.stakeAmount = uint80(_bound(user2.stakeAmount, 0, user2.mintAmount));
@@ -471,6 +531,10 @@ contract StakerTest is Auxiliary {
         emit Staked(account2, user2.stakeAmount);
         vm.prank(account2);
         staker.stake(user2.stakeAmount);
+
+        // Skip some time
+        delayCheck = _bound(delayCheck, 0, 15 * 365 days);
+        skip(delayCheck);
 
         // Verify balances
         if (account1 != account2) {
@@ -493,6 +557,24 @@ contract StakerTest is Auxiliary {
                 user1.mintAmount + user2.mintAmount,
                 "Wrong total balance of account2"
             );
+
+            (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(account2);
+            uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
+                user1.stakeAmount / 2 + user2.stakeAmount
+            );
+            assertApproxEqAbs(
+                lockedStake,
+                lockedStake_,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e17,
+                "Wrong locked stake"
+            );
+            assertApproxEqAbs(
+                unlockedStake,
+                user1.stakeAmount + user2.stakeAmount - lockedStake_,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e17,
+                "Wrong unlocked stake"
+            );
+
             assertEq(
                 staker.supply(),
                 totalSupplyOfSIR - user1.stakeAmount - user2.stakeAmount,
@@ -506,7 +588,8 @@ contract StakerTest is Auxiliary {
         User memory user1,
         User memory user2,
         uint80 totalSupplyOfSIR,
-        Donations memory donations
+        Donations memory donations,
+        uint256 delayCheck
     ) public {
         address account1 = _idToAddress(user1.id);
         address account2 = _idToAddress(user2.id);
@@ -515,7 +598,7 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Stake
-        testFuzz_stakeTwice(user1, user2, totalSupplyOfSIR);
+        testFuzz_stakeTwice(user1, user2, totalSupplyOfSIR, delayCheck);
 
         // No dividends before claiming
         assertEq(staker.unclaimedDividends(account1), 0);
@@ -649,13 +732,14 @@ contract StakerTest is Auxiliary {
         User memory user,
         uint80 totalSupplyOfSIR,
         Donations memory donations,
-        uint80 unstakeAmount
+        uint80 unstakeAmount,
+        uint256 delayCheck
     ) public {
         address account = _idToAddress(user.id);
 
         // Stakes
-        testFuzz_stake(user, totalSupplyOfSIR);
-        unstakeAmount = uint80(_bound(unstakeAmount, 0, user.stakeAmount));
+        (uint80 unlockedStake, uint80 lockedStake) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, 0, unlockedStake));
 
         // Set up donations
         _setDonations(donations);
@@ -706,6 +790,11 @@ contract StakerTest is Auxiliary {
                 "Donations after unstaking too low"
             );
 
+            // Check unlocked and locked stakes are correct
+            (uint80 unlockedStake_, uint80 lockedStake_) = staker.stakeOf(account);
+            assertEq(unlockedStake - unstakeAmount, unlockedStake_);
+            assertEq(lockedStake, lockedStake_);
+
             // Claim dividends
             vm.prank(account);
             assertApproxEqAbs(
@@ -728,13 +817,14 @@ contract StakerTest is Auxiliary {
         User memory user,
         uint80 totalSupplyOfSIR,
         Donations memory donations,
-        uint80 unstakeAmount
+        uint80 unstakeAmount,
+        uint256 delayCheck
     ) public {
         address account = _idToAddress(user.id);
 
         // Stakes
-        testFuzz_stake(user, totalSupplyOfSIR);
-        unstakeAmount = uint80(_bound(unstakeAmount, 0, user.stakeAmount));
+        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, 0, unlockedStake));
 
         // Set up donations
         _setDonations(donations);
@@ -790,18 +880,19 @@ contract StakerTest is Auxiliary {
         }
     }
 
-    function testFuzz_unstakeExceedsStake(
+    function testFuzz_unstakeExceedsUnlockedStake(
         User memory user,
         uint80 totalSupplyOfSIR,
         Donations memory donations,
-        uint80 unstakeAmount
+        uint80 unstakeAmount,
+        uint256 delayCheck
     ) public {
         address account = _idToAddress(user.id);
 
         // Stakes
         user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
-        testFuzz_stake(user, totalSupplyOfSIR);
-        unstakeAmount = uint80(_bound(unstakeAmount, user.stakeAmount + 1, type(uint80).max));
+        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, unlockedStake + 1, type(uint80).max));
 
         // Set up donations
         _setDonations(donations);
@@ -834,14 +925,15 @@ contract StakerTest is Auxiliary {
         User memory user,
         uint80 totalSupplyOfSIR,
         Donations memory donations,
-        uint80 unstakeAmount
+        uint80 unstakeAmount,
+        uint256 delayCheck
     ) public {
         address account = _idToAddress(user.id);
 
         // Stakes
         user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
-        testFuzz_stake(user, totalSupplyOfSIR);
-        unstakeAmount = uint80(_bound(unstakeAmount, user.stakeAmount + 1, type(uint80).max));
+        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, unlockedStake + 1, type(uint80).max));
 
         // Set up donations
         _setDonations(donations);
@@ -870,9 +962,9 @@ contract StakerTest is Auxiliary {
         staker.unstakeAndClaim(unstakeAmount);
     }
 
-    /////////////////////////////////////////////////////////
-    ///////////// AUCTION // AND // DIVIDENDS /////////////
-    ///////////////////////////////////////////////////////
+    // /////////////////////////////////////////////////////////
+    // ///////////// AUCTION // AND // DIVIDENDS /////////////
+    // ///////////////////////////////////////////////////////
 
     function testFuzz_payNoAuctionWinner(address bidder, address token, address beneficiary) public {
         vm.expectRevert(bidder == address(0) ? NoAuctionLot.selector : NotTheAuctionWinner.selector);
@@ -894,7 +986,7 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Stake
-        testFuzz_stake(user, totalSupplyOfSIR);
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
 
         bool noFees = uint256(tokenBalances.vaultTotalFees) +
             donations.stakerDonationsWETH +
@@ -992,7 +1084,7 @@ contract StakerTest is Auxiliary {
         Donations memory donations
     ) public {
         // User stakes
-        testFuzz_stake(user, totalSupplyOfSIR);
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
 
         // Set up fees
         _setFees(Addresses.ADDR_BNB, tokenBalances);
@@ -1021,7 +1113,7 @@ contract StakerTest is Auxiliary {
         uint96 amount
     ) public {
         // User stakes
-        testFuzz_stake(user, totalSupplyOfSIR);
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
         vm.assume(user.stakeAmount > 0);
 
         // Set up fees
@@ -1057,7 +1149,7 @@ contract StakerTest is Auxiliary {
         Donations memory donations
     ) public {
         // User stakes
-        testFuzz_stake(user, totalSupplyOfSIR);
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
 
         // Set up fees
         tokenBalances.vaultTotalFees = 0;

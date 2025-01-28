@@ -74,6 +74,13 @@ library SirStructs {
         uint176 cumulativeETHPerSIRx80; // Cumulative ETH per SIR * 2^80
     }
 
+    struct StakerParams {
+        uint80 stake; // Total amount of staked SIR by the staker
+        uint176 cumulativeETHPerSIRx80; // Cumulative ETH per SIR * 2^80 last time the user updated his balance of ETH dividends
+        uint80 lockedStake; // Amount of stake that was locked at time 'tsLastUpdate'
+        uint40 tsLastUpdate; // Timestamp of the last time the user staked or unstaked
+    }
+
     struct Auction {
         address bidder; // Address of the bidder
         uint96 bid; // Amount of the bid
