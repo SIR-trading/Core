@@ -325,7 +325,8 @@ contract Staker {
             emit DividendsClaimed(msg.sender, dividends_);
 
             // Transfer dividends
-            payable(msg.sender).transfer(dividends_);
+            (bool success, bytes memory data) = msg.sender.call{value: dividends_}("");
+            if (!success) revert(string(data));
         }
     }
 
