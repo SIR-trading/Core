@@ -6,7 +6,8 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
-// import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
+import {UD60x18, uEXP2_MAX_INPUT, uUNIT, convert} from "prb/UD60x18.sol";
+import {exp2} from "prb/Common.sol";
 
 import "forge-std/console.sol";
 
@@ -27,6 +28,7 @@ contract Staker {
     error InvalidSigner();
     error PermitDeadlineExpired();
     error NotTheAuctionWinner();
+    error InsufficientUnlockedStake();
 
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event AuctionedTokensSentToWinner(
@@ -64,7 +66,7 @@ contract Staker {
 
     mapping(address token => SirStructs.Auction) internal _auctions;
     mapping(address user => Balance) internal balances;
-    mapping(address user => SirStructs.StakingParams) internal _stakersParams;
+    mapping(address user => SirStructs.StakerParams) internal _stakersParams;
 
     mapping(address => mapping(address => uint256)) public allowance;
 
@@ -249,7 +251,7 @@ contract Staker {
     function stake(uint80 amount) public {
         Balance memory balance = balances[msg.sender];
         SirStructs.StakingParams memory stakingParams_ = stakingParams;
-        SirStructs.StakingParams memory stakerParams = _stakersParams[msg.sender];
+        SirStructs.StakerParams memory stakerParams = getStakerParams(msg.sender);
 
         uint80 newBalanceOfSIR = balance.balanceOfSIR - amount;
 
@@ -258,10 +260,10 @@ contract Staker {
             balances[msg.sender] = Balance(newBalanceOfSIR, _dividends(balance, stakingParams_, stakerParams));
 
             // Update staker info
-            _stakersParams[msg.sender] = SirStructs.StakingParams(
-                stakerParams.stake + amount,
-                stakingParams_.cumulativeETHPerSIRx80
-            );
+            stakerParams.stake += amount;
+            stakerParams.lockedStake += amount;
+            stakerParams.cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
+            _stakersParams[msg.sender] = stakerParams;
 
             // Update _supply
             _supply.balanceOfSIR -= amount;
@@ -277,23 +279,26 @@ contract Staker {
         @param amount of SIR to unstake
      */
     function unstake(uint80 amount) public {
-        Balance memory balance = balances[msg.sender];
-        SirStructs.StakingParams memory stakingParams_ = stakingParams;
-        SirStructs.StakingParams memory stakerParams = _stakersParams[msg.sender];
-
-        uint80 newStake = stakerParams.stake - amount;
-
         unchecked {
-            // Update balance
+            Balance memory balance = balances[msg.sender];
+            SirStructs.StakingParams memory stakingParams_ = stakingParams;
+            SirStructs.StakerParams memory stakerParams = getStakerParams(msg.sender);
+
+            // Check user has enough unlocked SIR to unstake
+            if (amount > stakerParams.stake - stakerParams.lockedStake) revert InsufficientUnlockedStake();
+
+            // Update balance of SIR and ETH dividends
             balances[msg.sender] = Balance(
                 balance.balanceOfSIR + amount,
                 _dividends(balance, stakingParams_, stakerParams)
             );
 
             // Update staker info
-            _stakersParams[msg.sender] = SirStructs.StakingParams(newStake, stakingParams_.cumulativeETHPerSIRx80);
+            stakerParams.stake -= amount;
+            stakerParams.cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
+            _stakersParams[msg.sender] = stakerParams;
 
-            // Update _supply
+            // Update _supply of SIR
             _supply.balanceOfSIR += amount;
 
             // Update total stake
@@ -348,7 +353,7 @@ contract Staker {
     function _dividends(
         Balance memory balance,
         SirStructs.StakingParams memory stakingParams_,
-        SirStructs.StakingParams memory stakerParams
+        SirStructs.StakerParams memory stakerParams
     ) private pure returns (uint96 dividends_) {
         unchecked {
             dividends_ = balance.unclaimedETH;
@@ -544,6 +549,48 @@ contract Staker {
         return true;
     }
 
+    /** @notice Returns the staking parameters of a staker at the present time
+     */
+    function getStakerParams(address staker) internal view returns (SirStructs.StakerParams memory stakerParams) {
+        unchecked {
+            stakerParams = _stakersParams[staker];
+            console.log("Locked stake pre decay: ", stakerParams.lockedStake);
+
+            if (stakerParams.tsLastUpdate == 0) stakerParams.tsLastUpdate = uint40(block.timestamp);
+
+            uint256 elapsedTime = block.timestamp - stakerParams.tsLastUpdate;
+            console.log("Elapsed time: ", elapsedTime);
+            if (elapsedTime == 0) return stakerParams;
+
+            /** Compute (t-t0)/T where
+                    t-t0 is the elapsed time since last update
+                    and T is period of time it takes for the locked stake to halve
+             */
+            UD60x18 exponent = UD60x18.wrap(elapsedTime * uUNIT).div( // Cannot overflow because 2^40 < 10^60
+                    UD60x18.wrap(SystemConstants.HALVING_PERIOD * uUNIT)
+                );
+            console.log("Exponent: ", convert(exponent));
+
+            // Compute 2^[(t-t0)/T]
+            uint256 exponentUint = exponent.unwrap();
+            if (exponentUint > uEXP2_MAX_INPUT) {
+                // Too large, so we just round it to 0
+                stakerParams.lockedStake = 0;
+            } else {
+                // Convert x to the 192.64-bit fixed-point format.
+                uint256 exponent_192x64 = (exponentUint << 64) / uUNIT;
+
+                // decay ≥ 1 always because exponent_192x64 is positive
+                UD60x18 decay = UD60x18.wrap(exp2(exponent_192x64));
+
+                /** Converting lockedStake to UD60x18 does not overflow because 2^80 < 10^60
+                    Computes lockedStake/2^[(t-t0)/T]
+                 */
+                stakerParams.lockedStake = uint80(convert(UD60x18.wrap(stakerParams.lockedStake * uUNIT).div(decay)));
+            }
+        }
+    }
+
     /*////////////////////////////////////////////////////////////////
                                 GETTERS
     ////////////////////////////////////////////////////////////////*/
@@ -552,7 +599,10 @@ contract Staker {
         return _auctions[token];
     }
 
-    function stakersParams(address staker) external view returns (SirStructs.StakingParams memory) {
-        return _stakersParams[staker];
+    function stakeOf(address staker) external view returns (uint80 unlockedStake, uint80 lockedStake) {
+        SirStructs.StakerParams memory stakerParams = getStakerParams(staker);
+        console.log("Locked stake: ", stakerParams.lockedStake);
+
+        return (stakerParams.stake - stakerParams.lockedStake, stakerParams.lockedStake);
     }
 }

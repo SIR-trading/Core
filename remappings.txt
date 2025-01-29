@@ -8,4 +8,5 @@ abdk/=lib/abdk-libraries-solidity/
 @uniswap/v3-core/=lib/v3-core/
 base64-sol/=lib/base64/
 @openzeppelin/=lib/uniswap-openzeppelin/
+prb/=lib/prb-math/src/
 
