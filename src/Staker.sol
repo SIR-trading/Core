@@ -265,9 +265,6 @@ contract Staker {
             stakerParams.cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
             _stakersParams[msg.sender] = stakerParams;
 
-            console.log("CONTRACT: Total stake after staking", stakerParams.stake);
-            console.log("CONTRACT: Locked stake after staking", stakerParams.lockedStake);
-
             // Update _supply
             _supply.balanceOfSIR -= amount;
 
@@ -566,8 +563,6 @@ contract Staker {
                 or there is no locked stake, then locked stake remains unchanged.
              */
             if (elapsedTime == 0 || stakerParams.lockedStake == 0) return stakerParams;
-
-            console.log("TEST: Time elapsed after staking: ", elapsedTime, ", or in days:", elapsedTime / 1 days);
 
             /** Compute (t-t0)/T where
                     t-t0 is the elapsed time since last update

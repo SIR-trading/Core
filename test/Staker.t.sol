@@ -436,7 +436,11 @@ contract StakerTest is Auxiliary {
     /////////////////// STAKING // TESTS ///////////////////
     ///////////////////////////////////////////////////////
 
-    function testFuzz_stake(User memory user, uint80 totalSupplyOfSIR, uint256 delayCheck) public {
+    function testFuzz_stake(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        uint256 delayCheck
+    ) public returns (uint80 unlockedStake, uint80 lockedStake) {
         address account = _idToAddress(user.id);
 
         user.mintAmount = uint80(_bound(user.mintAmount, 0, totalSupplyOfSIR));
@@ -459,15 +463,15 @@ contract StakerTest is Auxiliary {
         assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount, "Wrong balance");
         assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
 
-        (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(account);
+        (unlockedStake, lockedStake) = staker.stakeOf(account);
         uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
             user.stakeAmount
         );
-        assertApproxEqAbs(lockedStake, lockedStake_, user.stakeAmount / 1e18, "Wrong locked stake");
+        assertApproxEqAbs(lockedStake, lockedStake_, user.stakeAmount / 1e17, "Wrong locked stake");
         assertApproxEqAbs(
             unlockedStake,
             user.stakeAmount - lockedStake_,
-            user.stakeAmount / 1e18,
+            user.stakeAmount / 1e17,
             "Wrong unlocked stake"
         );
 
@@ -495,8 +499,8 @@ contract StakerTest is Auxiliary {
         uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
             stakeAmount
         );
-        assertApproxEqAbs(lockedStake, lockedStake_, stakeAmount / 1e18, "Wrong locked stake");
-        assertApproxEqAbs(unlockedStake, stakeAmount - lockedStake_, stakeAmount / 1e18, "Wrong unlocked stake");
+        assertApproxEqAbs(lockedStake, lockedStake_, stakeAmount / 1e17, "Wrong locked stake");
+        assertApproxEqAbs(unlockedStake, stakeAmount - lockedStake_, stakeAmount / 1e17, "Wrong unlocked stake");
 
         // Skip 1s
         skip(1 seconds);
@@ -543,9 +547,6 @@ contract StakerTest is Auxiliary {
             );
             assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply of account2");
         } else {
-            console.log("TEST: Staked a total of ", user1.stakeAmount + user2.stakeAmount);
-            console.log("TEST: Locked stake after 2nd staking", user1.stakeAmount / 2 + user2.stakeAmount);
-            console.log("TEST: Time elapsed after 2nd staking: ", delayCheck, ", or in days:", delayCheck / 1 days);
             assertEq(
                 staker.balanceOf(account2),
                 user1.mintAmount + user2.mintAmount - user1.stakeAmount - user2.stakeAmount,
@@ -564,13 +565,13 @@ contract StakerTest is Auxiliary {
             assertApproxEqAbs(
                 lockedStake,
                 lockedStake_,
-                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e18,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e17,
                 "Wrong locked stake"
             );
             assertApproxEqAbs(
                 unlockedStake,
                 user1.stakeAmount + user2.stakeAmount - lockedStake_,
-                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e18,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e17,
                 "Wrong unlocked stake"
             );
 
@@ -583,851 +584,861 @@ contract StakerTest is Auxiliary {
         }
     }
 
-    // function testFuzz_stakeTwiceAndGetDividends(
-    //     User memory user1,
-    //     User memory user2,
-    //     uint80 totalSupplyOfSIR,
-    //     Donations memory donations
-    // ) public {
-    //     address account1 = _idToAddress(user1.id);
-    //     address account2 = _idToAddress(user2.id);
+    function testFuzz_stakeTwiceAndGetDividends(
+        User memory user1,
+        User memory user2,
+        uint80 totalSupplyOfSIR,
+        Donations memory donations,
+        uint256 delayCheck
+    ) public {
+        address account1 = _idToAddress(user1.id);
+        address account2 = _idToAddress(user2.id);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Stake
-    //     testFuzz_stakeTwice(user1, user2, totalSupplyOfSIR);
+        // Stake
+        testFuzz_stakeTwice(user1, user2, totalSupplyOfSIR, delayCheck);
 
-    //     // No dividends before claiming
-    //     assertEq(staker.unclaimedDividends(account1), 0);
-    //     assertEq(staker.unclaimedDividends(account2), 0);
-    //     vm.prank(account1);
-    //     assertEq(staker.claim(), 0);
-    //     vm.prank(account2);
-    //     assertEq(staker.claim(), 0);
+        // No dividends before claiming
+        assertEq(staker.unclaimedDividends(account1), 0);
+        assertEq(staker.unclaimedDividends(account2), 0);
+        vm.prank(account1);
+        assertEq(staker.claim(), 0);
+        vm.prank(account2);
+        assertEq(staker.claim(), 0);
 
-    //     // This triggers a payment of dividends
-    //     if (
-    //         donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 &&
-    //         user1.stakeAmount + user2.stakeAmount > 0
-    //     ) {
-    //         vm.expectEmit();
-    //         emit DividendsPaid(
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             user1.stakeAmount + user2.stakeAmount
-    //         );
-    //     } else {
-    //         vm.expectRevert(NoFeesCollected.selector);
-    //     }
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        // This triggers a payment of dividends
+        if (
+            donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 &&
+            user1.stakeAmount + user2.stakeAmount > 0
+        ) {
+            vm.expectEmit();
+            emit DividendsPaid(
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                user1.stakeAmount + user2.stakeAmount
+            );
+        } else {
+            vm.expectRevert(NoFeesCollected.selector);
+        }
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
-    //     // Donations
-    //     if (
-    //         donations.stakerDonationsWETH + donations.stakerDonationsETH == 0 ||
-    //         user1.stakeAmount + user2.stakeAmount == 0
-    //     ) {
-    //         assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0");
-    //         assertEq(staker.unclaimedDividends(account2), 0, "Donations of account2 should be 0");
-    //     } else if (account1 == account2) {
-    //         uint256 maxError = ErrorComputation.maxErrorBalance(80, user1.stakeAmount + user2.stakeAmount, 1);
-    //         assertLe(
-    //             staker.unclaimedDividends(account1),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             "Donations too high"
-    //         );
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account1),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Donations too low"
-    //         );
+        // Donations
+        if (
+            donations.stakerDonationsWETH + donations.stakerDonationsETH == 0 ||
+            user1.stakeAmount + user2.stakeAmount == 0
+        ) {
+            assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0");
+            assertEq(staker.unclaimedDividends(account2), 0, "Donations of account2 should be 0");
+        } else if (account1 == account2) {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, user1.stakeAmount + user2.stakeAmount, 1);
+            assertLe(
+                staker.unclaimedDividends(account1),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                "Donations too high"
+            );
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account1),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Donations too low"
+            );
 
-    //         // Claim dividends
-    //         vm.prank(account1);
-    //         assertApproxEqAbs(
-    //             staker.claim(),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Claimed unclaimedDividends are incorrect"
-    //         );
-    //         assertEq(staker.unclaimedDividends(account1), 0, "Donations should be 0 after claim");
-    //         assertApproxEqAbs(
-    //             account1.balance,
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Balance is incorrect"
-    //         );
-    //         assertApproxEqAbs(address(staker).balance, 0, maxError, "Balance staker is incorrect");
-    //     } else {
-    //         // Verify balances of account1
-    //         uint256 dividends = (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) *
-    //             user1.stakeAmount) / (user1.stakeAmount + user2.stakeAmount);
-    //         uint256 maxError1 = ErrorComputation.maxErrorBalance(80, user1.stakeAmount, 1);
-    //         assertLe(staker.unclaimedDividends(account1), dividends, "Donations of account1 too high");
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account1),
-    //             dividends,
-    //             maxError1,
-    //             "Donations of account1 too low"
-    //         );
+            // Claim dividends
+            vm.prank(account1);
+            assertApproxEqAbs(
+                staker.claim(),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Claimed unclaimedDividends are incorrect"
+            );
+            assertEq(staker.unclaimedDividends(account1), 0, "Donations should be 0 after claim");
+            assertApproxEqAbs(
+                account1.balance,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Balance is incorrect"
+            );
+            assertApproxEqAbs(address(staker).balance, 0, maxError, "Balance staker is incorrect");
+        } else {
+            // Verify balances of account1
+            uint256 dividends = (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) *
+                user1.stakeAmount) / (user1.stakeAmount + user2.stakeAmount);
+            uint256 maxError1 = ErrorComputation.maxErrorBalance(80, user1.stakeAmount, 1);
+            assertLe(staker.unclaimedDividends(account1), dividends, "Donations of account1 too high");
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account1),
+                dividends,
+                maxError1,
+                "Donations of account1 too low"
+            );
 
-    //         // Claim dividends of account1
-    //         vm.prank(account1);
-    //         assertApproxEqAbs(staker.claim(), dividends, maxError1, "Claimed dividends of account1 are incorrect");
-    //         assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0 after claim");
-    //         assertApproxEqAbs(account1.balance, dividends, maxError1, "Balance of account1 is incorrect");
+            // Claim dividends of account1
+            vm.prank(account1);
+            assertApproxEqAbs(staker.claim(), dividends, maxError1, "Claimed dividends of account1 are incorrect");
+            assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0 after claim");
+            assertApproxEqAbs(account1.balance, dividends, maxError1, "Balance of account1 is incorrect");
 
-    //         // Verify balances of account2
-    //         dividends =
-    //             (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) * user2.stakeAmount) /
-    //             (user1.stakeAmount + user2.stakeAmount);
-    //         uint256 maxError2 = ErrorComputation.maxErrorBalance(80, user2.stakeAmount, 1);
-    //         assertLe(staker.unclaimedDividends(account2), dividends, "Donations of account2 too high");
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account2),
-    //             dividends,
-    //             maxError2,
-    //             "Donations of account2 too low"
-    //         );
+            // Verify balances of account2
+            dividends =
+                (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) * user2.stakeAmount) /
+                (user1.stakeAmount + user2.stakeAmount);
+            uint256 maxError2 = ErrorComputation.maxErrorBalance(80, user2.stakeAmount, 1);
+            assertLe(staker.unclaimedDividends(account2), dividends, "Donations of account2 too high");
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account2),
+                dividends,
+                maxError2,
+                "Donations of account2 too low"
+            );
 
-    //         // Claim dividends of account2
-    //         vm.prank(account2);
-    //         assertApproxEqAbs(staker.claim(), dividends, maxError2, "Claimed dividends of account2 are incorrect");
-    //         assertEq(staker.unclaimedDividends(account1), 0, "Donations of account2 should be 0 after claim");
-    //         assertApproxEqAbs(account2.balance, dividends, maxError2, "Balance of account2 is incorrect");
+            // Claim dividends of account2
+            vm.prank(account2);
+            assertApproxEqAbs(staker.claim(), dividends, maxError2, "Claimed dividends of account2 are incorrect");
+            assertEq(staker.unclaimedDividends(account1), 0, "Donations of account2 should be 0 after claim");
+            assertApproxEqAbs(account2.balance, dividends, maxError2, "Balance of account2 is incorrect");
 
-    //         // Verify balances of staker
-    //         assertApproxEqAbs(address(staker).balance, 0, maxError1 + maxError2, "Balance staker is incorrect");
-    //     }
-    // }
+            // Verify balances of staker
+            assertApproxEqAbs(address(staker).balance, 0, maxError1 + maxError2, "Balance staker is incorrect");
+        }
+    }
 
-    // function testFuzz_stakeExceedsBalance(User memory user, uint80 totalSupplyOfSIR) public {
-    //     address account = _idToAddress(user.id);
+    function testFuzz_stakeExceedsBalance(User memory user, uint80 totalSupplyOfSIR) public {
+        address account = _idToAddress(user.id);
 
-    //     totalSupplyOfSIR = uint80(_bound(totalSupplyOfSIR, 1, type(uint80).max));
-    //     user.mintAmount = uint80(_bound(user.mintAmount, 0, totalSupplyOfSIR - 1));
-    //     user.stakeAmount = uint80(_bound(user.stakeAmount, user.mintAmount + 1, totalSupplyOfSIR));
+        totalSupplyOfSIR = uint80(_bound(totalSupplyOfSIR, 1, type(uint80).max));
+        user.mintAmount = uint80(_bound(user.mintAmount, 0, totalSupplyOfSIR - 1));
+        user.stakeAmount = uint80(_bound(user.stakeAmount, user.mintAmount + 1, totalSupplyOfSIR));
 
-    //     _mint(account, user.mintAmount);
-    //     _mint(address(1), totalSupplyOfSIR - user.mintAmount);
+        _mint(account, user.mintAmount);
+        _mint(address(1), totalSupplyOfSIR - user.mintAmount);
 
-    //     vm.expectRevert();
-    //     vm.prank(account);
-    //     staker.stake(user.stakeAmount);
-    // }
+        vm.expectRevert();
+        vm.prank(account);
+        staker.stake(user.stakeAmount);
+    }
 
-    // function testFuzz_collectFeesAndStartAuctionNoFees(address token) public {
-    //     vm.expectRevert();
-    //     staker.collectFeesAndStartAuction(token);
-    // }
+    function testFuzz_collectFeesAndStartAuctionNoFees(address token) public {
+        vm.expectRevert();
+        staker.collectFeesAndStartAuction(token);
+    }
 
-    // function test_collectNoFeesAndStartAuction() public {
-    //     vm.expectRevert(NoFeesCollected.selector);
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_FRAX);
-    // }
+    function test_collectNoFeesAndStartAuction() public {
+        vm.expectRevert(NoFeesCollected.selector);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_FRAX);
+    }
 
-    // function testFuzz_unstake(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     Donations memory donations,
-    //     uint80 unstakeAmount
-    // ) public {
-    //     address account = _idToAddress(user.id);
+    function testFuzz_unstake(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        Donations memory donations,
+        uint80 unstakeAmount,
+        uint256 delayCheck
+    ) public {
+        address account = _idToAddress(user.id);
 
-    //     // Stakes
-    //     testFuzz_stake(user, totalSupplyOfSIR);
-    //     unstakeAmount = uint80(_bound(unstakeAmount, 0, user.stakeAmount));
+        // Stakes
+        (uint80 unlockedStake, uint80 lockedStake) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, 0, unlockedStake));
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Trigger a payment of dividends
-    //     if (donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0) {
-    //         vm.expectEmit();
-    //         emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH, user.stakeAmount);
-    //     } else {
-    //         vm.expectRevert(NoFeesCollected.selector);
-    //     }
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        // Trigger a payment of dividends
+        if (donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0) {
+            vm.expectEmit();
+            emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH, user.stakeAmount);
+        } else {
+            vm.expectRevert(NoFeesCollected.selector);
+        }
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
-    //     // Check dividends
-    //     if (user.stakeAmount == 0) {
-    //         assertEq(staker.unclaimedDividends(account), 0);
-    //     } else {
-    //         assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
-    //             "Donations before unstaking too low"
-    //         );
-    //     }
+        // Check dividends
+        if (user.stakeAmount == 0) {
+            assertEq(staker.unclaimedDividends(account), 0);
+        } else {
+            assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
+                "Donations before unstaking too low"
+            );
+        }
 
-    //     // Unstakes
-    //     vm.expectEmit();
-    //     emit Unstaked(account, unstakeAmount);
-    //     vm.prank(account);
-    //     staker.unstake(unstakeAmount);
+        // Unstakes
+        vm.expectEmit();
+        emit Unstaked(account, unstakeAmount);
+        vm.prank(account);
+        staker.unstake(unstakeAmount);
 
-    //     assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
-    //     assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
-    //     assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount + unstakeAmount, "Wrong supply");
-    //     assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
+        assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
+        assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
+        assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount + unstakeAmount, "Wrong supply");
+        assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
 
-    //     // Check dividends still there
-    //     if (user.stakeAmount == 0) {
-    //         assertEq(staker.unclaimedDividends(account), 0);
-    //     } else {
-    //         uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
-    //         assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Donations after unstaking too low"
-    //         );
+        // Check dividends still there
+        if (user.stakeAmount == 0) {
+            assertEq(staker.unclaimedDividends(account), 0);
+        } else {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
+            assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Donations after unstaking too low"
+            );
 
-    //         // Claim dividends
-    //         vm.prank(account);
-    //         assertApproxEqAbs(
-    //             staker.claim(),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Claimed dividends are incorrect"
-    //         );
-    //         assertEq(staker.unclaimedDividends(account), 0, "Donations should be 0 after claim");
-    //         assertApproxEqAbs(
-    //             account.balance,
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Balance is incorrect"
-    //         );
-    //     }
-    // }
+            // Check unlocked and locked stakes are correct
+            (uint80 unlockedStake_, uint80 lockedStake_) = staker.stakeOf(account);
+            assertEq(unlockedStake - unstakeAmount, unlockedStake_);
+            assertEq(lockedStake, lockedStake_);
 
-    // function testFuzz_unstakeAndClaim(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     Donations memory donations,
-    //     uint80 unstakeAmount
-    // ) public {
-    //     address account = _idToAddress(user.id);
+            // Claim dividends
+            vm.prank(account);
+            assertApproxEqAbs(
+                staker.claim(),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Claimed dividends are incorrect"
+            );
+            assertEq(staker.unclaimedDividends(account), 0, "Donations should be 0 after claim");
+            assertApproxEqAbs(
+                account.balance,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Balance is incorrect"
+            );
+        }
+    }
 
-    //     // Stakes
-    //     testFuzz_stake(user, totalSupplyOfSIR);
-    //     unstakeAmount = uint80(_bound(unstakeAmount, 0, user.stakeAmount));
+    function testFuzz_unstakeAndClaim(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        Donations memory donations,
+        uint80 unstakeAmount,
+        uint256 delayCheck
+    ) public {
+        address account = _idToAddress(user.id);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Stakes
+        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, 0, unlockedStake));
 
-    //     // Trigger a payment of dividends
-    //     uint96 dividends = donations.stakerDonationsWETH + donations.stakerDonationsETH;
-    //     if (dividends > 0 && user.stakeAmount > 0) {
-    //         vm.expectEmit();
-    //         emit DividendsPaid(dividends, user.stakeAmount);
-    //     } else {
-    //         vm.expectRevert(NoFeesCollected.selector);
-    //     }
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Check dividends
-    //     if (user.stakeAmount == 0) {
-    //         assertEq(staker.unclaimedDividends(account), 0);
-    //     } else {
-    //         assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
-    //             "Donations before unstaking too low"
-    //         );
-    //     }
+        // Trigger a payment of dividends
+        uint96 dividends = donations.stakerDonationsWETH + donations.stakerDonationsETH;
+        if (dividends > 0 && user.stakeAmount > 0) {
+            vm.expectEmit();
+            emit DividendsPaid(dividends, user.stakeAmount);
+        } else {
+            vm.expectRevert(NoFeesCollected.selector);
+        }
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
-    //     // Unstakes
-    //     vm.expectEmit();
-    //     emit Unstaked(account, unstakeAmount);
-    //     vm.prank(account);
-    //     uint96 dividends_ = staker.unstakeAndClaim(unstakeAmount);
-    //     assertEq(staker.unclaimedDividends(account), 0);
+        // Check dividends
+        if (user.stakeAmount == 0) {
+            assertEq(staker.unclaimedDividends(account), 0);
+        } else {
+            assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
+                "Donations before unstaking too low"
+            );
+        }
 
-    //     assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
-    //     assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
-    //     assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount + unstakeAmount, "Wrong supply");
-    //     assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
+        // Unstakes
+        vm.expectEmit();
+        emit Unstaked(account, unstakeAmount);
+        vm.prank(account);
+        uint96 dividends_ = staker.unstakeAndClaim(unstakeAmount);
+        assertEq(staker.unclaimedDividends(account), 0);
 
-    //     // Check dividends still there
-    //     assertEq(staker.unclaimedDividends(account), 0);
-    //     if (user.stakeAmount == 0) {
-    //         assertEq(dividends_, 0);
-    //     } else {
-    //         uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
-    //         assertLe(dividends_, dividends);
-    //         assertApproxEqAbs(
-    //             dividends_,
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             maxError,
-    //             "Donations after unstaking too low"
-    //         );
-    //     }
-    // }
+        assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
+        assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
+        assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount + unstakeAmount, "Wrong supply");
+        assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
 
-    // function testFuzz_unstakeExceedsStake(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     Donations memory donations,
-    //     uint80 unstakeAmount
-    // ) public {
-    //     address account = _idToAddress(user.id);
+        // Check dividends still there
+        assertEq(staker.unclaimedDividends(account), 0);
+        if (user.stakeAmount == 0) {
+            assertEq(dividends_, 0);
+        } else {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
+            assertLe(dividends_, dividends);
+            assertApproxEqAbs(
+                dividends_,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Donations after unstaking too low"
+            );
+        }
+    }
 
-    //     // Stakes
-    //     user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
-    //     testFuzz_stake(user, totalSupplyOfSIR);
-    //     unstakeAmount = uint80(_bound(unstakeAmount, user.stakeAmount + 1, type(uint80).max));
+    function testFuzz_unstakeExceedsUnlockedStake(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        Donations memory donations,
+        uint80 unstakeAmount,
+        uint256 delayCheck
+    ) public {
+        address account = _idToAddress(user.id);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Stakes
+        user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
+        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, unlockedStake + 1, type(uint80).max));
 
-    //     // Trigger a payment of dividends
-    //     vm.assume(donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0);
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Check dividends
-    //     if (user.stakeAmount == 0) {
-    //         assertEq(staker.unclaimedDividends(account), 0);
-    //     } else {
-    //         assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
-    //             "Donations before unstaking too low"
-    //         );
-    //     }
+        // Trigger a payment of dividends
+        vm.assume(donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
-    //     // Unstakes
-    //     vm.prank(account);
-    //     vm.expectRevert();
-    //     vm.prank(account);
-    //     staker.unstake(unstakeAmount);
-    // }
+        // Check dividends
+        if (user.stakeAmount == 0) {
+            assertEq(staker.unclaimedDividends(account), 0);
+        } else {
+            assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
+                "Donations before unstaking too low"
+            );
+        }
 
-    // function testFuzz_unstakeAndClaimExceedsStake(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     Donations memory donations,
-    //     uint80 unstakeAmount
-    // ) public {
-    //     address account = _idToAddress(user.id);
+        // Unstakes
+        vm.prank(account);
+        vm.expectRevert();
+        vm.prank(account);
+        staker.unstake(unstakeAmount);
+    }
 
-    //     // Stakes
-    //     user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
-    //     testFuzz_stake(user, totalSupplyOfSIR);
-    //     unstakeAmount = uint80(_bound(unstakeAmount, user.stakeAmount + 1, type(uint80).max));
+    function testFuzz_unstakeAndClaimExceedsStake(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        Donations memory donations,
+        uint80 unstakeAmount,
+        uint256 delayCheck
+    ) public {
+        address account = _idToAddress(user.id);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Stakes
+        user.stakeAmount = uint80(_bound(user.stakeAmount, 0, type(uint80).max - 1));
+        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        unstakeAmount = uint80(_bound(unstakeAmount, unlockedStake + 1, type(uint80).max));
 
-    //     // Trigger a payment of dividends
-    //     vm.assume(donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0);
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Check dividends
-    //     if (user.stakeAmount == 0) {
-    //         assertEq(staker.unclaimedDividends(account), 0);
-    //     } else {
-    //         assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
-    //         assertApproxEqAbs(
-    //             staker.unclaimedDividends(account),
-    //             donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
-    //             "Donations before unstaking too low"
-    //         );
-    //     }
+        // Trigger a payment of dividends
+        vm.assume(donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
-    //     // Unstakes
-    //     vm.prank(account);
-    //     vm.expectRevert();
-    //     vm.prank(account);
-    //     staker.unstakeAndClaim(unstakeAmount);
-    // }
+        // Check dividends
+        if (user.stakeAmount == 0) {
+            assertEq(staker.unclaimedDividends(account), 0);
+        } else {
+            assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            assertApproxEqAbs(
+                staker.unclaimedDividends(account),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
+                "Donations before unstaking too low"
+            );
+        }
+
+        // Unstakes
+        vm.prank(account);
+        vm.expectRevert();
+        vm.prank(account);
+        staker.unstakeAndClaim(unstakeAmount);
+    }
 
     // /////////////////////////////////////////////////////////
     // ///////////// AUCTION // AND // DIVIDENDS /////////////
     // ///////////////////////////////////////////////////////
 
-    // function testFuzz_payNoAuctionWinner(address bidder, address token, address beneficiary) public {
-    //     vm.expectRevert(bidder == address(0) ? NoAuctionLot.selector : NotTheAuctionWinner.selector);
-    //     vm.prank(bidder);
-    //     staker.getAuctionLot(token, beneficiary);
-    // }
+    function testFuzz_payNoAuctionWinner(address bidder, address token, address beneficiary) public {
+        vm.expectRevert(bidder == address(0) ? NoAuctionLot.selector : NotTheAuctionWinner.selector);
+        vm.prank(bidder);
+        staker.getAuctionLot(token, beneficiary);
+    }
 
-    // function testFuzz_nonAuctionOfWETH(
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR
-    // ) public {
-    //     // Set up fees
-    //     tokenBalances.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
-    //     _setFees(Addresses.ADDR_WETH, tokenBalances);
+    function testFuzz_nonAuctionOfWETH(
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        User memory user,
+        uint80 totalSupplyOfSIR
+    ) public {
+        // Set up fees
+        tokenBalances.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
+        _setFees(Addresses.ADDR_WETH, tokenBalances);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Stake
-    //     testFuzz_stake(user, totalSupplyOfSIR);
+        // Stake
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
 
-    //     bool noFees = uint256(tokenBalances.vaultTotalFees) +
-    //         donations.stakerDonationsWETH +
-    //         donations.stakerDonationsETH ==
-    //         0 ||
-    //         user.stakeAmount == 0;
-    //     if (noFees) {
-    //         vm.expectRevert(NoFeesCollected.selector);
-    //     } else {
-    //         if (tokenBalances.vaultTotalFees > 0) {
-    //             // Transfer event if there are WETH fees
-    //             vm.expectEmit();
-    //             emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
-    //         }
-    //         // DividendsPaid event if there are any WETH fees or (W)ETH donations
-    //         vm.expectEmit();
-    //         emit DividendsPaid(
-    //             uint96(tokenBalances.vaultTotalFees) + donations.stakerDonationsWETH + donations.stakerDonationsETH,
-    //             user.stakeAmount
-    //         );
-    //     }
+        bool noFees = uint256(tokenBalances.vaultTotalFees) +
+            donations.stakerDonationsWETH +
+            donations.stakerDonationsETH ==
+            0 ||
+            user.stakeAmount == 0;
+        if (noFees) {
+            vm.expectRevert(NoFeesCollected.selector);
+        } else {
+            if (tokenBalances.vaultTotalFees > 0) {
+                // Transfer event if there are WETH fees
+                vm.expectEmit();
+                emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
+            }
+            // DividendsPaid event if there are any WETH fees or (W)ETH donations
+            vm.expectEmit();
+            emit DividendsPaid(
+                uint96(tokenBalances.vaultTotalFees) + donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                user.stakeAmount
+            );
+        }
 
-    //     // Pay WETH fees and donations
-    //     uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
-    //     if (!noFees) assertEq(fees, tokenBalances.vaultTotalFees);
-    // }
+        // Pay WETH fees and donations
+        uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        if (!noFees) assertEq(fees, tokenBalances.vaultTotalFees);
+    }
 
-    // function testFuzz_nonAuctionOfWETH2ndTime(
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     uint40 timeSkip,
-    //     TokenBalances memory tokenBalances2,
-    //     Donations memory donations2
-    // ) public {
-    //     testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
+    function testFuzz_nonAuctionOfWETH2ndTime(
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        uint40 timeSkip,
+        TokenBalances memory tokenBalances2,
+        Donations memory donations2
+    ) public {
+        testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
 
-    //     // Set up fees
-    //     tokenBalances2.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
-    //     _setFees(Addresses.ADDR_WETH, tokenBalances2);
+        // Set up fees
+        tokenBalances2.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
+        _setFees(Addresses.ADDR_WETH, tokenBalances2);
 
-    //     // Set up donations
-    //     _setDonations(donations2);
+        // Set up donations
+        _setDonations(donations2);
 
-    //     // 2nd auction
-    //     skip(timeSkip);
-    //     bool noFees = uint256(tokenBalances2.vaultTotalFees) +
-    //         donations2.stakerDonationsWETH +
-    //         donations2.stakerDonationsETH ==
-    //         0 ||
-    //         user.stakeAmount == 0;
-    //     if (noFees) {
-    //         vm.expectRevert(NoFeesCollected.selector);
-    //     } else {
-    //         if (tokenBalances2.vaultTotalFees > 0) {
-    //             // Transfer event if there are WETH fees
-    //             vm.expectEmit();
-    //             emit Transfer(vault, address(staker), tokenBalances2.vaultTotalFees);
-    //         }
-    //         // DividendsPaid event if there are any WETH fees or (W)ETH donations
-    //         vm.expectEmit();
-    //         emit DividendsPaid(
-    //             uint96(tokenBalances2.vaultTotalFees) + donations2.stakerDonationsWETH + donations2.stakerDonationsETH,
-    //             user.stakeAmount
-    //         );
-    //     }
-    //     uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
-    //     if (!noFees) assertEq(fees, tokenBalances2.vaultTotalFees);
-    // }
+        // 2nd auction
+        skip(timeSkip);
+        bool noFees = uint256(tokenBalances2.vaultTotalFees) +
+            donations2.stakerDonationsWETH +
+            donations2.stakerDonationsETH ==
+            0 ||
+            user.stakeAmount == 0;
+        if (noFees) {
+            vm.expectRevert(NoFeesCollected.selector);
+        } else {
+            if (tokenBalances2.vaultTotalFees > 0) {
+                // Transfer event if there are WETH fees
+                vm.expectEmit();
+                emit Transfer(vault, address(staker), tokenBalances2.vaultTotalFees);
+            }
+            // DividendsPaid event if there are any WETH fees or (W)ETH donations
+            vm.expectEmit();
+            emit DividendsPaid(
+                uint96(tokenBalances2.vaultTotalFees) + donations2.stakerDonationsWETH + donations2.stakerDonationsETH,
+                user.stakeAmount
+            );
+        }
+        uint256 fees = staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        if (!noFees) assertEq(fees, tokenBalances2.vaultTotalFees);
+    }
 
-    // function testFuzz_auctionWinnerAlreadyPaid(
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     address beneficiary
-    // ) public {
-    //     testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
-    //     vm.assume(tokenBalances.vaultTotalFees > 0);
+    function testFuzz_auctionWinnerAlreadyPaid(
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        address beneficiary
+    ) public {
+        testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
+        vm.assume(tokenBalances.vaultTotalFees > 0);
 
-    //     // Reverts because prize has already been paid
-    //     vm.prank(address(0)); // WETH does not do auctions
-    //     vm.expectRevert(NoAuctionLot.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_WETH, beneficiary);
+        // Reverts because prize has already been paid
+        vm.prank(address(0)); // WETH does not do auctions
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.getAuctionLot(Addresses.ADDR_WETH, beneficiary);
 
-    //     vm.expectRevert(NoFeesCollected.selector);
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
-    // }
+        vm.expectRevert(NoFeesCollected.selector);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+    }
 
-    // function testFuzz_startAuctionOfBNB(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations
-    // ) public {
-    //     // User stakes
-    //     testFuzz_stake(user, totalSupplyOfSIR);
+    function testFuzz_startAuctionOfBNB(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations
+    ) public {
+        // User stakes
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
 
-    //     // Set up fees
-    //     _setFees(Addresses.ADDR_BNB, tokenBalances);
-    //     vm.assume(tokenBalances.vaultTotalFees > 0);
+        // Set up fees
+        _setFees(Addresses.ADDR_BNB, tokenBalances);
+        vm.assume(tokenBalances.vaultTotalFees > 0);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Start auction
-    //     if (user.stakeAmount > 0 && donations.stakerDonationsETH + donations.stakerDonationsWETH > 0) {
-    //         vm.expectEmit();
-    //         emit DividendsPaid(donations.stakerDonationsETH + donations.stakerDonationsWETH, user.stakeAmount);
-    //     }
-    //     vm.expectEmit();
-    //     emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
-    //     vm.expectEmit();
-    //     emit AuctionStarted(Addresses.ADDR_BNB, tokenBalances.vaultTotalFees);
-    //     assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
-    // }
+        // Start auction
+        if (user.stakeAmount > 0 && donations.stakerDonationsETH + donations.stakerDonationsWETH > 0) {
+            vm.expectEmit();
+            emit DividendsPaid(donations.stakerDonationsETH + donations.stakerDonationsWETH, user.stakeAmount);
+        }
+        vm.expectEmit();
+        emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
+        vm.expectEmit();
+        emit AuctionStarted(Addresses.ADDR_BNB, tokenBalances.vaultTotalFees);
+        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
+    }
 
-    // function testFuzz_auctionOfWETHFails(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     uint96 amount
-    // ) public {
-    //     // User stakes
-    //     testFuzz_stake(user, totalSupplyOfSIR);
-    //     vm.assume(user.stakeAmount > 0);
+    function testFuzz_auctionOfWETHFails(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        uint96 amount
+    ) public {
+        // User stakes
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
+        vm.assume(user.stakeAmount > 0);
 
-    //     // Set up fees
-    //     tokenBalances.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
-    //     _setFees(Addresses.ADDR_WETH, tokenBalances);
-    //     vm.assume(tokenBalances.vaultTotalFees + donations.stakerDonationsWETH + donations.stakerDonationsETH > 0);
+        // Set up fees
+        tokenBalances.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
+        _setFees(Addresses.ADDR_WETH, tokenBalances);
+        vm.assume(tokenBalances.vaultTotalFees + donations.stakerDonationsWETH + donations.stakerDonationsETH > 0);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Start auction?
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
+        // Start auction?
+        staker.collectFeesAndStartAuction(Addresses.ADDR_WETH);
 
-    //     // No auction
-    //     WETH.approve(address(staker), amount);
-    //     vm.expectRevert(NoAuction.selector);
-    //     staker.bid(Addresses.ADDR_WETH, amount);
+        // No auction
+        WETH.approve(address(staker), amount);
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_WETH, amount);
 
-    //     SirStructs.Auction memory auction = staker.auctions(Addresses.ADDR_WETH);
-    //     assertEq(auction.bidder, address(0), "Bidder should be 0");
-    //     assertEq(auction.bid, 0, "Bid should be 0");
-    //     assertEq(auction.startTime, 0, "Start time should be 0");
+        SirStructs.Auction memory auction = staker.auctions(Addresses.ADDR_WETH);
+        assertEq(auction.bidder, address(0), "Bidder should be 0");
+        assertEq(auction.bid, 0, "Bid should be 0");
+        assertEq(auction.startTime, 0, "Start time should be 0");
 
-    //     WETH.approve(address(staker), amount);
-    //     vm.expectRevert(NoAuction.selector);
-    //     staker.bid(Addresses.ADDR_WETH, amount);
-    // }
+        WETH.approve(address(staker), amount);
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_WETH, amount);
+    }
 
-    // function testFuzz_startAuctionOfBNBNoFees(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations
-    // ) public {
-    //     // User stakes
-    //     testFuzz_stake(user, totalSupplyOfSIR);
+    function testFuzz_startAuctionOfBNBNoFees(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations
+    ) public {
+        // User stakes
+        testFuzz_stake(user, totalSupplyOfSIR, 0);
 
-    //     // Set up fees
-    //     tokenBalances.vaultTotalFees = 0;
-    //     _setFees(Addresses.ADDR_BNB, tokenBalances);
+        // Set up fees
+        tokenBalances.vaultTotalFees = 0;
+        _setFees(Addresses.ADDR_BNB, tokenBalances);
 
-    //     // Set up donations
-    //     _setDonations(donations);
+        // Set up donations
+        _setDonations(donations);
 
-    //     // Start auction
-    //     vm.expectRevert(bytes("ST"));
-    //     assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
-    // }
+        // Start auction
+        vm.expectRevert(bytes("ST"));
+        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
+    }
 
-    // function testFuzz_payAuctionWinnerTooSoon(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     address bidder,
-    //     uint96 amount,
-    //     address beneficiary,
-    //     uint256 delay
-    // ) public {
-    //     testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
-    //     vm.assume(tokenBalances.vaultTotalFees > 0);
+    function testFuzz_payAuctionWinnerTooSoon(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        address bidder,
+        uint96 amount,
+        address beneficiary,
+        uint256 delay
+    ) public {
+        testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
+        vm.assume(tokenBalances.vaultTotalFees > 0);
 
-    //     // Bid
-    //     amount = uint96(_bound(amount, 1, ETH_SUPPLY));
-    //     _dealWETH(bidder, amount);
-    //     vm.prank(bidder);
-    //     WETH.approve(address(staker), amount);
-    //     vm.prank(bidder);
-    //     staker.bid(Addresses.ADDR_BNB, amount);
+        // Bid
+        amount = uint96(_bound(amount, 1, ETH_SUPPLY));
+        _dealWETH(bidder, amount);
+        vm.prank(bidder);
+        WETH.approve(address(staker), amount);
+        vm.prank(bidder);
+        staker.bid(Addresses.ADDR_BNB, amount);
 
-    //     // Attempt to get auction lot
-    //     delay = _bound(delay, 0, SystemConstants.AUCTION_DURATION - 1);
-    //     skip(delay);
-    //     vm.expectRevert(AuctionIsNotOver.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
-    // }
+        // Attempt to get auction lot
+        delay = _bound(delay, 0, SystemConstants.AUCTION_DURATION - 1);
+        skip(delay);
+        vm.expectRevert(AuctionIsNotOver.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+    }
 
-    // function testFuzz_payAuctionWinnerNoBids(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     address beneficiary,
-    //     uint256 delay
-    // ) public {
-    //     testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
-    //     vm.assume(tokenBalances.vaultTotalFees > 0);
+    function testFuzz_payAuctionWinnerNoBids(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        address beneficiary,
+        uint256 delay
+    ) public {
+        testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
+        vm.assume(tokenBalances.vaultTotalFees > 0);
 
-    //     // Attempt to get auction lot
-    //     delay = _bound(delay, SystemConstants.AUCTION_DURATION, type(uint40).max);
-    //     skip(SystemConstants.AUCTION_DURATION);
-    //     vm.prank(address(0));
-    //     vm.expectRevert(NoAuctionLot.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
-    // }
+        // Attempt to get auction lot
+        delay = _bound(delay, SystemConstants.AUCTION_DURATION, type(uint40).max);
+        skip(SystemConstants.AUCTION_DURATION);
+        vm.prank(address(0));
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+    }
 
-    // function testFuzz_auctionOfBNB(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     Bidder memory bidder1,
-    //     Bidder memory bidder2,
-    //     Bidder memory bidder3
-    // ) public returns (uint256 start) {
-    //     start = block.timestamp;
+    function testFuzz_auctionOfBNB(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3
+    ) public returns (uint256 start) {
+        start = block.timestamp;
 
-    //     testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
+        testFuzz_startAuctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations);
 
-    //     bidder1.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
-    //     bidder2.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
-    //     bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
+        bidder1.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
+        bidder2.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
+        bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
 
-    //     // Bidder 1
-    //     console.log("there");
-    //     _dealWETH(_idToAddress(bidder1.id), bidder1.amount);
-    //     vm.prank(_idToAddress(bidder1.id));
-    //     WETH.approve(address(staker), bidder1.amount);
-    //     if (bidder1.amount > 0) {
-    //         vm.expectEmit();
-    //         emit BidReceived(_idToAddress(bidder1.id), Addresses.ADDR_BNB, 0, bidder1.amount);
-    //     } else {
-    //         vm.expectRevert(BidTooLow.selector);
-    //     }
-    //     vm.prank(_idToAddress(bidder1.id));
-    //     staker.bid(Addresses.ADDR_BNB, bidder1.amount);
+        // Bidder 1
+        console.log("there");
+        _dealWETH(_idToAddress(bidder1.id), bidder1.amount);
+        vm.prank(_idToAddress(bidder1.id));
+        WETH.approve(address(staker), bidder1.amount);
+        if (bidder1.amount > 0) {
+            vm.expectEmit();
+            emit BidReceived(_idToAddress(bidder1.id), Addresses.ADDR_BNB, 0, bidder1.amount);
+        } else {
+            vm.expectRevert(BidTooLow.selector);
+        }
+        vm.prank(_idToAddress(bidder1.id));
+        staker.bid(Addresses.ADDR_BNB, bidder1.amount);
 
-    //     // Assert auction parameters
-    //     if (bidder1.amount > 0) _assertAuction(bidder1, start);
-    //     else _assertAuction(Bidder(0, 0), start);
+        // Assert auction parameters
+        if (bidder1.amount > 0) _assertAuction(bidder1, start);
+        else _assertAuction(Bidder(0, 0), start);
 
-    //     // Bidder 2
-    //     console.log("here");
-    //     skip(SystemConstants.AUCTION_DURATION - 1);
-    //     _dealWETH(_idToAddress(bidder2.id), bidder2.amount);
-    //     vm.prank(_idToAddress(bidder2.id));
-    //     WETH.approve(address(staker), bidder2.amount);
-    //     if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
-    //         if (bidder2.amount > 0) {
-    //             // Bidder increases its own bid
-    //             vm.expectEmit();
-    //             emit BidReceived(
-    //                 _idToAddress(bidder2.id),
-    //                 Addresses.ADDR_BNB,
-    //                 bidder1.amount,
-    //                 bidder1.amount + bidder2.amount
-    //             );
-    //         } else {
-    //             // Bidder fails to increase its own bid
-    //             vm.expectRevert(BidTooLow.selector);
-    //         }
-    //     } else if (bidder2.amount > bidder1.amount) {
-    //         // Bidder2 outbids bidder1
-    //         vm.expectEmit();
-    //         emit BidReceived(_idToAddress(bidder2.id), Addresses.ADDR_BNB, bidder1.amount, bidder2.amount);
-    //     } else {
-    //         // Bidder2 fails to outbid bidder1
-    //         vm.expectRevert(BidTooLow.selector);
-    //     }
-    //     vm.prank(_idToAddress(bidder2.id));
-    //     staker.bid(Addresses.ADDR_BNB, bidder2.amount);
+        // Bidder 2
+        console.log("here");
+        skip(SystemConstants.AUCTION_DURATION - 1);
+        _dealWETH(_idToAddress(bidder2.id), bidder2.amount);
+        vm.prank(_idToAddress(bidder2.id));
+        WETH.approve(address(staker), bidder2.amount);
+        if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
+            if (bidder2.amount > 0) {
+                // Bidder increases its own bid
+                vm.expectEmit();
+                emit BidReceived(
+                    _idToAddress(bidder2.id),
+                    Addresses.ADDR_BNB,
+                    bidder1.amount,
+                    bidder1.amount + bidder2.amount
+                );
+            } else {
+                // Bidder fails to increase its own bid
+                vm.expectRevert(BidTooLow.selector);
+            }
+        } else if (bidder2.amount > bidder1.amount) {
+            // Bidder2 outbids bidder1
+            vm.expectEmit();
+            emit BidReceived(_idToAddress(bidder2.id), Addresses.ADDR_BNB, bidder1.amount, bidder2.amount);
+        } else {
+            // Bidder2 fails to outbid bidder1
+            vm.expectRevert(BidTooLow.selector);
+        }
+        vm.prank(_idToAddress(bidder2.id));
+        staker.bid(Addresses.ADDR_BNB, bidder2.amount);
 
-    //     // Assert auction parameters
-    //     if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
-    //         if (bidder2.amount > 0) {
-    //             _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);
-    //         } else {
-    //             if (bidder1.amount > 0) _assertAuction(bidder1, start);
-    //             else _assertAuction(Bidder(0, 0), start);
-    //         }
-    //     } else if (bidder2.amount > bidder1.amount) {
-    //         _assertAuction(bidder2, start);
-    //     } else {
-    //         if (bidder1.amount > 0) _assertAuction(bidder1, start);
-    //         else _assertAuction(Bidder(0, 0), start);
-    //     }
+        // Assert auction parameters
+        if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
+            if (bidder2.amount > 0) {
+                _assertAuction(Bidder(bidder2.id, bidder1.amount + bidder2.amount), start);
+            } else {
+                if (bidder1.amount > 0) _assertAuction(bidder1, start);
+                else _assertAuction(Bidder(0, 0), start);
+            }
+        } else if (bidder2.amount > bidder1.amount) {
+            _assertAuction(bidder2, start);
+        } else {
+            if (bidder1.amount > 0) _assertAuction(bidder1, start);
+            else _assertAuction(Bidder(0, 0), start);
+        }
 
-    //     // Bidder 3 tries to bid after auction is over. It doesn't revert its transfer so it becomes a donation.
-    //     skip(1);
-    //     _dealWETH(address(staker), bidder3.amount);
-    //     vm.prank(_idToAddress(bidder3.id));
-    //     WETH.approve(address(staker), bidder3.amount);
-    //     vm.prank(_idToAddress(bidder3.id));
-    //     vm.expectRevert(NoAuction.selector);
-    //     staker.bid(Addresses.ADDR_BNB, bidder3.amount);
-    // }
+        // Bidder 3 tries to bid after auction is over. It doesn't revert its transfer so it becomes a donation.
+        skip(1);
+        _dealWETH(address(staker), bidder3.amount);
+        vm.prank(_idToAddress(bidder3.id));
+        WETH.approve(address(staker), bidder3.amount);
+        vm.prank(_idToAddress(bidder3.id));
+        vm.expectRevert(NoAuction.selector);
+        staker.bid(Addresses.ADDR_BNB, bidder3.amount);
+    }
 
-    // function testFuzz_payAuctionWinnerBNB(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     Bidder memory bidder1,
-    //     Bidder memory bidder2,
-    //     Bidder memory bidder3,
-    //     address fakeBidder,
-    //     address beneficiary
-    // ) public {
-    //     testFuzz_auctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
+    function testFuzz_payAuctionWinnerBNB(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3,
+        address fakeBidder,
+        address beneficiary
+    ) public {
+        testFuzz_auctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
 
-    //     // Find the winner
-    //     address winner = bidder1.amount + bidder2.amount == 0
-    //         ? address(0)
-    //         : (bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id));
+        // Find the winner
+        address winner = bidder1.amount + bidder2.amount == 0
+            ? address(0)
+            : (bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id));
 
-    //     // Wrong bidder
-    //     vm.assume(fakeBidder != winner);
-    //     vm.prank(fakeBidder);
-    //     vm.expectRevert(NotTheAuctionWinner.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+        // Wrong bidder
+        vm.assume(fakeBidder != winner);
+        vm.prank(fakeBidder);
+        vm.expectRevert(NotTheAuctionWinner.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
 
-    //     if (bidder1.amount + bidder2.amount == 0) {
-    //         vm.expectRevert(NoAuctionLot.selector);
-    //     } else {
-    //         if (user.stakeAmount > 0) {
-    //             vm.expectEmit();
-    //             emit DividendsPaid(
-    //                 (
-    //                     _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
-    //                         ? bidder1.amount + bidder2.amount
-    //                         : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
-    //                 ) + bidder3.amount,
-    //                 user.stakeAmount
-    //             );
-    //         }
-    //         winner = bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id);
-    //         vm.expectEmit();
-    //         emit AuctionedTokensSentToWinner(
-    //             winner,
-    //             beneficiary == address(0) ? winner : beneficiary,
-    //             Addresses.ADDR_BNB,
-    //             tokenBalances.vaultTotalFees + tokenBalances.stakerDonations
-    //         );
-    //     }
+        if (bidder1.amount + bidder2.amount == 0) {
+            vm.expectRevert(NoAuctionLot.selector);
+        } else {
+            if (user.stakeAmount > 0) {
+                vm.expectEmit();
+                emit DividendsPaid(
+                    (
+                        _idToAddress(bidder1.id) == _idToAddress(bidder2.id)
+                            ? bidder1.amount + bidder2.amount
+                            : (bidder1.amount >= bidder2.amount ? bidder1.amount : bidder2.amount)
+                    ) + bidder3.amount,
+                    user.stakeAmount
+                );
+            }
+            winner = bidder1.amount >= bidder2.amount ? _idToAddress(bidder1.id) : _idToAddress(bidder2.id);
+            vm.expectEmit();
+            emit AuctionedTokensSentToWinner(
+                winner,
+                beneficiary == address(0) ? winner : beneficiary,
+                Addresses.ADDR_BNB,
+                tokenBalances.vaultTotalFees + tokenBalances.stakerDonations
+            );
+        }
 
-    //     // Pay auction winner
-    //     vm.prank(winner);
-    //     staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+        // Pay auction winner
+        vm.prank(winner);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
 
-    //     // Attempt to pay auction winner again
-    //     vm.prank(winner);
-    //     vm.expectRevert(NoAuctionLot.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
-    // }
+        // Attempt to pay auction winner again
+        vm.prank(winner);
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+    }
 
-    // function testFuzz_cannotPayAuctionOfWETH(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     uint96 amount,
-    //     address beneficiary
-    // ) public {
-    //     testFuzz_auctionOfWETHFails(user, totalSupplyOfSIR, tokenBalances, donations, amount);
+    function testFuzz_cannotPayAuctionOfWETH(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        uint96 amount,
+        address beneficiary
+    ) public {
+        testFuzz_auctionOfWETHFails(user, totalSupplyOfSIR, tokenBalances, donations, amount);
 
-    //     skip(SystemConstants.AUCTION_DURATION + 1);
+        skip(SystemConstants.AUCTION_DURATION + 1);
 
-    //     vm.prank(address(0));
-    //     vm.expectRevert(NoAuctionLot.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_WETH, beneficiary);
+        vm.prank(address(0));
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.getAuctionLot(Addresses.ADDR_WETH, beneficiary);
 
-    //     vm.prank(address(0));
-    //     vm.expectRevert(NoAuctionLot.selector);
-    //     staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
-    // }
+        vm.prank(address(0));
+        vm.expectRevert(NoAuctionLot.selector);
+        staker.getAuctionLot(Addresses.ADDR_BNB, beneficiary);
+    }
 
-    // function testFuzz_start2ndAuctionOfBNBTooEarly(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     Bidder memory bidder1,
-    //     Bidder memory bidder2,
-    //     Bidder memory bidder3,
-    //     uint256 timeStamp
-    // ) public {
-    //     uint256 start = testFuzz_auctionOfBNB(
-    //         user,
-    //         totalSupplyOfSIR,
-    //         tokenBalances,
-    //         donations,
-    //         bidder1,
-    //         bidder2,
-    //         bidder3
-    //     );
+    function testFuzz_start2ndAuctionOfBNBTooEarly(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3,
+        uint256 timeStamp
+    ) public {
+        uint256 start = testFuzz_auctionOfBNB(
+            user,
+            totalSupplyOfSIR,
+            tokenBalances,
+            donations,
+            bidder1,
+            bidder2,
+            bidder3
+        );
 
-    //     // 2nd auction too early
-    //     timeStamp = _bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1);
-    //     vm.warp(timeStamp);
-    //     console.log("vaultTotalFees", tokenBalances.vaultTotalFees);
-    //     if (tokenBalances.vaultTotalFees == 0) vm.expectRevert(bytes("ST"));
-    //     else vm.expectRevert(NewAuctionCannotStartYet.selector);
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
-    // }
+        // 2nd auction too early
+        timeStamp = _bound(timeStamp, 0, start + SystemConstants.AUCTION_COOLDOWN - 1);
+        vm.warp(timeStamp);
+        console.log("vaultTotalFees", tokenBalances.vaultTotalFees);
+        if (tokenBalances.vaultTotalFees == 0) vm.expectRevert(bytes("ST"));
+        else vm.expectRevert(NewAuctionCannotStartYet.selector);
+        staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
+    }
 
-    // function testFuzz_2ndAuctionOfBNB(
-    //     User memory user,
-    //     uint80 totalSupplyOfSIR,
-    //     TokenBalances memory tokenBalances,
-    //     Donations memory donations,
-    //     Bidder memory bidder1,
-    //     Bidder memory bidder2,
-    //     Bidder memory bidder3,
-    //     TokenBalances memory tokenBalances2
-    // ) public {
-    //     testFuzz_auctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
-    //     vm.assume(bidder1.amount + bidder2.amount > 0);
+    function testFuzz_2ndAuctionOfBNB(
+        User memory user,
+        uint80 totalSupplyOfSIR,
+        TokenBalances memory tokenBalances,
+        Donations memory donations,
+        Bidder memory bidder1,
+        Bidder memory bidder2,
+        Bidder memory bidder3,
+        TokenBalances memory tokenBalances2
+    ) public {
+        testFuzz_auctionOfBNB(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
+        vm.assume(bidder1.amount + bidder2.amount > 0);
 
-    //     // Set up fees for 2nd auction
-    //     _setFees(Addresses.ADDR_BNB, tokenBalances2);
-    //     vm.assume(tokenBalances2.vaultTotalFees > 0);
+        // Set up fees for 2nd auction
+        _setFees(Addresses.ADDR_BNB, tokenBalances2);
+        vm.assume(tokenBalances2.vaultTotalFees > 0);
 
-    //     // Skip time
-    //     skip(SystemConstants.AUCTION_COOLDOWN);
+        // Skip time
+        skip(SystemConstants.AUCTION_COOLDOWN);
 
-    //     // Start 2nd auction
-    //     staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
+        // Start 2nd auction
+        staker.collectFeesAndStartAuction(Addresses.ADDR_BNB);
 
-    //     // Make sure the fees for the 2nd auction are correct
-    //     assertEq(
-    //         IERC20(Addresses.ADDR_BNB).balanceOf(address(staker)),
-    //         tokenBalances2.vaultTotalFees,
-    //         "Wrong BNB balance in Staker"
-    //     );
-    // }
+        // Make sure the fees for the 2nd auction are correct
+        assertEq(
+            IERC20(Addresses.ADDR_BNB).balanceOf(address(staker)),
+            tokenBalances2.vaultTotalFees,
+            "Wrong BNB balance in Staker"
+        );
+    }
 }
 
 contract StakerHandler is Auxiliary {
