@@ -265,6 +265,9 @@ contract Staker {
             stakerParams.cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
             _stakersParams[msg.sender] = stakerParams;
 
+            console.log("CONTRACT: Total stake after staking", stakerParams.stake);
+            console.log("CONTRACT: Locked stake after staking", stakerParams.lockedStake);
+
             // Update _supply
             _supply.balanceOfSIR -= amount;
 
@@ -550,17 +553,21 @@ contract Staker {
     }
 
     /** @notice Returns the staking parameters of a staker at the present time
+        @notice This function is responsible for unlocking stake and updating tsLastUpdate in stakerParams
      */
     function getStakerParams(address staker) internal view returns (SirStructs.StakerParams memory stakerParams) {
         unchecked {
             stakerParams = _stakersParams[staker];
-            console.log("Locked stake pre decay: ", stakerParams.lockedStake);
-
-            if (stakerParams.tsLastUpdate == 0) stakerParams.tsLastUpdate = uint40(block.timestamp);
 
             uint256 elapsedTime = block.timestamp - stakerParams.tsLastUpdate;
-            console.log("Elapsed time: ", elapsedTime);
-            if (elapsedTime == 0) return stakerParams;
+            stakerParams.tsLastUpdate = uint40(block.timestamp);
+
+            /** If no time has passed since the stake parameters were last updated
+                or there is no locked stake, then locked stake remains unchanged.
+             */
+            if (elapsedTime == 0 || stakerParams.lockedStake == 0) return stakerParams;
+
+            console.log("TEST: Time elapsed after staking: ", elapsedTime, ", or in days:", elapsedTime / 1 days);
 
             /** Compute (t-t0)/T where
                     t-t0 is the elapsed time since last update
@@ -569,7 +576,6 @@ contract Staker {
             UD60x18 exponent = UD60x18.wrap(elapsedTime * uUNIT).div( // Cannot overflow because 2^40 < 10^60
                     UD60x18.wrap(SystemConstants.HALVING_PERIOD * uUNIT)
                 );
-            console.log("Exponent: ", convert(exponent));
 
             // Compute 2^[(t-t0)/T]
             uint256 exponentUint = exponent.unwrap();
@@ -601,7 +607,6 @@ contract Staker {
 
     function stakeOf(address staker) external view returns (uint80 unlockedStake, uint80 lockedStake) {
         SirStructs.StakerParams memory stakerParams = getStakerParams(staker);
-        console.log("Locked stake: ", stakerParams.lockedStake);
 
         return (stakerParams.stake - stakerParams.lockedStake, stakerParams.lockedStake);
     }

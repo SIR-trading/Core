@@ -475,52 +475,113 @@ contract StakerTest is Auxiliary {
         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
     }
 
-    // function testFuzz_stakeTwice(User memory user1, User memory user2, uint80 totalSupplyOfSIR) public {
-    //     totalSupplyOfSIR = uint80(_bound(totalSupplyOfSIR, user2.mintAmount, type(uint80).max));
+    function test_stakeEdgeCase() public {
+        uint80 stakeAmount = type(uint80).max;
 
-    //     address account1 = _idToAddress(user1.id);
-    //     address account2 = _idToAddress(user2.id);
+        // Mint
+        _mint(alice, stakeAmount);
 
-    //     // 1st staker stakes
-    //     testFuzz_stake(user1, totalSupplyOfSIR - user2.mintAmount);
+        // Stake
+        vm.expectEmit();
+        emit Staked(alice, stakeAmount);
+        vm.prank(alice);
+        staker.stake(stakeAmount);
 
-    //     // 2nd staker stakes
-    //     user2.stakeAmount = uint80(_bound(user2.stakeAmount, 0, user2.mintAmount));
-    //     _mint(account2, user2.mintAmount);
-    //     vm.expectEmit();
-    //     emit Staked(account2, user2.stakeAmount);
-    //     vm.prank(account2);
-    //     staker.stake(user2.stakeAmount);
+        // Skip time
+        uint256 delayCheck = 192 * SystemConstants.HALVING_PERIOD - 1;
+        skip(delayCheck); // Maximum value that prb-match can deal with when computing 2^x
 
-    //     // Verify balances
-    //     if (account1 != account2) {
-    //         assertEq(staker.balanceOf(account2), user2.mintAmount - user2.stakeAmount, "Wrong balance of account2");
-    //         assertEq(staker.totalBalanceOf(account2), user2.mintAmount, "Wrong total balance of account2");
-    //         assertEq(
-    //             staker.supply(),
-    //             totalSupplyOfSIR - user1.stakeAmount - user2.stakeAmount,
-    //             "Wrong supply of account2"
-    //         );
-    //         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply of account2");
-    //     } else {
-    //         assertEq(
-    //             staker.balanceOf(account2),
-    //             user1.mintAmount + user2.mintAmount - user1.stakeAmount - user2.stakeAmount,
-    //             "Wrong balance"
-    //         );
-    //         assertEq(
-    //             staker.totalBalanceOf(account2),
-    //             user1.mintAmount + user2.mintAmount,
-    //             "Wrong total balance of account2"
-    //         );
-    //         assertEq(
-    //             staker.supply(),
-    //             totalSupplyOfSIR - user1.stakeAmount - user2.stakeAmount,
-    //             "Wrong supply of account2"
-    //         );
-    //         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply of account2");
-    //     }
-    // }
+        (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(alice);
+        uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
+            stakeAmount
+        );
+        assertApproxEqAbs(lockedStake, lockedStake_, stakeAmount / 1e18, "Wrong locked stake");
+        assertApproxEqAbs(unlockedStake, stakeAmount - lockedStake_, stakeAmount / 1e18, "Wrong unlocked stake");
+
+        // Skip 1s
+        skip(1 seconds);
+
+        (unlockedStake, lockedStake) = staker.stakeOf(alice);
+        assertEq(lockedStake, 0, "Wrong locked stake");
+        assertEq(unlockedStake, stakeAmount, "Wrong unlocked stake");
+    }
+
+    function testFuzz_stakeTwice(
+        User memory user1,
+        User memory user2,
+        uint80 totalSupplyOfSIR,
+        uint256 delayCheck
+    ) public {
+        totalSupplyOfSIR = uint80(_bound(totalSupplyOfSIR, user2.mintAmount, type(uint80).max));
+
+        address account1 = _idToAddress(user1.id);
+        address account2 = _idToAddress(user2.id);
+
+        // 1st staker stakes
+        testFuzz_stake(user1, totalSupplyOfSIR - user2.mintAmount, SystemConstants.HALVING_PERIOD);
+
+        // 2nd staker stakes
+        user2.stakeAmount = uint80(_bound(user2.stakeAmount, 0, user2.mintAmount));
+        _mint(account2, user2.mintAmount);
+        vm.expectEmit();
+        emit Staked(account2, user2.stakeAmount);
+        vm.prank(account2);
+        staker.stake(user2.stakeAmount);
+
+        // Skip some time
+        delayCheck = _bound(delayCheck, 0, 15 * 365 days);
+        skip(delayCheck);
+
+        // Verify balances
+        if (account1 != account2) {
+            assertEq(staker.balanceOf(account2), user2.mintAmount - user2.stakeAmount, "Wrong balance of account2");
+            assertEq(staker.totalBalanceOf(account2), user2.mintAmount, "Wrong total balance of account2");
+            assertEq(
+                staker.supply(),
+                totalSupplyOfSIR - user1.stakeAmount - user2.stakeAmount,
+                "Wrong supply of account2"
+            );
+            assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply of account2");
+        } else {
+            console.log("TEST: Staked a total of ", user1.stakeAmount + user2.stakeAmount);
+            console.log("TEST: Locked stake after 2nd staking", user1.stakeAmount / 2 + user2.stakeAmount);
+            console.log("TEST: Time elapsed after 2nd staking: ", delayCheck, ", or in days:", delayCheck / 1 days);
+            assertEq(
+                staker.balanceOf(account2),
+                user1.mintAmount + user2.mintAmount - user1.stakeAmount - user2.stakeAmount,
+                "Wrong balance"
+            );
+            assertEq(
+                staker.totalBalanceOf(account2),
+                user1.mintAmount + user2.mintAmount,
+                "Wrong total balance of account2"
+            );
+
+            (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(account2);
+            uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
+                user1.stakeAmount / 2 + user2.stakeAmount
+            );
+            assertApproxEqAbs(
+                lockedStake,
+                lockedStake_,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e18,
+                "Wrong locked stake"
+            );
+            assertApproxEqAbs(
+                unlockedStake,
+                user1.stakeAmount + user2.stakeAmount - lockedStake_,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e18,
+                "Wrong unlocked stake"
+            );
+
+            assertEq(
+                staker.supply(),
+                totalSupplyOfSIR - user1.stakeAmount - user2.stakeAmount,
+                "Wrong supply of account2"
+            );
+            assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply of account2");
+        }
+    }
 
     // function testFuzz_stakeTwiceAndGetDividends(
     //     User memory user1,
