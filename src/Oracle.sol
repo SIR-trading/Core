@@ -85,6 +85,15 @@ contract Oracle {
         return _state[tokenA][tokenB].uniswapFeeTier.fee;
     }
 
+    function uniswapFeeTierAddressOf(address tokenA, address tokenB) external view returns (address) {
+        (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
+        return
+            UniswapPoolAddress.computeAddress(
+                UNISWAPV3_FACTORY,
+                UniswapPoolAddress.getPoolKey(tokenA, tokenB, _state[tokenA][tokenB].uniswapFeeTier.fee)
+            );
+    }
+
     /** @notice Function for getting all the uniswap fee tiers
         @notice If a new fee tier is added, anyone can add it using the `newUniswapFeeTier` function
      */
