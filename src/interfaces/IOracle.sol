@@ -48,6 +48,8 @@ interface IOracle {
 
     function uniswapFeeTierOf(address tokenA, address tokenB) external view returns (uint24);
 
+    function uniswapFeeTierAddressOf(address tokenA, address tokenB) external view returns (address);
+
     function updateOracleState(
         address collateralToken,
         address debtToken

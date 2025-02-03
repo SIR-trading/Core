@@ -47,6 +47,8 @@ interface ISIR {
 
     function contributorMint() external returns (uint80 rewards);
 
+    function contributorMintAndStake() external returns (uint80 rewards);
+
     function contributorUnclaimedSIR(address contributor) external view returns (uint80);
 
     function decimals() external view returns (uint8);

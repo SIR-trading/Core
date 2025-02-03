@@ -78,7 +78,7 @@ contract SIR is Staker, SystemControlAccess {
 
     /** @return rewards in SIR received by a contributor
      */
-    function contributorMint() external returns (uint80 rewards) {
+    function contributorMint() public returns (uint80 rewards) {
         require(_mintingAllowed);
 
         // Get contributor's unclaimed rewards
@@ -106,6 +106,16 @@ contract SIR is Staker, SystemControlAccess {
         _mint(msg.sender, rewards);
 
         emit RewardsClaimed(msg.sender, vaultId, rewards);
+    }
+
+    /** @notice Auxiliary function for minting SIR rewards and staking them immediately in one call
+     */
+    function contributorMintAndStake() external returns (uint80 rewards) {
+        // Get unclaimed rewards
+        rewards = contributorMint();
+
+        // Stake them immediately
+        stake(rewards);
     }
 
     /** @notice Auxiliary function for minting SIR rewards and staking them immediately in one call

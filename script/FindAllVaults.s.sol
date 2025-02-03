@@ -115,23 +115,23 @@ contract FindAllVaults is Script {
                 console.log("Gentlemen: Moderately profitable");
             }
 
-            // SIR rewards?
-            uint8 tax = vault.vaultTax(i);
-            SirStructs.SystemParameters memory systemParams = vault.systemParams();
-            console.log(
-                "Rewards for the first 3 years:",
-                (uint256(tax) * 1 days * SystemConstants.LP_ISSUANCE_FIRST_3_YEARS) /
-                    systemParams.cumulativeTax /
-                    10 ** (SystemConstants.SIR_DECIMALS),
-                "SIR/day"
-            );
-            console.log(
-                "Rewards after the first 3 years:",
-                (uint256(tax) * 1 days * SystemConstants.ISSUANCE) /
-                    systemParams.cumulativeTax /
-                    10 ** (SystemConstants.SIR_DECIMALS),
-                "SIR/day"
-            );
+            // // SIR rewards?
+            // uint8 tax = vault.vaultTax(i);
+            // SirStructs.SystemParameters memory systemParams = vault.systemParams();
+            // console.log(
+            //     "Rewards for the first 3 years:",
+            //     (uint256(tax) * 1 days * SystemConstants.LP_ISSUANCE_FIRST_3_YEARS) /
+            //         systemParams.cumulativeTax /
+            //         10 ** (SystemConstants.SIR_DECIMALS),
+            //     "SIR/day"
+            // );
+            // console.log(
+            //     "Rewards after the first 3 years:",
+            //     (uint256(tax) * 1 days * SystemConstants.ISSUANCE) /
+            //         systemParams.cumulativeTax /
+            //         10 ** (SystemConstants.SIR_DECIMALS),
+            //     "SIR/day"
+            // );
         }
     }
 }
