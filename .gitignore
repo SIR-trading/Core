@@ -1,12 +1,6 @@
 # Compiler files
 cache/
-!out/
-out/*
-!out/SIR.sol/
-!out/Vault.sol/
-!out/SystemControl.sol/
-!out/Oracle.sol/
-!out/APE.sol/
+out/
 
 # Ignores broadcast logs
 broadcast
