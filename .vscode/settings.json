@@ -3,11 +3,21 @@
     "solidity.packageDefaultDependenciesDirectory": "lib",
     "solidity.compileUsingRemoteVersion": "v0.8.20",
 
+    // Formatting settings
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "solidity.formatter": "prettier",
     "editor.formatOnSave": true,
 
+    // Language specific settings
     "[solidity]": {
         "editor.defaultFormatter": "JuanBlanco.solidity"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
     }
 }

@@ -1,0 +1,421 @@
+{
+  "disclaimer_message": "Welcome to the SIR token sale!\n\nClick to accept the disclaimer (https://www.sir.trading/sale_disclaimer). This request will not trigger a blockchain transaction or cost any gas fees.\n\nThe Keccak256 hash of the disclaimer is beba0750bd779f8b410310a53f2c7c698f9f50e9af53924f77559bf8a71d39c2.",
+  "contributors": [
+    {
+      "ens": "",
+      "address": "0x36D11126eBc59cb962AE8ddD3bcD0741b4e337Dc",
+      "contribution": 18412,
+      "lock_nfts": 5,
+      "allocation": 239,
+      "disclaimer_signature": "0xd6f04760dc2e711f0973f014cf615400b411900d39808e2579615838a751b1057f84065755dc5d4d5fa3b138c91d81fe17bbe1e7a72ca988da6d85bf4786eff71b",
+      "transactions": [
+        "0x803c8b85c4c87b1d4722375a265998dd0ae18b36403d45665b39094a06ced237",
+        "0x178dca80db3c2302d6412603bddbfee2624f311dbaaf32113e6ee68eabf93061"
+      ]
+    },
+    {
+      "ens": "ggcrypto.eth",
+      "address": "0xBA5EDc0d2Ae493C9574328d77dc36eEF19F699e2",
+      "contribution": 1018,
+      "lock_nfts": 0,
+      "allocation": 10,
+      "disclaimer_signature": "0xd11699c03018cd1fdac1601f2e4a38b0e451908aaa29b5ba3c827bc462e820b44eacb4d0e9ac08eb98f6e1556a30a0a22d6db28c0720739533f48b12fa51cba91b",
+      "transactions": [
+        "0x8d111fc75d1353fc9131f72fa2a9d6b025aa08ed06fd33e92d43ec31edc1bf5d",
+        "0x1ee33e9712e0ba40f479c47b2e2d40ad4bbc18f11bd834f4fd639e8b5a1689b0",
+        "0xddb3c40b69563455fa282caf79af6490be043fdab6b53945eb50c030bfc7e41b"
+      ]
+    },
+    {
+      "ens": "ogzerozeni.eth",
+      "address": "0xa485B739e99334f4B92B04da2122e2923a054688",
+      "contribution": 1000,
+      "lock_nfts": 5,
+      "allocation": 13,
+      "disclaimer_signature": "0xa23e84f065821fc4df4999b9a224aad8a6ec55903ecc911459ee1219635c946a2320215241f9e52ac125f9d425e0726a9ab7ffa24575dfe4267cb4d93dcdc0811b",
+      "transactions": [
+        "0x656a12bb9e3bb674ceec360783af6a49d7ec8e2ebe43f14937a96516a5024b94",
+        "0xd83e7122545af05ae697160048ea02fcd64ae1ad5bc990faf2c5792fd1645b62",
+        "0xea336db538ff6cf1367860496ea85c37afc0469c9a86195daba99e251f567d92"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x8D2a097607da5E2E3d599c72EC50FD0704a4D37f",
+      "contribution": 3199,
+      "lock_nfts": 5,
+      "allocation": 42,
+      "disclaimer_signature": "0xf5cdd35701e977904ff3148dbbf56c9751e64b298c840d5a65ddbed3180d78b6589f3fd5b6063d234c7215c1b46f23e336800dc3420d9acdb275cd9fc19a5cd21b",
+      "transactions": [
+        "0x1bee03f340ee149ec995d11a721e2421dddab4debbd02c70074402c2aacafa9d",
+        "0x1b86f9f5817ba708e63cd9e8039d7d243ff45276ade6d67a83246e089b4f172a"
+      ]
+    },
+    {
+      "ens": "woodcollector.eth",
+      "address": "0x7DF76FDEedE91d3cB80e4a86158dD9f6D206c98E",
+      "contribution": 866,
+      "lock_nfts": 5,
+      "allocation": 11,
+      "disclaimer_signature": "0xe0b2a403166a72722269fd4491bcaca19bdc88707129b3991859ee1bedd963c33c59a2e2e9236e15a8bc74382fa537faf33f3f1f6f1b2f5addea1f089d03c6681b",
+      "transactions": [
+        "0x8dbf71232dff27d40fc956903320c5c6749b8114d195489c65edca59b2dbc0b7",
+        "0x6ba2e1ac360835f398adaf9d3293e6d6af2993112d1d04cc6ad19cc5d4332c61",
+        "0xf057eeffb727acff836054a97bca4ffe0905a04afae7bfb1c31ac047a4fa8e54",
+        "0xef3ae16c7737277b4cc57298909ff1d750c88152b51c1623c7e2ba0706eb1bfe"
+      ]
+    },
+    {
+      "ens": "gitgood.eth",
+      "address": "0x32cf4d1df6fb7bB173183CF8b51EF9499c803634",
+      "contribution": 1045,
+      "lock_nfts": 5,
+      "allocation": 14,
+      "disclaimer_signature": "0x012b4ccca9113729dbff75611a92d8dd7bed8ac36171f70f7f965a6449e3d66f772d25bcfc481b78f6218bb6f059f499e932701249731abbd004fb1b3909c91d1c",
+      "transactions": [
+        "0xfd8f1a31d79f4545ea288b63b387b73ac8fa47e16f970bf0072aaab12010ad40",
+        "0xe73ba8944dd869c6fe625fc56aa6f508600aece493977997a0623583b9c0eb3b",
+        "0xaba1264832a1b932b05ac8f1d6d9b2a35d3cc79abf0327d245bb51962465b3f9"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x65a831D9fB2CC87A7956eB8E4720956f6bfC6eeA",
+      "contribution": 364,
+      "lock_nfts": 1,
+      "allocation": 4,
+      "disclaimer_signature": "0x203c2bb0a4082c25ecd77511248061e2cbbf77649143ea1e22467658168b658e4cd62bd72b78e96422a4096e1cd75ff302539ddee3047b87fbee64b443b7d1321c",
+      "transactions": [
+        "0x5ad051a2fb5c7f1f2f6fe42a95d74bf27fd28274a0a7e01a855c8e59864bea57"
+      ]
+    },
+    {
+      "ens": "ol1y.eth",
+      "address": "0x78086Ad810f8F99A0B6c92a9A6c8857d3c665622",
+      "contribution": 1837,
+      "lock_nfts": 5,
+      "allocation": 24,
+      "disclaimer_signature": "0x082484b072c7441dded6ab45a88642b2a2d395b026a7a1b59d73f8475b546a7313f1c2e092aa2691583ddf40e15aa8203055765b1ab0c9113acc89247fcb74b51b",
+      "transactions": [
+        "0xb1805d99fe2c06f55d0c65ea63a4539ad8e289d455b17871ade6eb8afbb7e37b",
+        "0x5f7a3364496186672d7be0f7b8e2a27b5b67bd67c705eb4a3bebea105e50933f"
+      ]
+    },
+    {
+      "ens": "fedkassad.eth",
+      "address": "0xA6f4fa9840Aa6825446c820aF6d5eCcf9f78BA05",
+      "contribution": 721,
+      "lock_nfts": 0,
+      "allocation": 7,
+      "disclaimer_signature": "0xb2e1dae97eb3f21c83b4463fac161952003991fe4bc878ad8f4ac4f689191cc52c687015e0f1b6e8b8b8ae746643d80a45162abbf7ba16599b38221bafe109c81c",
+      "transactions": [
+        "0xad368c3014761877a311651c6aa38898273fe036add682bcb9ae5d2d7322b4a0"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xF613cfD07af6D011fD671F98064214aB5B2942CF",
+      "contribution": 298,
+      "lock_nfts": 0,
+      "allocation": 3,
+      "disclaimer_signature": "0x18750c2b0e61c1075ca1a3afe6d687eb422eb2f8f803600c2985f68f7ed8f9c4001a12ee42e049da500168123d135490b58992d3b7eb28897de8ea31ca8f09e91b",
+      "transactions": [
+        "0x3b6d1054da1c445b5672b1fa20d3aa418229a3f99b796cb1e883a88a493c2cb7",
+        "0x6390652f471d759664c74c013896399f859af7e54d85bb4fc52e4d9909692a72",
+        "0xbad551c1348200f2cbc3447ff4c4fe6b968893c4927ccb710b7e897ab9ebedee"
+      ]
+    },
+    {
+      "ens": "foxvault.eth",
+      "address": "0x241F1A461Da47Ccd40B48c38340896A9948A4725",
+      "contribution": 330,
+      "lock_nfts": 5,
+      "allocation": 4,
+      "disclaimer_signature": "0x8d9c7a5f1a26eace851641c9c9629d44a3629d9958c1d8be2f661e8497e2ec2812645c18713db7546c6ac3ef42eaa3f7c9835ad9b8164eb20f3d8d8f7f7ddc3b1c",
+      "transactions": [
+        "0xfbb555028e0887f12b3546039b1266472b9c63b69d00595e0eaa3058a2eb76aa",
+        "0x14dcbd0f6d1fc7f6dd3d30e163d8aa3c603a4efb9d5eae209a4f9e6f455aa7fe",
+        "0xfce29db6ad1f2550f30b92d15fbc27df6bb48861125719f98b722e75dc721ab0"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x16fD74300dcDc02E9b1E594f293c6EfFB299a3fc",
+      "contribution": 500,
+      "lock_nfts": 0,
+      "allocation": 5,
+      "disclaimer_signature": "0x9b4c4c3fc4fc46e551d5acbbd34d0c53ada0d910fa62ee919e50fc7de64e9b07435474443964b493fb5c3892f0b7b1234832f760c36e2ebdcae8b0d254cf4e151b",
+      "transactions": [
+        "0xda8690976e0e86ac97ef57ec002af86abab688463daf07736e1172a034f24fdc",
+        "0x073ae33fa263aa9d35e5b45eaacd7d4c4c87f06436ea3d6479efc1cf9f7be1b3",
+        "0xa5beeb3d1dd069c5cb881e49b58163450b94c07a41535fb02e008089e06b00d3",
+        "0x12008c05e71b8ff63065adb992645f1aebeee8ac594ace971bef209a73b7c09a"
+      ]
+    },
+    {
+      "ens": "minimaal.eth",
+      "address": "0xde3697dDA384ce178d04D8879F7a66423F72A326",
+      "contribution": 1211,
+      "lock_nfts": 5,
+      "allocation": 16,
+      "disclaimer_signature": "0x74788d9a861f6b82ec2881a6ecdc482741e3392ea4305acbe42610ab965b46a47e734c7d24a6a9134e92a711a508ea0224edb5b25b72c27eeb5bb8e11a7951111b",
+      "transactions": [
+        "0x4cf70f4240d281a4f576c020fb08226a4bfff9eea459255ca4e21ef052ca7583"
+      ]
+    },
+    {
+      "ens": "bon3r.eth",
+      "address": "0xbe1E110f4A2fD54622CD516e86b29f619ad994bF",
+      "contribution": 367,
+      "lock_nfts": 5,
+      "allocation": 5,
+      "disclaimer_signature": "0x29bc3a7e51a3f7b1d7b5e3f899c4ef5c983810a3c924b8490d5fbfb1d4d9df2e239c4ee77bc729e5d0a086545e430ea177c59d75e6927b22e21471ba4e6f19ac1c",
+      "transactions": [
+        "0x53c0d20792477aa02e27a7fdb1543d61b1aecab60dd8c9db28d543df7ba603a6"
+      ]
+    },
+    {
+      "ens": "afroviking.art",
+      "address": "0x0C0aB132F5a8d0988e88997cb2604F494052BDEF",
+      "contribution": 100,
+      "lock_nfts": 0,
+      "allocation": 1,
+      "disclaimer_signature": "0x371febb4253e1a86b5302c1fcc823f4e16c2dc5e837ab01a42e17b92804a279b1eed46ecb618c43fbea6ab7bbbd79645ac2d28968dd9eb0c59d6120d40235fb61c",
+      "transactions": [
+        "0xcbfe9cd71624593a2af4524dca67c89cd1922b52ec1ef0addf2ac522fb806a03"
+      ]
+    },
+    {
+      "ens": "emobi.eth",
+      "address": "0x30E14c4b4768F9B5F520a2F6214d2cCc21255fDa",
+      "contribution": 10000,
+      "lock_nfts": 5,
+      "allocation": 130,
+      "disclaimer_signature": "0xb95a61c4c584da5fd7d0d5009923372bfad8019341fc340e40b8adc62828180d5267b783fb8ddac9ccf0a56ffb68085c22286250e2b9892787795d7f573321641b",
+      "transactions": [
+        "0xcefcd139e5b64378785d41fbd54fd93069c159f7d3973667f103a4bec72af7c3"
+      ]
+    },
+    {
+      "ens": "afroviking.eth",
+      "address": "0x1C5EB68630cCd90C3152FB9Dee3a1C2A7201631D",
+      "contribution": 168,
+      "lock_nfts": 0,
+      "allocation": 2,
+      "disclaimer_signature": "0xb51d71f7e99719136154ff0ca51b676c0e1120073bdbf5188ab1265d1189a0863bf52f84a60cc855d86d3665b76c31494bc213cf76e86418de94e477133e960e1c",
+      "transactions": [
+        "0xeedf4df5f9cdc928df3f40d275cc0aaa9bdfb26378d36ae0d2a05a86fcdebd87"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x0D5f69C67DAE06ce606246A8bd88B552d1DdE140",
+      "contribution": 300,
+      "lock_nfts": 0,
+      "allocation": 3,
+      "disclaimer_signature": "0x60d75ce1f67218f40db70301718d37bc38cebcb3607b81d27f3d45acb00573e243fa0c1f9195096fa143873d83ebd0adbc0b5c80e6be21fb4a0a2222461715971c",
+      "transactions": [
+        "0x21a660f5c64f0b55ae3e2a0b9a73c23162e1972e35df2b3bf06cb5ddbf020bb1"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xdF58360e945F6a302FFFB012D114C9e2bE2F212a",
+      "contribution": 394,
+      "lock_nfts": 0,
+      "allocation": 4,
+      "disclaimer_signature": "0x09511ea681a640145db5f19d5b342a8b8014226e2cbd63f6ace3750cb2bd30f32803c6f253d2cb062a2276fed7305d98a46885f67cd8e373743b279bc8954d181c",
+      "transactions": [
+        "0x871531e188e876efb6d59a6f4a94e8190c0ac0d6324202573b098f3ad2f68417"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xFe202706E36F31aFBaf4b4543C2A8bBa4ddB2deE",
+      "contribution": 4000,
+      "lock_nfts": 2,
+      "allocation": 45,
+      "disclaimer_signature": "0x7768e528017644fd863949ac1b5831b3de397e7dc21de7ebdfb0989e78e42c4940a199bf79495e715560da5c635ea4a2b2d462a8c9c87d5228154ccca175c45a1b",
+      "transactions": [
+        "0xd408fb539bd80781518650d509c758ef52ac3c9ce11bc5a7b93b8eb1a31c5ff5"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xa233f74638Bd28A24CC2Ce23475eea7dC76881AC",
+      "contribution": 491,
+      "lock_nfts": 1,
+      "allocation": 5,
+      "disclaimer_signature": "0x4e123e3895346b9621c95c9325784521644f856b25a5c619f73a8e214a81c677057d6a2cf0e190db75620006e635bc36c67f399a181fe9f062e347911b19bcc41b",
+      "transactions": [
+        "0x883ab24fa0440cd37333eb89e649a60a2ff8ac09d357ae6e93fc5eae015f0d7a"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xe4F047C5DEB2659f3659057fe5cAFB5bC6bD4307",
+      "contribution": 124,
+      "lock_nfts": 0,
+      "allocation": 1,
+      "disclaimer_signature": "0xbd9460c5ce9bbfeb5b28255426d832c2df32de2eaa66d3eb034453752a9e64764f830de489b0fcc14b649e10310535328f72cebead77838ef316a4d3da37ee491b",
+      "transactions": [
+        "0x463ed70566e245738dde0bdad26468bace30f386ea55f7fabc1b1382778b85ff"
+      ]
+    },
+    {
+      "ens": "etovass.eth",
+      "address": "0x1ff241abaD54DEcB967Bd0f57c2a584C7d1ca8BD",
+      "contribution": 1200,
+      "lock_nfts": 0,
+      "allocation": 12,
+      "disclaimer_signature": "0xd43884b7efdacc93a9b4fc5d7ea30ae40ccb3198177463af2e38156e9ba5dc283dafcc73f7d1841ec7e0f5c451743174cbb5e9bf5ee2478d16aa99762e95820b1b",
+      "transactions": [
+        "0x348b52e71334f361ea1ea7aa317bd26b772ee03addbbf09396f15afd64ec0bf0"
+      ]
+    },
+    {
+      "ens": "nix.eth",
+      "address": "0x3424cd7D170949636C300e62674a3DFB7706Fc35",
+      "contribution": 3000,
+      "lock_nfts": 5,
+      "allocation": 39,
+      "disclaimer_signature": "0x8fb48f86b5da3f1b08ede371b20f5b1fb42e2f1384bc3fd5603ad37efdd4a7bf2983e955db9fe6986a87c41c1ceb099209540fd236e5541532f866472d4bdbdf1b",
+      "transactions": [
+        "0xe612e749c1d45eeb9c49a26c5783ff6685ab1b1b87a52464a88ac7dbdc6f451a"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x07bfeB5488ad97aA3920cf241E59d2A817054eA3",
+      "contribution": 100,
+      "lock_nfts": 1,
+      "allocation": 1,
+      "disclaimer_signature": "0x0d1e3422c0a5afbecfa8e64e252709d3a43015c2a22956f3ff43ecd96068768841cfda64c5012ff97ab88355264fd44eb43e5602b4b2bedfb9857973af65ebf51b",
+      "transactions": [
+        "0xece6d8d3bed42f4ceb27f0ae971eb79bbf35091a17e363407163b15e59f345a5"
+      ]
+    },
+    {
+      "ens": "0x00ff00.eth",
+      "address": "0x79C1134a1dFdF7e0d58E58caFC84a514991372e6",
+      "contribution": 3612,
+      "lock_nfts": 5,
+      "allocation": 47,
+      "disclaimer_signature": "0x4915bef11cb0cc87d55f3cd94bf16faa7551da3a75659332b1834dd571eea53c100e22001a4f52fcbd3005b28e7a35822f47e42fd3b473e69463df6f4591b3821b",
+      "transactions": [
+        "0x95eaac32a63b370d9673dadf258ddc13fc6f3af7396f86ee4c49da257f6934a4"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xEdA726014938d2E6Ed51c7d5A53193cf9713cdF7",
+      "contribution": 2085,
+      "lock_nfts": 0,
+      "allocation": 21,
+      "disclaimer_signature": "0xb84d8e75bacb39bb32a3279c1a10c682a506242c1a6fdd83c3429d6d6d6d2e522e2dc98cdc444a76a717265c046606c3219e69872875c3688ae8a1cbfb497b521c",
+      "transactions": [
+        "0x10b0ee7c28df22a802dded75871ab908b323b5db24ab80fd3603e03b6f9e7aec"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xc4Ab0e3F12309f37A5cdf3A4b3B7C70A53eeBBa9",
+      "contribution": 263,
+      "lock_nfts": 1,
+      "allocation": 3,
+      "disclaimer_signature": "0xf659c5cf7a8bef1ee8e8629a189b84af9b74fc2ac30dcbc66fa8d5fb7368a91f2ceb43afd8e00d664fee355d5ec5cb6177bf7f49110f3468c2ee59be8829d7d71b",
+      "transactions": [
+        "0x5e79d961889f2926ed8037327fc8ea717883cceb0edb3561e1e44123cba3d2ec",
+        "0x876d58e25f20fbd74ac4dba9826e8ef447a521e1dea775031f9510fde21c0db8"
+      ]
+    },
+    {
+      "ens": "reikan.eth",
+      "address": "0xb1f55485d7ebA772F0d454Ceb0EA9a27586Ad86f",
+      "contribution": 200,
+      "lock_nfts": 3,
+      "allocation": 2,
+      "disclaimer_signature": "0x8b5f39cfb89e40f51b58ad8ed6e29d212d14ea3b588c9c884b0d79272550eed83b9cfcfb78ff18fa737c4190b93626e0377d7cd714a5409e386c8b0de00019601b",
+      "transactions": [
+        "0xacea4710cbaec8b37de867438e0e97774d3c7d482497b06b64a4fd4121ebd885"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x6422D607CA13457589A1f2dbf0ec63d5Adf87BFB",
+      "contribution": 362,
+      "lock_nfts": 0,
+      "allocation": 4,
+      "disclaimer_signature": "0x7dabb102e91361621d94987ec721766eea03dffd7181362b43aff771bb0177ea50b70cd76f9c3c16450028a06c9bdbc0b04095df916081c35650f1cbc16327be1c",
+      "transactions": [
+        "0xb894ce5d5f21b9f175e8ff8b8173e0902d515f431ce61a0f70367a3ddd58b32a"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0x18e17dd452Ef58F91E45fD20Eb2F839ac13AA648",
+      "contribution": 3000,
+      "lock_nfts": 0,
+      "allocation": 30,
+      "disclaimer_signature": "0x23e2254232600fa5d969d77b2e0d2c7b8e7e0dc10215c307a26e10071031184d4e1f513b9f2da3544f08075865d9e47b2f76d058e22db9b164ee142d64e091681c",
+      "transactions": [
+        "0xf8e676faf863666a61f661df6c8ae4bf3b9bdd3b9788d8f8c55fb64f14f3fb99"
+      ]
+    },
+    {
+      "ens": "avigad.eth",
+      "address": "0x26610e89A8B825F23E89e58879cE97D791aD4438",
+      "contribution": 5000,
+      "lock_nfts": 0,
+      "allocation": 50,
+      "disclaimer_signature": "0x34e20432caacc37b8c644a210b45570e12dfcc4232ebb3cd00b4608d43fb5c6365186971ef38d13688e98e017490d6a5d98bf0dd90f8d8ebb4977c7b4514388b1b",
+      "transactions": [
+        "0xee0f963596ed81fc6ee9c17bd69b29b5f46fc7d2f148f98bd5fc5d3edf5f4ede"
+      ]
+    },
+    {
+      "ens": "a7111a.eth",
+      "address": "0x81B55FBe66C5FFbb8468328E924AF96a84438F14",
+      "contribution": 250,
+      "lock_nfts": 0,
+      "allocation": 3,
+      "disclaimer_signature": "0xd5ca18dd780db2b8baadfa3bc2746b0fde9b22a97c1bd3358aec3643d1fc82be48ce8d20a1ffc7ef0dc9c44ebfd704d26574a50abbe521bb24172d835fcd0aef1c",
+      "transactions": [
+        "0xcbc3fc6fc7605f53684a505c685983afaf8c300ece7ac3ac62dd9e52d4bc355e"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xC3632CD03BEd246719965bB74279af79bE4bd813",
+      "contribution": 100,
+      "lock_nfts": 1,
+      "allocation": 1,
+      "disclaimer_signature": "0x6aa0865d0893b68faba8495cf0635e7b3f3321ac15b44bafe28cb5f6c7acab0e602c761933d16d2fb9fc7ef53c126307127b614c3c6d4d64fa61024f216d00661b",
+      "transactions": [
+        "0x7375aa225ff9a013f39c0ce1efb6e47fe8b63bfdfe860ebbb6ced223984dcc32"
+      ]
+    },
+    {
+      "ens": "gfun.eth",
+      "address": "0xAacc079965F0F9473BF4299d930eF639690a9792",
+      "contribution": 200,
+      "lock_nfts": 5,
+      "allocation": 3,
+      "disclaimer_signature": "0x9882f3cb9629059a5594102ab1342be0a8c91f5bdadfe54f6ca71dba22e6c58424076fcfecad7b1af9eea745287b89d3df23641215bad6cfc9dc347d9b30e9221c",
+      "transactions": [
+        "0x0c684905363156684bcd6bfb83cd4862fdbbc4bc877e057561435f8b020c4b1b"
+      ]
+    },
+    {
+      "ens": "",
+      "address": "0xE19618C08F74b7e80278Ec14b63797419dACCDf8",
+      "contribution": 2000,
+      "lock_nfts": 0,
+      "allocation": 20,
+      "disclaimer_signature": "",
+      "transactions": [],
+      "note": "External USDT contribution"
+    }
+  ],
+  "total_allocation": 824
+}
