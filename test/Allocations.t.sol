@@ -95,4 +95,6 @@ contract AllocationsTest is Test {
 
         assertEq(totalAllocations, type(uint56).max, "Total allocations is not type(uint56).max");
     }
+
+    // Check the allocations match those of usd-contributors.json
 }
