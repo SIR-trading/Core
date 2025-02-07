@@ -1,9 +1,9 @@
 [
     { "address": "0x0000000000000000000000000000000000000001", "allocation": 800 },
     { "address": "0x0000000000000000000000000000000000000002", "allocation": 250 },
-    { "address": "0x0000000000000000000000000000000000000003", "allocation": 100 },
+    { "address": "0x0e52b591Cbc9AB81c806F303DE8d9a3B0Dc4ea5C", "allocation": 100 },
     { "address": "0xfdcc69463b0106888D1CA07CE118A64AdF9fe458", "allocation": 100 },
-    { "address": "0x0000000000000000000000000000000000000004", "allocation": 70 },
+    { "address": "0xC58D3aE892A104D663B01194f2EE325CfB5187f2", "allocation": 70 },
     { "address": "0x0000000000000000000000000000000000000005", "allocation": 15 },
     { "address": "0x241F1A461Da47Ccd40B48c38340896A9948A4725", "allocation": 10 },
     { "address": "0x0000000000000000000000000000000000000007", "allocation": 10 },

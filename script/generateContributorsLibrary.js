@@ -1,11 +1,12 @@
 const fs = require("fs");
 const path = require("path");
+require("dotenv").config();
 
 // Configuration
 const FUNDRAISING_PERCENTAGE = 10; // 10% of total tokens for fundraising
 const SALE_CAP_USD = 100000; // $100,000 sale cap
 const BC_BOOST_PER_CENT = 6; // 6% boost per NFT
-const TREASURY_ADDRESS = "0x1234567890123456789012345678901234567890"; // Add your treasury address here
+const TREASURY_ADDRESS = process.env.TREASURY_ADDRESS; // Add your treasury address here
 const TREASURY_ALLOCATION = 10; // 10%
 
 // File paths
@@ -119,7 +120,7 @@ ${allocations
     .map(
         (c, i) =>
             `        ${i === 0 ? "" : "else "}if (contributor == address(${c.address})) return ${Math.round(
-                (c.allocation / 100) * typeMax
+                (c.allocation / totalAllocation) * typeMax
             ).toString()};`
     )
     .join("\n")}
