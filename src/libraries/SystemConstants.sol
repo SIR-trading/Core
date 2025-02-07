@@ -14,7 +14,7 @@ library SystemConstants {
         - 10%-13% to fundraising contributors
         - 10% to a treasury for post-mainnet stuff
      */
-    uint72 internal constant LP_ISSUANCE_FIRST_3_YEARS = uint72((uint256(68550363481563960) * ISSUANCE) / 1e17);
+    uint72 internal constant LP_ISSUANCE_FIRST_3_YEARS = uint72((uint256(68126421999999980) * ISSUANCE) / 1e17);
 
     uint128 internal constant TEA_MAX_SUPPLY = (uint128(LP_ISSUANCE_FIRST_3_YEARS) << 96) / type(uint16).max; // Must fit in uint128
 
