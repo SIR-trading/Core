@@ -7,7 +7,6 @@ const FUNDRAISING_PERCENTAGE = 10; // 10% of total tokens for fundraising
 const SALE_CAP_USD = 100000; // $100,000 sale cap
 const BC_BOOST_PER_CENT = 6; // 6% boost per NFT
 const TREASURY_ADDRESS = process.env.TREASURY_ADDRESS; // Add your treasury address here
-const TREASURY_ALLOCATION = 10; // 10%
 
 // File paths
 const SPICE_PATH = path.join(__dirname, "../contributors/spice-contributors.json");
@@ -61,7 +60,7 @@ const combineAllocations = () => {
     });
 
     // Add treasury allocation
-    addAllocation(TREASURY_ADDRESS, TREASURY_ALLOCATION, "");
+    addAllocation(TREASURY_ADDRESS, 10, "");
 
     return Array.from(allocations.values()).sort((a, b) => b.allocation - a.allocation);
 };

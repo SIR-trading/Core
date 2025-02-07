@@ -2,6 +2,8 @@
 pragma solidity >=0.8.0;
 
 import {Contributors} from "src/libraries/Contributors.sol";
+import {SystemConstants} from "src/libraries/SystemConstants.sol";
+
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
 
@@ -9,6 +11,9 @@ contract AllocationsTest is Test {
     using stdJson for string;
 
     address[] public allContributors;
+    address treasury;
+
+    uint256 public constant YEAR_ISSUANCE = 2_015_000_000 * 10 ** (SystemConstants.SIR_DECIMALS); // 2,015 M SIR per year
 
     function setUp() public {
         // Load spice contributors
@@ -30,7 +35,7 @@ contract AllocationsTest is Test {
         _addUniqueAddresses(usdAddresses);
 
         // Add treasury address directly from env
-        address treasury = vm.envAddress("TREASURY_ADDRESS");
+        treasury = vm.envAddress("TREASURY_ADDRESS");
         address[] memory treasuryArray = new address[](1);
         treasuryArray[0] = treasury;
         _addUniqueAddresses(treasuryArray);
@@ -96,5 +101,60 @@ contract AllocationsTest is Test {
         assertEq(totalAllocations, type(uint56).max, "Total allocations is not type(uint56).max");
     }
 
-    // Check the allocations match those of usd-contributors.json
+    // Define JSON structure
+    struct USDContributor {
+        address addr;
+        uint256 allocation; // Basis points from JSON
+        uint256 contribution;
+        string ens;
+        uint256 lock_nfts;
+    }
+
+    // Define JSON structure
+    struct SpiceContributor {
+        address addr;
+        uint256 allocation; // Basis points from JSON
+    }
+
+    mapping(address => uint256) allocations;
+
+    // Check the allocations match
+    function test_allocationsMatch() public {
+        // Process USD Contributors - Use same method as in setUp()
+        string memory usdJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/usd-contributors.json"));
+        USDContributor[] memory usdContributors = abi.decode(
+            usdJson.parseRaw(".contributors"), // Decode entire contributors array
+            (USDContributor[])
+        );
+
+        for (uint256 i = 0; i < usdContributors.length; i++) {
+            allocations[usdContributors[i].addr] += usdContributors[i].allocation;
+        }
+
+        // Process Spice Contributors - Use same method as in setUp()
+        string memory spiceJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/spice-contributors.json"));
+        SpiceContributor[] memory spiceContributors = abi.decode(
+            spiceJson.parseRaw(""), // Decode root array
+            (SpiceContributor[])
+        );
+
+        for (uint256 i = 0; i < spiceContributors.length; i++) {
+            allocations[spiceContributors[i].addr] += spiceContributors[i].allocation;
+        }
+
+        // Add treasury
+        allocations[treasury] += 100;
+
+        // Validate allocations
+        for (uint256 i = 0; i < allContributors.length; i++) {
+            address addr = allContributors[i];
+            uint256 actual = ((Contributors.getAllocation(addr) *
+                uint256(SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) / type(uint56).max) *
+                365 days;
+
+            uint256 expected = (allocations[addr] * YEAR_ISSUANCE) / 10000;
+
+            assertApproxEqRel(actual, expected, 1e17, string.concat("Allocation mismatch for ", vm.toString(addr)));
+        }
+    }
 }
