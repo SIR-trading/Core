@@ -81,30 +81,31 @@ function calculateLpAllocation(totalContributorAllocation) {
 
 // Generate Solidity library
 const generateLibrary = (allocations) => {
-    const TYPE_MAX = 0xffffffffffffffn; // uint56.max as BigInt
+    const TYPE_MAX = 0xffffffffffffff; // uint56.max
+    const TYPE_MAX_BIG_INT = 0xffffffffffffffn; // uint56.max as BigInt
     const totalContributorPercentage = allocations.reduce((sum, c) => sum + c.allocation, 0);
 
-    // Convert allocations to basis points (integer math)
-    const allocationData = allocations.map((c) => {
-        const basisPoints = BigInt(Math.round(c.allocation * 100));
-        return {
-            ...c,
-            basisPoints: basisPoints
-        };
-    });
+    // // Convert allocations to basis points (integer math)
+    // const allocationData = allocations.map((c) => {
+    //     const basisPoints = BigInt(Math.round(c.allocation * 100));
+    //     return {
+    //         ...c,
+    //         basisPoints: basisPoints
+    //     };
+    // });
 
-    // Calculate total basis points
-    const totalBasisPoints = allocationData.reduce((sum, c) => sum + c.basisPoints, 0n);
+    // // Calculate total basis points
+    // const totalBasisPoints = allocationData.reduce((sum, c) => sum + c.basisPoints, 0n);
 
     // Calculate allocations with remainders
-    let remaining = TYPE_MAX;
-    const allocationList = allocationData.map((c) => {
-        const exact = (c.basisPoints * TYPE_MAX) / totalBasisPoints;
+    let remaining = TYPE_MAX_BIG_INT;
+    const allocationList = allocations.map((c) => {
+        const exact = BigInt(Math.round((c.allocation * TYPE_MAX) / totalContributorPercentage));
         remaining -= exact;
         return {
             ...c,
             exact: exact,
-            remainder: Number((c.basisPoints * TYPE_MAX) % totalBasisPoints)
+            remainder: (c.allocation * TYPE_MAX) % totalContributorPercentage
         };
     });
 
@@ -117,8 +118,8 @@ const generateLibrary = (allocations) => {
 
     // Final validation
     const finalTotal = allocationList.reduce((sum, c) => sum + c.exact, 0n);
-    if (finalTotal !== TYPE_MAX) {
-        throw new Error(`Allocation sum mismatch: ${finalTotal} vs ${TYPE_MAX}`);
+    if (finalTotal !== TYPE_MAX_BIG_INT) {
+        throw new Error(`Allocation sum mismatch: ${finalTotal} vs ${TYPE_MAX_BIG_INT}`);
     }
 
     // Calculate LP allocation details

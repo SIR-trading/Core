@@ -105,6 +105,7 @@ contract AllocationsTest is Test {
     struct USDContributor {
         address addr;
         uint256 allocation; // Basis points from JSON
+        uint256 allocationPrecision;
         uint256 contribution;
         string ens;
         uint256 lock_nfts;
@@ -116,7 +117,7 @@ contract AllocationsTest is Test {
         uint256 allocation; // Basis points from JSON
     }
 
-    mapping(address => uint256) allocations;
+    mapping(address => uint256) allocationPrecision;
 
     // Check the allocations match
     function test_allocationsMatch() public {
@@ -128,7 +129,7 @@ contract AllocationsTest is Test {
         );
 
         for (uint256 i = 0; i < usdContributors.length; i++) {
-            allocations[usdContributors[i].addr] += usdContributors[i].allocation;
+            allocationPrecision[usdContributors[i].addr] += usdContributors[i].allocationPrecision;
         }
 
         // Process Spice Contributors - Use same method as in setUp()
@@ -139,11 +140,11 @@ contract AllocationsTest is Test {
         );
 
         for (uint256 i = 0; i < spiceContributors.length; i++) {
-            allocations[spiceContributors[i].addr] += spiceContributors[i].allocation;
+            allocationPrecision[spiceContributors[i].addr] += spiceContributors[i].allocation * 1e15;
         }
 
         // Add treasury
-        allocations[treasury] += 100;
+        allocationPrecision[treasury] += 1000 * 1e15;
 
         // Validate allocations
         for (uint256 i = 0; i < allContributors.length; i++) {
@@ -152,9 +153,10 @@ contract AllocationsTest is Test {
                 uint256(SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) / type(uint56).max) *
                 365 days;
 
-            uint256 expected = (allocations[addr] * YEAR_ISSUANCE) / 10000;
+            uint256 expected = (allocationPrecision[addr] * YEAR_ISSUANCE) / 1e19;
 
-            assertApproxEqRel(actual, expected, 1e17, string.concat("Allocation mismatch for ", vm.toString(addr)));
+            console.log(addr, actual, expected);
+            assertApproxEqRel(actual, expected, 1e9, string.concat("Allocation mismatch for ", vm.toString(addr)));
         }
     }
 }

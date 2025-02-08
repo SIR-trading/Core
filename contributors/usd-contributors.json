@@ -7,6 +7,7 @@
       "contribution": 18412,
       "lock_nfts": 5,
       "allocation": 239,
+      "allocationPrecision": 239356000000000030,
       "disclaimer_signature": "0xd6f04760dc2e711f0973f014cf615400b411900d39808e2579615838a751b1057f84065755dc5d4d5fa3b138c91d81fe17bbe1e7a72ca988da6d85bf4786eff71b",
       "transactions": [
         "0x803c8b85c4c87b1d4722375a265998dd0ae18b36403d45665b39094a06ced237",
@@ -19,6 +20,7 @@
       "contribution": 1018,
       "lock_nfts": 0,
       "allocation": 10,
+      "allocationPrecision": 10180000000000000,
       "disclaimer_signature": "0xd11699c03018cd1fdac1601f2e4a38b0e451908aaa29b5ba3c827bc462e820b44eacb4d0e9ac08eb98f6e1556a30a0a22d6db28c0720739533f48b12fa51cba91b",
       "transactions": [
         "0x8d111fc75d1353fc9131f72fa2a9d6b025aa08ed06fd33e92d43ec31edc1bf5d",
@@ -32,6 +34,7 @@
       "contribution": 1000,
       "lock_nfts": 5,
       "allocation": 13,
+      "allocationPrecision": 13000000000000000,
       "disclaimer_signature": "0xa23e84f065821fc4df4999b9a224aad8a6ec55903ecc911459ee1219635c946a2320215241f9e52ac125f9d425e0726a9ab7ffa24575dfe4267cb4d93dcdc0811b",
       "transactions": [
         "0x656a12bb9e3bb674ceec360783af6a49d7ec8e2ebe43f14937a96516a5024b94",
@@ -45,6 +48,7 @@
       "contribution": 3199,
       "lock_nfts": 5,
       "allocation": 42,
+      "allocationPrecision": 41587000000000000,
       "disclaimer_signature": "0xf5cdd35701e977904ff3148dbbf56c9751e64b298c840d5a65ddbed3180d78b6589f3fd5b6063d234c7215c1b46f23e336800dc3420d9acdb275cd9fc19a5cd21b",
       "transactions": [
         "0x1bee03f340ee149ec995d11a721e2421dddab4debbd02c70074402c2aacafa9d",
@@ -57,6 +61,7 @@
       "contribution": 866,
       "lock_nfts": 5,
       "allocation": 11,
+      "allocationPrecision": 11258000000000000,
       "disclaimer_signature": "0xe0b2a403166a72722269fd4491bcaca19bdc88707129b3991859ee1bedd963c33c59a2e2e9236e15a8bc74382fa537faf33f3f1f6f1b2f5addea1f089d03c6681b",
       "transactions": [
         "0x8dbf71232dff27d40fc956903320c5c6749b8114d195489c65edca59b2dbc0b7",
@@ -71,6 +76,7 @@
       "contribution": 1045,
       "lock_nfts": 5,
       "allocation": 14,
+      "allocationPrecision": 13585000000000000,
       "disclaimer_signature": "0x012b4ccca9113729dbff75611a92d8dd7bed8ac36171f70f7f965a6449e3d66f772d25bcfc481b78f6218bb6f059f499e932701249731abbd004fb1b3909c91d1c",
       "transactions": [
         "0xfd8f1a31d79f4545ea288b63b387b73ac8fa47e16f970bf0072aaab12010ad40",
@@ -84,6 +90,7 @@
       "contribution": 364,
       "lock_nfts": 1,
       "allocation": 4,
+      "allocationPrecision": 3858400000000001,
       "disclaimer_signature": "0x203c2bb0a4082c25ecd77511248061e2cbbf77649143ea1e22467658168b658e4cd62bd72b78e96422a4096e1cd75ff302539ddee3047b87fbee64b443b7d1321c",
       "transactions": [
         "0x5ad051a2fb5c7f1f2f6fe42a95d74bf27fd28274a0a7e01a855c8e59864bea57"
@@ -95,6 +102,7 @@
       "contribution": 1837,
       "lock_nfts": 5,
       "allocation": 24,
+      "allocationPrecision": 23881000000000004,
       "disclaimer_signature": "0x082484b072c7441dded6ab45a88642b2a2d395b026a7a1b59d73f8475b546a7313f1c2e092aa2691583ddf40e15aa8203055765b1ab0c9113acc89247fcb74b51b",
       "transactions": [
         "0xb1805d99fe2c06f55d0c65ea63a4539ad8e289d455b17871ade6eb8afbb7e37b",
@@ -107,6 +115,7 @@
       "contribution": 721,
       "lock_nfts": 0,
       "allocation": 7,
+      "allocationPrecision": 7210000000000000,
       "disclaimer_signature": "0xb2e1dae97eb3f21c83b4463fac161952003991fe4bc878ad8f4ac4f689191cc52c687015e0f1b6e8b8b8ae746643d80a45162abbf7ba16599b38221bafe109c81c",
       "transactions": [
         "0xad368c3014761877a311651c6aa38898273fe036add682bcb9ae5d2d7322b4a0"
@@ -118,6 +127,7 @@
       "contribution": 298,
       "lock_nfts": 0,
       "allocation": 3,
+      "allocationPrecision": 2980000000000000,
       "disclaimer_signature": "0x18750c2b0e61c1075ca1a3afe6d687eb422eb2f8f803600c2985f68f7ed8f9c4001a12ee42e049da500168123d135490b58992d3b7eb28897de8ea31ca8f09e91b",
       "transactions": [
         "0x3b6d1054da1c445b5672b1fa20d3aa418229a3f99b796cb1e883a88a493c2cb7",
@@ -131,6 +141,7 @@
       "contribution": 330,
       "lock_nfts": 5,
       "allocation": 4,
+      "allocationPrecision": 4290000000000000,
       "disclaimer_signature": "0x8d9c7a5f1a26eace851641c9c9629d44a3629d9958c1d8be2f661e8497e2ec2812645c18713db7546c6ac3ef42eaa3f7c9835ad9b8164eb20f3d8d8f7f7ddc3b1c",
       "transactions": [
         "0xfbb555028e0887f12b3546039b1266472b9c63b69d00595e0eaa3058a2eb76aa",
@@ -144,6 +155,7 @@
       "contribution": 500,
       "lock_nfts": 0,
       "allocation": 5,
+      "allocationPrecision": 5000000000000000,
       "disclaimer_signature": "0x9b4c4c3fc4fc46e551d5acbbd34d0c53ada0d910fa62ee919e50fc7de64e9b07435474443964b493fb5c3892f0b7b1234832f760c36e2ebdcae8b0d254cf4e151b",
       "transactions": [
         "0xda8690976e0e86ac97ef57ec002af86abab688463daf07736e1172a034f24fdc",
@@ -158,6 +170,7 @@
       "contribution": 1211,
       "lock_nfts": 5,
       "allocation": 16,
+      "allocationPrecision": 15742999999999998,
       "disclaimer_signature": "0x74788d9a861f6b82ec2881a6ecdc482741e3392ea4305acbe42610ab965b46a47e734c7d24a6a9134e92a711a508ea0224edb5b25b72c27eeb5bb8e11a7951111b",
       "transactions": [
         "0x4cf70f4240d281a4f576c020fb08226a4bfff9eea459255ca4e21ef052ca7583"
@@ -169,6 +182,7 @@
       "contribution": 367,
       "lock_nfts": 5,
       "allocation": 5,
+      "allocationPrecision": 4771000000000001,
       "disclaimer_signature": "0x29bc3a7e51a3f7b1d7b5e3f899c4ef5c983810a3c924b8490d5fbfb1d4d9df2e239c4ee77bc729e5d0a086545e430ea177c59d75e6927b22e21471ba4e6f19ac1c",
       "transactions": [
         "0x53c0d20792477aa02e27a7fdb1543d61b1aecab60dd8c9db28d543df7ba603a6"
@@ -180,6 +194,7 @@
       "contribution": 100,
       "lock_nfts": 0,
       "allocation": 1,
+      "allocationPrecision": 1000000000000000,
       "disclaimer_signature": "0x371febb4253e1a86b5302c1fcc823f4e16c2dc5e837ab01a42e17b92804a279b1eed46ecb618c43fbea6ab7bbbd79645ac2d28968dd9eb0c59d6120d40235fb61c",
       "transactions": [
         "0xcbfe9cd71624593a2af4524dca67c89cd1922b52ec1ef0addf2ac522fb806a03"
@@ -191,6 +206,7 @@
       "contribution": 10000,
       "lock_nfts": 5,
       "allocation": 130,
+      "allocationPrecision": 130000000000000000,
       "disclaimer_signature": "0xb95a61c4c584da5fd7d0d5009923372bfad8019341fc340e40b8adc62828180d5267b783fb8ddac9ccf0a56ffb68085c22286250e2b9892787795d7f573321641b",
       "transactions": [
         "0xcefcd139e5b64378785d41fbd54fd93069c159f7d3973667f103a4bec72af7c3"
@@ -202,6 +218,7 @@
       "contribution": 168,
       "lock_nfts": 0,
       "allocation": 2,
+      "allocationPrecision": 1680000000000000,
       "disclaimer_signature": "0xb51d71f7e99719136154ff0ca51b676c0e1120073bdbf5188ab1265d1189a0863bf52f84a60cc855d86d3665b76c31494bc213cf76e86418de94e477133e960e1c",
       "transactions": [
         "0xeedf4df5f9cdc928df3f40d275cc0aaa9bdfb26378d36ae0d2a05a86fcdebd87"
@@ -213,6 +230,7 @@
       "contribution": 300,
       "lock_nfts": 0,
       "allocation": 3,
+      "allocationPrecision": 3000000000000000,
       "disclaimer_signature": "0x60d75ce1f67218f40db70301718d37bc38cebcb3607b81d27f3d45acb00573e243fa0c1f9195096fa143873d83ebd0adbc0b5c80e6be21fb4a0a2222461715971c",
       "transactions": [
         "0x21a660f5c64f0b55ae3e2a0b9a73c23162e1972e35df2b3bf06cb5ddbf020bb1"
@@ -224,6 +242,7 @@
       "contribution": 394,
       "lock_nfts": 0,
       "allocation": 4,
+      "allocationPrecision": 3940000000000000,
       "disclaimer_signature": "0x09511ea681a640145db5f19d5b342a8b8014226e2cbd63f6ace3750cb2bd30f32803c6f253d2cb062a2276fed7305d98a46885f67cd8e373743b279bc8954d181c",
       "transactions": [
         "0x871531e188e876efb6d59a6f4a94e8190c0ac0d6324202573b098f3ad2f68417"
@@ -235,6 +254,7 @@
       "contribution": 4000,
       "lock_nfts": 2,
       "allocation": 45,
+      "allocationPrecision": 44800000000000010,
       "disclaimer_signature": "0x7768e528017644fd863949ac1b5831b3de397e7dc21de7ebdfb0989e78e42c4940a199bf79495e715560da5c635ea4a2b2d462a8c9c87d5228154ccca175c45a1b",
       "transactions": [
         "0xd408fb539bd80781518650d509c758ef52ac3c9ce11bc5a7b93b8eb1a31c5ff5"
@@ -246,6 +266,7 @@
       "contribution": 491,
       "lock_nfts": 1,
       "allocation": 5,
+      "allocationPrecision": 5204600000000001,
       "disclaimer_signature": "0x4e123e3895346b9621c95c9325784521644f856b25a5c619f73a8e214a81c677057d6a2cf0e190db75620006e635bc36c67f399a181fe9f062e347911b19bcc41b",
       "transactions": [
         "0x883ab24fa0440cd37333eb89e649a60a2ff8ac09d357ae6e93fc5eae015f0d7a"
@@ -257,6 +278,7 @@
       "contribution": 124,
       "lock_nfts": 0,
       "allocation": 1,
+      "allocationPrecision": 1240000000000000,
       "disclaimer_signature": "0xbd9460c5ce9bbfeb5b28255426d832c2df32de2eaa66d3eb034453752a9e64764f830de489b0fcc14b649e10310535328f72cebead77838ef316a4d3da37ee491b",
       "transactions": [
         "0x463ed70566e245738dde0bdad26468bace30f386ea55f7fabc1b1382778b85ff"
@@ -268,6 +290,7 @@
       "contribution": 1200,
       "lock_nfts": 0,
       "allocation": 12,
+      "allocationPrecision": 12000000000000000,
       "disclaimer_signature": "0xd43884b7efdacc93a9b4fc5d7ea30ae40ccb3198177463af2e38156e9ba5dc283dafcc73f7d1841ec7e0f5c451743174cbb5e9bf5ee2478d16aa99762e95820b1b",
       "transactions": [
         "0x348b52e71334f361ea1ea7aa317bd26b772ee03addbbf09396f15afd64ec0bf0"
@@ -279,6 +302,7 @@
       "contribution": 3000,
       "lock_nfts": 5,
       "allocation": 39,
+      "allocationPrecision": 39000000000000000,
       "disclaimer_signature": "0x8fb48f86b5da3f1b08ede371b20f5b1fb42e2f1384bc3fd5603ad37efdd4a7bf2983e955db9fe6986a87c41c1ceb099209540fd236e5541532f866472d4bdbdf1b",
       "transactions": [
         "0xe612e749c1d45eeb9c49a26c5783ff6685ab1b1b87a52464a88ac7dbdc6f451a"
@@ -290,6 +314,7 @@
       "contribution": 100,
       "lock_nfts": 1,
       "allocation": 1,
+      "allocationPrecision": 1060000000000000,
       "disclaimer_signature": "0x0d1e3422c0a5afbecfa8e64e252709d3a43015c2a22956f3ff43ecd96068768841cfda64c5012ff97ab88355264fd44eb43e5602b4b2bedfb9857973af65ebf51b",
       "transactions": [
         "0xece6d8d3bed42f4ceb27f0ae971eb79bbf35091a17e363407163b15e59f345a5"
@@ -301,6 +326,7 @@
       "contribution": 3612,
       "lock_nfts": 5,
       "allocation": 47,
+      "allocationPrecision": 46956000000000000,
       "disclaimer_signature": "0x4915bef11cb0cc87d55f3cd94bf16faa7551da3a75659332b1834dd571eea53c100e22001a4f52fcbd3005b28e7a35822f47e42fd3b473e69463df6f4591b3821b",
       "transactions": [
         "0x95eaac32a63b370d9673dadf258ddc13fc6f3af7396f86ee4c49da257f6934a4"
@@ -312,6 +338,7 @@
       "contribution": 2085,
       "lock_nfts": 0,
       "allocation": 21,
+      "allocationPrecision": 20850000000000000,
       "disclaimer_signature": "0xb84d8e75bacb39bb32a3279c1a10c682a506242c1a6fdd83c3429d6d6d6d2e522e2dc98cdc444a76a717265c046606c3219e69872875c3688ae8a1cbfb497b521c",
       "transactions": [
         "0x10b0ee7c28df22a802dded75871ab908b323b5db24ab80fd3603e03b6f9e7aec"
@@ -323,6 +350,7 @@
       "contribution": 263,
       "lock_nfts": 1,
       "allocation": 3,
+      "allocationPrecision": 2787800000000001,
       "disclaimer_signature": "0xf659c5cf7a8bef1ee8e8629a189b84af9b74fc2ac30dcbc66fa8d5fb7368a91f2ceb43afd8e00d664fee355d5ec5cb6177bf7f49110f3468c2ee59be8829d7d71b",
       "transactions": [
         "0x5e79d961889f2926ed8037327fc8ea717883cceb0edb3561e1e44123cba3d2ec",
@@ -335,6 +363,7 @@
       "contribution": 200,
       "lock_nfts": 3,
       "allocation": 2,
+      "allocationPrecision": 2360000000000000,
       "disclaimer_signature": "0x8b5f39cfb89e40f51b58ad8ed6e29d212d14ea3b588c9c884b0d79272550eed83b9cfcfb78ff18fa737c4190b93626e0377d7cd714a5409e386c8b0de00019601b",
       "transactions": [
         "0xacea4710cbaec8b37de867438e0e97774d3c7d482497b06b64a4fd4121ebd885"
@@ -346,6 +375,7 @@
       "contribution": 362,
       "lock_nfts": 0,
       "allocation": 4,
+      "allocationPrecision": 3620000000000000,
       "disclaimer_signature": "0x7dabb102e91361621d94987ec721766eea03dffd7181362b43aff771bb0177ea50b70cd76f9c3c16450028a06c9bdbc0b04095df916081c35650f1cbc16327be1c",
       "transactions": [
         "0xb894ce5d5f21b9f175e8ff8b8173e0902d515f431ce61a0f70367a3ddd58b32a"
@@ -357,6 +387,7 @@
       "contribution": 3000,
       "lock_nfts": 0,
       "allocation": 30,
+      "allocationPrecision": 30000000000000000,
       "disclaimer_signature": "0x23e2254232600fa5d969d77b2e0d2c7b8e7e0dc10215c307a26e10071031184d4e1f513b9f2da3544f08075865d9e47b2f76d058e22db9b164ee142d64e091681c",
       "transactions": [
         "0xf8e676faf863666a61f661df6c8ae4bf3b9bdd3b9788d8f8c55fb64f14f3fb99"
@@ -368,6 +399,7 @@
       "contribution": 5000,
       "lock_nfts": 0,
       "allocation": 50,
+      "allocationPrecision": 50000000000000000,
       "disclaimer_signature": "0x34e20432caacc37b8c644a210b45570e12dfcc4232ebb3cd00b4608d43fb5c6365186971ef38d13688e98e017490d6a5d98bf0dd90f8d8ebb4977c7b4514388b1b",
       "transactions": [
         "0xee0f963596ed81fc6ee9c17bd69b29b5f46fc7d2f148f98bd5fc5d3edf5f4ede"
@@ -379,6 +411,7 @@
       "contribution": 250,
       "lock_nfts": 0,
       "allocation": 3,
+      "allocationPrecision": 2500000000000000,
       "disclaimer_signature": "0xd5ca18dd780db2b8baadfa3bc2746b0fde9b22a97c1bd3358aec3643d1fc82be48ce8d20a1ffc7ef0dc9c44ebfd704d26574a50abbe521bb24172d835fcd0aef1c",
       "transactions": [
         "0xcbc3fc6fc7605f53684a505c685983afaf8c300ece7ac3ac62dd9e52d4bc355e"
@@ -390,6 +423,7 @@
       "contribution": 100,
       "lock_nfts": 1,
       "allocation": 1,
+      "allocationPrecision": 1060000000000000,
       "disclaimer_signature": "0x6aa0865d0893b68faba8495cf0635e7b3f3321ac15b44bafe28cb5f6c7acab0e602c761933d16d2fb9fc7ef53c126307127b614c3c6d4d64fa61024f216d00661b",
       "transactions": [
         "0x7375aa225ff9a013f39c0ce1efb6e47fe8b63bfdfe860ebbb6ced223984dcc32"
@@ -401,6 +435,7 @@
       "contribution": 200,
       "lock_nfts": 5,
       "allocation": 3,
+      "allocationPrecision": 2600000000000000,
       "disclaimer_signature": "0x9882f3cb9629059a5594102ab1342be0a8c91f5bdadfe54f6ca71dba22e6c58424076fcfecad7b1af9eea745287b89d3df23641215bad6cfc9dc347d9b30e9221c",
       "transactions": [
         "0x0c684905363156684bcd6bfb83cd4862fdbbc4bc877e057561435f8b020c4b1b"
@@ -412,6 +447,7 @@
       "contribution": 2000,
       "lock_nfts": 0,
       "allocation": 20,
+      "allocationPrecision": 20000000000000000,
       "disclaimer_signature": "",
       "transactions": [],
       "note": "External USDT contribution"

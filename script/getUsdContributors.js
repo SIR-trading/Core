@@ -112,7 +112,10 @@ function calculateAllocation(contributionUSD, cardCount) {
     const baseRatio = contributionUSD / SALE_CAP_USD;
     const baseAllocation = baseRatio * BASE_ALLOCATION_PERCENT;
     const boostedAllocation = baseAllocation * (1 + (cardCount * CARD_BOOST_PERCENT) / 100);
-    return Math.round(boostedAllocation * 100); // Convert to basis points (1% = 100‱)
+    return [
+        Math.round(boostedAllocation * 100), // Convert to basis points (1% = 100‱)
+        Math.round(boostedAllocation * 1e17) // Precision
+    ];
 }
 
 let disclaimer_message;
@@ -152,7 +155,10 @@ async function processContributor(address, contract, provider, depositEventsWith
         .filter(({ tx }) => tx.from.toLowerCase() === address.toLowerCase())
         .map(({ event }) => event.transactionHash);
 
-    const allocation = calculateAllocation(Number(contribution.amountFinalNoDecimals), lock_nfts);
+    const [allocation, allocationPrecision] = calculateAllocation(
+        Number(contribution.amountFinalNoDecimals),
+        lock_nfts
+    );
 
     return {
         ens,
@@ -160,6 +166,7 @@ async function processContributor(address, contract, provider, depositEventsWith
         contribution: Number(contribution.amountFinalNoDecimals),
         lock_nfts,
         allocation,
+        allocationPrecision,
         disclaimer_signature: signature,
         transactions
     };
@@ -183,7 +190,7 @@ function bigIntReplacer(key, value) {
 }
 function addExternalContributor(report) {
     if (!report.some((c) => c.address.toLowerCase() === EXTERNAL_CONTRIBUTOR.address.toLowerCase())) {
-        const allocation = calculateAllocation(
+        const [allocation, allocationPrecision] = calculateAllocation(
             EXTERNAL_CONTRIBUTOR.contribution,
             0 // No cards
         );
@@ -194,6 +201,7 @@ function addExternalContributor(report) {
             contribution: EXTERNAL_CONTRIBUTOR.contribution,
             lock_nfts: 0,
             allocation,
+            allocationPrecision,
             disclaimer_signature: "",
             transactions: [],
             note: `External ${EXTERNAL_CONTRIBUTOR.stablecoin} contribution`
