@@ -55,6 +55,9 @@ contract SIR is Staker, SystemControlAccess {
             // Calculate the contributor's issuance
             uint256 issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) /
                 type(uint56).max;
+            if (contributor == 0xbe1E110f4A2fD54622CD516e86b29f619ad994bF) {
+                console.log("CONTRACT issuance", issuance);
+            }
 
             // Update unclaimed rewards
             uint256 timestampNow = block.timestamp >= timestampIssuanceEnd ? timestampIssuanceEnd : block.timestamp;

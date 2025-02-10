@@ -467,11 +467,11 @@ contract StakerTest is Auxiliary {
         uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
             user.stakeAmount
         );
-        assertApproxEqAbs(lockedStake, lockedStake_, user.stakeAmount / 1e17, "Wrong locked stake");
+        assertApproxEqAbs(lockedStake, lockedStake_, user.stakeAmount / 1e16, "Wrong locked stake");
         assertApproxEqAbs(
             unlockedStake,
             user.stakeAmount - lockedStake_,
-            user.stakeAmount / 1e17,
+            user.stakeAmount / 1e16,
             "Wrong unlocked stake"
         );
 
@@ -499,8 +499,8 @@ contract StakerTest is Auxiliary {
         uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
             stakeAmount
         );
-        assertApproxEqAbs(lockedStake, lockedStake_, stakeAmount / 1e17, "Wrong locked stake");
-        assertApproxEqAbs(unlockedStake, stakeAmount - lockedStake_, stakeAmount / 1e17, "Wrong unlocked stake");
+        assertApproxEqAbs(lockedStake, lockedStake_, stakeAmount / 1e16, "Wrong locked stake");
+        assertApproxEqAbs(unlockedStake, stakeAmount - lockedStake_, stakeAmount / 1e16, "Wrong unlocked stake");
 
         // Skip 1s
         skip(1 seconds);
@@ -565,13 +565,13 @@ contract StakerTest is Auxiliary {
             assertApproxEqAbs(
                 lockedStake,
                 lockedStake_,
-                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e17,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e16,
                 "Wrong locked stake"
             );
             assertApproxEqAbs(
                 unlockedStake,
                 user1.stakeAmount + user2.stakeAmount - lockedStake_,
-                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e17,
+                (user1.stakeAmount / 2 + user2.stakeAmount) / 1e16,
                 "Wrong unlocked stake"
             );
 

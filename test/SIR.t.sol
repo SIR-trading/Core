@@ -14,28 +14,35 @@ import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 
 import "forge-std/Test.sol";
+import "forge-std/StdJson.sol";
 
 contract ContributorsTest is Test {
-    struct ContributorFR {
-        uint256 contribution;
+    using stdJson for string;
+
+    struct USDContributor {
         address addr;
-        uint256 numBC;
+        uint256 allocation;
+        uint256 allocationPrecision;
+        uint256 contribution;
+        string disclaimer;
+        string ens;
+        uint256 lock_nfts;
     }
 
-    struct ContributorPreMainnet {
-        uint256 allocation;
+    struct SpiceContributor {
         address addr;
+        uint256 allocation;
     }
 
     uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
+    uint256 constant FUNDRAISING_GOAL = 100_000; // $100K
     uint256 constant FUNDRAISING_PERCENTAGE = 10; // 10% of the issuance reserved for fundraising
-    uint256 constant BC_BOOST = 5; // [%] 5% boost per BC
-    uint256 constant MAX_NUM_BC = 6; // Maximum number of BCs for boost
+    uint256 constant BC_BOOST = 6; // [%] 5% boost per BC
 
     SIR public sir;
 
-    ContributorFR[] contributorsFR;
-    ContributorPreMainnet[] contributorsPreMainnet;
+    USDContributor[] usdContributors;
+    SpiceContributor[] spiceContributors;
     mapping(address => uint256) contributorIssuance;
 
     mapping(address => bool) addressChecked;
@@ -57,66 +64,64 @@ contract ContributorsTest is Test {
         sir.initialize(vault);
 
         // Get fundrasing contributors
-        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/fundraising.json"));
-        bytes memory data = vm.parseJson(json);
-        ContributorFR[] memory contributorsFR_ = abi.decode(data, (ContributorFR[]));
-        uint256 fundraisingTotal = 0;
-        for (uint256 i = 0; i < contributorsFR_.length; i++) {
-            // Sum total fundraising
-            fundraisingTotal += contributorsFR_[i].contribution;
-
-            // Limit the number of BCs
-            if (contributorsFR_[i].numBC > MAX_NUM_BC) contributorsFR_[i].numBC = MAX_NUM_BC;
-
-            // Add the contributor if the contribution is greater than 0
-            if (contributorsFR_[i].contribution > 0) {
-                contributorsFR.push(contributorsFR_[i]);
-            }
-        }
+        string memory usdJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/usd-contributors.json"));
+        USDContributor[] memory usdContributors_ = abi.decode(
+            usdJson.parseRaw(".contributors"), // Decode entire contributors array
+            (USDContributor[])
+        );
 
         // Get pre-mainnet contributors
-        json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/pre_mainnet.json"));
-        data = vm.parseJson(json);
-        ContributorPreMainnet[] memory contributorsPreMainnet_ = abi.decode(data, (ContributorPreMainnet[]));
-        for (uint256 i = 0; i < contributorsPreMainnet_.length; i++) {
-            if (contributorsPreMainnet_[i].allocation > 0) {
-                contributorsPreMainnet.push(contributorsPreMainnet_[i]);
-            }
-        }
+        string memory spiceJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/spice-contributors.json"));
+        SpiceContributor[] memory spiceContributors_ = abi.decode(
+            spiceJson.parseRaw(""), // Decode root array
+            (SpiceContributor[])
+        );
 
         // Update their issuances
-        for (uint256 i = 0; i < contributorsFR.length; i++) {
-            uint256 issuance = (((contributorsFR[i].contribution * SystemConstants.ISSUANCE) * FUNDRAISING_PERCENTAGE) *
-                (100 + BC_BOOST * contributorsFR[i].numBC)) / (fundraisingTotal * (100 ** 2));
+        for (uint256 i = 0; i < usdContributors_.length; i++) {
+            usdContributors.push(usdContributors_[i]);
+
+            uint256 issuance = (((usdContributors[i].contribution * SystemConstants.ISSUANCE) *
+                FUNDRAISING_PERCENTAGE) * (100 + BC_BOOST * usdContributors[i].lock_nfts)) /
+                (FUNDRAISING_GOAL * (100 ** 2));
 
             // Update the contributors issuance
-            contributorIssuance[contributorsFR[i].addr] += issuance;
+            contributorIssuance[usdContributors[i].addr] += issuance;
         }
-        for (uint256 i = 0; i < contributorsPreMainnet.length; i++) {
-            uint256 issuance = (contributorsPreMainnet[i].allocation * SystemConstants.ISSUANCE) / 100000;
+        for (uint256 i = 0; i < spiceContributors_.length; i++) {
+            spiceContributors.push(spiceContributors_[i]);
+
+            uint256 issuance = (spiceContributors[i].allocation * SystemConstants.ISSUANCE) / 10000;
 
             // Update the contributors issuance
-            contributorIssuance[contributorsPreMainnet[i].addr] += issuance;
+            contributorIssuance[spiceContributors[i].addr] += issuance;
         }
     }
 
     function test_getAllocation() public {
         uint256 aggContributions = 0;
-        for (uint256 i = 0; i < contributorsFR.length; i++) {
-            if (!addressChecked[contributorsFR[i].addr]) {
-                aggContributions += Contributors.getAllocation(contributorsFR[i].addr);
-                addressChecked[contributorsFR[i].addr] = true;
+        for (uint256 i = 0; i < usdContributors.length; i++) {
+            if (!addressChecked[usdContributors[i].addr]) {
+                aggContributions += Contributors.getAllocation(usdContributors[i].addr);
+                addressChecked[usdContributors[i].addr] = true;
             }
         }
 
-        for (uint256 i = 0; i < contributorsPreMainnet.length; i++) {
-            if (!addressChecked[contributorsPreMainnet[i].addr]) {
-                aggContributions += Contributors.getAllocation(contributorsPreMainnet[i].addr);
-                addressChecked[contributorsPreMainnet[i].addr] = true;
+        for (uint256 i = 0; i < spiceContributors.length; i++) {
+            if (!addressChecked[spiceContributors[i].addr]) {
+                aggContributions += Contributors.getAllocation(spiceContributors[i].addr);
+                addressChecked[spiceContributors[i].addr] = true;
             }
         }
 
-        assertEq(aggContributions, type(uint56).max); // This works for now but most likely it needs some error tolerance.
+        // Treasury address
+        address treasury = vm.envAddress("TREASURY_ADDRESS");
+        if (!addressChecked[treasury]) {
+            aggContributions += Contributors.getAllocation(treasury);
+            addressChecked[treasury] = true;
+        }
+
+        assertEq(aggContributions, type(uint56).max);
     }
 
     function testFuzz_fakeContributorMint(address contributor, uint32 timeSkip) public {
@@ -142,9 +147,7 @@ contract ContributorsTest is Test {
     ) public {
         uint256 relErr18Decimals = 1e6;
 
-        address contributorAddr = typeContributor
-            ? _getContributorFR(contributor)
-            : _getContributorPreMainnet(contributor);
+        address contributorAddr = typeContributor ? _getUsdContributor(contributor) : _getSpiceContributor(contributor);
 
         // Skip time
         skip(timeSkip);
@@ -154,7 +157,12 @@ contract ContributorsTest is Test {
 
         // Contributor's rewards
         uint256 rewards = issuance * (timeSkip <= THREE_YEARS ? timeSkip : THREE_YEARS);
-        assertApproxEqRel(sir.contributorUnclaimedSIR(contributorAddr), rewards, relErr18Decimals);
+        assertApproxEqRel(
+            sir.contributorUnclaimedSIR(contributorAddr),
+            rewards,
+            relErr18Decimals,
+            string.concat("Unclaimed rewards mismatch for address ", vm.toString(contributorAddr))
+        );
 
         // Mint contributor's rewards
         vm.prank(contributorAddr);
@@ -162,7 +170,12 @@ contract ContributorsTest is Test {
         uint256 rewards_ = sir.contributorMint();
 
         // Assert rewards
-        assertApproxEqRel(rewards_, rewards, relErr18Decimals);
+        assertApproxEqRel(
+            rewards_,
+            rewards,
+            relErr18Decimals,
+            string.concat("Rewards mismatch for address ", vm.toString(contributorAddr))
+        );
         assertEq(sir.contributorUnclaimedSIR(contributorAddr), 0);
 
         // Skip time
@@ -176,19 +189,24 @@ contract ContributorsTest is Test {
                     ? timeSkip2
                     : (timeSkip <= THREE_YEARS ? THREE_YEARS - timeSkip : 0)
             );
-        assertApproxEqRel(sir.contributorUnclaimedSIR(contributorAddr), rewards, relErr18Decimals);
+        assertApproxEqRel(
+            sir.contributorUnclaimedSIR(contributorAddr),
+            rewards,
+            relErr18Decimals,
+            string.concat("Delayed rewards mismatch for address ", vm.toString(contributorAddr))
+        );
     }
 
     /////////////////////////////////////////////////////////////////////////////
     ///////////////////// H E L P E R // F U N C T I O N S /////////////////////
     ///////////////////////////////////////////////////////////////////////////
 
-    function _getContributorFR(uint256 index) internal view returns (address) {
-        return contributorsFR[_bound(index, 0, contributorsFR.length - 1)].addr;
+    function _getUsdContributor(uint256 index) internal view returns (address) {
+        return usdContributors[_bound(index, 0, usdContributors.length - 1)].addr;
     }
 
-    function _getContributorPreMainnet(uint256 index) internal view returns (address) {
-        return contributorsPreMainnet[_bound(index, 0, contributorsPreMainnet.length - 1)].addr;
+    function _getSpiceContributor(uint256 index) internal view returns (address) {
+        return spiceContributors[_bound(index, 0, spiceContributors.length - 1)].addr;
     }
 }
 

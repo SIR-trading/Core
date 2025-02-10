@@ -61,8 +61,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     event NewLPFee(uint16 lpFee);
 
     struct ContributorPreMainnet {
-        uint256 allocation;
         address addr;
+        uint256 allocation;
     }
 
     uint256 constant SLOT_SYSTEM_STATUS = 2;
@@ -120,7 +120,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.initialize(address(vault), sir);
 
         // Get 1 pre-mainnet contributor
-        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/pre_mainnet.json"));
+        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/spice-contributors.json"));
         bytes memory data = vm.parseJson(json);
         ContributorPreMainnet[] memory contributorsPreMainnet = abi.decode(data, (ContributorPreMainnet[]));
         oneContributor = contributorsPreMainnet[0].addr;
