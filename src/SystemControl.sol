@@ -10,13 +10,13 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 
 // Smart contracts
-import {Ownable} from "openzeppelin/access/Ownable.sol";
+import {Ownable2Step} from "openzeppelin/access/Ownable2Step.sol";
 
 /** @notice The SIR protocol is an immutable protocol.
     @notice However, during the beta phase (TrainingWheels) a few parameters will be tunable,
     @notice and the protocol has a few safety mechanisms to save users in case of a critical bug.
  */
-contract SystemControl is Ownable {
+contract SystemControl is Ownable2Step {
     /** Flow chart of the system 4 possible states:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
@@ -59,7 +59,7 @@ contract SystemControl is Ownable {
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
-    constructor() Ownable(msg.sender) {}
+    constructor() Ownable2Step(msg.sender) {}
 
     function initialize(address vault_, address payable sir_) external {
         require(!_initialized && msg.sender == owner());

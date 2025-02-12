@@ -14,7 +14,7 @@ library Contributors {
         else if (contributor == address(0xfdcc69463b0106888D1CA07CE118A64AdF9fe458)) return 2260731256400770;
         else if (contributor == address(0xF613cfD07af6D011fD671F98064214aB5B2942CF)) return 67369791440744;
         else if (contributor == address(0x3424cd7D170949636C300e62674a3DFB7706Fc35)) return 881685189996301;
-        else if (contributor == address(0x0000000000000000000000000000000000000007)) return 226073125640078;
+        else if (contributor == address(0xe59813A4a120288dbf42630C051e3921E5dAbCd8)) return 226073125640078;
         else if (contributor == address(0x241F1A461Da47Ccd40B48c38340896A9948A4725)) return 323058496539671;
         else if (contributor == address(0x6422D607CA13457589A1f2dbf0ec63d5Adf87BFB)) return 81838471481709;
         else if (contributor == address(0xE19618C08F74b7e80278Ec14b63797419dACCDf8)) return 452146251280155;
@@ -37,7 +37,7 @@ library Contributors {
         else if (contributor == address(0xA6f4fa9840Aa6825446c820aF6d5eCcf9f78BA05)) return 162998723586496;
         else if (contributor == address(0xa1a841D79758Bd4b06c9206e97343dFeBcBE200b)) return 18085850051206152;
         else if (contributor == address(0xEdA726014938d2E6Ed51c7d5A53193cf9713cdF7)) return 471362466959560;
-        else if (contributor == address(0x0000000000000000000000000000000000000005)) return 339109688460115;
+        else if (contributor == address(0x65665e10EB86D72b02067863342277EA2DF78516)) return 339109688460115;
         else if (contributor == address(0xd11f322ad85730Eab11ef61eE9100feE84b63739)) return 5651828141001922;
         else if (contributor == address(0xdF58360e945F6a302FFFB012D114C9e2bE2F212a)) return 89072811502190;
         else if (contributor == address(0x65a831D9fB2CC87A7956eB8E4720956f6bfC6eeA)) return 87228054796967;
