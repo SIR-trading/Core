@@ -65,7 +65,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         uint256 allocation;
     }
 
-    uint256 constant SLOT_SYSTEM_STATUS = 2;
+    uint256 constant SLOT_SYSTEM_STATUS = 3;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
 
     IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
@@ -488,7 +488,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
 
-    uint256 constant SLOT_SYSTEM_STATUS = 2;
+    uint256 constant SLOT_SYSTEM_STATUS = 3;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
 
     enum SystemStatus {
