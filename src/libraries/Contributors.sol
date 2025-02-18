@@ -45,7 +45,7 @@ library Contributors {
         else if (contributor == address(0x1ff241abaD54DEcB967Bd0f57c2a584C7d1ca8BD)) return 271287750768092;
         else if (contributor == address(0x36D11126eBc59cb962AE8ddD3bcD0741b4e337Dc)) return 5411195906070625;
         else if (contributor == address(0x81B55FBe66C5FFbb8468328E924AF96a84438F14)) return 56518281410019;
-        else if (contributor == address(0x1234567890123456789000000000000000000000)) return 22607312564007688;
+        else if (contributor == address(0x686748764c5C7Aa06FEc784E60D14b650bF79129)) return 22607312564007688;
         else if (contributor == address(0x07bfeB5488ad97aA3920cf241E59d2A817054eA3)) return 23963751317848;
         else if (contributor == address(0xC3632CD03BEd246719965bB74279af79bE4bd813)) return 23963751317848;
         else if (contributor == address(0xb1f55485d7ebA772F0d454Ceb0EA9a27586Ad86f)) return 53353257651058;

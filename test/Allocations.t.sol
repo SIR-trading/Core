@@ -1,8 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
+// Libraries
+import {Addresses} from "src/libraries/Addresses.sol";
 import {Contributors} from "src/libraries/Contributors.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
+import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+
+// Contracts
+import {Oracle} from "src/Oracle.sol";
+import {SystemControl} from "src/SystemControl.sol";
+import {SIR} from "src/SIR.sol";
+import {APE} from "src/APE.sol";
+import {Vault} from "src/Vault.sol";
 
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
@@ -10,6 +20,23 @@ import "forge-std/StdJson.sol";
 contract AllocationsTest is Test {
     using stdJson for string;
 
+    // Define JSON structure
+    struct USDContributor {
+        address addr;
+        uint256 allocation; // Basis points from JSON
+        uint256 allocationPrecision;
+        uint256 contribution;
+        string ens;
+        uint256 lock_nfts;
+    }
+
+    // Define JSON structure
+    struct SpiceContributor {
+        address addr;
+        uint256 allocation; // Basis points from JSON
+    }
+
+    mapping(address => uint256) allocationPrecision;
     address[] public allContributors;
     address treasury;
 
@@ -39,29 +66,6 @@ contract AllocationsTest is Test {
         address[] memory treasuryArray = new address[](1);
         treasuryArray[0] = treasury;
         _addUniqueAddresses(treasuryArray);
-    }
-
-    function _addUniqueAddresses(address[] memory addresses) internal {
-        for (uint256 i = 0; i < addresses.length; i++) {
-            address addr = addresses[i];
-            bool exists = false;
-
-            // Check if already exists (case-insensitive)
-            for (uint256 j = 0; j < allContributors.length; j++) {
-                if (addressMatches(addr, allContributors[j])) {
-                    exists = true;
-                    break;
-                }
-            }
-
-            if (!exists) {
-                allContributors.push(addr);
-            }
-        }
-    }
-
-    function addressMatches(address a, address b) internal pure returns (bool) {
-        return uint160(a) == uint160(b);
     }
 
     // Test all allocations are greater than 0
@@ -100,24 +104,6 @@ contract AllocationsTest is Test {
 
         assertEq(totalAllocations, type(uint56).max, "Total allocations is not type(uint56).max");
     }
-
-    // Define JSON structure
-    struct USDContributor {
-        address addr;
-        uint256 allocation; // Basis points from JSON
-        uint256 allocationPrecision;
-        uint256 contribution;
-        string ens;
-        uint256 lock_nfts;
-    }
-
-    // Define JSON structure
-    struct SpiceContributor {
-        address addr;
-        uint256 allocation; // Basis points from JSON
-    }
-
-    mapping(address => uint256) allocationPrecision;
 
     // Check the allocations match
     function test_allocationsMatch() public {
@@ -158,5 +144,81 @@ contract AllocationsTest is Test {
             console.log(addr, actual, expected);
             assertApproxEqRel(actual, expected, 1e9, string.concat("Allocation mismatch for ", vm.toString(addr)));
         }
+    }
+
+    function _addUniqueAddresses(address[] memory addresses) internal {
+        for (uint256 i = 0; i < addresses.length; i++) {
+            address addr = addresses[i];
+            bool exists = false;
+
+            // Check if already exists (case-insensitive)
+            for (uint256 j = 0; j < allContributors.length; j++) {
+                if (addressMatches(addr, allContributors[j])) {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                allContributors.push(addr);
+            }
+        }
+    }
+
+    function addressMatches(address a, address b) internal pure returns (bool) {
+        return uint160(a) == uint160(b);
+    }
+}
+
+interface ITreasuryV1 {
+    function relayCall(address to, bytes memory data) external returns (bytes memory);
+}
+
+contract TreasuryTest is Test {
+    address constant OWNER = 0x5000Ff6Cc1864690d947B864B9FB0d603E8d1F1A;
+    address constant TREASURY = 0x686748764c5C7Aa06FEc784E60D14b650bF79129;
+
+    address payable sir;
+
+    function setUp() public {
+        vm.createSelectFork("mainnet", 21873556);
+
+        // Deploy oracle
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+
+        // Deploy SystemControl
+        address systemControl = address(new SystemControl());
+
+        // Deploy SIR
+        sir = payable(address(new SIR(Addresses.ADDR_WETH, systemControl)));
+
+        // Deploy APE implementation
+        address apeImplementation = address(new APE());
+
+        // Deploy Vault
+        address vault = address(new Vault(systemControl, sir, oracle, apeImplementation, Addresses.ADDR_WETH));
+
+        // Initialize SIR
+        SIR(sir).initialize(vault);
+
+        // Initialize SystemControl
+        SystemControl(systemControl).initialize(vault, sir);
+    }
+
+    function test_treasuryMintsSIR() public {
+        skip(1000 days);
+
+        assertEq(IERC20(sir).balanceOf(TREASURY), 0);
+        vm.prank(OWNER);
+        ITreasuryV1(TREASURY).relayCall(sir, abi.encodeWithSelector(SIR.contributorMint.selector));
+        assertTrue(IERC20(sir).balanceOf(TREASURY) > 0);
+    }
+
+    function test_noBodyMintsSIR() public {
+        skip(1000 days);
+
+        assertEq(IERC20(sir).balanceOf(TREASURY), 0);
+        vm.expectRevert();
+        ITreasuryV1(TREASURY).relayCall(sir, abi.encodeWithSelector(SIR.contributorMint.selector));
     }
 }
