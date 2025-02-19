@@ -10,8 +10,6 @@ import {Clone} from "lib/clones-with-immutable-args/src/Clone.sol";
 // Contracts
 import {Vault} from "./Vault.sol";
 
-import "forge-std/console.sol";
-
 /** @notice Every APE token from every vault is its own ERC-20 token.
     @notice It is deployed during the initialization of the vault.
     @dev To minimize gas cost we use the ClonesWithImmutableArgs library to replicate the contract.

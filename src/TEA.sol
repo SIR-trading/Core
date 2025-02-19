@@ -15,8 +15,6 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemState} from "./SystemState.sol";
 
-import "forge-std/console.sol";
-
 /** @notice Highly modified contract version from Solmate
     @dev This is an ERC-1155 token contract.
     @dev TEA manages all the LP tokens of all vaults in the protocol.

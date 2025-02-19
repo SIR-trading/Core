@@ -9,8 +9,6 @@ import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 
-import "forge-std/console.sol";
-
 /** @notice The Oracle contract is our interface to Uniswap v3 pools and their oracle data.
     @notice It allows the SIR protocol to retrieve the TWAP of any pair of tokens,
     @notice without worrying about which fee tier to use, nor whether the pool exists,

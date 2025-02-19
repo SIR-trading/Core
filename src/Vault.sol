@@ -19,8 +19,6 @@ import {APE} from "./APE.sol";
 import {Oracle} from "./Oracle.sol";
 import {TEA} from "./TEA.sol";
 
-import "forge-std/console.sol";
-
 /** @notice This is the main contract of the protocol.
     @notice Users can mint or burn the synthetic assets (TEA or APE) of the protocol
     @dev Vault inherits from TEA which inherits from SystemState.

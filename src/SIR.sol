@@ -7,8 +7,6 @@ import {Contributors} from "./libraries/Contributors.sol";
 import {Staker} from "./Staker.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 
-import "forge-std/console.sol";
-
 /** @notice The SIR ERC-20 token is managed partially here and by the Staker contract.
     @notice In particular this contract handles the external functions for minting SIR by contributors,
     @notice who have a fixed allocation for the first 3 years, and LPers. 
@@ -55,9 +53,6 @@ contract SIR is Staker, SystemControlAccess {
             // Calculate the contributor's issuance
             uint256 issuance = (allocation * (SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) /
                 type(uint56).max;
-            if (contributor == 0xbe1E110f4A2fD54622CD516e86b29f619ad994bF) {
-                console.log("CONTRACT issuance", issuance);
-            }
 
             // Update unclaimed rewards
             uint256 timestampNow = block.timestamp >= timestampIssuanceEnd ? timestampIssuanceEnd : block.timestamp;

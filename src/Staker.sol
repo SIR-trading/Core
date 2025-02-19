@@ -9,8 +9,6 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 import {UD60x18, uEXP2_MAX_INPUT, uUNIT, convert} from "prb/UD60x18.sol";
 import {exp2} from "prb/Common.sol";
 
-import "forge-std/console.sol";
-
 /** @notice The Staker contract handles mostly the staking of SIR tokens, and the token auctions.
     @notice Collection of fees from the vault can be triggered by anyone and also start an auction to convert them to ETH.
     @notice Stakers only receive dividends in the form of ETH.
