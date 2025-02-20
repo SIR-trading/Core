@@ -581,8 +581,8 @@ contract Staker {
     }
 
     /**
-     * @dev Returns the staking parameters of a staker at the present time.
-     * @dev This function is responsible for unlocking stake and updating tsLastUpdate in stakerParams.
+     * @dev Returns the staking parameters of a staker at the present time.\n
+     * This function is responsible for unlocking stake and updating tsLastUpdate in stakerParams.
      */
     function getStakerParams(address staker) internal view returns (SirStructs.StakerParams memory stakerParams) {
         unchecked {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
 import "./FullMath.sol";
@@ -10,8 +10,6 @@ library TickMathPrecision {
     /// @return uint128 in Q63.64
     function getRatioAtTick(int64 tickX42) internal pure returns (uint128) {
         assert(tickX42 >= 0 && tickX42 <= SystemConstants.MAX_TICK_X42);
-
-        // if (tickX42 > SystemConstants.MAX_TICK_X42) return (true, 0);
 
         uint256 ratioX64 = tickX42 & 0x1 != 0 ? 0x100000000000001A3 : 0x10000000000000000;
         if (tickX42 & 0x2 != 0) ratioX64 = (ratioX64 * 0x10000000000000346) >> 64; // 42th bit after the comma
@@ -154,7 +152,6 @@ library TickMathPrecision {
             }
         }
 
-        // 2^179/log_2(1.0001) = 5311490373674440127006610942261594940696236095528553491154
         return int64(uint64((log_2 * 5311490373674440127006610942261594940696236095528553491154) >> (13 + 179)));
     }
 }
