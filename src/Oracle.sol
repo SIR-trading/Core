@@ -9,11 +9,12 @@ import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 import {UniswapPoolAddress} from "./libraries/UniswapPoolAddress.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 
-/** @notice The Oracle contract is our interface to Uniswap v3 pools and their oracle data.
- *  It allows the SIR protocol to retrieve the TWAP of any pair of tokens,
- *  without worrying about which fee tier to use, nor whether the pool exists,
- *  nor if the TWAP is initialized to the proper length.
- *  This oracle is permissionless and requires no administrative access.
+/**
+ * @notice The Oracle contract is our interface to Uniswap v3 pools and their oracle data.
+ * It allows the SIR protocol to retrieve the TWAP of any pair of tokens,
+ * without worrying about which fee tier to use, nor whether the pool exists,
+ * nor if the TWAP is initialized to the proper length.
+ * This oracle is permissionless and requires no administrative access.
  */
 contract Oracle {
     error NoUniswapPool();
@@ -71,24 +72,27 @@ contract Oracle {
                             READ-ONLY FUNCTIONS
     /////////////////////////////////////////////////////////////////*/
 
-    /** @notice Returns the state of the oracle for the pair of tokens.
-     *  @dev The tokens must be sorted lexicographically.
+    /**
+     * @notice Returns the state of the oracle for the pair of tokens.
+     * @dev The tokens must be sorted lexicographically.
      */
     function state(address token0, address token1) external view returns (SirStructs.OracleState memory) {
         require(token0 < token1);
         return _state[token0][token1];
     }
 
-    /** @notice Returns the uniswap fee tier of the pair of tokens.
-     *  @dev The order of the tokens does not matter.
+    /**
+     * @notice Returns the uniswap fee tier of the pair of tokens.
+     * @dev The order of the tokens does not matter.
      */
     function uniswapFeeTierOf(address tokenA, address tokenB) external view returns (uint24) {
         (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
         return _state[tokenA][tokenB].uniswapFeeTier.fee;
     }
 
-    /** @notice Returns the address of the uniswap pool for the pair of tokens.
-     *  @dev The order of the tokens does not matter.
+    /**
+     * @notice Returns the address of the uniswap pool for the pair of tokens.
+     * @dev The order of the tokens does not matter.
      */
     function uniswapFeeTierAddressOf(address tokenA, address tokenB) external view returns (address) {
         (tokenA, tokenB) = _orderTokens(tokenA, tokenB);
@@ -99,8 +103,9 @@ contract Oracle {
             );
     }
 
-    /** @notice Function for getting all the uniswap fee tiers.
-     *  @dev If a new fee tier is added, anyone can add it using the 'newUniswapFeeTier' function.
+    /**
+     * @notice Function for getting all the uniswap fee tiers.
+     * @dev If a new fee tier is added, anyone can add it using the 'newUniswapFeeTier' function.
      */
     function getUniswapFeeTiers() public view returns (SirStructs.UniswapFeeTier[] memory uniswapFeeTiers) {
         unchecked {
@@ -168,8 +173,9 @@ contract Oracle {
                             WRITE FUNCTIONS
     /////////////////////////////////////////////////////////////////*/
 
-    /** @notice Initializes the oracleState for a pair of tokens.
-     *  Anyone can call it, but it's a no-op if already initialized.
+    /**
+     * @notice Initializes the oracleState for a pair of tokens.
+     * @dev Anyone can call it, but it's a no-op if already initialized.
      */
     function initialize(address tokenA, address tokenB) external {
         unchecked {
@@ -273,10 +279,11 @@ contract Oracle {
         emit UniswapFeeTierAdded(fee);
     }
 
-    /** @notice Updates the oracle price for a pair of tokens, so that calls in the same block don't need to call Uniswap again.
-     *  @dev This function also checks periodically if there is a better fee tier.
-     *  @return tickPriceX42 TWAP price of the pair of tokens
-     *  @return uniswapPoolAddress address of the pool
+    /**
+     * @notice Updates the oracle price for a pair of tokens, so that calls in the same block don't need to call Uniswap again.
+     * @dev This function also checks periodically if there is a better fee tier.
+     * @return tickPriceX42 TWAP price of the pair of tokens
+     * @return uniswapPoolAddress address of the pool
      */
     function updateOracleState(
         address collateralToken,

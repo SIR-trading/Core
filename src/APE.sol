@@ -10,10 +10,11 @@ import {Clone} from "lib/clones-with-immutable-args/src/Clone.sol";
 // Contracts
 import {Vault} from "./Vault.sol";
 
-/** @notice Every APE token from every vault is its own ERC-20 token.
-    @notice It is deployed during the initialization of the vault.
-    @dev To minimize gas cost we use the ClonesWithImmutableArgs library to replicate the contract.
-    @dev Modified from Solmate's ERC20.sol
+/**
+ * @notice Every APE token from every vault is its own ERC-20 token.
+ * It is deployed during the initialization of the vault.
+ * @dev To minimize gas cost we use the ClonesWithImmutableArgs library to replicate the contract.
+ * APE is a mod from Solmate's ERC20.sol
  */
 contract APE is Clone {
     error PermitDeadlineExpired();
@@ -51,6 +52,9 @@ contract APE is Clone {
         INITIAL_CHAIN_ID = block.chainid;
     }
 
+    /**
+     * @dev Initializes the contract. It is called by the vault.
+     */
     function initialize(
         string memory name_,
         string memory symbol_,
@@ -66,6 +70,9 @@ contract APE is Clone {
         collateralToken = collateralToken_;
     }
 
+    /**
+     * @notice Returns the current leverage tier.
+     */
     function leverageTier() public pure returns (int8) {
         return int8(_getArgUint8(0));
     }
@@ -74,6 +81,9 @@ contract APE is Clone {
                               IERC20 LOGIC
     //////////////////////////////////////////////////////////////*/
 
+    /**
+     * @notice Sets the allowance of `spender` to `amount`.
+     */
     function approve(address spender, uint256 amount) external returns (bool) {
         allowance[msg.sender][spender] = amount;
 
@@ -82,6 +92,9 @@ contract APE is Clone {
         return true;
     }
 
+    /**
+     * @notice Transfers `amount` tokens to `to`.
+     */
     function transfer(address to, uint256 amount) external returns (bool) {
         balanceOf[msg.sender] -= amount;
 
@@ -96,6 +109,9 @@ contract APE is Clone {
         return true;
     }
 
+    /**
+     * @notice Transfers `amount` tokens from `from` to `to`.
+     */
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
 
@@ -185,8 +201,9 @@ contract APE is Clone {
                        MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    /** @dev This function is called when a user mints APE.
-        @dev It splits the collateral amount between the minter, stakers and POL and updates the total supply and balances.
+    /**
+     * @dev The vault contract calls this function to mint APE.
+     * It splits the collateral amount between the minter, stakers and POL and updates the total supply and balances.
      */
     function mint(
         address to,
@@ -216,8 +233,9 @@ contract APE is Clone {
         newReserves = reserves; // Important because memory is not persistent across external calls
     }
 
-    /** @dev This function is called when a user burns APE.
-        @dev It splits the collateral amount between the minter, stakers and POL and updates the total supply and balances.
+    /**
+     * @dev The vault contract calls this function when a user burns APE.
+     * It splits the collateral amount between the minter, stakers and POL and updates the total supply and balances.
      */
     function burn(
         address from,

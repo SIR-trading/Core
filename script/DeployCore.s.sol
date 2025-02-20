@@ -12,8 +12,8 @@ import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
-/** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy
-    @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
+/** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy --verify --etherscan-api-key YOUR_KEY
+    @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast --verify --etherscan-api-key YOUR_KEY
     @dev Steps:
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol

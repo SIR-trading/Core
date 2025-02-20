@@ -15,9 +15,8 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemState} from "./SystemState.sol";
 
-/** @notice Highly modified contract version from Solmate
-    @dev This is an ERC-1155 token contract.
-    @dev TEA manages all the LP tokens of all vaults in the protocol.
+/** @dev Highly modified contract version from Solmate's ERC-1155.\n
+    This contract manages all the LP tokens of all vaults in the protocol.
  */
 contract TEA is SystemState {
     error TEAMaxSupplyExceeded();
@@ -51,7 +50,7 @@ contract TEA is SystemState {
 
     mapping(address => mapping(uint256 => uint256)) internal balances;
 
-    /** Because the protocol owned liquidity (POL) is updated on every mint/burn of TEA/APE, we packed both values,
+    /*  Because the protocol owned liquidity (POL) is updated on every mint/burn of TEA, we packed both values,
         totalSupply and the POL balance, into a single uint256 to save gas on SLOADs.
         POL is TEA owned by this same contract.
         Fortunately, the max supply of TEA fits in 128 bits, so we can use the other 128 bits for POL.
@@ -67,20 +66,22 @@ contract TEA is SystemState {
                             READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /// @notice Returns vault parameters by vault ID.
     function paramsById(uint48 vaultId) external view returns (SirStructs.VaultParameters memory) {
         return _paramsById[vaultId];
     }
 
+    /// @notice Returns the number of initialized vaults.
     function numberOfVaults() external view returns (uint48) {
         return uint48(_paramsById.length - 1);
     }
 
-    /// @notice The total circulating supply of TEA
+    /// @notice The total circulating supply of TEA.
     function totalSupply(uint256 vaultId) external view returns (uint256) {
         return totalSupplyAndBalanceVault[vaultId].totalSupply;
     }
 
-    /// @notice The total circulating supply of TEA excluding POL
+    /// @notice The total circulating supply of TEA excluding POL.
     function supplyExcludeVault(uint256 vaultId) internal view override returns (uint256) {
         TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
         return totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault;
@@ -90,10 +91,12 @@ contract TEA is SystemState {
         return VaultExternal.teaURI(_paramsById, vaultId, totalSupplyAndBalanceVault[vaultId].totalSupply);
     }
 
+    /// @notice Returns the balance of the given `account` for the given `vaultId`.
     function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {
         return account == address(this) ? totalSupplyAndBalanceVault[vaultId].balanceVault : balances[account][vaultId];
     }
 
+    /// @notice Returns the balances of multiple vault ID's
     function balanceOfBatch(
         address[] calldata owners,
         uint256[] calldata vaultIds
@@ -122,12 +125,18 @@ contract TEA is SystemState {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /**
+     * @notice Grants or revokes permission for `operator` to delegate token transfers on behalf of `account`.
+     */
     function setApprovalForAll(address operator, bool approved) external {
         isApprovedForAll[msg.sender][operator] = approved;
 
         emit ApprovalForAll(msg.sender, operator, approved);
     }
 
+    /**
+     * @notice Transfers `amount` tokens in `vaultId` from `from` to `to`.
+     */
     function safeTransferFrom(address from, address to, uint256 vaultId, uint256 amount, bytes calldata data) external {
         assert(from != address(this));
         if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
@@ -146,6 +155,9 @@ contract TEA is SystemState {
         ) revert UnsafeRecipient();
     }
 
+    /**
+     * @notice Transfers `amounts` tokens in `vaultIds` from `from` to `to`.
+     */
     function safeBatchTransferFrom(
         address from,
         address to,
@@ -175,9 +187,10 @@ contract TEA is SystemState {
         }
     }
 
-    /** @dev This function is called when a user mints TEA.
-        @dev It splits the collateral amount between the minter and POL.
-        @dev It also updates SIR rewards in case this vault is elligible for them.
+    /**
+     * @dev This function is called when a user mints TEA.
+     * It splits the collateral amount between the minter and POL.
+     * It also updates SIR rewards in case this vault is elligible for them.
      */
     function mint(
         address minter,
@@ -248,8 +261,9 @@ contract TEA is SystemState {
         emit TransferSingle(minter, address(0), address(this), vaultId, amountToPOL);
     }
 
-    /** @dev This function is called when a user burns TEA.
-        @dev It also updates SIR rewards in case this vault is elligible for them.
+    /**
+     * @dev This function is called when a user burns TEA.
+     * @dev It also updates SIR rewards in case this vault is elligible for them.
      */
     function burn(
         uint48 vaultId,
@@ -300,8 +314,9 @@ contract TEA is SystemState {
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /** @dev Make sure that even if the entire supply of the collateral token was deposited into the vault,
-        @dev the amount of TEA minted is less than the maximum supply of TEA.
+    /**
+     * @dev Makes sure that even if the entire supply of the collateral token was deposited into the vault,
+     * the amount of TEA minted is less than the maximum supply of TEA.
      */
     function _amountFirstMint(address collateral, uint144 collateralDeposited) private view returns (uint256 amount) {
         uint256 collateralTotalSupply = IERC20(collateral).totalSupply();
@@ -313,15 +328,17 @@ contract TEA is SystemState {
             : collateralDeposited * 1e6;
     }
 
-    /** @dev This helper function ensure, that the balance of the vault (POL)
-        @dev is not stored in the regular variable balances.
+    /**'
+     * @dev This helper function ensures that the balance of the vault (POL)
+     * is not stored in the regular variable balances.
      */
     function _setBalance(address account, uint256 vaultId, uint256 balance) private {
         if (account == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault = uint128(balance);
         else balances[account][vaultId] = balance;
     }
 
-    /** @dev Helper function for updating balances and SIR rewards when transfering TEA between accounts.
+    /**
+     * @dev Helper function for updating balances and SIR rewards when transfering TEA between accounts.
      */
     function _updateBalances(address from, address to, uint256 vaultId, uint256 amount) private {
         // Update SIR issuances

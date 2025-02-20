@@ -12,12 +12,14 @@ import {SystemConstants} from "src/libraries/SystemConstants.sol";
 // Smart contracts
 import {Ownable2Step, Ownable} from "openzeppelin/access/Ownable2Step.sol";
 
-/** @notice The SIR protocol is an immutable protocol.
-    @notice However, during the beta phase (TrainingWheels) a few parameters will be tunable,
-    @notice and the protocol has a few safety mechanisms to save users in case of a critical bug.
+/**
+ * @notice The SIR protocol is an immutable protocol.
+ * However, during the beta phase (TrainingWheels) a few parameters will be tunable,
+ * and the protocol has a few safety mechanisms to save users in case of a critical bug.
  */
 contract SystemControl is Ownable2Step {
-    /** Flow chart of the system 4 possible states:
+    /*  
+        Flow chart of the system 4 possible states:
         +---------------+      +---------------+       +---------------+      +---------------+
         |  Unstoppable  | <--- | TrainingWheels| <---> |   Emergency   | ---> |    Shutdown   |
         +---------------+      +---------------+       +---------------+      +---------------+
@@ -49,18 +51,21 @@ contract SystemControl is Ownable2Step {
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
     uint40 public timestampStatusChanged; // Timestamp when the status last changed
 
-    /** This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
-        before new issuance parameters are stored. This is more gas efficient that storing all active vaults
-        in an array, but it requires that system control keeps track of the active vaults.
-        If the vaults were in an unknown order, it maybe be problem because the hash would change.
-        So by default the vaults must be ordered in increasing order.
-
-        The starting value is the hash of an empty array.
+    /**
+     * @notice This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
+     * before new issuance parameters are stored. This is more gas efficient that storing all active vaults
+     * in an array, but it requires that system control keeps track of the active vaults.\n
+     * If the vaults were in an unknown order, it maybe be problem because the hash would change.
+     * So the vaults must be ordered in increasing order.\n
+     * The starting value is the hash of an empty array.
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     constructor() Ownable(msg.sender) {}
 
+    /**
+     * @dev Initializes the addresses in the contract.
+     */
     function initialize(address vault_, address payable sir_) external {
         require(!_initialized && msg.sender == owner());
 
@@ -74,8 +79,10 @@ contract SystemControl is Ownable2Step {
                         STATE TRANSITIONING FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    /** @notice THIS ACTION IS IRREVERSIBLE
-        @notice As soon as the protocol is redeemed safe and stable, ownership will be revoked and SIR will be completely immutable
+    /**
+     * @notice THIS ACTION IS IRREVERSIBLE.
+     * As soon as the protocol is redeemed safe and stable, ownership will be revoked and SIR will be completely immutable.
+     * It changes the status to Unstoppable.
      */
     function exitBeta() external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
@@ -87,6 +94,9 @@ contract SystemControl is Ownable2Step {
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Unstoppable);
     }
 
+    /**
+     * @notice Haults minting of TEA, APE and SIR. It changes the status to Emergency.
+     */
     function haultMinting() external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
 
@@ -103,6 +113,9 @@ contract SystemControl is Ownable2Step {
         emit SystemStatusChanged(SystemStatus.TrainingWheels, SystemStatus.Emergency);
     }
 
+    /**
+     * @notice Resumes minting of TEA, APE and SIR. It changes the status to TrainingWheels.
+     */
     function resumeMinting() external onlyOwner {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
 
@@ -119,9 +132,10 @@ contract SystemControl is Ownable2Step {
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
     }
 
-    /** @notice THIS ACTION IS IRREVERSIBLE
-        @notice Shutdown the system and allow the owner to withdraw all funds
-        @notice This function can only be called after SHUTDOWN_WITHDRAWAL_DELAY seconds have passed since the system entered Emergency status.
+    /**
+     * @notice THIS ACTION IS IRREVERSIBLE.
+     * It shutdowns the system and allows the owner to withdraw all funds
+     * This function can only be called after SHUTDOWN_WITHDRAWAL_DELAY seconds have passed since the system entered Emergency status.
      */
     function shutdownSystem() external onlyOwner {
         if (systemStatus != SystemStatus.Emergency) revert WrongStatus();
@@ -141,7 +155,8 @@ contract SystemControl is Ownable2Step {
                     PARAMETER CONFIGURATION FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    /** @notice Fees can only be set when the system is in TrainingWheels status
+    /**
+     * @notice Fees can only be set when the system is in TrainingWheels status.
      */
     function setBaseFee(uint16 baseFee_) external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
@@ -152,6 +167,9 @@ contract SystemControl is Ownable2Step {
         emit NewBaseFee(baseFee_);
     }
 
+    /**
+     * @notice Fees can only be set when the system is in TrainingWheels status.
+     */
     function setLPFee(uint16 lpFee_) external onlyOwner {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
@@ -161,9 +179,11 @@ contract SystemControl is Ownable2Step {
         emit NewLPFee(lpFee_);
     }
 
-    /** @notice It will not fail even if the newVaults do not exist.
-        @notice The implicit limit on the # of newVaults is 65025,
-        @notice which comes from the act that the sum of squared taxes must be smaller than (2^8-1)^2.
+    /**
+     * @notice It updates the vaults taxes.
+     * @dev It will not fail if the new vaults do not exist.
+     * The limit on the # of newVaults is 65025,
+     * which comes from the act that the sum of squared taxes must be smaller than (2^8-1)^2.
      */
     function updateVaultsIssuances(
         uint48[] calldata oldVaults,
@@ -200,7 +220,10 @@ contract SystemControl is Ownable2Step {
                         WITHDRAWAL FUNCTIONS
     ///////////////////////////////////////////////////////////////*/
 
-    /// @notice Save the remaining funds that have not been withdrawn from the vaults
+    /**
+     * @notice Save the remaining funds that have not been withdrawn from the vaults.
+     * @dev Only the owner can call this function when the system is in Shutdown status.
+     */
     function saveFunds(address[] calldata tokens, address to) external onlyOwner {
         require(to != address(0));
 

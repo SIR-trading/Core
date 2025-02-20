@@ -6,31 +6,11 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 
-/** @dev Contract handling the few protocol-wide parameters,
-    @dev and some of the functions for keeping track of the SIR rewards assign to vaults.
+/**
+ * @dev Contract handling the few protocol-wide parameters,
+ * and some of the functions for keeping track of the SIR rewards allocated to LPers.
  */
 abstract contract SystemState is SystemControlAccess {
-    /** Choice of types for 'cumulativeSIRPerTEAx96' and 'unclaimedRewards'
-
-        unclaimedRewards ~ uint80
-        cumulativeSIRPerTEAx96 ~ uint176 ~ Q80.96
-
-        Worst case analysis assuming all SIR is accumulated by a single LPer AND it never gets claimed.
-        If SIR uses 12 decimals after the comma, 'uint80' is sufficient to store ALL SIR issued over 599 years
-            2,015,000,000 sir/year * 599 years * 10^12 ≤ type(uint80).max
-
-        Maximum TEA Supply
-        The previous choice implies that if wish to store struct LPerIssuanceParams in a single slot (256 bits), cumulativeSIRPerTEAx96 can use up to
-            96 bits for the decimals (Q80.96)
-        It is important that cumulativeSIRPerTEAx96 does not underflow (if it is 0 it would wrongly imply that the LPers have not claim to any SIR):
-            cumulativeSIRPerTEAx96 = 8/10 * 63.9 SIR/s * 10^12 * timeInterval * 2^96 * (tax / cumulativeTax) / T
-        In the worst case scenario: timeInterval=1s, tax=1, cumulativeTax=type(uint16).max and TEA has 18 decimals. So to avoid underflow:
-            T ≤ 8/10 * 63.9 * 10^12 * 2^96 / (2^16-1)
-        If TEA has 18 decimals
-            Max Supply of TEA = T / 10^18 ≈ 6.18 * 10^19
-        which is more than a Quintillion TEA, sufficient for almost any ERC-20.
-     */
-
     event VaultNewTax(uint48 indexed vault, uint8 tax, uint16 cumulativeTax);
 
     struct LPerIssuanceParams {
@@ -59,7 +39,7 @@ abstract contract SystemState is SystemControlAccess {
 
         _SIR = sir_;
 
-        /** Apes pay fees to the gentlemen for their liquidity when minting or burning APE. They are paid twice to encourage LPers to
+        /*  Apes pay fees to the gentlemen for their liquidity when minting or burning APE. They are paid twice to encourage LPers to
             continue to provide liqduidity after a mint of APE.
 
             Gentlemen pay a fee when minting TEA given to the protocol. Protocol will never touch these fees and act as its own pool of liquidity.
@@ -78,20 +58,6 @@ abstract contract SystemState is SystemControlAccess {
                         READ-ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /** 
-        @dev Ideally, the cumulative SIR minted by the vaultId per unit of TEA (a).
-        @dev    a_i = a_{i-i} + issuance * Δt_i * 2^96 / totalSupplyTEA_i
-        @dev where i is the i-th time the cumulative SIR is updated, and timeInterval is the time since the last update.
-        @dev Because of the implicity rounding of the division operation the actual computed value of
-        @dev    â_i = â_{i-1} + issuance * Δt_i * 2^96 / totalSupplyTEA_i + n_i
-        @dev        = â_{i-1} + Δa_i + n_i
-        @dev where n_i ∈ (- 1,0] is the rounding error due to the division, and Δa_i = issuance * Δt_i * 2^96 / totalSupplyTEA_i.
-        @dev Alternatively,
-        @dev    â_i = Σ_i (Δa_i + n_i)
-        @dev        = Σ_i Δa_i + n
-        @dev where n ∈ (- M,0] is the cumulative rounding error, and M is the number of updates on the cumulative SIR per unit of TEA.
-        @return cumulativeSIRPerTEAx96 cumulative SIR issued to the vault per unit of TEA.            
-    */
     function cumulativeSIRPerTEA(
         uint16 cumulativeTax,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
@@ -140,19 +106,6 @@ abstract contract SystemState is SystemControlAccess {
     }
 
     /**
-        @dev Ideally, the unclaimed SIR of an LPer is computed as
-        @dev    u = balance * (a_i - a_j) / 2^96
-        @dev where i is the last time the cumulative SIR was updated, and j is the last time the LPer claimed its rewards.
-        @dev In reality we only have access to â_i,
-        @dev    û = balance * (â_i - â_j) / 2^96 =
-        @dev      = balance * (Σ_{k=j+1}^i Δa_k + Σ_{k=j+1}^i n_k)) / 2^96
-        @dev      = u + balance * (Σ_{k=j+1}^i n_k)) / 2^96
-        @dev      = u + balance * q / 2^96
-        @dev where q ∈ (- M,0] is the rounding whose range depends on the number (M) of updates on the cumulative SIR per unit of TEA (x).
-        @dev Because of the division error, we actually compute
-        @dev    ũ = û + r
-        @dev where r ∈ (- 1,0] is the rounding error. Thus,
-        @dev    ũ ∈ u + (-balance * M / 2^96 -1, 0]
         @param vaultId The id of the vault to query.
         @param lper The address of the LPer to query.
         @param cumulativeSIRPerTEAx96 The current cumulative SIR minted by the vaultId per unit of TEA.
@@ -179,14 +132,26 @@ abstract contract SystemState is SystemControlAccess {
         }
     }
 
+    /**
+     * @notice Returns the amount of SIR owed to the LPer in vault `vaultId`.
+     * @param vaultId The id of the vault to query.
+     * @param lper The address of the LPer to query.
+     */
     function unclaimedRewards(uint256 vaultId, address lper) external view returns (uint80) {
         return unclaimedRewards(vaultId, lper, balanceOf(lper, vaultId), cumulativeSIRPerTEA(vaultId));
     }
 
+    /**
+     * @notice Returns the tax charged to the vault which is equal to
+     * 10% * tax / type(uint8).max
+     */
     function vaultTax(uint48 vaultId) external view returns (uint8) {
         return vaultIssuanceParams[vaultId].tax;
     }
 
+    /**
+     * @notice Returns the system parameters.
+     */
     function systemParams() public view returns (SirStructs.SystemParameters memory systemParams_) {
         systemParams_ = _systemParams;
 
@@ -213,6 +178,10 @@ abstract contract SystemState is SystemControlAccess {
                             WRITE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /**
+     * @dev Mints SIR rewards for `lper` in vault `vaultId`.
+     * Only callable by the SIR contract.
+     */
     function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
         require(msg.sender == _SIR);
 
@@ -227,8 +196,6 @@ abstract contract SystemState is SystemControlAccess {
             );
     }
 
-    /** @dev To be called BEFORE transfering/minting/burning TEA
-     */
     function updateLPerIssuanceParams(
         bool sirIsCaller,
         uint256 vaultId,
@@ -277,10 +244,11 @@ abstract contract SystemState is SystemControlAccess {
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /** @notice This function can only be called by the SystemControl contract
-        @notice It updates the base fee charge to apes, the fee charged to LPers when minting or haults all minting.
-        @dev All these parameters are update in a single function for minimize bytecode.
-        @dev All checks and balances to be done at system control
+    /**
+     * @dev This function can only be called by the SystemControl contract.\n
+     * It updates the base fee charge to apes, the fee charged to LPers when minting or haults all minting.\n
+     * All these parameters are updated in a single function for bytecode efficiency.\n
+     * All checks and balances are done at the SystemControl contract.
      */
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
@@ -298,9 +266,11 @@ abstract contract SystemState is SystemControlAccess {
         _systemParams = systemParams_;
     }
 
-    /** @notice Updates the tax of the vaults whose fees are distributed to stakers of SIR.
-        @notice The amount of SIR rewards received by LPers of a vault is proportional to the tax of the vault. 0 tax implies no SIR rewards.
-        @notice This function can only be called by the SystemControl contract.
+    /**
+     * @dev This function can only be called by the SystemControl contract.\n
+     * Updates the tax of the vaults whose fees are distributed to stakers of SIR.\n
+     * The amount of SIR rewards received by LPers of a vault is proportional to the tax of the vault. 0 tax implies no SIR rewards.\n
+     * All checks and balances are done at the SystemControl contract.
      */
     function updateVaults(
         uint48[] calldata oldVaults,
