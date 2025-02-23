@@ -16,3 +16,9 @@ The SIR protocol can be deployed using the Foundry script `script\DeployCore.s.s
 | Oracle.sol        | [0x3CDCCFA37c1B2BEe3d810eC9dAddbB205048bB29](https://etherscan.io/address/0x3CDCCFA37c1B2BEe3d810eC9dAddbB205048bB29) |
 | VaultExternal.sol | [0x80f18B12A6dBD515C5Ad01A2006abF30C5972158](https://etherscan.io/address/0x80f18B12A6dBD515C5Ad01A2006abF30C5972158) |
 | SystemControl.sol | [0x8d694D1b369BdE5B274Ad643fEdD74f836E88543](https://etherscan.io/address/0x8d694D1b369BdE5B274Ad643fEdD74f836E88543) |
+
+## License
+
+The SIR protocol contracts are licensed under the MIT License with a few exceptions, as outlined below:
+
+-   The `APE.sol` and `TEA.sol `contracts are a modification of the `ERC20` and `ERC1155` contracts from Solmate, which are licensed under the AGPL-3.0-only.
