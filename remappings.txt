@@ -2,11 +2,11 @@ solmate/=lib/solmate/src/
 v2-core/=lib/v2-core/contracts/
 v3-core/=lib/v3-core/contracts/
 v3-periphery/=lib/v3-periphery/contracts/
+@openzeppelin/=lib/uniswap-openzeppelin/
 openzeppelin/=lib/openzeppelin-contracts/contracts/
 abdk/=lib/abdk-libraries-solidity/
 @uniswap/lib/=lib/uniswap-lib/
 @uniswap/v3-core/=lib/v3-core/
 base64-sol/=lib/base64/
-@openzeppelin/=lib/uniswap-openzeppelin/
 prb/=lib/prb-math/src/
 

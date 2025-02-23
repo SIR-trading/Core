@@ -12,7 +12,7 @@ import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
-/** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast --legacy --verify --etherscan-api-key YOUR_KEY
+/** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url mainnet --chain 1 --broadcast --verify --slow --etherscan-api-key YOUR_KEY --ledger --hd-paths PATHS
     @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast --verify --etherscan-api-key YOUR_KEY
     @dev Steps:
         1. Deploy Oracle.sol
@@ -26,17 +26,16 @@ contract DeployCore is Script {
     uint256 deployerPrivateKey;
 
     function setUp() public {
-        if (block.chainid == 1) {
-            deployerPrivateKey = vm.envUint("TARP_TESTNET_DEPLOYER_PRIVATE_KEY");
-        } else if (block.chainid == 11155111) {
-            deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
-        } else {
+        if (block.chainid == 11155111) {
+            privateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        } else if (block.chainid != 1) {
             revert("Network not supported");
         }
     }
 
     function run() public {
-        vm.startBroadcast(deployerPrivateKey);
+        if (block.chainid == 1) vm.startBroadcast();
+        else vm.startBroadcast(deployerPrivateKey);
 
         // Deploy oracle
         address oracle = address(

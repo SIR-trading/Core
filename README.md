@@ -1,17 +1,18 @@
-## Testing
+# SIR Protocol
 
-To run tests successfully run `forge test --ffi`
+This repository generated with [Foundry](https://book.getfoundry.sh/) contains the core contract files of the SIR protocol.
 
-## Deployment to Testnet
+## Deployment
 
-To deploy Core run `forge script script/DeployCore.s.sol --rpc-url tarp_testnet --broadcast -vv`.
+The SIR protocol can be deployed using the Foundry script `script\DeployCore.s.sol`. This script will deploy all the necessary contracts and configure them to talk to each other.
 
-## Cast contract interface
+## Ethereum Mainnet Addresses
 
-1. Edit out/contract_name.sol/contract_name.json to only contain the ABI array
-2. Call `cast interface -n I{contract_name} -o src/interfaces/I{contract_name}.sol out/{contract_name}.sol/{contract_name}.json`
-
-## Impersonate Binance hot wallet in Anvil to get some tokens
-
-`cast rpc anvil_impersonateAccount 0xF977814e90dA44bFA03b6295A0616a897441aceC --rpc-url tarp_testnet`
-`cast send 0xdAC17F958D2ee523a2206206994597C13D831ec7 --from 0xF977814e90dA44bFA03b6295A0616a897441aceC "transfer(address,uint256)(bool)" 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc 10000000000 --unlocked --rpc-url tarp_testnet`
+| Contract Name     | Ethereum Mainnet Address                                                                                              |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Vault.sol         | [0xb91ae2c8365fd45030aba84a4666c4db074e53e7](https://etherscan.io/address/0xb91ae2c8365fd45030aba84a4666c4db074e53e7) |
+| SIR.sol           | [0x1278b112943abc025a0df081ee42369414c3a834](https://etherscan.io/address/0x1278b112943abc025a0df081ee42369414c3a834) |
+| APE.sol           | [0x8E3a5ec5a8B23Fd169F38C9788B19e72aEd97b5A](https://etherscan.io/address/0x8E3a5ec5a8B23Fd169F38C9788B19e72aEd97b5A) |
+| Oracle.sol        | [0x3CDCCFA37c1B2BEe3d810eC9dAddbB205048bB29](https://etherscan.io/address/0x3CDCCFA37c1B2BEe3d810eC9dAddbB205048bB29) |
+| VaultExternal.sol | [0x80f18B12A6dBD515C5Ad01A2006abF30C5972158](https://etherscan.io/address/0x80f18B12A6dBD515C5Ad01A2006abF30C5972158) |
+| SystemControl.sol | [0x8d694D1b369BdE5B274Ad643fEdD74f836E88543](https://etherscan.io/address/0x8d694D1b369BdE5B274Ad643fEdD74f836E88543) |
