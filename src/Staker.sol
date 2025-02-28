@@ -154,6 +154,8 @@ contract Staker {
      */
     function transfer(address to, uint256 amount) public returns (bool) {
         unchecked {
+            require(to != address(this));
+
             uint80 balance = balances[msg.sender].balanceOfSIR;
             require(amount <= balance);
             balances[msg.sender].balanceOfSIR = balance - uint80(amount);
@@ -170,6 +172,8 @@ contract Staker {
      * @notice Transfers `amount` tokens from `from` to `to`.
      */
     function transferFrom(address from, address to, uint256 amount) public returns (bool) {
+        require(to != address(this));
+
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
 
@@ -289,6 +293,7 @@ contract Staker {
             // Update total stake
             stakingParams.stake = stakingParams_.stake + amount;
 
+            emit Transfer(msg.sender, address(this), amount);
             emit Staked(msg.sender, amount);
         }
     }
@@ -323,6 +328,7 @@ contract Staker {
             // Update total stake
             stakingParams.stake = stakingParams_.stake - amount;
 
+            emit Transfer(address(this), msg.sender, amount);
             emit Unstaked(msg.sender, amount);
         }
     }
