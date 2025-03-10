@@ -12,10 +12,10 @@ import {Vault} from "src/Vault.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 
-/** @dev cli for local testnet:  forge script script/FindAllVaults.s.sol --rpc-url tarp_testnet --broadcast --legacy
-    @dev cli for Sepolia:        forge script script/FindAllVaults.s.sol --rpc-url sepolia --chain sepolia --broadcast
+/** @dev cli for local testnet:  forge script script/statsAllVaults.s.sol --rpc-url mainnet --chain 1 --broadcast
+    @dev cli for Sepolia:        forge script script/statsAllVaults.s.sol --rpc-url sepolia --chain sepolia --broadcast
 */
-contract FindAllVaults is Script {
+contract statsAllVaults is Script {
     uint256 privateKey;
 
     Vault vault;

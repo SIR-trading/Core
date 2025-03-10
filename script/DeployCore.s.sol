@@ -13,7 +13,7 @@ import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
 /** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url mainnet --chain 1 --broadcast --verify --slow --etherscan-api-key YOUR_KEY --ledger --hd-paths PATHS
-    @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast --verify --etherscan-api-key YOUR_KEY
+    @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast
     @dev Steps:
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol
@@ -27,7 +27,7 @@ contract DeployCore is Script {
 
     function setUp() public {
         if (block.chainid == 11155111) {
-            privateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+            deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
         } else if (block.chainid != 1) {
             revert("Network not supported");
         }
