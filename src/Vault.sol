@@ -242,7 +242,7 @@ contract Vault is TEA {
 
             // Get amount of tokens
             assembly {
-                amount := tload(1)
+                amount := tload(2)
             }
         }
     }
@@ -297,7 +297,7 @@ contract Vault is TEA {
 
         // Use the transient storage to return amount of tokens minted to the mint function
         assembly {
-            tstore(1, amount)
+            tstore(2, amount)
         }
     }
 
