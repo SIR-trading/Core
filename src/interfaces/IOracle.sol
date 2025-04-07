@@ -24,15 +24,7 @@ interface IOracle {
     );
     event PriceUpdated(address indexed token0, address indexed token1, bool indexed priceTruncated, int64 priceTickX42);
     event UniswapFeeTierAdded(uint24 indexed fee);
-    event UniswapOracleProbed(
-        address indexed tokenA,
-        address indexed tokenB,
-        uint24 indexed fee,
-        int56 aggPriceTick,
-        uint160 avLiquidity,
-        uint40 period,
-        uint16 cardinalityToIncrease
-    );
+    event UniswapOracleProbed(uint24 fee, uint160 avLiquidity, uint40 period, uint16 cardinalityToIncrease);
 
     function TWAP_DURATION() external view returns (uint40);
 
