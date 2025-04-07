@@ -15,6 +15,7 @@ import {exp2} from "prb/Common.sol";
  * @dev Mod of Solmate's ERC20.
  */
 contract Staker {
+    error TransferToStakingVaultNotPermitted();
     error NewAuctionCannotStartYet();
     error NoAuctionLot();
     error NoFeesCollected();
@@ -39,9 +40,8 @@ contract Staker {
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
-    event Staked(address indexed staker, uint256 amount);
-    event Unstaked(address indexed staker, uint256 amount);
 
+    address public constant STAKING_VAULT = 0x000000000051200beef00Add2e55000000000000;
     address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
     IWETH9 private immutable _WETH;
     Vault internal vault;
@@ -56,6 +56,7 @@ contract Staker {
     }
 
     SirStructs.StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
+
     Balance private _supply; // Total unstaked SIR and ETH owed to the stakers
     uint96 internal totalWinningBids; // Total amount of WETH deposited by the bidders
     bool private _initialized;
@@ -98,18 +99,18 @@ contract Staker {
                             CUSTOM ERC20 LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @notice Returns transferable (unstaked) SIR.
-     */
     function balanceOf(address account) external view returns (uint256) {
+        if (account == STAKING_VAULT) return stakingParams.stake;
         return balances[account].balanceOfSIR;
     }
 
     /**
-     * @notice Returns staked SIR + transferable (unstaked) SIR.
+     * @notice Returns the unlocked and locked stake of `staker`.
      */
-    function totalBalanceOf(address account) external view returns (uint256) {
-        return _stakersParams[account].stake + balances[account].balanceOfSIR;
+    function stakeOf(address staker) external view returns (uint80 unlockedStake, uint80 lockedStake) {
+        SirStructs.StakerParams memory stakerParams = getStakerParams(staker);
+
+        return (stakerParams.stake - stakerParams.lockedStake, stakerParams.lockedStake);
     }
 
     /**
@@ -154,6 +155,8 @@ contract Staker {
      */
     function transfer(address to, uint256 amount) public returns (bool) {
         unchecked {
+            if (to == STAKING_VAULT) TransferToStakingVaultNotPermitted();
+
             uint80 balance = balances[msg.sender].balanceOfSIR;
             require(amount <= balance);
             balances[msg.sender].balanceOfSIR = balance - uint80(amount);
@@ -170,6 +173,8 @@ contract Staker {
      * @notice Transfers `amount` tokens from `from` to `to`.
      */
     function transferFrom(address from, address to, uint256 amount) public returns (bool) {
+        if (to == STAKING_VAULT) TransferToStakingVaultNotPermitted();
+
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
 
@@ -289,7 +294,7 @@ contract Staker {
             // Update total stake
             stakingParams.stake = stakingParams_.stake + amount;
 
-            emit Staked(msg.sender, amount);
+            emit Transfer(msg.sender, STAKING_VAULT, amount);
         }
     }
 
@@ -323,7 +328,7 @@ contract Staker {
             // Update total stake
             stakingParams.stake = stakingParams_.stake - amount;
 
-            emit Unstaked(msg.sender, amount);
+            emit Transfer(STAKING_VAULT, msg.sender, amount);
         }
     }
 
@@ -369,6 +374,7 @@ contract Staker {
      * @return amount of unclaimed ETH
      */
     function unclaimedDividends(address staker) external view returns (uint96) {
+        if (staker == STAKING_VAULT) return 0; // _dividends function would not decode balances[STAKING_VAULT] properly
         return _dividends(balances[staker], stakingParams, _stakersParams[staker]);
     }
 
@@ -633,14 +639,5 @@ contract Staker {
      */
     function auctions(address token) external view returns (SirStructs.Auction memory) {
         return _auctions[token];
-    }
-
-    /**
-     * @notice Returns the unlocked and locked stake of `staker`.
-     */
-    function stakeOf(address staker) external view returns (uint80 unlockedStake, uint80 lockedStake) {
-        SirStructs.StakerParams memory stakerParams = getStakerParams(staker);
-
-        return (stakerParams.stake - stakerParams.lockedStake, stakerParams.lockedStake);
     }
 }

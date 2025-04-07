@@ -585,17 +585,6 @@ contract Oracle {
         }
     }
 
-    /**
-        The tick TVL (liquidity in Uniswap v3) is a good criteria for selecting the best pool.
-        We use the time-weighted tickTVL to score fee tiers.
-        However, fee tiers with small weighting period are more susceptible to manipulation.
-        Thus, instead we weight the time-weighted tickTVL by the weighting period:
-            twTickTVL * period * feeTier = avLiquidity
-        
-        However, it may be a good idea to weight the score by the fee tier, because it is harder to move the
-        price of a pool with higher fee tier.
-
-     */
     function _feeTierScore(
         uint256 aggOrAvLiquidity, // 0 < aggOrAvLiquidity < 2^136
         SirStructs.UniswapFeeTier memory uniswapFeeTier
