@@ -200,7 +200,7 @@ contract TEA is SystemState {
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
+    ) internal returns (SirStructs.Fees memory fees, uint256 amount, uint256 totalSupplyOfTEA) {
         uint256 amountToPOL;
         unchecked {
             // Loads supply and balance of TEA
@@ -249,8 +249,9 @@ contract TEA is SystemState {
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountToPOL);
             totalSupplyAndBalanceVault_.totalSupply += uint128(amount + amountToPOL);
 
-            // Store total supply
+            // Store total supply and balance
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
+            totalSupplyOfTEA = totalSupplyAndBalanceVault_.totalSupply;
         }
 
         // Update reserves
@@ -271,7 +272,7 @@ contract TEA is SystemState {
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         SirStructs.Reserves memory reserves,
         uint256 amount
-    ) internal returns (SirStructs.Fees memory fees) {
+    ) internal returns (SirStructs.Fees memory fees, uint256 totalSupplyOfTEA) {
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -304,6 +305,7 @@ contract TEA is SystemState {
 
             // Update total supply and vault balance
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
+            totalSupplyOfTEA = totalSupplyAndBalanceVault_.totalSupply;
 
             // Emit transfer event
             emit TransferSingle(msg.sender, msg.sender, address(0), vaultId, amount);

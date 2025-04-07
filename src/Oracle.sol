@@ -32,13 +32,7 @@ contract Oracle {
     );
     event PriceUpdated(address indexed token0, address indexed token1, bool priceTruncated, int64 priceTickX42);
 
-    event UniswapOracleProbed(
-        uint24 fee,
-        int56 aggPriceTick,
-        uint136 avLiquidity,
-        uint40 period,
-        uint16 cardinalityToIncrease
-    );
+    event UniswapOracleProbed(uint24 fee, uint136 avLiquidity, uint40 period, uint16 cardinalityToIncrease);
     event OracleFeeTierChanged(uint24 feeTierPrevious, uint24 feeTierSelected);
 
     // This struct is used to pass data between functions.
@@ -198,7 +192,6 @@ contract Oracle {
                 oracleData = _uniswapOracleData(tokenA, tokenB, uniswapFeeTiers[i].fee);
                 emit UniswapOracleProbed(
                     uniswapFeeTiers[i].fee,
-                    oracleData.aggPriceTick,
                     oracleData.avLiquidity,
                     oracleData.period,
                     oracleData.cardinalityToIncrease
@@ -302,7 +295,6 @@ contract Oracle {
             uniswapPoolAddress = address(oracleData.uniswapPool);
             emit UniswapOracleProbed(
                 oracleState.uniswapFeeTier.fee,
-                oracleData.aggPriceTick,
                 oracleData.avLiquidity,
                 oracleData.period,
                 oracleData.cardinalityToIncrease
@@ -347,7 +339,6 @@ contract Oracle {
                     );
                     emit UniswapOracleProbed(
                         uniswapFeeTierProbed.fee,
-                        oracleDataProbed.aggPriceTick,
                         oracleDataProbed.avLiquidity,
                         oracleDataProbed.period,
                         oracleDataProbed.cardinalityToIncrease
