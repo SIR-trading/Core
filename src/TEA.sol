@@ -249,7 +249,7 @@ contract TEA is SystemState {
             totalSupplyAndBalanceVault_.balanceVault += uint128(amountToPOL);
             totalSupplyAndBalanceVault_.totalSupply += uint128(amount + amountToPOL);
 
-            // Store total supply
+            // Store total supply and balance
             totalSupplyAndBalanceVault[vaultId] = totalSupplyAndBalanceVault_;
         }
 

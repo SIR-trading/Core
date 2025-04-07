@@ -213,21 +213,22 @@ contract APE is Clone {
         uint144 collateralDeposited
     ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
         // Loads supply of APE
-        uint256 supplyAPE = totalSupply;
+        uint256 totalSupplyOfAPE = totalSupply;
 
         // Substract fees
         fees = Fees.feeAPE(collateralDeposited, baseFee, leverageTier(), tax);
 
         unchecked {
             // Mint APE
-            amount = supplyAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
+            amount = totalSupplyOfAPE == 0 // By design reserveApes can never be 0 unless it is the first mint ever
                 ? fees.collateralInOrWithdrawn + reserves.reserveApes // Any ownless APE reserve is minted by the first ape
-                : FullMath.mulDiv(supplyAPE, fees.collateralInOrWithdrawn, reserves.reserveApes);
+                : FullMath.mulDiv(totalSupplyOfAPE, fees.collateralInOrWithdrawn, reserves.reserveApes);
             balanceOf[to] += amount; // If it OF, so will totalSupply
         }
 
         reserves.reserveApes += fees.collateralInOrWithdrawn;
-        totalSupply = supplyAPE + amount; // Checked math to ensure totalSupply never overflows
+        totalSupplyOfAPE += amount; // Checked math to ensure totalSupply never overflows
+        totalSupply = totalSupplyOfAPE;
         emit Transfer(address(0), to, amount);
 
         newReserves = reserves; // Important because memory is not persistent across external calls
@@ -245,13 +246,14 @@ contract APE is Clone {
         uint256 amount
     ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees) {
         // Loads supply of APE
-        uint256 supplyAPE = totalSupply;
+        uint256 totalSupplyOfAPE = totalSupply;
 
         // Burn APE
-        uint144 collateralOut = uint144(FullMath.mulDiv(reserves.reserveApes, amount, supplyAPE)); // Compute amount of collateral
+        uint144 collateralOut = uint144(FullMath.mulDiv(reserves.reserveApes, amount, totalSupplyOfAPE)); // Compute amount of collateral
         balanceOf[from] -= amount; // Checks for underflow
         unchecked {
-            totalSupply = supplyAPE - amount;
+            totalSupplyOfAPE -= amount;
+            totalSupply = totalSupplyOfAPE;
             reserves.reserveApes -= collateralOut;
 
             // Substract fees
