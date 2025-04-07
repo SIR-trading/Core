@@ -37,8 +37,8 @@ library Fees {
             fees.collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
             uint256 totalFees = collateralDepositedOrOut - fees.collateralInOrWithdrawn;
 
-            // Depending on the tax, between 0 and 10% of the fee is for SIR stakers
-            fees.collateralFeeToStakers = uint144((totalFees * tax) / (10 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
+            // Depending on the tax, between 0 and 20% of the fee is for SIR stakers
+            fees.collateralFeeToStakers = uint144((totalFees * tax) / (20 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
 
             // The rest is sent to the gentlemen, if there are none, then it is POL
             fees.collateralFeeToLPers = uint144(totalFees) - fees.collateralFeeToStakers;
