@@ -61,21 +61,9 @@ contract Vault is TEA {
 
     /** @dev The Mint and Burn events are meant to make it easier to retrieve the prices of APE and TEA.
      */
-    event Mint(
-        uint48 indexed vaultId,
-        bool isAPE,
-        uint144 reserveLPers,
-        uint144 reserveApes,
-        uint256 totalSupply // If isAPE, total suppy of APE; else total supply of TEA
-    );
+    event Mint(uint48 indexed vaultId, bool isAPE, uint144 reserveLPers, uint144 reserveApes);
 
-    event Burn(
-        uint48 indexed vaultId,
-        bool isAPE,
-        uint144 reserveLPers,
-        uint144 reserveApes,
-        uint256 totalSupply // If isAPE, total suppy of APE; else total supply of TEA
-    );
+    event Burn(uint48 indexed vaultId, bool isAPE, uint144 reserveLPers, uint144 reserveApes);
 
     Oracle private immutable _ORACLE;
     address private immutable _APE_IMPLEMENTATION;
@@ -319,10 +307,9 @@ contract Vault is TEA {
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
         bool isAPE = ape != address(0);
-        uint256 totalSupply;
         if (isAPE) {
             // Mint APE
-            (reserves, fees, amount, totalSupply) = APE(ape).mint(
+            (reserves, fees, amount) = APE(ape).mint(
                 minter,
                 systemParams_.baseFee.fee,
                 vaultIssuanceParams_.tax,
@@ -334,7 +321,7 @@ contract Vault is TEA {
             reserves.reserveLPers += fees.collateralFeeToLPers;
         } else {
             // Mint TEA and distribute fees to protocol owned liquidity (POL)
-            (fees, amount, totalSupply) = mint(
+            (fees, amount) = mint(
                 minter,
                 vaultParams.collateralToken,
                 vaultState.vaultId,
@@ -355,7 +342,7 @@ contract Vault is TEA {
         totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
 
         // Emit event
-        emit Mint(vaultState.vaultId, isAPE, reserves.reserveLPers, reserves.reserveApes, totalSupply);
+        emit Mint(vaultState.vaultId, isAPE, reserves.reserveLPers, reserves.reserveApes);
 
         /** Check if recipient is enabled for receiving TEA.
             This check is done last to avoid reentrancy attacks because it may call an external contract.
@@ -391,10 +378,9 @@ contract Vault is TEA {
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
-        uint256 totalSupply;
         if (isAPE) {
             // Burn APE
-            (reserves, fees, totalSupply) = APE(ape).burn(
+            (reserves, fees) = APE(ape).burn(
                 msg.sender,
                 systemParams_.baseFee.fee,
                 vaultIssuanceParams_.tax,
@@ -406,7 +392,7 @@ contract Vault is TEA {
             reserves.reserveLPers += fees.collateralFeeToLPers;
         } else {
             // Burn TEA (no fees are actually paid)
-            (fees, totalSupply) = burn(vaultState.vaultId, systemParams_, vaultIssuanceParams_, reserves, amount);
+            fees = burn(vaultState.vaultId, systemParams_, vaultIssuanceParams_, reserves, amount);
         }
 
         // Update vault state from new reserves
@@ -418,7 +404,7 @@ contract Vault is TEA {
         }
 
         // Emit event
-        emit Burn(vaultState.vaultId, isAPE, reserves.reserveLPers, reserves.reserveApes, totalSupply);
+        emit Burn(vaultState.vaultId, isAPE, reserves.reserveLPers, reserves.reserveApes);
 
         // Send collateral to the user
         TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);

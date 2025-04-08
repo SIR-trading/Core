@@ -211,18 +211,9 @@ contract APE is Clone {
         uint8 tax,
         SirStructs.Reserves memory reserves,
         uint144 collateralDeposited
-    )
-        external
-        onlyVault
-        returns (
-            SirStructs.Reserves memory newReserves,
-            SirStructs.Fees memory fees,
-            uint256 amount,
-            uint256 totalSupplyOfAPE
-        )
-    {
+    ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 amount) {
         // Loads supply of APE
-        totalSupplyOfAPE = totalSupply;
+        uint256 totalSupplyOfAPE = totalSupply;
 
         // Substract fees
         fees = Fees.feeAPE(collateralDeposited, baseFee, leverageTier(), tax);
@@ -253,13 +244,9 @@ contract APE is Clone {
         uint8 tax,
         SirStructs.Reserves memory reserves,
         uint256 amount
-    )
-        external
-        onlyVault
-        returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees, uint256 totalSupplyOfAPE)
-    {
+    ) external onlyVault returns (SirStructs.Reserves memory newReserves, SirStructs.Fees memory fees) {
         // Loads supply of APE
-        totalSupplyOfAPE = totalSupply;
+        uint256 totalSupplyOfAPE = totalSupply;
 
         // Burn APE
         uint144 collateralOut = uint144(FullMath.mulDiv(reserves.reserveApes, amount, totalSupplyOfAPE)); // Compute amount of collateral
