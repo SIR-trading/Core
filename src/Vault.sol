@@ -59,11 +59,8 @@ contract Vault is TEA {
     error Locked();
     error NotAWETHVault();
 
-    /** @dev The Mint and Burn events are meant to make it easier to retrieve the prices of APE and TEA.
-     */
-    event Mint(uint48 indexed vaultId, bool isAPE, uint144 reserveLPers, uint144 reserveApes);
-
-    event Burn(uint48 indexed vaultId, bool isAPE, uint144 reserveLPers, uint144 reserveApes);
+    /// @dev This event is meant to make it easier to retrieve the prices of APE and TEA.
+    event ReservesChanged(uint48 indexed vaultId, bool isAPE, bool isMint, uint144 reserveLPers, uint144 reserveApes);
 
     Oracle private immutable _ORACLE;
     address private immutable _APE_IMPLEMENTATION;
@@ -342,7 +339,7 @@ contract Vault is TEA {
         totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
 
         // Emit event
-        emit Mint(vaultState.vaultId, isAPE, reserves.reserveLPers, reserves.reserveApes);
+        emit ReservesChanged(vaultState.vaultId, isAPE, true, reserves.reserveLPers, reserves.reserveApes);
 
         /** Check if recipient is enabled for receiving TEA.
             This check is done last to avoid reentrancy attacks because it may call an external contract.
@@ -404,7 +401,7 @@ contract Vault is TEA {
         }
 
         // Emit event
-        emit Burn(vaultState.vaultId, isAPE, reserves.reserveLPers, reserves.reserveApes);
+        emit ReservesChanged(vaultState.vaultId, isAPE, false, reserves.reserveLPers, reserves.reserveApes);
 
         // Send collateral to the user
         TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);
