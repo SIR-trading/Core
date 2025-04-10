@@ -27,8 +27,8 @@ contract SIR is Staker, SystemControlAccess {
 
     /**
      * @notice Returns unclaimed SIR rewards of a contributor.
-     * @param contributor whose unclaimed SIR rewards are to be checked.
-     * @return unclaimed SIR rewards of a contributor.
+     * @param contributor Address of the contributor to check.
+     * @return unclaimed Amount of unclaimed SIR rewards.
      */
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
@@ -66,14 +66,14 @@ contract SIR is Staker, SystemControlAccess {
     }
 
     /**
-     * @notice Returns the total SIR issuance rate [sir/s].
+     * @notice Returns the amount of SIR issued every second [SIR/s].
      */
     function ISSUANCE_RATE() external pure returns (uint72) {
         return SystemConstants.ISSUANCE;
     }
 
     /**
-     * @notice Returns the SIR issuance rate [sir/s] to LPers for the first 3 years.
+     * @notice Returns the amount of SIR issued every second [SIR/s] only to LPers for the first 3 years.
      */
     function LP_ISSUANCE_FIRST_3_YEARS() external pure returns (uint72) {
         return SystemConstants.LP_ISSUANCE_FIRST_3_YEARS;
@@ -84,8 +84,9 @@ contract SIR is Staker, SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Mints SIR rewards for a contributor.
-     * @return rewards in SIR received by a contributor.
+     * @notice Contributor can mint SIR rewards.
+     * @dev Contributors are those that contributed pre mainnet and got an allocation for it.
+     * @return rewards Amount of SIR received by the contributor.
      */
     function contributorMint() public returns (uint80 rewards) {
         require(_mintingAllowed);
@@ -102,11 +103,11 @@ contract SIR is Staker, SystemControlAccess {
     }
 
     /**
-     * @notice Mints SIR rewards for an LPer.
-     * @param vaultId of the vault for which the LPer wants to claim SIR.
-     * @return rewards in SIR received by an LPer.
+     * @notice Mint SIR rewards for an LPer.
+     * @param vaultId The vault ID of the vault to claim SIR from.
+     * @return rewards Amount of SIR rewards received.
      */
-    function lPerMint(uint256 vaultId) public returns (uint80 rewards) {
+    function lperMint(uint256 vaultId) public returns (uint80 rewards) {
         require(_mintingAllowed);
 
         // Get LPer issuance parameters
@@ -120,7 +121,8 @@ contract SIR is Staker, SystemControlAccess {
     }
 
     /**
-     * @notice Auxiliary function for minting SIR rewards for a contributor and staking them immediately in one call.
+     * @notice Contributor can mint SIR rewards and stake them in one call.
+     * @dev Auxiliary function that saves the user from calling contributorMint() and stake() separately.
      */
     function contributorMintAndStake() external returns (uint80 rewards) {
         // Get unclaimed rewards
@@ -131,11 +133,12 @@ contract SIR is Staker, SystemControlAccess {
     }
 
     /**
-     * @notice Auxiliary function for minting SIR rewards for an LPer and staking them immediately in one call.
+     * @notice LPer can mint SIR rewards and stake them in one call.
+     * @dev Auxiliary function that saves the LPer from calling lperMint() and stake() separately.
      */
-    function lPerMintAndStake(uint256 vaultId) external returns (uint80 rewards) {
+    function lperMintAndStake(uint256 vaultId) external returns (uint80 rewards) {
         // Get unclaimed rewards
-        rewards = lPerMint(vaultId);
+        rewards = lperMint(vaultId);
 
         // Stake them immediately
         stake(rewards);

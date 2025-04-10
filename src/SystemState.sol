@@ -25,9 +25,11 @@ abstract contract SystemState is SystemControlAccess {
         uint256 balance1;
     }
 
+    /// @notice Unix timestamp when SIR was launched and SIR token issuance started.
     uint40 public immutable TIMESTAMP_ISSUANCE_START;
 
-    address internal immutable _SIR;
+    /// @dev The SIR token contract
+    address public immutable SIR;
 
     mapping(uint256 vaultId => SirStructs.VaultIssuanceParams) internal vaultIssuanceParams;
     mapping(uint256 vaultId => mapping(address => LPerIssuanceParams)) private _lpersIssuances;
@@ -37,7 +39,7 @@ abstract contract SystemState is SystemControlAccess {
     constructor(address systemControl, address sir_) SystemControlAccess(systemControl) {
         TIMESTAMP_ISSUANCE_START = uint40(block.timestamp);
 
-        _SIR = sir_;
+        SIR = sir_;
 
         /*  Apes pay fees to the gentlemen for their liquidity when minting or burning APE. They are paid twice to encourage LPers to
             continue to provide liqduidity after a mint of APE.
@@ -105,11 +107,6 @@ abstract contract SystemState is SystemControlAccess {
         }
     }
 
-    /**
-        @param vaultId The id of the vault to query.
-        @param lper The address of the LPer to query.
-        @param cumulativeSIRPerTEAx96 The current cumulative SIR minted by the vaultId per unit of TEA.
-     */
     function unclaimedRewards(
         uint256 vaultId,
         address lper,
@@ -133,7 +130,7 @@ abstract contract SystemState is SystemControlAccess {
     }
 
     /**
-     * @notice Returns the amount of SIR owed to the LPer in vault `vaultId`.
+     * @notice Returns the amount of SIR owed to the LPer in a specific vault.
      * @param vaultId The id of the vault to query.
      * @param lper The address of the LPer to query.
      */
@@ -143,14 +140,16 @@ abstract contract SystemState is SystemControlAccess {
 
     /**
      * @notice Returns the tax charged to the vault which is equal to
-     * 10% * tax / type(uint8).max
+     * 20% * tax / type(uint8).max
      */
     function vaultTax(uint48 vaultId) external view returns (uint8) {
         return vaultIssuanceParams[vaultId].tax;
     }
 
     /**
-     * @notice Returns the system parameters.
+     *  @notice Returns the global system parameters.
+     *  @return systemParams_ A 4-tuple that includes (1) the base fee, (2) the LP fee,
+     *  (3) whether minting is stopped, and (4) the cumulative tax.
      */
     function systemParams() public view returns (SirStructs.SystemParameters memory systemParams_) {
         systemParams_ = _systemParams;
@@ -179,11 +178,11 @@ abstract contract SystemState is SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev Mints SIR rewards for `lper` in vault `vaultId`.
+     * @dev Mints pending SIR rewards for a specific LPer and vault.
      * Only callable by the SIR contract.
      */
     function claimSIR(uint256 vaultId, address lper) external returns (uint80) {
-        require(msg.sender == _SIR);
+        require(msg.sender == SIR);
 
         return
             updateLPerIssuanceParams(
@@ -245,9 +244,9 @@ abstract contract SystemState is SystemControlAccess {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev This function can only be called by the SystemControl contract.\n
-     * It updates the base fee charge to apes, the fee charged to LPers when minting or haults all minting.\n
-     * All these parameters are updated in a single function for bytecode efficiency.\n
+     * @dev This function can only be called by the SystemControl contract.
+     * It updates the base fee charge to apes, the fee charged to LPers when minting or haults all minting.
+     * All these parameters are updated in a single function for bytecode efficiency.
      * All checks and balances are done at the SystemControl contract.
      */
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
@@ -267,9 +266,9 @@ abstract contract SystemState is SystemControlAccess {
     }
 
     /**
-     * @dev This function can only be called by the SystemControl contract.\n
-     * Updates the tax of the vaults whose fees are distributed to stakers of SIR.\n
-     * The amount of SIR rewards received by LPers of a vault is proportional to the tax of the vault. 0 tax implies no SIR rewards.\n
+     * @dev This function can only be called by the SystemControl contract.
+     * Updates the tax of the vaults whose fees are distributed to stakers of SIR.
+     * The amount of SIR rewards received by LPers of a vault is proportional to the tax of the vault. 0 tax implies no SIR rewards.
      * All checks and balances are done at the SystemControl contract.
      */
     function updateVaults(

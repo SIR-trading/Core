@@ -58,6 +58,11 @@ contract TEA is SystemState {
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
 
     SirStructs.VaultParameters[] internal _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
+
+    /**
+     *  @notice Checks if an operator is approved to transfer on behalf of an account.
+     *  @notice The first address is the account, the second is the operator.
+     */
     mapping(address => mapping(address => bool)) public isApprovedForAll;
 
     constructor(address systemControl, address sir) SystemState(systemControl, sir) {}
@@ -71,7 +76,7 @@ contract TEA is SystemState {
         return _paramsById[vaultId];
     }
 
-    /// @notice Returns the number of initialized vaults.
+    /// @notice Returns the number of existing vaults.
     function numberOfVaults() external view returns (uint48) {
         return uint48(_paramsById.length - 1);
     }
@@ -87,16 +92,25 @@ contract TEA is SystemState {
         return totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault;
     }
 
+    /**
+     *  @notice Returns the URI for a specific vault.
+     *  The URI is a data URL encoding a JSON with the following data:
+     *  name, symbol, decimals, chain_id, debt_token, collateral_token, leverage_tier and total_supply.
+     */
     function uri(uint256 vaultId) external view returns (string memory) {
         return VaultExternal.teaURI(_paramsById, vaultId, totalSupplyAndBalanceVault[vaultId].totalSupply);
     }
 
-    /// @notice Returns the balance of the given `account` for the given `vaultId`.
+    /// @notice Returns the balance of an account for a specific vault
     function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {
         return account == address(this) ? totalSupplyAndBalanceVault[vaultId].balanceVault : balances[account][vaultId];
     }
 
-    /// @notice Returns the balances of multiple vault ID's
+    /** @notice Returns the balances of multiple accounts for specific vaults.
+     *  @dev The length of owners and vaultIds must be the same.
+     *  @param owners An array of accounts to query.
+     *  @param vaultIds An array of vaults to query.
+     */
     function balanceOfBatch(
         address[] calldata owners,
         uint256[] calldata vaultIds
@@ -135,7 +149,10 @@ contract TEA is SystemState {
     }
 
     /**
-     * @notice Transfers `amount` tokens in `vaultId` from `from` to `to`.
+     * @notice Transfers TEA from a specific vault.
+     * @param from The account to transfer from.
+     * @param to The account to transfer to.
+     * @param vaultId The vault to transfer from.
      */
     function safeTransferFrom(address from, address to, uint256 vaultId, uint256 amount, bytes calldata data) external {
         assert(from != address(this));
@@ -156,7 +173,11 @@ contract TEA is SystemState {
     }
 
     /**
-     * @notice Transfers `amounts` tokens in `vaultIds` from `from` to `to`.
+     * @notice Transfers TEA from multiple vaults.
+     * @param from The account to transfer from.
+     * @param to The account to transfer to.
+     * @param vaultIds The vaults to transfer from.
+     * @param amounts The amounts to transfer.
      */
     function safeBatchTransferFrom(
         address from,
@@ -263,7 +284,7 @@ contract TEA is SystemState {
 
     /**
      * @dev This function is called when a user burns TEA.
-     * @dev It also updates SIR rewards in case this vault is elligible for them.
+     * It also updates SIR rewards in case this vault is elligible for them.
      */
     function burn(
         uint48 vaultId,
@@ -366,6 +387,7 @@ contract TEA is SystemState {
                         SYSTEM STATE VIRTUAL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
+    /// @dev Info function to return cumulative SIR per unit of TEA for a given vault
     function cumulativeSIRPerTEA(uint256 vaultId) public view override returns (uint176 cumulativeSIRPerTEAx96) {
         return
             cumulativeSIRPerTEA(_systemParams.cumulativeTax, vaultIssuanceParams[vaultId], supplyExcludeVault(vaultId));

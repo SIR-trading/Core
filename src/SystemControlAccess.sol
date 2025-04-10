@@ -4,7 +4,8 @@ pragma solidity ^0.8.0;
 // import {SystemConstants} from "./libraries/SystemConstants.sol";
 
 contract SystemControlAccess {
-    address internal immutable SYSTEM_CONTROL;
+    /// @notice Address of the SystemControl contract.
+    address public immutable SYSTEM_CONTROL;
 
     modifier onlySystemControl() {
         require(msg.sender == SYSTEM_CONTROL);
