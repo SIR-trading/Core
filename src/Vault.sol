@@ -47,10 +47,10 @@ import {TEA} from "./TEA.sol";
 
 /**
  * @notice Users can mint or burn the synthetic assets (TEA or APE) of the protocol
- * @dev Vaultall vaults for maximum efficiency using a singleton architecture.\n
+ * @dev Vaultall vaults for maximum efficiency using a singleton architecture.
  * A bogus collateral token (doing reentrancy attacks or returning face values)
  * means that all vaults using that type of collateral are compromised,
- * but vaults using OTHER collateral types are safe.\n
+ * but vaults using OTHER collateral types are safe.
  * VaultExternal is an external library used for unloading bytecode and meeting the maximum contract size requirement.
  */
 contract Vault is TEA {
@@ -62,13 +62,21 @@ contract Vault is TEA {
     /// @dev This event is meant to make it easier to retrieve the prices of APE and TEA.
     event ReservesChanged(uint48 indexed vaultId, bool isAPE, bool isMint, uint144 reserveLPers, uint144 reserveApes);
 
-    Oracle private immutable _ORACLE;
-    address private immutable _APE_IMPLEMENTATION;
+    /// @dev The Oracle contract used for getting the price of collateral vs. debt token.
+    Oracle public immutable ORACLE;
+
+    /// @dev The address of the APE implementation.
+    address public immutable APE_IMPLEMENTATION;
+
     address private immutable _WETH;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
 
+    /**
+     * @notice Total balance across all vaults for a specific collateral token.
+     * It does not include fees reserved for distributing to stakers.
+     */
     mapping(address collateral => uint256) public totalReserves;
 
     constructor(
@@ -78,11 +86,11 @@ contract Vault is TEA {
         address apeImplementation,
         address weth
     ) TEA(systemControl, sir) {
-        // Price _ORACLE
-        _ORACLE = Oracle(oracle);
+        // Price ORACLE
+        ORACLE = Oracle(oracle);
 
         // Save the address of the APE implementation
-        _APE_IMPLEMENTATION = apeImplementation;
+        APE_IMPLEMENTATION = apeImplementation;
 
         // WETH
         _WETH = weth;
@@ -92,16 +100,17 @@ contract Vault is TEA {
     }
 
     /**
-     * @notice Initialization is always necessary because we must deploy the APE contract for each vault,
-     * and possibly initialize the Oracle.
+     * @notice Initializize (create) a new vault with specific parameters.
+     * It will revert if the vault already exists.
+     * @dev The initialization deploys a new ERC20 APE token, and potentially initializes the Oracle.
      */
     function initialize(SirStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deploy(
-            _ORACLE,
+            ORACLE,
             _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
             _paramsById,
             vaultParams,
-            _APE_IMPLEMENTATION
+            APE_IMPLEMENTATION
         );
     }
 
@@ -134,16 +143,14 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Function for minting APE or TEA, the protocol's synthetic tokens.\n
-     * You can mint by depositing collateral token or debt token dependening by setting collateralToDepositMin to 0 or not, respectively.\n
-     * You have the option to mint with vanilla ETH when the token is WETH by simply sending ETH with the call. In this case, amountToDeposit is ignored.
-     * @dev When minting APE, the user will give away a portion of his deposited collateral to the LPers.\n
-     * When minting TEA, the user will give away a portion of his deposited collateral to protocol owned liquidity.
+     * @notice Function for minting APE or TEA, the protocol's synthetic tokens.
+     * @dev You can mint by depositing collateral token or, alternatively, with debt token if collateralToDepositMin set to a non-zero amount.
+     * You also have the option to mint with vanilla ETH when the token is WETH by simply sending ETH with the call. In this case, amountToDeposit is ignored.
      * @param isAPE If true, mint APE. If false, mint TEA
-     * @param vaultParams The 3 parameters identifying a vault: collateral token, debt token, and leverage tier.
-     * @param amountToDeposit Collateral amount to deposit if collateralToDepositMin == 0, debt token to deposit if collateralToDepositMin > 0
-     * @param collateralToDepositMin Ignored when minting with collateral token, otherwise it specifies the minimum amount of collateral to receive from Uniswap when swapping the debt token.
-     * @return amount of tokens TEA/APE obtained
+     * @param vaultParams The 3 parameters identifying a vault.
+     * @param amountToDeposit Amount of collateral to deposit, or if collateralToDepositMin > 0, amount of debt token to deposit.
+     * @param collateralToDepositMin Ignored when minting with collateral token, otherwise it specifies the MINIMUM amount of collateral to receive from Uniswap when swapping the debt token.
+     * @return amount Amount of TEA/APE send to the caller.
      */
     function mint(
         bool isAPE,
@@ -174,7 +181,7 @@ contract Vault is TEA {
             SirStructs.Reserves memory reserves,
             address ape,
             address uniswapPool
-        ) = VaultExternal.getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
+        ) = VaultExternal.getReserves(isAPE, _vaultStates, ORACLE, vaultParams);
 
         if (collateralToDepositMin == 0) {
             // Minter deposited collateral
@@ -232,9 +239,9 @@ contract Vault is TEA {
     }
 
     /**
-     * @dev This callback function is required by Uniswap pools when making a swap.\n
-     * This function is exectuted when the user decides to mint TEA or APE with debt token.\n
-     * This function is in charge of sending the debt token to the uniswwap pool.\n
+     * @dev This callback function is required by Uniswap pools when making a swap.
+     * This function is exectuted when the user decides to mint TEA or APE with debt token.
+     * This function is in charge of sending the debt token to the uniswwap pool.
      * It will revert if any external actor that is not a Uniswap pool calls this function.
      */
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
@@ -341,7 +348,8 @@ contract Vault is TEA {
         // Emit event
         emit ReservesChanged(vaultState.vaultId, isAPE, true, reserves.reserveLPers, reserves.reserveApes);
 
-        /** Check if recipient is enabled for receiving TEA.
+        /*  
+            Check if recipient is enabled for receiving TEA.
             This check is done last to avoid reentrancy attacks because it may call an external contract.
         */
         if (
@@ -353,12 +361,11 @@ contract Vault is TEA {
     }
 
     /**
-     * @notice Function for burning APE or TEA, the protocol's synthetic tokens.
-     * @dev When burning APE, the user will give away a portion of his collateral to the LPers.
+     * @notice Function for burning APE or TEA, the protocol's synthetic tokens, and getting collateral token in return.
      * @param isAPE If true, burn APE. If false, burn TEA
-     * @param vaultParams The 3 parameters identifying a vault: collateral token, debt token, and leverage tier.
+     * @param vaultParams The 3 parameters identifying a vault.
      * @param amount Amount of tokens to burn
-     * @return amount of collateral obtained for burning APE or TEA.
+     * @return Amount of collateral obtained for burning APE or TEA.
      */
     function burn(
         bool isAPE,
@@ -371,7 +378,7 @@ contract Vault is TEA {
 
         // Get reserves
         (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
-            .getReserves(isAPE, _vaultStates, _ORACLE, vaultParams);
+            .getReserves(isAPE, _vaultStates, ORACLE, vaultParams);
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
@@ -413,20 +420,24 @@ contract Vault is TEA {
                             READ ONLY FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /** @notice Returns the reserves of the vault meaning (1) the amount of collateral in the vault belonging to apes,
-        @notice (2) the amount of collateral belonging to LPers, and (3) the current collateral-debt-token price.
+    /**
+     *  @notice Function for getting the reserves of a specific vault.
+     *  @param vaultParams A 3-tuple of parameters identifying a vault: (1) collateral token, (2) debt token, and (3) leverage tier.
+     *  @return The vault's reserves, meaning a 3-tuple of (1) the amount of collateral in the vault belonging to apes,
+     *  (2) the amount of collateral belonging to LPers, and (3) the current collateral-debt-token price in fixed point.
      */
     function getReserves(
         SirStructs.VaultParameters calldata vaultParams
     ) external view returns (SirStructs.Reserves memory) {
-        return VaultExternal.getReservesReadOnly(_vaultStates, _ORACLE, vaultParams);
+        return VaultExternal.getReservesReadOnly(_vaultStates, ORACLE, vaultParams);
     }
 
     /*////////////////////////////////////////////////////////////////
                             PRIVATE FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
 
-    /*  This function stores the state of the vault ass efficiently as possible.
+    /*  
+        This function stores the state of the vault ass efficiently as possible.
         Connections Between VaultState Variables (R,priceSat) & Reserves (A,L)
         where R = Total reserve, A = Apes reserve, L = LP reserve
             (R,priceSat) ⇔ (A,L)
@@ -442,7 +453,8 @@ contract Vault is TEA {
         vaultState.reserve = reserves.reserveApes + reserves.reserveLPers;
 
         unchecked {
-            /** We enforce that the reserve must be at least 10^6 to avoid division by zero, and
+            /*  
+                We enforce that the reserve must be at least 10^6 to avoid division by zero, and
                 to mitigate inflation attacks.
              */
             require(vaultState.reserve >= 1e6);
@@ -455,9 +467,9 @@ contract Vault is TEA {
             } else {
                 bool isLeverageTierNonNegative = vaultParams.leverageTier >= 0;
 
-                /**
-                 * Decide if we are in the power or saturation zone
-                 * Condition for power zone: A < (l-1) L where l=1+2^leverageTier
+                /*
+                    Decide if we are in the power or saturation zone
+                    Condition for power zone: A < (l-1) L where l=1+2^leverageTier
                  */
                 uint8 absLeverageTier = isLeverageTierNonNegative
                     ? uint8(vaultParams.leverageTier)
@@ -484,7 +496,8 @@ contract Vault is TEA {
                 }
 
                 if (isPowerZone) {
-                    /** PRICE IN POWER ZONE
+                    /*
+                        PRICE IN POWER ZONE
                         priceSat = price*(R/(lA))^(r-1)
                      */
 
@@ -501,7 +514,8 @@ contract Vault is TEA {
                     if (tempTickPriceSatX42 > type(int64).max) vaultState.tickPriceSatX42 = type(int64).max;
                     else vaultState.tickPriceSatX42 = int64(tempTickPriceSatX42);
                 } else {
-                    /** PRICE IN SATURATION ZONE
+                    /*
+                        PRICE IN SATURATION ZONE
                         priceSat = r*price*L/R
                      */
 
@@ -534,12 +548,12 @@ contract Vault is TEA {
      * @return totalFeesToStakers is the total amount of tokens to be distributed
      */
     function withdrawFees(address token) external nonReentrant returns (uint256 totalFeesToStakers) {
-        require(msg.sender == _SIR);
+        require(msg.sender == SIR);
 
         // Surplus above totalReserves is fees to stakers
         totalFeesToStakers = IERC20(token).balanceOf(address(this)) - totalReserves[token];
 
-        TransferHelper.safeTransfer(token, _SIR, totalFeesToStakers);
+        TransferHelper.safeTransfer(token, SIR, totalFeesToStakers);
     }
 
     /**
@@ -582,7 +596,7 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Returns the state of a particular vault
+     * @notice Returns the state of a specific vault.
      * @param vaultParams The 3 parameters identifying a vault: collateral token, debt token, and leverage tier.
      */
     function vaultStates(

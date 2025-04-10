@@ -9,8 +9,8 @@ import {UD60x18, uEXP2_MAX_INPUT, uUNIT, convert} from "prb/UD60x18.sol";
 import {exp2} from "prb/Common.sol";
 
 /**
- * @notice The Staker contract handles mostly the staking of SIR tokens, and the token auctions.\n
- * Collection of fees from the vault can be triggered by anyone and also start an auction to convert them to ETH.\n
+ * @notice The Staker contract handles mostly the staking of SIR tokens, and the token auctions.
+ * Collection of fees from the vault can be triggered by anyone and also start an auction to convert them to ETH.
  * Stakers only receive dividends in the form of ETH.
  * @dev Mod of Solmate's ERC20.
  */
@@ -41,13 +41,26 @@ contract Staker {
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
+    /**
+     * @notice The staking vault.
+     * @dev The staking vault holds all SIR staked by users.
+     * This SIR is theirs and is simply a pool of SIR that is being staked by users to receive a share of the protocol's revenue.
+     */
     address public constant STAKING_VAULT = 0x000000000051200beef00Add2e55000000000000;
-    address immutable deployer; // Just used to make sure function initialize() is not called by anyone else.
-    IWETH9 private immutable _WETH;
-    Vault internal vault;
 
+    address private immutable _deployer; // Just used to make sure function initialize() is not called by anyone else.
+    IWETH9 private immutable _WETH;
+
+    /// @dev The staking vault.
+    Vault public vault;
+
+    /// @dev The protocol's full name.
     string public constant name = "Synthetics Implemented Right";
+
+    /// @dev The protocol's ERC20 token symbol.
     string public constant symbol = "SIR";
+
+    /// @dev Number of decimals of the protocol's token.
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;
 
     struct Balance {
@@ -65,6 +78,10 @@ contract Staker {
     mapping(address user => Balance) internal balances;
     mapping(address user => SirStructs.StakerParams) internal _stakersParams;
 
+    /**
+     * @dev Allowance is the amount of SIR that an address (the spender) is allowed to spend
+     * on behalf of another address (the owner).
+     */
     mapping(address => mapping(address => uint256)) public allowance;
 
     uint256 internal immutable INITIAL_CHAIN_ID;
@@ -75,7 +92,7 @@ contract Staker {
     constructor(address weth) {
         _WETH = IWETH9(payable(weth));
 
-        deployer = msg.sender;
+        _deployer = msg.sender;
 
         INITIAL_CHAIN_ID = block.chainid;
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
@@ -88,7 +105,7 @@ contract Staker {
      * @dev Initializes the contract with the vault contract address.
      */
     function initialize(address vault_) external {
-        require(!_initialized && msg.sender == deployer);
+        require(!_initialized && msg.sender == _deployer);
 
         vault = Vault(vault_);
 
@@ -140,7 +157,9 @@ contract Staker {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Sets the amount of tokens that `spender` will be allowed to spend on behalf of `owner`.
+     * @notice Sets the amount of tokens that the spender will be allowed to spend on behalf of the owner.
+     * @param spender The address that will spend the tokens.
+     * @param amount The amount of tokens that the spender will be allowed to spend.
      */
     function approve(address spender, uint256 amount) public returns (bool) {
         allowance[msg.sender][spender] = amount;
@@ -151,11 +170,13 @@ contract Staker {
     }
 
     /**
-     * @notice Transfers `amount` tokens to `to`.
+     * @notice Transfers tokens to a specific address.
+     * @param to The address that will receive the tokens.
+     * @param amount The amount of tokens to transfer.
      */
     function transfer(address to, uint256 amount) public returns (bool) {
         unchecked {
-            if (to == STAKING_VAULT) TransferToStakingVaultNotPermitted();
+            if (to == STAKING_VAULT) revert TransferToStakingVaultNotPermitted();
 
             uint80 balance = balances[msg.sender].balanceOfSIR;
             require(amount <= balance);
@@ -170,10 +191,14 @@ contract Staker {
     }
 
     /**
-     * @notice Transfers `amount` tokens from `from` to `to`.
+     * @notice Transfers tokens from one address to another.
+     * @dev The caller of this function must be approved to spend tokens on behalf of the 'from' address.
+     * @param from The address that will send the tokens.
+     * @param to The address that will receive the tokens.
+     * @param amount The amount of tokens to transfer.
      */
     function transferFrom(address from, address to, uint256 amount) public returns (bool) {
-        if (to == STAKING_VAULT) TransferToStakingVaultNotPermitted();
+        if (to == STAKING_VAULT) revert TransferToStakingVaultNotPermitted();
 
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
@@ -268,8 +293,9 @@ contract Staker {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Stakes SIR tokens. Tokens can be unstaked at any time.
-     * @param amount of SIR to stake.
+     * @notice Stake SIR tokens to get ETH dividends from the protocol.
+     * @dev Staked SIR is unlocked gradually, and after 30 days half of the stake will be unlocked.
+     * @param amount Amount of SIR to stake.
      */
     function stake(uint80 amount) public {
         Balance memory balance = balances[msg.sender];
@@ -299,8 +325,9 @@ contract Staker {
     }
 
     /**
-     * @notice Unstakes SIR tokens.
-     * @param amount of SIR to unstake.
+     * @notice Unstakes staked SIR.
+     * @dev Only unlocked staked SIR can be unstaked.
+     * @param amount Amount of SIR to unstake.
      */
     function unstake(uint80 amount) public {
         unchecked {
@@ -334,7 +361,7 @@ contract Staker {
 
     /**
      * @notice Claim ETH dividends. You can still claim even if you already unstaked you SIR.
-     * @return dividends_ of ETH received.
+     * @return dividends_ Amount of ETH received.
      */
     function claim() public returns (uint96 dividends_) {
         unchecked {
@@ -361,8 +388,8 @@ contract Staker {
 
     /**
      * @notice Convenient function for unstaking SIR and claim ETH dividens in one call.
-     * @param amount of SIR to unstake.
-     * @return dividends_ received in ETH.
+     * @param amount Amount of SIR to unstake.
+     * @return dividends_ Amount of ETH received.
      */
     function unstakeAndClaim(uint80 amount) external returns (uint96 dividends_) {
         unstake(amount);
@@ -371,7 +398,7 @@ contract Staker {
 
     /**
      * @notice Returns the amount of unclaimed ETH for a staker.
-     * @return amount of unclaimed ETH
+     * @return Amount of unclaimed ETH
      */
     function unclaimedDividends(address staker) external view returns (uint96) {
         if (staker == STAKING_VAULT) return 0; // _dividends function would not decode balances[STAKING_VAULT] properly
@@ -400,8 +427,8 @@ contract Staker {
 
     /**
      * @notice Bid on an auction.
-     * @param token of the auction.
-     * @param amount of WETH to bid.
+     * @param token Contract address of the token being auctioned.
+     * @param amount Amount of WETH to bid.
      */
     function bid(address token, uint96 amount) external {
         unchecked {
@@ -436,8 +463,8 @@ contract Staker {
     }
 
     /**
-     * @notice Collect `token` fees and starts an auction.
-     * @param token of the auction.
+     * @notice Collect fees and starts an auctio for the token.
+     * @param token Contract address of the token.
      */
     function collectFeesAndStartAuction(address token) external returns (uint256 totalFees) {
         unchecked {
@@ -472,7 +499,7 @@ contract Staker {
                 */
                 totalFees = vault.withdrawFees(token);
 
-                // Do not start a new auction if there are no fees to auction
+                // Do not start a new auction if there are no new fees to auction
                 if (totalFees == 0) revert NoFeesCollected();
 
                 // Emit event with the new auction's details
@@ -492,9 +519,9 @@ contract Staker {
 
     /**
      * @notice Winner of the auction can call this function to get the auction lot.
-     * If the transfer of the auction lot fails, the function reverts and the dividends (WETH) are not distributed, allowing the bidder to try again later.
-     * @param token of the auction lot
-     * @param beneficiary address of the auction lot. If it is 0, the auction lot is sent to the bidder address.
+     * @dev If the transfer of the auction lot fails, the function reverts and the dividends (WETH) are not distributed, allowing the bidder to try again later.
+     * @param token Contract address of the token in the lot.
+     * @param beneficiary Address to send the auction lot. If it is 0, the auction lot is sent to the bidder address.
      */
     function getAuctionLot(address token, address beneficiary) external {
         SirStructs.Auction memory auction = _auctions[token];
@@ -587,7 +614,7 @@ contract Staker {
     }
 
     /**
-     * @dev Returns the staking parameters of a staker at the present time.\n
+     * @dev Returns the staking parameters of a staker at the present time.
      * This function is responsible for unlocking stake and updating tsLastUpdate in stakerParams.
      */
     function getStakerParams(address staker) internal view returns (SirStructs.StakerParams memory stakerParams) {
@@ -635,7 +662,7 @@ contract Staker {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Returns the auction for `token`.
+     * @notice Returns the auction parameters associated with token.
      */
     function auctions(address token) external view returns (SirStructs.Auction memory) {
         return _auctions[token];

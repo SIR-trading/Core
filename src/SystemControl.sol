@@ -44,19 +44,28 @@ contract SystemControl is Ownable2Step {
     error WrongVaultsOrOrder();
     error NewTaxesTooHigh();
 
+    /// @dev The SIR token contract.
     SIR public sir;
+
+    /// @dev The Vault contract.
     Vault public vault;
+
     bool private _initialized = false;
 
+    /**
+     * @notice Current protocol status. Can be one of the following: 0 (Unstoppable), 1 (TrainingWheels), 2 (Emergency), and 3 (Shutdown).
+     */
     SystemStatus public systemStatus = SystemStatus.TrainingWheels;
-    uint40 public timestampStatusChanged; // Timestamp when the status last changed
 
     /**
-     * @notice This is the hash of the active vaults. It is used to make sure active vaults's issuances are nulled
-     * before new issuance parameters are stored. This is more gas efficient that storing all active vaults
-     * in an array, but it requires that system control keeps track of the active vaults.\n
-     * If the vaults were in an unknown order, it maybe be problem because the hash would change.
-     * So the vaults must be ordered in increasing order.\n
+     * @notice Timestamp when the protocol status last changed.
+     */
+    uint40 public timestampStatusChanged;
+
+    /**
+     * @notice This is the hash of the uint48 array of active vaults ID's. It is used internally to make sure
+     * that the active vaults's issuances are nulled before new issuance parameters are stored.
+     * @dev The vaults must be ordered in increasing order.
      * The starting value is the hash of an empty array.
      */
     bytes32 public hashActiveVaults = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
