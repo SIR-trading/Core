@@ -277,7 +277,7 @@ contract GentlemenTest is Test {
         // Attempt to mint
         vm.prank(lper);
         vm.expectRevert();
-        sir.lPerMint(1);
+        sir.lperMint(1);
     }
 
     function testFuzz_fakeVaultLPerMint(uint256 vaultId, uint32 timeSkip) public {
@@ -289,7 +289,7 @@ contract GentlemenTest is Test {
         // Attempt to mint
         vm.prank(alice);
         vm.expectRevert();
-        sir.lPerMint(vaultId);
+        sir.lperMint(vaultId);
     }
 
     function testFuzz_lPerMint(uint32 timeSkip, uint32 timeSkip2, uint32 timeSkip3) public {
@@ -302,7 +302,7 @@ contract GentlemenTest is Test {
 
         // Attempt to mint
         vm.prank(alice);
-        uint80 rewards = sir.lPerMint(1);
+        uint80 rewards = sir.lperMint(1);
 
         // Expected rewards
         uint256 rewards_;
@@ -327,14 +327,14 @@ contract GentlemenTest is Test {
         // No more rewards
         vm.prank(alice);
         vm.expectRevert();
-        sir.lPerMint(1);
+        sir.lperMint(1);
 
         // Skip time
         skip(timeSkip2);
 
         // Attempt to mint
         vm.prank(alice);
-        rewards += sir.lPerMint(1);
+        rewards += sir.lperMint(1);
 
         // Expected rewards
         if (uint256(timeSkip) + timeSkip2 <= THREE_YEARS) {
@@ -365,7 +365,7 @@ contract GentlemenTest is Test {
         // Attempt to mint
         vm.prank(alice);
         vm.expectRevert();
-        sir.lPerMint(1);
+        sir.lperMint(1);
     }
 
     function _dealWETH(address to, uint256 amount) internal {

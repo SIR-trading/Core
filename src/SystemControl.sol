@@ -161,8 +161,8 @@ contract SystemControl is Ownable2Step {
     }
 
     /** @notice renounceOwnership has been disabled.
-     *  @dev One could imagine that when transitioning to Unstoppable, we can renounced ownership as well since all parameters become immutable.
-     *  @dev But in Unstoppable mode we still need to allow the DAO the access the permissioned function updateVaultsIssuances.
+     *  @dev One could imagine that when transitioning to Unstoppable, the owner may want to renounce ownership since all
+     *  parameters become immutable, but we still need to allow the DAP to access the permissioned function updateVaultsIssuances.
      */
     function renounceOwnership() public override onlyOwner {
         revert("renounceOwnership has been disabled");

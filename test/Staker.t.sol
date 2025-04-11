@@ -15,6 +15,8 @@ import {APE} from "src/APE.sol";
 import {ABDKMath64x64} from "abdk/ABDKMath64x64.sol";
 
 contract Auxiliary is Test {
+    address internal constant STAKING_VAULT = 0x000000000051200beef00Add2e55000000000000;
+
     struct Bidder {
         uint256 id;
         uint96 amount;
@@ -240,9 +242,7 @@ contract StakerTest is Auxiliary {
     error NotTheAuctionWinner();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
-    event Staked(address indexed staker, uint256 amount);
     event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
-    event Unstaked(address indexed staker, uint256 amount);
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event AuctionedTokensSentToWinner(
@@ -296,9 +296,13 @@ contract StakerTest is Auxiliary {
         assertEq(staker.maxTotalSupply(), 0);
 
         assertEq(staker.balanceOf(alice), 0);
-        assertEq(staker.totalBalanceOf(alice), 0);
+        (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(alice);
+        assertEq(unlockedStake, 0);
+        assertEq(lockedStake, 0);
         assertEq(staker.balanceOf(bob), 0);
-        assertEq(staker.totalBalanceOf(bob), 0);
+        (unlockedStake, lockedStake) = staker.stakeOf(bob);
+        assertEq(unlockedStake, 0);
+        assertEq(lockedStake, 0);
 
         assertEq(staker.name(), "Synthetics Implemented Right");
         assertEq(staker.symbol(), "SIR");
@@ -452,7 +456,7 @@ contract StakerTest is Auxiliary {
 
         // Stake
         vm.expectEmit();
-        emit Staked(account, user.stakeAmount);
+        emit Transfer(account, STAKING_VAULT, user.stakeAmount);
         vm.prank(account);
         staker.stake(user.stakeAmount);
 
@@ -461,9 +465,9 @@ contract StakerTest is Auxiliary {
         skip(delayCheck);
 
         assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount, "Wrong balance");
-        assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
-
         (unlockedStake, lockedStake) = staker.stakeOf(account);
+        assertEq(unlockedStake + lockedStake, user.stakeAmount, "Wrong total balance");
+
         uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
             user.stakeAmount
         );
@@ -487,7 +491,7 @@ contract StakerTest is Auxiliary {
 
         // Stake
         vm.expectEmit();
-        emit Staked(alice, stakeAmount);
+        emit Transfer(alice, STAKING_VAULT, stakeAmount);
         vm.prank(alice);
         staker.stake(stakeAmount);
 
@@ -528,7 +532,7 @@ contract StakerTest is Auxiliary {
         user2.stakeAmount = uint80(_bound(user2.stakeAmount, 0, user2.mintAmount));
         _mint(account2, user2.mintAmount);
         vm.expectEmit();
-        emit Staked(account2, user2.stakeAmount);
+        emit Transfer(account2, STAKING_VAULT, user2.stakeAmount);
         vm.prank(account2);
         staker.stake(user2.stakeAmount);
 
@@ -539,7 +543,8 @@ contract StakerTest is Auxiliary {
         // Verify balances
         if (account1 != account2) {
             assertEq(staker.balanceOf(account2), user2.mintAmount - user2.stakeAmount, "Wrong balance of account2");
-            assertEq(staker.totalBalanceOf(account2), user2.mintAmount, "Wrong total balance of account2");
+            (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(account2);
+            assertEq(unlockedStake + lockedStake, user2.stakeAmount, "Wrong total balance of account2");
             assertEq(
                 staker.supply(),
                 totalSupplyOfSIR - user1.stakeAmount - user2.stakeAmount,
@@ -552,13 +557,13 @@ contract StakerTest is Auxiliary {
                 user1.mintAmount + user2.mintAmount - user1.stakeAmount - user2.stakeAmount,
                 "Wrong balance"
             );
+            (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(account2);
             assertEq(
-                staker.totalBalanceOf(account2),
-                user1.mintAmount + user2.mintAmount,
+                unlockedStake + lockedStake,
+                user1.stakeAmount + user2.stakeAmount,
                 "Wrong total balance of account2"
             );
 
-            (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(account2);
             uint256 lockedStake_ = ABDKMath64x64.divu(delayCheck, SystemConstants.HALVING_PERIOD).neg().exp_2().mulu(
                 user1.stakeAmount / 2 + user2.stakeAmount
             );
@@ -768,16 +773,18 @@ contract StakerTest is Auxiliary {
 
         // Unstakes
         vm.expectEmit();
-        emit Unstaked(account, unstakeAmount);
+        emit Transfer(STAKING_VAULT, account, unstakeAmount);
         vm.prank(account);
         staker.unstake(unstakeAmount);
 
         assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
-        assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
+        (unlockedStake, lockedStake) = staker.stakeOf(account);
+        assertEq(unlockedStake + lockedStake, user.stakeAmount - unstakeAmount, "Wrong total balance");
         assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount + unstakeAmount, "Wrong supply");
         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
 
         // Check dividends still there
+        console.log("stakeAmount", user.stakeAmount);
         if (user.stakeAmount == 0) {
             assertEq(staker.unclaimedDividends(account), 0);
         } else {
@@ -789,11 +796,6 @@ contract StakerTest is Auxiliary {
                 maxError,
                 "Donations after unstaking too low"
             );
-
-            // Check unlocked and locked stakes are correct
-            (uint80 unlockedStake_, uint80 lockedStake_) = staker.stakeOf(account);
-            assertEq(unlockedStake - unstakeAmount, unlockedStake_);
-            assertEq(lockedStake, lockedStake_);
 
             // Claim dividends
             vm.prank(account);
@@ -823,7 +825,7 @@ contract StakerTest is Auxiliary {
         address account = _idToAddress(user.id);
 
         // Stakes
-        (uint80 unlockedStake, ) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
+        (uint80 unlockedStake, uint80 lockedStake) = testFuzz_stake(user, totalSupplyOfSIR, delayCheck);
         unstakeAmount = uint80(_bound(unstakeAmount, 0, unlockedStake));
 
         // Set up donations
@@ -854,13 +856,14 @@ contract StakerTest is Auxiliary {
 
         // Unstakes
         vm.expectEmit();
-        emit Unstaked(account, unstakeAmount);
+        emit Transfer(STAKING_VAULT, account, unstakeAmount);
         vm.prank(account);
         uint96 dividends_ = staker.unstakeAndClaim(unstakeAmount);
         assertEq(staker.unclaimedDividends(account), 0);
 
         assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");
-        assertEq(staker.totalBalanceOf(account), user.mintAmount, "Wrong total balance");
+        (unlockedStake, lockedStake) = staker.stakeOf(account);
+        assertEq(unlockedStake + lockedStake, user.stakeAmount - unstakeAmount, "Wrong total balance");
         assertEq(staker.supply(), totalSupplyOfSIR - user.stakeAmount + unstakeAmount, "Wrong supply");
         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
 
@@ -1493,8 +1496,8 @@ contract StakerHandler is Auxiliary {
         address user = _idToAddress(userId);
 
         // Cannot unstake more than what is staked
-        uint256 stakeBalanceOfUser = staker.totalBalanceOf(user) - staker.balanceOf(user);
-        amount = uint80(_bound(amount, 0, stakeBalanceOfUser));
+        (uint80 unlockedStake, uint80 lockedStake) = staker.stakeOf(user);
+        amount = uint80(_bound(amount, 0, unlockedStake + lockedStake));
         // vm.writeLine(
         //     "./InvariantStaker.log",
         //     string.concat("User ", vm.toString(user), " UNstakes ", vm.toString(amount), " SIR")

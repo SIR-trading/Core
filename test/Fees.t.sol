@@ -52,8 +52,8 @@ contract FeesTest is Test {
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
         assertEq(
             fees.collateralFeeToStakers,
-            (uint256(totalFee) * tax) / (uint256(10) * type(uint8).max),
-            "Treasury fee incorrect"
+            (uint256(totalFee) * tax) / (uint256(20) * type(uint8).max),
+            "Stakers fee incorrect"
         );
         assertEq(fees.collateralFeeToLPers, totalFee - fees.collateralFeeToStakers, "LPers fee incorrect");
     }
