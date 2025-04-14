@@ -37,30 +37,31 @@ const combineAllocations = () => {
     const allocations = new Map();
 
     // Helper to add allocations with ENS
-    const addAllocation = (address, allocation, ens) => {
+    const addAllocation = (address, allocation, ens, source) => {
         const key = address.toLowerCase();
-        const existing = allocations.get(key) || { allocation: 0, ens: "" };
+        const existing = allocations.get(key) || { allocation: 0, ens: "", source };
 
         allocations.set(key, {
             address,
             allocation: existing.allocation + allocation,
-            ens: ens || existing.ens // Preserve existing ENS if any
+            ens: ens || existing.ens,
+            source: existing.source || source
         });
     };
 
     // Process spice contributors (no ENS)
-    processSpice().forEach(({ address, allocation }) => addAllocation(address, allocation, ""));
+    processSpice().forEach(({ address, allocation }) => addAllocation(address, allocation, "", "spice"));
 
     // Process fundraising contributors (with ENS)
     fundraisingData.contributors.forEach((c) => {
         const baseRatio = c.contribution / SALE_CAP_USD;
         const baseAllocation = baseRatio * FUNDRAISING_PERCENTAGE;
         const boost = 1 + (c.lock_nfts * BC_BOOST_PER_CENT) / 100;
-        addAllocation(c.address, baseAllocation * boost, c.ens);
+        addAllocation(c.address, baseAllocation * boost, c.ens, "usd");
     });
 
     // Add treasury allocation
-    addAllocation(TREASURY_ADDRESS, 10, "");
+    addAllocation(TREASURY_ADDRESS, 10, "", "treasury");
 
     return Array.from(allocations.values()).sort((a, b) => b.allocation - a.allocation);
 };
@@ -85,22 +86,10 @@ const generateLibrary = (allocations) => {
     const TYPE_MAX_BIG_INT = 0xffffffffffffffn; // uint56.max as BigInt
     const totalContributorPercentage = allocations.reduce((sum, c) => sum + c.allocation, 0);
 
-    // // Convert allocations to basis points (integer math)
-    // const allocationData = allocations.map((c) => {
-    //     const basisPoints = BigInt(Math.round(c.allocation * 100));
-    //     return {
-    //         ...c,
-    //         basisPoints: basisPoints
-    //     };
-    // });
-
-    // // Calculate total basis points
-    // const totalBasisPoints = allocationData.reduce((sum, c) => sum + c.basisPoints, 0n);
-
     // Calculate allocations with remainders
     let remaining = TYPE_MAX_BIG_INT;
     const allocationList = allocations.map((c) => {
-        const exact = BigInt(Math.round((c.allocation * TYPE_MAX) / totalContributorPercentage));
+        const exact = BigInt(Math.floor((c.allocation * TYPE_MAX) / totalContributorPercentage));
         remaining -= exact;
         return {
             ...c,
@@ -122,6 +111,42 @@ const generateLibrary = (allocations) => {
         throw new Error(`Allocation sum mismatch: ${finalTotal} vs ${TYPE_MAX_BIG_INT}`);
     }
 
+    // Group allocations by source
+    const usdAllocations = allocationList
+        .filter((c) => c.source === "usd")
+        .sort((a, b) => (b.exact > a.exact ? 1 : -1));
+    const spiceAllocations = allocationList
+        .filter((c) => c.source === "spice")
+        .sort((a, b) => (b.exact > a.exact ? 1 : -1));
+    const treasuryAllocations = allocationList.filter((c) => c.source === "treasury");
+
+    const formatAlloc = (list) =>
+        list
+            .map((c, i) => {
+                const formattedExact = c.exact.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "_");
+
+                // Calculate real allocation % of full token supply
+                const shareFraction = Number(c.exact) / Number(TYPE_MAX_BIG_INT);
+                const realPercent = shareFraction * totalContributorPercentage;
+
+                const comment = `// ${realPercent.toFixed(4)}%`;
+                return `        ${i === 0 ? "" : "else "}if (contributor == address(${
+                    c.address
+                })) return ${formattedExact}; ${comment}`;
+            })
+            .join("\n");
+
+    const allConditionals = [
+        "        // -------- Presale Contributors --------",
+        formatAlloc(usdAllocations),
+        "",
+        "        // -------- Spice Contributors --------",
+        formatAlloc(spiceAllocations),
+        "",
+        "        // -------- Treasury --------",
+        formatAlloc(treasuryAllocations)
+    ].join("\n");
+
     // Calculate LP allocation details
     const lpAllocation = calculateLpAllocation(totalContributorPercentage);
 
@@ -135,16 +160,11 @@ pragma solidity ^0.8.0;
 
 library Contributors {
     /** @dev Total contributor allocation: ${totalContributorPercentage.toFixed(2)}%
-        @dev LP allocation: ${lpAllocation.percentage.toFixed(2)}%
-        @dev Sum of all allocations must be equal to type(uint56).max.
+     *  LP allocation: ${lpAllocation.percentage.toFixed(2)}%
+     *  Sum of all allocations must be equal to type(uint56).max.
      */
     function getAllocation(address contributor) internal pure returns (uint56) {
-${allocationList
-    .map(
-        (c, i) =>
-            `        ${i === 0 ? "" : "else "}if (contributor == address(${c.address})) return ${c.exact.toString()};`
-    )
-    .join("\n")}
+${allConditionals}
         
         return 0;
     }
