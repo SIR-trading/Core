@@ -2,6 +2,14 @@
 
 This repository generated with [Foundry](https://book.getfoundry.sh/) contains the core contract files of the SIR protocol.
 
+## Local Installation
+
+```bash
+git clone https://github.com/SIR-trading/Core
+cd Core
+forge test --ffi
+```
+
 ## Deployment
 
 The SIR protocol can be deployed using the Foundry script `script\DeployCore.s.sol`. This script will deploy all the necessary contracts and configure them to talk to each other.
