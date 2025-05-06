@@ -1231,7 +1231,6 @@ contract StakerTest is Auxiliary {
         bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
 
         // Bidder 1
-        console.log("there");
         _dealWETH(_idToAddress(bidder1.id), bidder1.amount);
         vm.prank(_idToAddress(bidder1.id));
         WETH.approve(address(staker), bidder1.amount);
@@ -1249,7 +1248,6 @@ contract StakerTest is Auxiliary {
         else _assertAuction(Bidder(0, 0), start);
 
         // Bidder 2
-        console.log("here");
         skip(SystemConstants.AUCTION_DURATION - 1);
         _dealWETH(_idToAddress(bidder2.id), bidder2.amount);
         vm.prank(_idToAddress(bidder2.id));
@@ -1268,7 +1266,7 @@ contract StakerTest is Auxiliary {
                 // Bidder fails to increase its own bid
                 vm.expectRevert(BidTooLow.selector);
             }
-        } else if (bidder2.amount > bidder1.amount) {
+        } else if (bidder2.amount > (uint256(bidder1.amount) * 101) / 100) {
             // Bidder2 outbids bidder1
             vm.expectEmit();
             emit BidReceived(_idToAddress(bidder2.id), Addresses.ADDR_BNB, bidder1.amount, bidder2.amount);
@@ -1287,7 +1285,7 @@ contract StakerTest is Auxiliary {
                 if (bidder1.amount > 0) _assertAuction(bidder1, start);
                 else _assertAuction(Bidder(0, 0), start);
             }
-        } else if (bidder2.amount > bidder1.amount) {
+        } else if (bidder2.amount > (uint256(bidder1.amount) * 101) / 100) {
             _assertAuction(bidder2, start);
         } else {
             if (bidder1.amount > 0) _assertAuction(bidder1, start);
