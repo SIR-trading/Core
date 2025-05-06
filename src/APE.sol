@@ -93,6 +93,17 @@ contract APE is Clone {
     }
 
     /**
+     * @notice Increases the allowance of `spender` by `amount`.
+     */
+    function increaseAllowance(address spender, uint256 amount) external returns (bool) {
+        uint256 currentAllowance = allowance[msg.sender][spender];
+        allowance[msg.sender][spender] = currentAllowance + amount;
+
+        emit Approval(msg.sender, spender, amount);
+        return true;
+    }
+
+    /**
      * @notice Transfers `amount` tokens to `to`.
      */
     function transfer(address to, uint256 amount) external returns (bool) {
