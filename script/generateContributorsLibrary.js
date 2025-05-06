@@ -81,95 +81,77 @@ function calculateLpAllocation(totalContributorAllocation) {
 }
 
 // Generate Solidity library
-const generateLibrary = (allocations) => {
-    const TYPE_MAX = 0xffffffffffffff; // uint56.max
-    const TYPE_MAX_BIG_INT = 0xffffffffffffffn; // uint56.max as BigInt
+function generateLibrary(allocations) {
+    // uint56 max
+    const TYPE_MAX = 0xffffffffffffffn;
+
+    // Sum of all percentage allocations (e.g. 31.87)
     const totalContributorPercentage = allocations.reduce((sum, c) => sum + c.allocation, 0);
 
-    // Calculate allocations with remainders
-    let remaining = TYPE_MAX_BIG_INT;
-    const allocationList = allocations.map((c) => {
-        const exact = BigInt(Math.floor((c.allocation * TYPE_MAX) / totalContributorPercentage));
+    // Compute exact uint56 shares with largest-remainder rounding
+    let remaining = TYPE_MAX;
+    const scaled = allocations.map((c) => {
+        // exact share proportional to allocation%
+        const exact = BigInt(Math.floor((c.allocation * Number(TYPE_MAX)) / totalContributorPercentage));
         remaining -= exact;
-        return {
-            ...c,
-            exact: exact,
-            remainder: (c.allocation * TYPE_MAX) % totalContributorPercentage
-        };
+        return { ...c, exact };
     });
-
-    // Distribute remaining units to largest remainders first
-    allocationList.sort((a, b) => b.remainder - a.remainder);
-    for (let i = 0; remaining > 0n; i = (i + 1) % allocationList.length) {
-        allocationList[i].exact += 1n;
-        remaining -= 1n;
+    // Sort by fractional remainder descending
+    scaled
+        .sort((a, b) => {
+            const ra = (a.allocation * Number(TYPE_MAX)) % totalContributorPercentage;
+            const rb = (b.allocation * Number(TYPE_MAX)) % totalContributorPercentage;
+            return rb - ra;
+        })
+        .forEach((c, i) => {
+            if (remaining > 0n) {
+                scaled[i].exact += 1n;
+                remaining -= 1n;
+            }
+        });
+    // Sanity check
+    const sumCheck = scaled.reduce((acc, c) => acc + c.exact, 0n);
+    if (sumCheck !== TYPE_MAX) {
+        throw new Error(`Allocation rounding sum ${sumCheck} != ${TYPE_MAX}`);
     }
 
-    // Final validation
-    const finalTotal = allocationList.reduce((sum, c) => sum + c.exact, 0n);
-    if (finalTotal !== TYPE_MAX_BIG_INT) {
-        throw new Error(`Allocation sum mismatch: ${finalTotal} vs ${TYPE_MAX_BIG_INT}`);
-    }
+    // Partition by source
+    const presale = scaled.filter((c) => c.source === "usd");
+    const spice = scaled.filter((c) => c.source === "spice");
+    const treasury = scaled.filter((c) => c.source === "treasury");
 
-    // Group allocations by source
-    const usdAllocations = allocationList
-        .filter((c) => c.source === "usd")
-        .sort((a, b) => (b.exact > a.exact ? 1 : -1));
-    const spiceAllocations = allocationList
-        .filter((c) => c.source === "spice")
-        .sort((a, b) => (b.exact > a.exact ? 1 : -1));
-    const treasuryAllocations = allocationList.filter((c) => c.source === "treasury");
+    // Helper to format each assignment line
+    const fmt = (c) => `        allocations[${c.address}] = ${c.exact.toString()}; // ${c.allocation.toFixed(4)}%`;
 
-    const formatAlloc = (list) =>
-        list
-            .map((c, i) => {
-                const formattedExact = c.exact.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "_");
-
-                // Calculate real allocation % of full token supply
-                const shareFraction = Number(c.exact) / Number(TYPE_MAX_BIG_INT);
-                const realPercent = shareFraction * totalContributorPercentage;
-
-                const comment = `// ${realPercent.toFixed(4)}%`;
-                return `        ${i === 0 ? "" : "else "}if (contributor == address(${
-                    c.address
-                })) return ${formattedExact}; ${comment}`;
-            })
-            .join("\n");
-
-    const allConditionals = [
-        "        // -------- Presale Contributors --------",
-        formatAlloc(usdAllocations),
-        "",
-        "        // -------- Spice Contributors --------",
-        formatAlloc(spiceAllocations),
-        "",
-        "        // -------- Treasury --------",
-        formatAlloc(treasuryAllocations)
-    ].join("\n");
-
-    // Calculate LP allocation details
-    const lpAllocation = calculateLpAllocation(totalContributorPercentage);
-
-    console.log("\nTotal Allocation Breakdown:");
-    console.log(`- Contributors: ${totalContributorPercentage.toFixed(7)}%`);
-    console.log(`- LP Pool: ${lpAllocation.percentage.toFixed(7)}%`);
-    console.log(`- LP Fraction (1e17 precision): ${lpAllocation.fraction}`);
-
+    // Build the Solidity text
     return `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-library Contributors {
-    /** @dev Total contributor allocation: ${totalContributorPercentage.toFixed(2)}%
-     *  LP allocation: ${lpAllocation.percentage.toFixed(2)}%
-     *  Sum of all allocations must be equal to type(uint56).max.
-     */
-    function getAllocation(address contributor) internal pure returns (uint56) {
-${allConditionals}
-        
-        return 0;
-    }
-}`;
-};
+  pragma solidity ^0.8.0;
+  
+  contract Contributors {
+      /** @dev Total contributor allocation: ${totalContributorPercentage.toFixed(2)}%
+       *  LP allocation: ${(100 - totalContributorPercentage).toFixed(2)}%
+       *  Sum of all allocations must be equal to type(uint56).max.
+       */
+      mapping(address => uint56) public allocations;
+  
+      constructor() {
+          // -------- Presale Contributors --------
+  ${presale.map(fmt).join("\n")}
+  
+          // -------- Spice Contributors --------
+  ${spice.map(fmt).join("\n")}
+  
+          // -------- Treasury --------
+  ${treasury.map(fmt).join("\n")}
+      }
+  
+      /// @notice Lookup your contributor allocation
+      function getAllocation(address contributor) external view returns (uint56) {
+          return allocations[contributor];
+      }
+  }
+  `;
+}
 
 // Main execution
 try {

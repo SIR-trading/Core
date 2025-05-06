@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Contributors {
+    /** @dev Total contributor allocation: 31.87%
+     *  LP allocation: 68.13%
+     *  Sum of all allocations must be equal to type(uint56).max.
+     */
+    mapping(address => uint56) public allocations;
+
+    constructor() {
+        // -------- Presale Contributors --------
+        allocations[0xAacc079965F0F9473BF4299d930eF639690a9792] = 58779012666421; // 0.0260%
+        allocations[0xa485B739e99334f4B92B04da2122e2923a054688] = 293895063332101; // 0.1300%
+        allocations[0x1C5EB68630cCd90C3152FB9Dee3a1C2A7201631D] = 37980285107533; // 0.0168%
+        allocations[0xF613cfD07af6D011fD671F98064214aB5B2942CF] = 67369791440743; // 0.0298%
+        allocations[0x3424cd7D170949636C300e62674a3DFB7706Fc35] = 881685189996300; // 0.3900%
+        allocations[0x6422D607CA13457589A1f2dbf0ec63d5Adf87BFB] = 81838471481708; // 0.0362%
+        allocations[0xE19618C08F74b7e80278Ec14b63797419dACCDf8] = 452146251280154; // 0.2000%
+        allocations[0xbe1E110f4A2fD54622CD516e86b29f619ad994bF] = 107859488242881; // 0.0477%
+        allocations[0x30E14c4b4768F9B5F520a2F6214d2cCc21255fDa] = 2938950633321000; // 1.3000%
+        allocations[0x0C0aB132F5a8d0988e88997cb2604F494052BDEF] = 22607312564008; // 0.0100%
+        allocations[0x8D2a097607da5E2E3d599c72EC50FD0704a4D37f] = 940170307599388; // 0.4159%
+        allocations[0x78086Ad810f8F99A0B6c92a9A6c8857d3c665622] = 539885231341068; // 0.2388%
+        allocations[0x18e17dd452Ef58F91E45fD20Eb2F839ac13AA648] = 678219376920231; // 0.3000%
+        allocations[0xc4Ab0e3F12309f37A5cdf3A4b3B7C70A53eeBBa9] = 63024665965941; // 0.0279%
+        allocations[0xFe202706E36F31aFBaf4b4543C2A8bBa4ddB2deE] = 1012807602867545; // 0.4480%
+        allocations[0x7DF76FDEedE91d3cB80e4a86158dD9f6D206c98E] = 254513124845599; // 0.1126%
+        allocations[0xe4F047C5DEB2659f3659057fe5cAFB5bC6bD4307] = 28033067579370; // 0.0124%
+        allocations[0x26610e89A8B825F23E89e58879cE97D791aD4438] = 1130365628200385; // 0.5000%
+        allocations[0x32cf4d1df6fb7bB173183CF8b51EF9499c803634] = 307120341182045; // 0.1358%
+        allocations[0x16fD74300dcDc02E9b1E594f293c6EfFB299a3fc] = 113036562820039; // 0.0500%
+        allocations[0xa233f74638Bd28A24CC2Ce23475eea7dC76881AC] = 117662018970635; // 0.0520%
+        allocations[0xA6f4fa9840Aa6825446c820aF6d5eCcf9f78BA05] = 162998723586496; // 0.0721%
+        allocations[0xEdA726014938d2E6Ed51c7d5A53193cf9713cdF7] = 471362466959561; // 0.2085%
+        allocations[0xdF58360e945F6a302FFFB012D114C9e2bE2F212a] = 89072811502191; // 0.0394%
+        allocations[0x65a831D9fB2CC87A7956eB8E4720956f6bfC6eeA] = 87228054796968; // 0.0386%
+        allocations[0xBA5EDc0d2Ae493C9574328d77dc36eEF19F699e2] = 230142441901599; // 0.1018%
+        allocations[0x1ff241abaD54DEcB967Bd0f57c2a584C7d1ca8BD] = 271287750768093; // 0.1200%
+        allocations[0x36D11126eBc59cb962AE8ddD3bcD0741b4e337Dc] = 5411195906070626; // 2.3936%
+        allocations[0x81B55FBe66C5FFbb8468328E924AF96a84438F14] = 56518281410020; // 0.0250%
+        allocations[0x07bfeB5488ad97aA3920cf241E59d2A817054eA3] = 23963751317849; // 0.0106%
+        allocations[0xC3632CD03BEd246719965bB74279af79bE4bd813] = 23963751317849; // 0.0106%
+        allocations[0xb1f55485d7ebA772F0d454Ceb0EA9a27586Ad86f] = 53353257651059; // 0.0236%
+        allocations[0x0D5f69C67DAE06ce606246A8bd88B552d1DdE140] = 67821937692024; // 0.0300%
+        allocations[0xde3697dDA384ce178d04D8879F7a66423F72A326] = 355906921695174; // 0.1574%
+        allocations[0x79C1134a1dFdF7e0d58E58caFC84a514991372e6] = 1061548968755546; // 0.4696%
+
+        // -------- Spice Contributors --------
+        allocations[0x0e52b591Cbc9AB81c806F303DE8d9a3B0Dc4ea5C] = 2260731256400770; // 1.0000%
+        allocations[0xfdcc69463b0106888D1CA07CE118A64AdF9fe458] = 2260731256400770; // 1.0000%
+        allocations[0xe59813A4a120288dbf42630C051e3921E5dAbCd8] = 226073125640077; // 0.1000%
+        allocations[0x241F1A461Da47Ccd40B48c38340896A9948A4725] = 323058496539670; // 0.1429%
+        allocations[0x8D677d312F2CA04dF98eB22ce886bE8E7804280d] = 113036562820039; // 0.0500%
+        allocations[0x40FEfD52714f298b9EaD6760753aAA720438D4bB] = 113036562820039; // 0.0500%
+        allocations[0xa1a841D79758Bd4b06c9206e97343dFeBcBE200b] = 18085850051206153; // 8.0000%
+        allocations[0x65665e10EB86D72b02067863342277EA2DF78516] = 339109688460116; // 0.1500%
+        allocations[0xd11f322ad85730Eab11ef61eE9100feE84b63739] = 5651828141001923; // 2.5000%
+        allocations[0xC58D3aE892A104D663B01194f2EE325CfB5187f2] = 1582511879480539; // 0.7000%
+
+        // -------- Treasury --------
+        allocations[0x686748764c5C7Aa06FEc784E60D14b650bF79129] = 22607312564007689; // 10.0000%
+    }
+
+    /// @notice Lookup your contributor allocation
+    function getAllocation(address contributor) external view returns (uint56) {
+        return allocations[contributor];
+    }
+}

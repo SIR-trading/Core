@@ -7,6 +7,7 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SystemControl} from "src/SystemControl.sol";
+import {Contributors} from "src/Contributors.sol";
 import {SIR} from "src/SIR.sol";
 import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
@@ -47,9 +48,18 @@ contract DeployCore is Script {
         address systemControl = address(new SystemControl());
         console.log("SystemControl deployed at: ", systemControl);
 
+        // Deploy Contributors
+        address contributors = address(new Contributors());
+
         // Deploy SIR
         address payable sir = payable(
-            address(new SIR((block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH), systemControl))
+            address(
+                new SIR(
+                    contributors,
+                    (block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH),
+                    systemControl
+                )
+            )
         );
         console.log("SIR deployed at: ", sir);
 

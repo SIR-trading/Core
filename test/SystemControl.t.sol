@@ -6,6 +6,7 @@ import {Addresses} from "src/libraries/Addresses.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
+import {Contributors} from "src/Contributors.sol";
 import {SIR} from "src/SIR.sol";
 import {SystemControl} from "src/SystemControl.sol";
 import {Staker} from "src/Staker.sol";
@@ -104,8 +105,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Deploy SystemControl
         systemControl = new SystemControl();
 
+        // Deploy Contributors
+        address contributors = address(new Contributors());
+
         // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH, address(systemControl))));
+        sir = payable(address(new SIR(contributors, Addresses.ADDR_WETH, address(systemControl))));
 
         // Deploy APE implementation
         address ape = address(new APE());
@@ -510,8 +514,11 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         // Deploy SystemControl
         systemControl = new SystemControl();
 
+        // Deploy Contributors
+        address contributors = address(new Contributors());
+
         // Deploy SIR
-        sir = payable(address(new SIR(Addresses.ADDR_WETH, address(systemControl))));
+        sir = payable(address(new SIR(contributors, Addresses.ADDR_WETH, address(systemControl))));
 
         // Deploy APE implementation
         address ape = address(new APE());

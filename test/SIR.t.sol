@@ -8,7 +8,7 @@ import {Oracle} from "src/Oracle.sol";
 import {SIR} from "src/SIR.sol";
 import {APE} from "src/APE.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
-import {Contributors} from "src/libraries/Contributors.sol";
+import {Contributors} from "src/Contributors.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
@@ -40,6 +40,7 @@ contract ContributorsTest is Test {
     uint256 constant BC_BOOST = 6; // [%] 5% boost per BC
 
     SIR public sir;
+    Contributors public contributors;
 
     USDContributor[] usdContributors;
     SpiceContributor[] spiceContributors;
@@ -51,8 +52,11 @@ contract ContributorsTest is Test {
         // vm.createSelectFork("mainnet", 18128102);
         vm.warp(4269);
 
+        // Deploy Contributors
+        contributors = (new Contributors());
+
         // Deploy SIR
-        sir = new SIR(Addresses.ADDR_WETH, vm.addr(10));
+        sir = new SIR(address(contributors), Addresses.ADDR_WETH, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());
@@ -102,14 +106,14 @@ contract ContributorsTest is Test {
         uint256 aggContributions = 0;
         for (uint256 i = 0; i < usdContributors.length; i++) {
             if (!addressChecked[usdContributors[i].addr]) {
-                aggContributions += Contributors.getAllocation(usdContributors[i].addr);
+                aggContributions += contributors.getAllocation(usdContributors[i].addr);
                 addressChecked[usdContributors[i].addr] = true;
             }
         }
 
         for (uint256 i = 0; i < spiceContributors.length; i++) {
             if (!addressChecked[spiceContributors[i].addr]) {
-                aggContributions += Contributors.getAllocation(spiceContributors[i].addr);
+                aggContributions += contributors.getAllocation(spiceContributors[i].addr);
                 addressChecked[spiceContributors[i].addr] = true;
             }
         }
@@ -117,7 +121,7 @@ contract ContributorsTest is Test {
         // Treasury address
         address treasury = vm.envAddress("TREASURY_ADDRESS");
         if (!addressChecked[treasury]) {
-            aggContributions += Contributors.getAllocation(treasury);
+            aggContributions += contributors.getAllocation(treasury);
             addressChecked[treasury] = true;
         }
 
@@ -234,8 +238,11 @@ contract GentlemenTest is Test {
         // Deploy oracle
         address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
 
+        // Deploy Contributors
+        address contributors = address(new Contributors());
+
         // Deploy SIR
-        sir = new SIR(Addresses.ADDR_WETH, vm.addr(10));
+        sir = new SIR(contributors, Addresses.ADDR_WETH, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());

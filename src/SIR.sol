@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 // Contracts
 import {SystemConstants} from "./libraries/SystemConstants.sol";
-import {Contributors} from "./libraries/Contributors.sol";
+import {Contributors} from "./Contributors.sol";
 import {Staker} from "./Staker.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
 
@@ -15,11 +15,19 @@ import {SystemControlAccess} from "./SystemControlAccess.sol";
 contract SIR is Staker, SystemControlAccess {
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
 
+    Contributors private immutable _CONTRIBUTORS;
+
     mapping(address => uint40) internal timestampLastMint;
 
     bool private _mintingAllowed = true;
 
-    constructor(address weth, address systemControl) Staker(weth) SystemControlAccess(systemControl) {}
+    constructor(
+        address contributors,
+        address weth,
+        address systemControl
+    ) Staker(weth) SystemControlAccess(systemControl) {
+        _CONTRIBUTORS = Contributors(contributors);
+    }
 
     /*////////////////////////////////////////////////////////////////
                         READ-ONLY FUNCTIONS
@@ -33,7 +41,7 @@ contract SIR is Staker, SystemControlAccess {
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
             // Get the contributor's allocation
-            uint256 allocation = Contributors.getAllocation(contributor);
+            uint256 allocation = _CONTRIBUTORS.getAllocation(contributor);
 
             // No allocation, no rewards
             if (allocation == 0) return 0;
