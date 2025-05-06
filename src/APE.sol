@@ -96,10 +96,10 @@ contract APE is Clone {
      * @notice Increases the allowance of `spender` by `amount`.
      */
     function increaseAllowance(address spender, uint256 amount) external returns (bool) {
-        uint256 currentAllowance = allowance[msg.sender][spender];
-        allowance[msg.sender][spender] = currentAllowance + amount;
+        uint256 newAllowance = allowance[msg.sender][spender] + amount;
+        allowance[msg.sender][spender] = newAllowance;
 
-        emit Approval(msg.sender, spender, amount);
+        emit Approval(msg.sender, spender, newAllowance);
         return true;
     }
 
