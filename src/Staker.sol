@@ -450,8 +450,8 @@ contract Staker {
                 _WETH.transfer(auction.bidder, auction.bid);
             }
 
-            /** If the bidder is not the current winner, we check if the bid is at least 1% higher.
-                Null bids are no possible because auction.bid >=0 always.
+            /** We check if the bid is at least 1% higher.
+                Null bids are not possible because 100*0 <= 101* auction.bid is always true.
              */
             if (100 * uint256(amount) <= 101 * uint256(auction.bid)) revert BidTooLow();
 
