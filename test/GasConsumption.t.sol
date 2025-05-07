@@ -110,25 +110,25 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // Mint some APE with WETH
         _prepareWETH(2 ether);
-        vault.mint(true, vaultParameters1, 2 ether, 0);
+        vault.mint(true, vaultParameters1, 2 ether, 0, 0);
 
         // Mint some TEA with WETH
         _prepareWETH(2 ether);
-        vault.mint(false, vaultParameters1, 2 ether, 0);
+        vault.mint(false, vaultParameters1, 2 ether, 0, 0);
 
         // Mint some APE with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0);
+        vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0, 0);
 
         // Mint some TEA with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0);
+        vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0, 0);
 
         // Burn some APE
-        vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters1, ape.balanceOf(address(this)), 0);
 
         // Burn some TEA
-        vault.burn(false, vaultParameters1, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters1, vault.balanceOf(address(this), 1), 0);
     }
 
     function test_ProbeFeeTierA() public {
@@ -140,25 +140,25 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // Mint some APE with WETH
         _prepareWETH(2 ether);
-        vault.mint(true, vaultParameters1, 2 ether, 0);
+        vault.mint(true, vaultParameters1, 2 ether, 0, 0);
 
         // Mint some TEA with WETH
         _prepareWETH(2 ether);
-        vault.mint(false, vaultParameters1, 2 ether, 0);
+        vault.mint(false, vaultParameters1, 2 ether, 0, 0);
 
         // Mint some APE with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0);
+        vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0, 0);
 
         // Mint some TEA with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0);
+        vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0, 0);
 
         // Burn some APE
-        vault.burn(true, vaultParameters1, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters1, ape.balanceOf(address(this)), 0);
 
         // Burn some TEA
-        vault.burn(false, vaultParameters1, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters1, vault.balanceOf(address(this), 1), 0);
     }
 
     function test_DoNotProbeFeeTierB() public {
@@ -170,25 +170,25 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // Mint some APE with WETH
         _prepareWETH(2 ether);
-        vault.mint(true, vaultParameters2, 2 ether, 0);
+        vault.mint(true, vaultParameters2, 2 ether, 0, 0);
 
         // Mint some TEA with WETH
         _prepareWETH(2 ether);
-        vault.mint(false, vaultParameters2, 2 ether, 0);
+        vault.mint(false, vaultParameters2, 2 ether, 0, 0);
 
         // Mint some APE with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0);
+        vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0, 0);
 
         // Mint some TEA with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0);
+        vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0, 0);
 
         // Burn some APE
-        vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters2, ape.balanceOf(address(this)), 0);
 
         // Burn some TEA
-        vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1), 0);
     }
 
     function test_ProbeFeeTierB() public {
@@ -200,25 +200,25 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // Mint some APE with WETH
         _prepareWETH(2 ether);
-        vault.mint(true, vaultParameters2, 2 ether, 0);
+        vault.mint(true, vaultParameters2, 2 ether, 0, 0);
 
         // Mint some TEA with WETH
         _prepareWETH(2 ether);
-        vault.mint(false, vaultParameters2, 2 ether, 0);
+        vault.mint(false, vaultParameters2, 2 ether, 0, 0);
 
         // Mint some APE with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0);
+        vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0, 0);
 
         // Mint some TEA with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0);
+        vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0, 0);
 
         // Burn some APE
-        vault.burn(true, vaultParameters2, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters2, ape.balanceOf(address(this)), 0);
 
         // Burn some TEA
-        vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters2, vault.balanceOf(address(this), 1), 0);
     }
 
     function test_DoNotProbeFeeTierC() public {
@@ -230,25 +230,25 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // Mint some APE with WETH
         _prepareWETH(2 ether);
-        vault.mint(true, vaultParameters3, 2 ether, 1);
+        vault.mint(true, vaultParameters3, 2 ether, 1, 0);
 
         // Mint some TEA with WETH
         _prepareWETH(2 ether);
-        vault.mint(false, vaultParameters3, 2 ether, 1);
+        vault.mint(false, vaultParameters3, 2 ether, 1, 0);
 
         // Mint some APE with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1);
+        vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1, 0);
 
         // Mint some TEA with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1);
+        vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1, 0);
 
         // Burn some APE
-        vault.burn(true, vaultParameters3, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters3, ape.balanceOf(address(this)), 0);
 
         // Burn some TEA
-        vault.burn(false, vaultParameters3, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters3, vault.balanceOf(address(this), 1), 0);
     }
 
     function test_ProbeFeeTierC() public {
@@ -260,24 +260,24 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         // Mint some APE with WETH
         _prepareWETH(2 ether);
-        vault.mint(true, vaultParameters3, 2 ether, 1);
+        vault.mint(true, vaultParameters3, 2 ether, 1, 0);
 
         // Mint some TEA with WETH
         _prepareWETH(2 ether);
-        vault.mint(false, vaultParameters3, 2 ether, 1);
+        vault.mint(false, vaultParameters3, 2 ether, 1, 0);
 
         // Mint some APE with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1);
+        vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1, 0);
 
         // Mint some TEA with ETH
         _prepareETH(2 ether);
-        vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1);
+        vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1, 0);
 
         // Burn some APE
-        vault.burn(true, vaultParameters3, ape.balanceOf(address(this)));
+        vault.burn(true, vaultParameters3, ape.balanceOf(address(this)), 0);
 
         // Burn some TEA
-        vault.burn(false, vaultParameters3, vault.balanceOf(address(this), 1));
+        vault.burn(false, vaultParameters3, vault.balanceOf(address(this), 1), 0);
     }
 }

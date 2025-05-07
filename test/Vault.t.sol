@@ -212,7 +212,7 @@ contract VaultTest is Test {
         console.log(isAPE ? "minting APE" : "minting TEA");
         console.log("amount of collateral:", inputsOutputs.collateral);
         console.log("lp fee is:", systemParams.lpFee);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -245,7 +245,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
     function testFuzz_mint1stTimeType(
@@ -268,7 +268,7 @@ contract VaultTest is Test {
         console.log("APE supply:", balances.apeSupply);
         console.log("TEA reserve:", reservesPre.reserveLPers);
         console.log("APE reserve:", reservesPre.reserveApes);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
 
         // Check reserves
         SirStructs.Reserves memory reserves = vault.getReserves(vaultParams);
@@ -301,7 +301,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert();
-        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
     function testFuzz_recursiveStateSave(
@@ -372,16 +372,23 @@ contract VaultTest is Test {
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
-        Balances memory balances
+        Balances memory balances,
+        uint40 deadline,
+        uint40 skipTime
     ) public {
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
         _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
 
+        // Skip equal or less than deadline
+        deadline = uint40(_bound(deadline, block.timestamp, type(uint40).max));
+        skipTime = uint40(_bound(skipTime, 0, deadline - block.timestamp));
+        skip(skipTime);
+
         // User mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, deadline);
 
         // Retrieve reserves after minting
         SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
@@ -399,15 +406,22 @@ contract VaultTest is Test {
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
-        Balances memory balances
+        Balances memory balances,
+        uint40 deadline,
+        uint40 skipTime
     ) public {
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
         _constrainAmount(isAPE, inputsOutputs, reservesPre, balances);
 
+        // Skip equal or less than deadline
+        deadline = uint40(_bound(deadline, block.timestamp, type(uint40).max));
+        skipTime = uint40(_bound(skipTime, 0, deadline - block.timestamp));
+        skip(skipTime);
+
         // User burns APE
         vm.prank(user);
-        inputsOutputs.collateral = vault.burn(isAPE, vaultParams, inputsOutputs.amount);
+        inputsOutputs.collateral = vault.burn(isAPE, vaultParams, inputsOutputs.amount, deadline);
 
         // Retrieve reserves after minting
         SirStructs.Reserves memory reservesPost = vault.getReserves(vaultParams);
@@ -416,6 +430,57 @@ contract VaultTest is Test {
         isAPE
             ? _verifyAmountsBurnAPE(systemParams, inputsOutputs, reservesPre, reservesPost, balances)
             : _verifyAmountsBurnTEA(inputsOutputs, reservesPre, reservesPost, balances);
+    }
+
+    error DeadlineExceeded();
+
+    function testFuzz_mintTooLate(
+        bool isAPE,
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        SirStructs.Reserves memory reservesPre,
+        Balances memory balances,
+        uint40 deadline,
+        uint40 skipTime
+    ) public {
+        _initialize(systemParams, reservesPre);
+        _constraintBalances(isAPE, false, reservesPre, balances);
+        _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
+
+        // Skip equal or less than deadline
+        deadline = uint40(_bound(deadline, block.timestamp, type(uint40).max - 1));
+        skipTime = uint40(_bound(skipTime, deadline - block.timestamp + 1, type(uint40).max - block.timestamp));
+        skip(skipTime);
+
+        // User mints APE
+        vm.startPrank(user);
+        collateral.approve(address(vault), inputsOutputs.collateral);
+        vm.expectRevert(DeadlineExceeded.selector);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, deadline);
+    }
+
+    function testFuzz_burnTooLate(
+        bool isAPE,
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        SirStructs.Reserves memory reservesPre,
+        Balances memory balances,
+        uint40 deadline,
+        uint40 skipTime
+    ) public {
+        _initialize(systemParams, reservesPre);
+        _constraintBalances(isAPE, false, reservesPre, balances);
+        _constrainAmount(isAPE, inputsOutputs, reservesPre, balances);
+
+        // Skip equal or less than deadline
+        deadline = uint40(_bound(deadline, block.timestamp, type(uint40).max - 1));
+        skipTime = uint40(_bound(skipTime, deadline - block.timestamp + 1, type(uint40).max - block.timestamp));
+        skip(skipTime);
+
+        // User burns APE
+        vm.prank(user);
+        vm.expectRevert(DeadlineExceeded.selector);
+        vault.burn(isAPE, vaultParams, inputsOutputs.amount, deadline);
     }
 
     function testFuzz_mintWrongVaultParameters(
@@ -463,7 +528,7 @@ contract VaultTest is Test {
         collateral.approve(address(vault), collateralAmount);
         // vm.expectRevert(VaultDoesNotExist.selector);
         vm.expectRevert();
-        vault.mint(isAPE, vaultParams_, collateralAmount, 0);
+        vault.mint(isAPE, vaultParams_, collateralAmount, 0, 0);
     }
 
     function testFuzz_burnWrongVaultParameters(
@@ -510,7 +575,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), tokenAmount);
         vm.expectRevert(VaultDoesNotExist.selector);
-        vault.burn(isAPE, vaultParams_, tokenAmount);
+        vault.burn(isAPE, vaultParams_, tokenAmount, 0);
     }
 
     function testFuzz_priceFluctuation(
@@ -603,7 +668,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert(Locked.selector);
-        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
     function testFuzz_burnIsLocked(
@@ -628,7 +693,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert(Locked.selector);
-        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
     function testFuzz_withdrawFeesIsLocked(
@@ -652,7 +717,7 @@ contract VaultTest is Test {
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
         vm.expectRevert(Locked.selector);
-        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0);
+        vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
     /////////////////////////////////////////////////////////////////////////
@@ -1668,7 +1733,7 @@ contract VaultTestETH is Test {
         // Alice mints
         deal(user, amountETH);
         vm.prank(user);
-        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0, 0);
 
         // Checks
         assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
@@ -1683,7 +1748,7 @@ contract VaultTestETH is Test {
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0, 0);
     }
 
     function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
@@ -1702,7 +1767,7 @@ contract VaultTestETH is Test {
         deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert(NotAWETHVault.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0, 0);
     }
 }
 
@@ -1772,7 +1837,7 @@ contract VaultTestDebtToken is Test {
         IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
 
         // User mints
-        uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+        uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin, 0);
 
         // Checks
         assertEq(weth.balanceOf(address(vault)), amountOut, "Wrong total reserve");
@@ -1808,7 +1873,7 @@ contract VaultTestDebtToken is Test {
 
         // User mints
         vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
-        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin, 0);
     }
 
     function testFuzz_mintWithTooMuchDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
@@ -1824,7 +1889,7 @@ contract VaultTestDebtToken is Test {
 
         // User mints
         vm.expectRevert();
-        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin);
+        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin, 0);
     }
 
     function testFuzz_mintWithZeroDebtToken(uint144 collateralTokenMin) public {
@@ -1833,12 +1898,12 @@ contract VaultTestDebtToken is Test {
         // User mints TEA
         vm.startPrank(user);
         vm.expectRevert(AmountTooLow.selector);
-        vault.mint(false, vaultParams, 0, collateralTokenMin);
+        vault.mint(false, vaultParams, 0, collateralTokenMin, 0);
 
         // User mints APE
         vm.startPrank(user);
         vm.expectRevert(AmountTooLow.selector);
-        vault.mint(true, vaultParams, 0, collateralTokenMin);
+        vault.mint(true, vaultParams, 0, collateralTokenMin, 0);
     }
 }
 
@@ -1911,7 +1976,7 @@ contract VaultTestETHDebtToken is Test {
 
         // User mints
         vm.prank(user);
-        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin, 0);
 
         // Checks
         assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), amountOut, "Wrong total reserve");
@@ -1943,7 +2008,7 @@ contract VaultTestETHDebtToken is Test {
         // User mints
         vm.prank(user);
         vm.expectRevert(NotAWETHVault.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, collateralTokenMin);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, collateralTokenMin, 0);
     }
 
     function testFuzz_mintWithEthBadUniswapTrade(
@@ -1976,7 +2041,7 @@ contract VaultTestETHDebtToken is Test {
         // User mints
         vm.prank(user);
         vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin, 0);
     }
 
     function testFuzz_mintWithTooLittleEthAsDebtToken(
@@ -2012,7 +2077,7 @@ contract VaultTestETHDebtToken is Test {
         // User mints
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin, 0);
     }
 }
 
@@ -2589,7 +2654,7 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
 
         // Mint with WETH
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0);
+        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0, 0);
         vm.stopPrank();
     }
 
@@ -2734,7 +2799,7 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
 
         // Mint with WETH
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0);
+        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0, 0);
         vm.stopPrank();
         console.log("Minting Over");
     }
@@ -2801,7 +2866,7 @@ contract VaultHandler is Test, RegimeEnum {
         vm.startPrank(user);
         console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         _checkRegime();
-        inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount);
+        inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount, 0);
 
         // Unwrap ETH
         _WETH.withdraw(inputOutput.amountCollateral);

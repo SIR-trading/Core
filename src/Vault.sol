@@ -58,6 +58,7 @@ contract Vault is TEA {
     error InsufficientCollateralReceivedFromUniswap();
     error Locked();
     error NotAWETHVault();
+    error DeadlineExceeded();
 
     /// @dev This event is meant to make it easier to retrieve the prices of APE and TEA.
     event ReservesChanged(uint48 indexed vaultId, bool isAPE, bool isMint, uint144 reserveLPers, uint144 reserveApes);
@@ -150,14 +151,18 @@ contract Vault is TEA {
      * @param vaultParams The 3 parameters identifying a vault.
      * @param amountToDeposit Amount of collateral to deposit, or if collateralToDepositMin > 0, amount of debt token to deposit.
      * @param collateralToDepositMin Ignored when minting with collateral token, otherwise it specifies the MINIMUM amount of collateral to receive from Uniswap when swapping the debt token.
+     * @param deadline The timestamp after which the transaction will be invalid. If the caller sets it to 0, deadline has no effect.
      * @return amount Amount of TEA/APE send to the caller.
      */
     function mint(
         bool isAPE,
         SirStructs.VaultParameters memory vaultParams,
         uint256 amountToDeposit, // Collateral amount to deposit if collateralToDepositMin == 0, debt token to deposit if collateralToDepositMin > 0
-        uint144 collateralToDepositMin
+        uint144 collateralToDepositMin,
+        uint40 deadline
     ) external payable nonReentrant returns (uint256 amount) {
+        if (block.timestamp > deadline && deadline != 0) revert DeadlineExceeded();
+
         // Check if user sent vanilla ETH
         bool isETH = msg.value != 0;
         if (isETH) {
@@ -217,10 +222,11 @@ contract Vault is TEA {
             bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne, isETH);
 
             // Swap
+            int256 amountToDepositInt = int256(amountToDeposit);
             (int256 amount0, int256 amount1) = IUniswapV3Pool(uniswapPool).swap(
                 address(this),
                 zeroForOne,
-                int256(amountToDeposit),
+                amountToDepositInt,
                 zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
                 data
             );
@@ -364,14 +370,18 @@ contract Vault is TEA {
      * @notice Function for burning APE or TEA, the protocol's synthetic tokens, and getting collateral token in return.
      * @param isAPE If true, burn APE. If false, burn TEA
      * @param vaultParams The 3 parameters identifying a vault.
-     * @param amount Amount of tokens to burn
+     * @param amount Amount of tokens to burn.
+     * @param deadline The timestamp after which the transaction will be invalid. If the caller sets it to 0, deadline has no effect.
      * @return Amount of collateral obtained for burning APE or TEA.
      */
     function burn(
         bool isAPE,
         SirStructs.VaultParameters calldata vaultParams,
-        uint256 amount
+        uint256 amount,
+        uint40 deadline
     ) external nonReentrant returns (uint144) {
+        if (block.timestamp > deadline && deadline != 0) revert DeadlineExceeded();
+
         if (amount == 0) revert AmountTooLow();
 
         SirStructs.SystemParameters memory systemParams_ = systemParams();
