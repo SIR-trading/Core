@@ -1,0 +1,38 @@
+[
+  {
+    "address": "0x5000ff6cc1864690d947b864b9fb0d603e8d1f1a",
+    "minted_sir": 196731,
+    "unminted_lp_sir": 2537499,
+    "unminted_contributor_sir": 0,
+    "staked_sir": 11799,
+    "uniswapV2_sir": 0,
+    "total_entitled": 2746030,
+    "allocationOld": 0,
+    "allocation": 0,
+    "allocationPrecision": 0
+  },
+  {
+    "address": "0x0e52b591cbc9ab81c806f303de8d9a3b0dc4ea5c",
+    "minted_sir": 0,
+    "unminted_lp_sir": 33482,
+    "unminted_contributor_sir": 58505310,
+    "staked_sir": 1829110,
+    "uniswapV2_sir": 0,
+    "total_entitled": 60367903,
+    "allocationOld": 100,
+    "allocation": 99,
+    "allocationPrecision": 99864190704399260
+  },
+  {
+    "address": "0x83a3548d204889b17aa229cb281a39584eb232e7",
+    "minted_sir": 0,
+    "unminted_lp_sir": 18131,
+    "unminted_contributor_sir": 0,
+    "staked_sir": 47,
+    "uniswapV2_sir": 0,
+    "total_entitled": 18178,
+    "allocationOld": 0,
+    "allocation": 0,
+    "allocationPrecision": 30072620664053
+  }
+]

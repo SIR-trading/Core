@@ -6,11 +6,16 @@ const path = require("path");
 // --- Configuration ---
 const SNAPSHOT_BLOCK = 22157899;
 const OUTPUT_FILE = path.join(__dirname, "../contributors/snapshot-allocations.json");
-const SIR_ADDRESS = process.env.SIR_ADDRESS;
-const VAULT_ADDRESS = process.env.VAULT_ADDRESS;
+const SIR_ADDRESS = "0x1278B112943Abc025a0DF081Ee42369414c3A834".toLowerCase();
+const VAULT_ADDRESS = "0xB91AE2c8365FD45030abA84a4666C4dB074E53E7".toLowerCase();
+const V2_POOL = "0xD213F59f057d32194592f22850f4f077405F9Bc1".toLowerCase();
 const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
-// Treasury override
-const TREASURY_ADDRESS = process.env.TREASURY_ADDRESS.toLowerCase();
+
+// Import contributor data
+const SPICE_PATH = path.join(__dirname, "../contributors/spice-contributors.json");
+const FUNDRAISING_PATH = path.join(__dirname, "../contributors/usd-contributors.json");
+const spiceContributors = JSON.parse(fs.readFileSync(SPICE_PATH, "utf8"));
+const fundraisingData = JSON.parse(fs.readFileSync(FUNDRAISING_PATH, "utf8"));
 
 // Contributor & presale addresses from Contributors.sol
 const CONTRIBUTOR_ADDRESSES = new Set(
@@ -69,11 +74,21 @@ const SIR_ABI = [
     "event Transfer(address indexed from, address indexed to, uint256 amount)",
     "function balanceOf(address) view returns (uint256)",
     "function contributorUnclaimedSIR(address) view returns (uint80)",
-    "function stakeOf(address) view returns (uint80 unlocked, uint80 locked)"
+    "function stakeOf(address) view returns (uint80 unlocked, uint80 locked)",
+    "function ISSUANCE_RATE() view returns (uint72)"
 ];
 const VAULT_ABI = [
     "function numberOfVaults() view returns (uint48)",
-    "function unclaimedRewards(uint256, address) view returns (uint80)"
+    "function unclaimedRewards(uint256, address) view returns (uint80)",
+    "function TIMESTAMP_ISSUANCE_START() view returns (uint40)"
+];
+
+const UNI_V2_ABI = [
+    "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+    "function totalSupply() view returns (uint256)",
+    "function balanceOf(address owner) view returns (uint256)",
+    "function token0() view returns (address)",
+    "function token1() view returns (address)"
 ];
 
 async function main() {
@@ -81,10 +96,24 @@ async function main() {
     const provider = new ethers.AlchemyProvider("mainnet", ALCHEMY_KEY);
     const sir = new ethers.Contract(SIR_ADDRESS, SIR_ABI, provider);
     const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, provider);
+    const uniV2 = new ethers.Contract(V2_POOL, UNI_V2_ABI, provider);
 
     // Fetch vault count
     const vaultCountRaw = await vault.numberOfVaults({ blockTag: SNAPSHOT_BLOCK });
     const vaultCount = Number(vaultCountRaw);
+
+    // Time stamps and issuance rate
+    const tsIssuanceStart = await vault.TIMESTAMP_ISSUANCE_START();
+    const block = await provider.getBlock(SNAPSHOT_BLOCK);
+    const tsSnapshot = block.timestamp;
+    const issuance = await sir.ISSUANCE_RATE();
+
+    // Fetch Uniswap v2 reserves
+    const [r0, r1] = await uniV2.getReserves({ blockTag: SNAPSHOT_BLOCK });
+    const totalSupplyV2 = await uniV2.totalSupply({ blockTag: SNAPSHOT_BLOCK });
+    const token0 = (await uniV2.token0()).toLowerCase();
+    const token1 = (await uniV2.token1()).toLowerCase();
+    const reserveSIR_V2 = token0 === SIR_ADDRESS ? r0 : token1 === SIR_ADDRESS ? r1 : 0;
 
     // 1) Gather holders via Transfer events
     console.log(`Fetching Transfer logs up to block ${SNAPSHOT_BLOCK}`);
@@ -93,14 +122,17 @@ async function main() {
     for (const log of logs) {
         const from = (log.args.from ?? log.args[0]).toLowerCase();
         const to = (log.args.to ?? log.args[1]).toLowerCase();
-        if (from && from !== ethers.ZeroAddress) holders.add(from);
-        if (to && to !== ethers.ZeroAddress) holders.add(to);
+        if (from && from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
+        if (to && to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
     }
 
     // 2) Snapshot balances and unclaimed amounts
     console.log(`Processing ${holders.size} holders across ${vaultCount} vaults`);
     const entries = [];
     for (const addr of holders) {
+        process.stdout.write(`\r${entries.length} holders processed`);
+        process.stdout.cursorTo(0);
+
         // on-chain balance is a bigint under ethers v6
         const minted = await sir.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK }); // bigint
 
@@ -125,32 +157,70 @@ async function main() {
         const [unlocked, locked] = await sir.stakeOf(addr, { blockTag: SNAPSHOT_BLOCK });
         const staked = unlocked + locked;
 
-        entries.push({ addr, minted, unmintedLP, unmintedC, staked });
+        // SIR from Uniswap v2
+        const userLPbalance = await uniV2.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK });
+        const sirFromV2 = (userLPbalance * reserveSIR_V2) / totalSupplyV2;
+
+        entries.push({ addr, minted, unmintedLP, unmintedC, staked, sirFromV2 });
+
+        if (entries.length === 3) break;
     }
+
+    const threeYearsInSeconds = 3n * 365n * 24n * 60n * 60n;
+    const totalSupply3Y = issuance * threeYearsInSeconds; // 3 years of issuance
 
     // 3) Safety: verify contributors have non-zero total
     for (const contrib of CONTRIBUTOR_ADDRESSES) {
         const rec = entries.find((e) => e.addr === contrib);
-        const total = rec ? rec.minted + rec.unmintedLP + rec.unmintedC + rec.staked : 0n;
-        if (total === 0n) console.warn(`Contributor ${contrib} has zero SIR at snapshot`);
+
+        // TEST
+        if (rec === undefined) continue;
+        // TEST
+
+        if (rec.unmintedC === 0n) console.warn(`Contributor ${contrib} has no pending SIR to mint`);
+
+        // Add unminted contributor SIR
+        let contribData = spiceContributors.find((c) => c.address.toLowerCase() === contrib);
+        const allocationSpice = contribData ? 1_000_000_000_000_000n * BigInt(contribData.allocation) : 0n;
+        contribData = fundraisingData.contributors.find((c) => c.address.toLowerCase() === contrib);
+        const allocationUsd = contribData ? BigInt(contribData.allocationPrecision) : 0n;
+        rec.allocationOld = (allocationSpice + allocationUsd) / 1_000_000_000_000_000n;
+
+        const unmintedRemainingC =
+            (BigInt(issuance) *
+                (BigInt(tsIssuanceStart) + threeYearsInSeconds - BigInt(tsSnapshot)) *
+                (allocationSpice + allocationUsd)) /
+            10_000_000_000_000_000_000n;
+        rec.unmintedC += unmintedRemainingC;
     }
 
     // 4) Compute totals and allocations (12 decimals)
-    const DECIMALS = 12n;
-    const totalSupply3Y = 2015000000n * 10n ** DECIMALS * 3n;
 
     const output = entries.map((e) => {
-        const totalEnt = e.minted + e.unmintedLP + e.unmintedC + e.staked;
-        let alloc = Number((totalEnt * 10000n) / totalSupply3Y);
-        if (e.addr === TREASURY_ADDRESS) alloc = 500;
+        const totalEnt = e.minted + e.unmintedLP + e.unmintedC + e.staked + (e.sirFromV2 || 0n);
+        let allocation = Number((totalEnt * 10_000n) / totalSupply3Y);
+        let allocationPrecision = Number((totalEnt * 10_000_000_000_000_000_000n) / totalSupply3Y);
+        if (e.addr === "0x686748764c5C7Aa06FEc784E60D14b650bF79129".toLowerCase()) {
+            // Treasury will get a fixed allocation
+            allocation = 1_000;
+            allocationPrecision = 1_000_000_000_000_000_000;
+        } else if (e.addr === "0x5000ff6cc1864690d947b864b9fb0d603e8d1f1a".toLowerCase()) {
+            // We do not reimburse ourselses
+            allocation = 0;
+            allocationPrecision = 0;
+        }
+
         return {
             address: e.addr,
-            minted_sir: e.minted.toString(),
-            unminted_lp_sir: e.unmintedLP.toString(),
-            unminted_contributor_sir: e.unmintedC.toString(),
-            staked_sir: e.staked.toString(),
-            total_entitled: totalEnt.toString(),
-            allocation: alloc
+            minted_sir: Number(e.minted / BigInt(1e12)),
+            unminted_lp_sir: Number(e.unmintedLP / BigInt(1e12)),
+            unminted_contributor_sir: Number(e.unmintedC / BigInt(1e12)),
+            staked_sir: Number(e.staked / BigInt(1e12)),
+            uniswapV2_sir: Number(e.sirFromV2 / BigInt(1e12)),
+            total_entitled: Number(totalEnt / BigInt(1e12)),
+            allocationOld: e.allocationOld === undefined ? 0 : Number(e.allocationOld),
+            allocation,
+            allocationPrecision
         };
     });
 
