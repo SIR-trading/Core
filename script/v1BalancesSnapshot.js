@@ -1,23 +1,29 @@
+/*  TODOS
+ *  Include SIR LP balances and other tokens balances in LP
+ */
+
 require("dotenv").config();
 const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
 
 // --- Configuration ---
+const DEPLOYMENT_BLOCK = 21888475;
 const SNAPSHOT_BLOCK = 22157899;
 const OUTPUT_FILE = path.join(__dirname, "../contributors/snapshot-allocations.json");
 const SIR_ADDRESS = "0x1278B112943Abc025a0DF081Ee42369414c3A834".toLowerCase();
 const VAULT_ADDRESS = "0xB91AE2c8365FD45030abA84a4666C4dB074E53E7".toLowerCase();
 const V2_POOL = "0xD213F59f057d32194592f22850f4f077405F9Bc1".toLowerCase();
+const V3_NFPM_ADDRESS = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88".toLowerCase();
 const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
 
-// Import contributor data
-const SPICE_PATH = path.join(__dirname, "../contributors/spice-contributors.json");
-const FUNDRAISING_PATH = path.join(__dirname, "../contributors/usd-contributors.json");
-const spiceContributors = JSON.parse(fs.readFileSync(SPICE_PATH, "utf8"));
-const fundraisingData = JSON.parse(fs.readFileSync(FUNDRAISING_PATH, "utf8"));
+// load your contributor JSONs
+const spiceContribPath = path.join(__dirname, "../contributors/spice-contributors.json");
+const fundraisingDataPath = path.join(__dirname, "../contributors/usd-contributors.json");
+const spiceContributors = JSON.parse(fs.readFileSync(spiceContribPath, "utf8"));
+const fundraisingData = JSON.parse(fs.readFileSync(fundraisingDataPath, "utf8"));
 
-// Contributor & presale addresses from Contributors.sol
+// hard-coded contributor set from Contributors.sol
 const CONTRIBUTOR_ADDRESSES = new Set(
     [
         "0xAacc079965F0F9473BF4299d930eF639690a9792",
@@ -77,129 +83,339 @@ const SIR_ABI = [
     "function stakeOf(address) view returns (uint80 unlocked, uint80 locked)",
     "function ISSUANCE_RATE() view returns (uint72)"
 ];
+
 const VAULT_ABI = [
     "function numberOfVaults() view returns (uint48)",
     "function unclaimedRewards(uint256, address) view returns (uint80)",
-    "function TIMESTAMP_ISSUANCE_START() view returns (uint40)"
+    "function TIMESTAMP_ISSUANCE_START() view returns (uint40)",
+    "function paramsById(uint48 vaultId) external view returns ((address debtToken, address collateralToken, int8 leverageTier))",
+    "event VaultInitialized(address indexed debtToken, address indexed collateralToken, int8 indexed leverageTier, uint256 vaultId, address ape)",
+    "function balanceOf(address account, uint256 vaultId) external view returns (uint256)",
+    "function mint(bool isAPE, (address debtToken, address collateralToken, int8 leverageTier) vaultParams, uint256 amountToDeposit, uint144 collateralToDepositMin) external returns (uint256 amount)",
+    "function burn(bool isAPE, (address debtToken, address collateralToken, int8 leverageTier) vaultParams, uint256 amount) external returns (uint144)"
 ];
 
 const UNI_V2_ABI = [
-    "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+    "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32)",
     "function totalSupply() view returns (uint256)",
-    "function balanceOf(address owner) view returns (uint256)",
+    "function balanceOf(address) view returns (uint256)",
     "function token0() view returns (address)",
     "function token1() view returns (address)"
 ];
 
+const NFPM_ABI = [
+    "function positions(uint256) external view returns (uint96 nonce, address operator, " +
+        "address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, " +
+        "uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1)",
+    "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+    "function decreaseLiquidity((uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min, uint256 deadline)) external payable returns (uint256 amount0, uint256 amount1)",
+    "function collect((uint256 tokenId, address recipient, uint128 amount0Max, uint128 amount1Max)) external payable returns (uint256 amount0, uint256 amount1)",
+    "function burn(uint256 tokenId) external payable",
+    "function multicall(bytes[] calldata data) external payable returns (bytes[] memory results)"
+];
+
+const MaxUint128 = BigInt(2) ** BigInt(128) - 1n;
+
 async function main() {
-    // Setup provider & contracts
-    const provider = new ethers.AlchemyProvider("mainnet", ALCHEMY_KEY);
+    const provider = new ethers.JsonRpcProvider(`https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`);
     const sir = new ethers.Contract(SIR_ADDRESS, SIR_ABI, provider);
     const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, provider);
     const uniV2 = new ethers.Contract(V2_POOL, UNI_V2_ABI, provider);
+    const nfpm = new ethers.Contract(V3_NFPM_ADDRESS, NFPM_ABI, provider);
 
-    // Fetch vault count
+    // a helper that pages through the full range in slices of `STEP` blocks
+    async function fetchAllTransfers(contract, fromBlock, toBlock, step = 10_000) {
+        const filter = contract.filters.Transfer(null, null);
+        let allEvents = [];
+
+        for (let start = fromBlock; start <= toBlock; start += step) {
+            const end = Math.min(start + step - 1, toBlock);
+            console.log(`Fetching Transfer events from blocks ${start} to ${end}…`);
+            const events = await contract.queryFilter(filter, start, end);
+            allEvents = allEvents.concat(events);
+        }
+
+        return allEvents;
+    }
+
+    // 1) Vault + issuance info
+    // Pull all events from genesis through your snapshot block
+    const initEvents = await vault.queryFilter(
+        vault.filters.VaultInitialized(), // no args ⇒ all vaults
+        DEPLOYMENT_BLOCK,
+        SNAPSHOT_BLOCK
+    );
     const vaultCountRaw = await vault.numberOfVaults({ blockTag: SNAPSHOT_BLOCK });
+    const vaultParamsArray = [];
+    for (let i = 1; i <= vaultCountRaw; i++) {
+        const { debtToken, collateralToken, leverageTier } = await vault.paramsById(i);
+        const apeToken = new ethers.Contract(
+            initEvents[i - 1].args.ape,
+            ["function balanceOf(address) view returns (uint256)"],
+            provider
+        );
+        const collateralSymbol = await new ethers.Contract(
+            collateralToken,
+            ["function symbol() view returns (string)"],
+            provider
+        ).symbol();
+        vaultParamsArray.push({
+            debtToken,
+            collateralToken,
+            leverageTier,
+            apeToken,
+            collateralTokenSymbol: collateralSymbol.toLowerCase()
+        });
+    }
     const vaultCount = Number(vaultCountRaw);
-
-    // Time stamps and issuance rate
     const tsIssuanceStart = await vault.TIMESTAMP_ISSUANCE_START();
-    const block = await provider.getBlock(SNAPSHOT_BLOCK);
-    const tsSnapshot = block.timestamp;
+    const blockInfo = await provider.getBlock(SNAPSHOT_BLOCK);
+    const tsSnapshot = blockInfo.timestamp;
     const issuance = await sir.ISSUANCE_RATE();
 
-    // Fetch Uniswap v2 reserves
+    // 2) build V3‐positions map
+    console.log("Fetching V3 NFT Transfer events…");
+    let transferEvents = await fetchAllTransfers(nfpm, DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK, 10_000);
+    const v3Positions = {}; // addr → Set of tokenIds
+    for (const ev of transferEvents) {
+        const from = ev.args.from.toLowerCase();
+        const to = ev.args.to.toLowerCase();
+        const tokenId = ev.args.tokenId.toString();
+        if (from !== ethers.ZeroAddress) {
+            v3Positions[from] = v3Positions[from] || new Set();
+            v3Positions[from].delete(tokenId);
+        }
+        if (to !== ethers.ZeroAddress) {
+            v3Positions[to] = v3Positions[to] || new Set();
+            v3Positions[to].add(tokenId);
+        }
+    }
+    // convert Sets → Arrays
+    for (const addr of Object.keys(v3Positions)) {
+        v3Positions[addr] = Array.from(v3Positions[addr]);
+    }
+
+    // 3) Uniswap V2 reserves
     const [r0, r1] = await uniV2.getReserves({ blockTag: SNAPSHOT_BLOCK });
     const totalSupplyV2 = await uniV2.totalSupply({ blockTag: SNAPSHOT_BLOCK });
     const token0 = (await uniV2.token0()).toLowerCase();
     const token1 = (await uniV2.token1()).toLowerCase();
-    const reserveSIR_V2 = token0 === SIR_ADDRESS ? r0 : token1 === SIR_ADDRESS ? r1 : 0;
+    const [reserveSIR_V2, reserveETH_V2] =
+        token0 === SIR_ADDRESS ? [r0, r1] : token1 === SIR_ADDRESS ? [r1, r0] : [0n, 0n];
 
-    // 1) Gather holders via Transfer events
-    console.log(`Fetching Transfer logs up to block ${SNAPSHOT_BLOCK}`);
-    const logs = await sir.queryFilter(sir.filters.Transfer(), 0, SNAPSHOT_BLOCK);
-    const holders = new Set();
-    for (const log of logs) {
-        const from = (log.args.from ?? log.args[0]).toLowerCase();
-        const to = (log.args.to ?? log.args[1]).toLowerCase();
-        if (from && from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
-        if (to && to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
+    // helper to simulate V3 and V4 withdrawal via read‐only multicall
+    async function simulateWithdrawV3(tokenId) {
+        const iface = nfpm.interface;
+
+        try {
+            // 1) read current position info
+            const pos = await nfpm.positions(tokenId, { blockTag: SNAPSHOT_BLOCK });
+            const liquidity = BigInt(pos.liquidity);
+            if (liquidity === 0n) return { sirAmt: 0n, ethAmt: 0n };
+
+            // 2) build the calldata for decreaseLiquidity
+            const decData = iface.encodeFunctionData("decreaseLiquidity", [
+                {
+                    tokenId,
+                    liquidity,
+                    amount0Min: 0,
+                    amount1Min: 0,
+                    deadline: ethers.MaxUint256
+                }
+            ]);
+
+            // 3) build the calldata for collect
+            const colData = iface.encodeFunctionData("collect", [
+                {
+                    tokenId,
+                    recipient: ethers.ZeroAddress,
+                    amount0Max: MaxUint128,
+                    amount1Max: MaxUint128
+                }
+            ]);
+
+            // 4) multicall them in one eth_call
+            const multiData = iface.encodeFunctionData("multicall", [[decData, colData]]);
+            const ret = await provider.call(
+                {
+                    to: V3_NFPM_ADDRESS,
+                    data: multiData
+                },
+                SNAPSHOT_BLOCK
+            );
+
+            // 5) decode the multicall return
+            const [results] = iface.decodeFunctionResult("multicall", ret);
+            // results is an array: [ bytes(return of decreaseLiquidity), bytes(return of collect) ]
+
+            // 6) decode the collect return
+            //    decreaseLiquidity returns (uint256 amount0, uint256 amount1)
+            //    collect returns     (uint256 amount0, uint256 amount1)
+            const collectReturn = iface.decodeFunctionResult("collect", results[1]);
+            const [amount0, amount1] = collectReturn;
+
+            // 7) split both sides
+            const [sirAmt, ethAmt] = pos.token0.toLowerCase() === SIR_ADDRESS ? [amount0, amount1] : [amount1, amount0];
+            return { sirAmt, ethAmt };
+        } catch {
+            console.log(`Failed to simulate withdraw for token ${tokenId} with liquidity ${liquidity}.`);
+            return { sirAmt: 0n, ethAmt: 0n };
+        }
     }
 
-    // 2) Snapshot balances and unclaimed amounts
+    // 4) Gather all holders
+    console.log(`Fetching Transfer logs up to block ${SNAPSHOT_BLOCK}`);
+    const logs = await sir.queryFilter(sir.filters.Transfer(), DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK);
+    let holders = new Set();
+    for (const lg of logs) {
+        const f = lg.args.from?.toLowerCase();
+        const t = lg.args.to?.toLowerCase();
+        if (f && f !== ethers.ZeroAddress && f !== SIR_ADDRESS && f !== VAULT_ADDRESS) holders.add(f);
+        if (t && t !== ethers.ZeroAddress && t !== SIR_ADDRESS && t !== VAULT_ADDRESS) holders.add(t);
+    }
+    holders = new Set([...holders, ...CONTRIBUTOR_ADDRESSES]);
+
+    // 5) For each holder snapshot balances + LP pulls
     console.log(`Processing ${holders.size} holders across ${vaultCount} vaults`);
     const entries = [];
     for (const addr of holders) {
-        process.stdout.write(`\r${entries.length} holders processed`);
-        process.stdout.cursorTo(0);
+        process.stdout.write(`\r${entries.length} processed`);
 
-        // on-chain balance is a bigint under ethers v6
-        const minted = await sir.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK }); // bigint
+        // on‐chain balance
+        const sir_balance = await sir.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK });
 
-        // unminted contributor SIR
-        let unmintedC = 0n;
+        // contributor unminted
+        let sir_unminted_contributor = 0n;
         if (CONTRIBUTOR_ADDRESSES.has(addr)) {
-            unmintedC = await sir.contributorUnclaimedSIR(addr, { blockTag: SNAPSHOT_BLOCK });
+            sir_unminted_contributor = await sir.contributorUnclaimedSIR(addr, { blockTag: SNAPSHOT_BLOCK });
         }
 
-        // unminted LP SIR across vaults
-        let unmintedLP = 0n;
+        // vault rewards and LP positions
+        let sir_liquidity_mining = 0n;
+        const lp_sir = {
+            usdc: 0n,
+            usdt: 0n,
+            weth: 0n,
+            wbtc: 0n,
+            sir: 0n
+        };
         for (let vid = 1; vid <= vaultCount; vid++) {
             try {
-                const u = await vault.unclaimedRewards(vid, addr, { blockTag: SNAPSHOT_BLOCK });
-                unmintedLP += u; // bigint addition
+                sir_liquidity_mining += await vault.unclaimedRewards(vid, addr, { blockTag: SNAPSHOT_BLOCK });
             } catch {
-                // skip if vault id invalid or no rewards
+                console.log(`User ${addr} call to unclaimedRewards for vault ID ${vid} reverted.`);
+            }
+
+            const { debtToken, collateralToken, leverageTier } = vaultParamsArray[vid - 1];
+            const vaultParams = { debtToken, collateralToken, leverageTier };
+
+            // Get LPers claim of colalteral
+            const teaBal = BigInt(await vault.balanceOf(addr, vid, { blockTag: SNAPSHOT_BLOCK }));
+            if (teaBal > 0) {
+                try {
+                    const collateralFromTeaBurn = BigInt(
+                        await vault.burn.staticCall(
+                            false, // isAPE
+                            vaultParams,
+                            teaBal,
+                            { from: addr, blockTag: SNAPSHOT_BLOCK }
+                        )
+                    );
+                    lp_sir[vaultParamsArray[vid - 1].collateralTokenSymbol] += collateralFromTeaBurn;
+                } catch {
+                    console.log(`User ${addr} with balance ${teaBal} call to burn TEA for vault ID ${vid} reverted.`);
+                }
+            }
+
+            // Get leveragors claim of colalteral
+            const apeBal = BigInt(
+                await vaultParamsArray[vid - 1].apeToken.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK })
+            );
+            if (apeBal > 0) {
+                try {
+                    const collateralFromApeBurn = BigInt(
+                        await vault.burn.staticCall(
+                            true, // isAPE
+                            vaultParams,
+                            apeBal,
+                            { from: addr, blockTag: SNAPSHOT_BLOCK }
+                        )
+                    );
+                    lp_sir[vaultParamsArray[vid - 1].collateralTokenSymbol] += collateralFromApeBurn;
+                } catch {
+                    console.log(
+                        `User ${addr} with balance ${apeBal} call to burn APE (${
+                            vaultParamsArray[vid - 1].apeToken.target
+                        }) for vault ID ${vid} reverted.`
+                    );
+                }
             }
         }
 
-        // staked SIR (unlocked + locked)
+        // stake
         const [unlocked, locked] = await sir.stakeOf(addr, { blockTag: SNAPSHOT_BLOCK });
-        const staked = unlocked + locked;
+        const sir_staked = unlocked + locked;
 
-        // SIR from Uniswap v2
-        const userLPbalance = await uniV2.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK });
-        const sirFromV2 = (userLPbalance * reserveSIR_V2) / totalSupplyV2;
+        // v2 LP share
+        const lp_uniswap_v2 = { sir: 0n, weth: 0n };
+        const lpBalV2 = await uniV2.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK });
+        lp_uniswap_v2.sir = (lpBalV2 * reserveSIR_V2) / totalSupplyV2;
+        lp_uniswap_v2.weth = (lpBalV2 * reserveETH_V2) / totalSupplyV2;
 
-        entries.push({ addr, minted, unmintedLP, unmintedC, staked, sirFromV2 });
+        // sum up SIR in Uniswap V3
+        const lp_uniswap_v3 = { sir: 0n, weth: 0n };
+        const tokenIds = v3Positions[addr] || [];
+        for (const tokenId of tokenIds) {
+            const { sirAmt, ethAmt } = await simulateWithdrawV3(tokenId);
+            lp_uniswap_v3.sir += BigInt(sirAmt);
+            lp_uniswap_v3.weth += BigInt(ethAmt);
+        }
 
-        if (entries.length === 3) break;
+        entries.push({
+            addr,
+            sir_balance,
+            sir_unminted_contributor,
+            sir_liquidity_mining,
+            sir_staked,
+            lp_uniswap_v2,
+            lp_uniswap_v3,
+            lp_sir
+        });
     }
 
-    const threeYearsInSeconds = 3n * 365n * 24n * 60n * 60n;
-    const totalSupply3Y = issuance * threeYearsInSeconds; // 3 years of issuance
-
-    // 3) Safety: verify contributors have non-zero total
+    // 5) post‐process contributor “old” and unmintedRemaining etc.
+    const threeYears = 3n * 365n * 24n * 60n * 60n;
+    const total3Y = issuance * threeYears;
     for (const contrib of CONTRIBUTOR_ADDRESSES) {
         const rec = entries.find((e) => e.addr === contrib);
+        if (!rec) throw new Error(`No record found for contributor ${contrib}`);
 
-        // TEST
-        if (rec === undefined) continue;
-        // TEST
+        // old allocation
+        let cdata = spiceContributors.find((c) => c.address.toLowerCase() === contrib) ?? {};
 
-        if (rec.unmintedC === 0n) console.warn(`Contributor ${contrib} has no pending SIR to mint`);
+        const aSpice = BigInt(cdata.allocation || 0) * 1_000_000_000_000_000n;
+        cdata = fundraisingData.contributors.find((c) => c.address.toLowerCase() === contrib) ?? {};
 
-        // Add unminted contributor SIR
-        let contribData = spiceContributors.find((c) => c.address.toLowerCase() === contrib);
-        const allocationSpice = contribData ? 1_000_000_000_000_000n * BigInt(contribData.allocation) : 0n;
-        contribData = fundraisingData.contributors.find((c) => c.address.toLowerCase() === contrib);
-        const allocationUsd = contribData ? BigInt(contribData.allocationPrecision) : 0n;
-        rec.allocationOld = (allocationSpice + allocationUsd) / 1_000_000_000_000_000n;
-
-        const unmintedRemainingC =
-            (BigInt(issuance) *
-                (BigInt(tsIssuanceStart) + threeYearsInSeconds - BigInt(tsSnapshot)) *
-                (allocationSpice + allocationUsd)) /
+        const aUsd = BigInt(cdata.allocationPrecision || 0);
+        rec.allocationOld = Number((aSpice + aUsd) / 1_000_000_000_000_000n);
+        // add remaining unminted contributor SIR
+        const remainC =
+            (issuance * (BigInt(tsIssuanceStart) + threeYears - BigInt(tsSnapshot)) * (aSpice + aUsd)) /
             10_000_000_000_000_000_000n;
-        rec.unmintedC += unmintedRemainingC;
+        rec.sir_unminted_contributor += remainC;
     }
 
-    // 4) Compute totals and allocations (12 decimals)
-
+    // 6) final output
     const output = entries.map((e) => {
-        const totalEnt = e.minted + e.unmintedLP + e.unmintedC + e.staked + (e.sirFromV2 || 0n);
-        let allocation = Number((totalEnt * 10_000n) / totalSupply3Y);
-        let allocationPrecision = Number((totalEnt * 10_000_000_000_000_000_000n) / totalSupply3Y);
+        const SIR_TOTAL_ENTITLED =
+            e.sir_balance +
+            e.sir_unminted_contributor +
+            e.sir_liquidity_mining +
+            e.sir_staked +
+            e.lp_uniswap_v2.sir +
+            e.lp_uniswap_v3.sir;
+        let allocation = Number((SIR_TOTAL_ENTITLED * 10_000n) / total3Y);
+        let allocationPrecision = Number((SIR_TOTAL_ENTITLED * 10_000_000_000_000_000_000n) / total3Y);
         if (e.addr === "0x686748764c5C7Aa06FEc784E60D14b650bF79129".toLowerCase()) {
             // Treasury will get a fixed allocation
             allocation = 1_000;
@@ -212,21 +428,33 @@ async function main() {
 
         return {
             address: e.addr,
-            minted_sir: Number(e.minted / BigInt(1e12)),
-            unminted_lp_sir: Number(e.unmintedLP / BigInt(1e12)),
-            unminted_contributor_sir: Number(e.unmintedC / BigInt(1e12)),
-            staked_sir: Number(e.staked / BigInt(1e12)),
-            uniswapV2_sir: Number(e.sirFromV2 / BigInt(1e12)),
-            total_entitled: Number(totalEnt / BigInt(1e12)),
-            allocationOld: e.allocationOld === undefined ? 0 : Number(e.allocationOld),
+            sir_balance: bigIntToString(e.sir_balance),
+            sir_liquidity_mining: bigIntToString(e.sir_liquidity_mining),
+            sir_unminted_contributor: bigIntToString(e.sir_unminted_contributor),
+            sir_staked: bigIntToString(e.sir_staked),
+            sir_sir: bigIntToString(e.lp_sir.sir),
+            sir_uniswapV2: bigIntToString(e.lp_uniswap_v2.sir),
+            sir_uniswapV3: bigIntToString(e.lp_uniswap_v3.sir),
+            eth_sir: bigIntToString(e.lp_sir.weth),
+            eth_uniswapV2: bigIntToString(e.lp_uniswap_v2.weth),
+            eth_uniswapV3: bigIntToString(e.lp_uniswap_v3.weth),
+            wbtc_sir: bigIntToString(e.lp_sir.wbtc),
+            usdc_sir: bigIntToString(e.lp_sir.usdc),
+            usdt_sir: bigIntToString(e.lp_sir.usdt),
+            SIR_TOTAL_ENTITLED: bigIntToString(SIR_TOTAL_ENTITLED),
+            allocationOld: e.allocationOld || 0,
             allocation,
             allocationPrecision
         };
     });
 
-    // 5) Write JSON
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2));
-    console.log(`Wrote allocations to ${OUTPUT_FILE}`);
+    await provider.connection?.agent.destroy?.();
+    console.log(`\nWrote allocations to ${OUTPUT_FILE}`);
+}
+
+function bigIntToString(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 main().catch((err) => {
