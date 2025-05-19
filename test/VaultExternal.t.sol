@@ -59,6 +59,15 @@ contract VaultExternalTest is Test {
     function testFuzz_deployETHvsUSDC(int8 leverageTier) public {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)); // Only accepted values in the system
 
+        string memory leverageStr;
+        if (leverageTier == -4) leverageStr = "1.0625";
+        else if (leverageTier == -3) leverageStr = "1.125";
+        else if (leverageTier == -2) leverageStr = "1.25";
+        else if (leverageTier == -1) leverageStr = "1.5";
+        else if (leverageTier == 0) leverageStr = "2";
+        else if (leverageTier == 1) leverageStr = "3";
+        else if (leverageTier == 2) leverageStr = "5";
+
         // vm.expectEmit();
         // emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
         VaultExternal.deploy(
@@ -77,6 +86,7 @@ contract VaultExternalTest is Test {
         assertGt(address(ape).code.length, 0);
 
         assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)), "Symbol is not correct");
+        assertEq(ape.name(), string.concat("Tokenized (WETH/USDC)^", leverageStr), "Name is not correct");
         assertEq(ape.decimals(), 18, "Decimals is not correct");
         assertEq(ape.debtToken(), Addresses.ADDR_USDC, "Debt token is not correct");
         assertEq(ape.collateralToken(), Addresses.ADDR_WETH, "Collateral token is not correct");
@@ -86,6 +96,30 @@ contract VaultExternalTest is Test {
         assertEq(params.debtToken, Addresses.ADDR_USDC, "Debt token is not correct");
         assertEq(params.collateralToken, Addresses.ADDR_WETH, "Collateral token is not correct");
         assertEq(params.leverageTier, leverageTier, "Leverage tier is not correct");
+    }
+
+    // Test a token whose symbol function returns a bytes32
+    function test_deployMKRvsWETH() public {
+        address makerToken = 0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2;
+
+        VaultExternal.deploy(
+            oracle,
+            vaultState[Addresses.ADDR_WETH][makerToken][0],
+            paramsById,
+            SirStructs.VaultParameters({debtToken: Addresses.ADDR_WETH, collateralToken: makerToken, leverageTier: 0}),
+            apeImplementation
+        );
+
+        APE ape = APE(AddressClone.getAddress(address(this), vaultId));
+        assertGt(address(ape).code.length, 0);
+
+        assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)), "Symbol is not correct");
+        console.log(ape.name());
+        assertEq(ape.name(), "Tokenized (MKR/WETH)^2", "Name is not correct");
+        assertEq(ape.decimals(), 18, "Decimals is not correct");
+        assertEq(ape.debtToken(), Addresses.ADDR_WETH, "Debt token is not correct");
+        assertEq(ape.collateralToken(), makerToken, "Collateral token is not correct");
+        assertEq(ape.leverageTier(), 0, "Leverage tier is not correct");
     }
 
     function testFuzz_deployWrongTokens(address debtToken, address collateralToken, int8 leverageTier) public {

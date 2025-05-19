@@ -206,15 +206,37 @@ library VaultExternal {
         return
             string(
                 abi.encodePacked(
-                    "Tokenized ",
-                    IERC20(vaultParams.collateralToken).symbol(),
+                    "Tokenized (",
+                    _getSymbol(vaultParams.collateralToken),
                     "/",
-                    IERC20(vaultParams.debtToken).symbol(),
-                    " with ",
-                    leverageStr,
-                    "x leverage"
+                    _getSymbol(vaultParams.debtToken),
+                    ")^",
+                    leverageStr
                 )
             );
+    }
+
+    function _getSymbol(address token) private view returns (string memory) {
+        (bool ok, bytes memory data) = token.staticcall(abi.encodeWithSignature("symbol()"));
+        if (!ok || data.length == 0) revert();
+
+        // bytes32 case
+        if (data.length == 32) {
+            bytes32 raw = abi.decode(data, (bytes32));
+            // find first zero byte
+            uint256 len;
+            while (len < 32 && raw[len] != 0) {
+                len++;
+            }
+            bytes memory b = new bytes(len);
+            for (uint256 i = 0; i < len; i++) {
+                b[i] = raw[i];
+            }
+            return string(b);
+        }
+
+        // Otherwise assume dynamic string return
+        return abi.decode(data, (string));
     }
 
     function _getReserves(
