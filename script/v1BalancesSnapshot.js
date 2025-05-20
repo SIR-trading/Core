@@ -1,5 +1,5 @@
 /*  TODOS
- *  Include SIR LP balances and other tokens balances in LP
+ *  Check every smart contract with a balance, if yes, then judge if it needs allocation
  */
 
 require("dotenv").config();
@@ -31,7 +31,7 @@ const CONTRIBUTOR_ADDRESSES = new Set(
         "0x1C5EB68630cCd90C3152FB9Dee3a1C2A7201631D",
         "0x0e52b591Cbc9AB81c806F303DE8d9a3B0Dc4ea5C",
         "0xfdcc69463b0106888D1CA07CE118A64AdF9fe458",
-        "0xF613cfD07af6D011fD671F98064214b5B2942CF",
+        "0xF613cfD07af6D011fD671F98064214aB5B2942CF",
         "0x3424cd7D170949636C300e62674a3DFB7706Fc35",
         "0xe59813A4a120288dbf42630C051e3921E5dAbCd8",
         "0x241F1A461Da47Ccd40B48c38340896A9948A4725",
@@ -74,6 +74,17 @@ const CONTRIBUTOR_ADDRESSES = new Set(
         "0x79C1134a1dFdF7e0d58E58caFC84a514991372e6"
     ].map((a) => a.toLowerCase())
 );
+
+const addressesToIgnore = [
+    "0x5000Ff6Cc1864690d947B864B9FB0d603E8d1F1A", // We do not reimburse our team play account
+    "0x000000000004444c5dc75cB358380D2e3dE08A90", // Ignore Uniswap v4 pool manager
+    "0x000000fee13a103A10D593b9AE06b3e05F2E7E1c", // Ignore Uniswap fee collector
+    "0x00700052c0608F670705380a4900e0a8080010CC", // Ignore Paraswap augustus fee vault
+    "0x9008d19f58aabd9ed0d60971565aa8510560ab41", // Ignore CoW Protocol fees
+    "0xad3b67bca8935cb510c8d18bd45f0b94f54a968f", // Ignore 1inch
+    "0xB6E981f235F70bDa631122DF1ee8303D7566AB62", // Ignore Uniswap v3 pool
+    V2_POOL // Ignore Uniswap v2 pool
+].map((a) => a.toLowerCase());
 
 // ABIs
 const SIR_ABI = [
@@ -122,6 +133,11 @@ async function main() {
     const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, provider);
     const uniV2 = new ethers.Contract(V2_POOL, UNI_V2_ABI, provider);
     const nfpm = new ethers.Contract(V3_NFPM_ADDRESS, NFPM_ABI, provider);
+
+    console.log(`There are ${CONTRIBUTOR_ADDRESSES.size} contributors.`);
+    if (!Array.from(CONTRIBUTOR_ADDRESSES).every((a) => ethers.isAddress(a))) {
+        throw new Error("Some contributors are not addresses.");
+    }
 
     // a helper that pages through the full range in slices of `STEP` blocks
     async function fetchAllTransfers(contract, fromBlock, toBlock, step = 10_000) {
@@ -173,6 +189,26 @@ async function main() {
     const tsSnapshot = blockInfo.timestamp;
     const issuance = await sir.ISSUANCE_RATE();
 
+    // helper to fetch prices by symbol at a given UNIX timestamp
+    async function fetchPrices(symbol) {
+        const startTime = new Date(tsSnapshot * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+        const endTime = new Date((tsSnapshot + 100000) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+        const res = await fetch(`https://api.g.alchemy.com/prices/v1/${ALCHEMY_KEY}/tokens/historical`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                symbol,
+                startTime,
+                endTime
+            })
+        });
+        if (!res.ok) throw new Error(`Prices API error: ${res.statusText}`);
+        const { data } = await res.json();
+        return Number(data[0].value);
+    }
+
     // 2) build V3‐positions map
     console.log("Fetching V3 NFT Transfer events…");
     let transferEvents = await fetchAllTransfers(nfpm, DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK, 10_000);
@@ -207,10 +243,11 @@ async function main() {
     async function simulateWithdrawV3(tokenId) {
         const iface = nfpm.interface;
 
+        let liquidity;
         try {
             // 1) read current position info
             const pos = await nfpm.positions(tokenId, { blockTag: SNAPSHOT_BLOCK });
-            const liquidity = BigInt(pos.liquidity);
+            liquidity = BigInt(pos.liquidity);
             if (liquidity === 0n) return { sirAmt: 0n, ethAmt: 0n };
 
             // 2) build the calldata for decreaseLiquidity
@@ -270,16 +307,23 @@ async function main() {
     for (const lg of logs) {
         const f = lg.args.from?.toLowerCase();
         const t = lg.args.to?.toLowerCase();
-        if (f && f !== ethers.ZeroAddress && f !== SIR_ADDRESS && f !== VAULT_ADDRESS) holders.add(f);
-        if (t && t !== ethers.ZeroAddress && t !== SIR_ADDRESS && t !== VAULT_ADDRESS) holders.add(t);
+        if (ethers.isAddress(f) && f !== ethers.ZeroAddress && f !== SIR_ADDRESS && f !== VAULT_ADDRESS) holders.add(f);
+        if (ethers.isAddress(t) && t !== ethers.ZeroAddress && t !== SIR_ADDRESS && t !== VAULT_ADDRESS) holders.add(t);
     }
-    holders = new Set([...holders, ...CONTRIBUTOR_ADDRESSES]);
+    holders = new Set([...holders, ...CONTRIBUTOR_ADDRESSES].sort((a, b) => a.localeCompare(b)));
 
     // 5) For each holder snapshot balances + LP pulls
     console.log(`Processing ${holders.size} holders across ${vaultCount} vaults`);
     const entries = [];
     for (const addr of holders) {
         process.stdout.write(`\r${entries.length} processed`);
+
+        const code = await provider.getCode(addr);
+        const isContract = code !== "0x";
+
+        // // TO REMOVE
+        // if (entries.length > 5) break;
+        // // TO REMOVE
 
         // on‐chain balance
         const sir_balance = await sir.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK });
@@ -371,8 +415,20 @@ async function main() {
             lp_uniswap_v3.weth += BigInt(ethAmt);
         }
 
+        if (
+            sir_balance === 0n &&
+            sir_unminted_contributor === 0n &&
+            sir_liquidity_mining === 0n &&
+            sir_staked === 0n &&
+            allZero(lp_uniswap_v2) &&
+            allZero(lp_uniswap_v3) &&
+            allZero(lp_sir)
+        )
+            continue;
+
         entries.push({
             addr,
+            isContract,
             sir_balance,
             sir_unminted_contributor,
             sir_liquidity_mining,
@@ -388,7 +444,11 @@ async function main() {
     const total3Y = issuance * threeYears;
     for (const contrib of CONTRIBUTOR_ADDRESSES) {
         const rec = entries.find((e) => e.addr === contrib);
-        if (!rec) throw new Error(`No record found for contributor ${contrib}`);
+
+        // TO UNCOMMENT
+        if (rec.sir_unminted_contributor === 0n) throw new Error(`No record found for contributor ${contrib}`);
+        // if (rec === undefined) continue;
+        // TO UNCOMMENT
 
         // old allocation
         let cdata = spiceContributors.find((c) => c.address.toLowerCase() === contrib) ?? {};
@@ -398,6 +458,7 @@ async function main() {
 
         const aUsd = BigInt(cdata.allocationPrecision || 0);
         rec.allocationOld = Number((aSpice + aUsd) / 1_000_000_000_000_000n);
+
         // add remaining unminted contributor SIR
         const remainC =
             (issuance * (BigInt(tsIssuanceStart) + threeYears - BigInt(tsSnapshot)) * (aSpice + aUsd)) /
@@ -405,53 +466,91 @@ async function main() {
         rec.sir_unminted_contributor += remainC;
     }
 
-    // 6) final output
-    const output = entries.map((e) => {
-        const SIR_TOTAL_ENTITLED =
-            e.sir_balance +
-            e.sir_unminted_contributor +
-            e.sir_liquidity_mining +
-            e.sir_staked +
-            e.lp_uniswap_v2.sir +
-            e.lp_uniswap_v3.sir;
-        let allocation = Number((SIR_TOTAL_ENTITLED * 10_000n) / total3Y);
-        let allocationPrecision = Number((SIR_TOTAL_ENTITLED * 10_000_000_000_000_000_000n) / total3Y);
-        if (e.addr === "0x686748764c5C7Aa06FEc784E60D14b650bF79129".toLowerCase()) {
-            // Treasury will get a fixed allocation
-            allocation = 1_000;
-            allocationPrecision = 1_000_000_000_000_000_000;
-        } else if (e.addr === "0x5000ff6cc1864690d947b864b9fb0d603e8d1f1a".toLowerCase()) {
-            // We do not reimburse ourselses
-            allocation = 0;
-            allocationPrecision = 0;
-        }
+    const prices = {
+        eth: await fetchPrices("ETH"),
+        btc: await fetchPrices("BTC"),
+        usdt: await fetchPrices("USDT"),
+        usdc: await fetchPrices("USDC"),
+        sir: 3_600_000 / (2_015_000_000 * 3) // Assuming $3.6M valuation after 3 years of emissions
+    };
 
-        return {
-            address: e.addr,
-            sir_balance: bigIntToString(e.sir_balance),
-            sir_liquidity_mining: bigIntToString(e.sir_liquidity_mining),
-            sir_unminted_contributor: bigIntToString(e.sir_unminted_contributor),
-            sir_staked: bigIntToString(e.sir_staked),
-            sir_sir: bigIntToString(e.lp_sir.sir),
-            sir_uniswapV2: bigIntToString(e.lp_uniswap_v2.sir),
-            sir_uniswapV3: bigIntToString(e.lp_uniswap_v3.sir),
-            eth_sir: bigIntToString(e.lp_sir.weth),
-            eth_uniswapV2: bigIntToString(e.lp_uniswap_v2.weth),
-            eth_uniswapV3: bigIntToString(e.lp_uniswap_v3.weth),
-            wbtc_sir: bigIntToString(e.lp_sir.wbtc),
-            usdc_sir: bigIntToString(e.lp_sir.usdc),
-            usdt_sir: bigIntToString(e.lp_sir.usdt),
-            SIR_TOTAL_ENTITLED: bigIntToString(SIR_TOTAL_ENTITLED),
-            allocationOld: e.allocationOld || 0,
-            allocation,
-            allocationPrecision
-        };
-    });
+    const pricesPrecision = Object.fromEntries(
+        Object.entries(prices).map(([key, value]) => [key, BigInt(Math.round(value * 1e10))])
+    );
+
+    // 6) final vector of allocations
+    const allocations = entries
+        .map((e) => {
+            const SIR_TOTAL_BALANCE =
+                e.sir_balance +
+                e.sir_unminted_contributor +
+                e.sir_liquidity_mining +
+                e.sir_staked +
+                e.lp_uniswap_v2.sir +
+                e.lp_uniswap_v3.sir;
+
+            const WETH_TOTAL_BALANCE = e.lp_uniswap_v2.weth + e.lp_uniswap_v3.weth + e.lp_sir.weth;
+
+            let SIR_ENTITLED = SIR_TOTAL_BALANCE;
+            SIR_ENTITLED += (WETH_TOTAL_BALANCE * pricesPrecision.eth) / (pricesPrecision.sir * 1_000_000n);
+            SIR_ENTITLED += (e.lp_sir.wbtc * pricesPrecision.btc * 10_000n) / pricesPrecision.sir;
+            SIR_ENTITLED += (e.lp_sir.usdt * pricesPrecision.usdt * 1_000_000n) / pricesPrecision.sir;
+            SIR_ENTITLED += (e.lp_sir.usdc * pricesPrecision.usdc * 1_000_000n) / pricesPrecision.sir;
+
+            // The extra term "+total3Y/2n" is to round to the nearest integer
+            let allocation = Number((SIR_ENTITLED * 10_000n + total3Y / 2n) / total3Y);
+            let allocationPrecision = Number((SIR_ENTITLED * 10_000_000_000_000_000_000n + total3Y / 2n) / total3Y);
+
+            // Exceptions
+            if (e.addr === "0x686748764c5C7Aa06FEc784E60D14b650bF79129".toLowerCase()) {
+                // Treasury will get a fixed allocation
+                allocation = 1_000;
+                allocationPrecision = 1_000_000_000_000_000_000;
+            } else if (SIR_ENTITLED < 1_000_000_000_000n) {
+                // Ignore balances less than 1 SIR
+                return undefined;
+            } else if (addressesToIgnore.includes(e.addr.toLowerCase())) {
+                // Ignore some addresses
+                return undefined;
+            }
+
+            return {
+                address: e.addr,
+                isContract: e.isContract,
+                sir_balance: bigIntToString(e.sir_balance),
+                sir_liquidity_mining: bigIntToString(e.sir_liquidity_mining),
+                sir_unminted_contributor: bigIntToString(e.sir_unminted_contributor),
+                sir_staked: bigIntToString(e.sir_staked),
+                sir_sir: bigIntToString(e.lp_sir.sir),
+                sir_uniswapV2: bigIntToString(e.lp_uniswap_v2.sir),
+                sir_uniswapV3: bigIntToString(e.lp_uniswap_v3.sir),
+                SIR_TOTAL_BALANCE: bigIntToString(SIR_TOTAL_BALANCE),
+                eth_sir: bigIntToString(e.lp_sir.weth),
+                eth_uniswapV2: bigIntToString(e.lp_uniswap_v2.weth),
+                eth_uniswapV3: bigIntToString(e.lp_uniswap_v3.weth),
+                WETH_TOTAL_BALANCE: bigIntToString(WETH_TOTAL_BALANCE),
+                wbtc_sir: bigIntToString(e.lp_sir.wbtc),
+                usdc_sir: bigIntToString(e.lp_sir.usdc),
+                usdt_sir: bigIntToString(e.lp_sir.usdt),
+                SIR_ENTITLED: bigIntToString(SIR_ENTITLED),
+                allocationOld: e.allocationOld || 0,
+                allocation,
+                allocationPrecision
+            };
+        })
+        .filter((e) => e !== undefined);
+
+    const output = {
+        allocations,
+        prices
+    };
 
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2));
     await provider.connection?.agent.destroy?.();
     console.log(`\nWrote allocations to ${OUTPUT_FILE}`);
 }
+
+const allZero = (obj) => Object.values(obj).every((v) => typeof v === "bigint" && v === 0n);
 
 function bigIntToString(x) {
     return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
