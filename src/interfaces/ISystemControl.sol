@@ -1,58 +1,47 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.0;
 
-interface ISystemControl {
+interface SystemControl {
     type SystemStatus is uint8;
 
     error ArraysLengthMismatch();
     error FeeCannotBeZero();
     error NewTaxesTooHigh();
+    error OwnableInvalidOwner(address owner);
+    error OwnableUnauthorizedAccount(address account);
     error ShutdownTooEarly();
-    error WrongVaultsOrOrder();
     error WrongStatus();
+    error WrongVaultsOrOrder();
 
     event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
 
-    function SHUTDOWN_WITHDRAWAL_DELAY() external view returns (uint40);
-
+    function acceptOwnership() external;
     function exitBeta() external;
-
     function hashActiveVaults() external view returns (bytes32);
-
     function haultMinting() external;
-
-    function initialize(address vault_) external;
-
+    function initialize(address vault_, address payable sir_) external;
     function owner() external view returns (address);
-
+    function pendingOwner() external view returns (address);
     function renounceOwnership() external;
-
     function resumeMinting() external;
-
-    function saveFunds(address[] calldata tokens, address to) external;
-
+    function saveFunds(address[] memory tokens, address to) external;
     function setBaseFee(uint16 baseFee_) external;
-
     function setLPFee(uint16 lpFee_) external;
-
     function shutdownSystem() external;
-
+    function sir() external view returns (address);
     function systemStatus() external view returns (SystemStatus);
-
-    function transferOwnership(address newOwner) external;
-
     function timestampStatusChanged() external view returns (uint40);
-
+    function transferOwnership(address newOwner) external;
     function updateVaultsIssuances(
-        uint48[] calldata oldVaults,
-        uint48[] calldata newVaults,
-        uint8[] calldata newTaxes
+        uint48[] memory oldVaults,
+        uint48[] memory newVaults,
+        uint8[] memory newTaxes
     ) external;
-
     function vault() external view returns (address);
 }
