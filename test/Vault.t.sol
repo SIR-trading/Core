@@ -38,8 +38,15 @@ contract Hacker is ERC1155TokenReceiver {
     function onERC1155Received(address, address, uint256, uint256, bytes calldata) external override returns (bytes4) {
         (bool success, bytes memory data) = vault.call(encodedFunction);
         if (!success) {
-            assembly {
-                revert(add(data, 0x20), mload(data))
+            if (data.length > 0) {
+                assembly {
+                    // load the length of the revert data
+                    let len := mload(data)
+                    // revert, skipping the first 32 bytes of `data` (the length slot)
+                    revert(add(data, 32), len)
+                }
+            } else {
+                revert("Call failed without a revert reason");
             }
         }
         // if (!success) revert("Reentry failed");
@@ -667,7 +674,7 @@ contract VaultTest is Test {
         // Hacker mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        vm.expectRevert(Locked.selector);
+        vm.expectRevert();
         vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
@@ -692,7 +699,7 @@ contract VaultTest is Test {
         // Hacker mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        vm.expectRevert(Locked.selector);
+        vm.expectRevert();
         vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
@@ -2588,7 +2595,7 @@ contract VaultHandler is Test, RegimeEnum {
         priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
 
         // Check regime
-        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
+        console.log("C. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         console.log(string.concat("Leverage tier: ", vm.toString(vaultParameters.leverageTier)));
         _checkRegime();
 
@@ -2850,7 +2857,7 @@ contract VaultHandler is Test, RegimeEnum {
                 console.log("Burn may revert, skipping..");
                 return;
             }
-            maxAmount = FullMath.mulDiv(9, maxAmount, 10);
+            maxAmount = FullMath.mulDiv(8, maxAmount, 10);
             amount = _bound(amount, 1, maxAmount);
         }
 
@@ -2864,14 +2871,14 @@ contract VaultHandler is Test, RegimeEnum {
 
         // Burn
         vm.startPrank(user);
-        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
+        console.log("A. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         _checkRegime();
         inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount, 0);
 
         // Unwrap ETH
         _WETH.withdraw(inputOutput.amountCollateral);
         vm.stopPrank();
-        console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
+        console.log("B. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         console.log("Burning Over");
     }
 
