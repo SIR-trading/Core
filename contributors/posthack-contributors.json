@@ -1,0 +1,22 @@
+[
+    {
+        "address": "0x0f1b084c7aAf82bB5ad3DE9A1222ecC805b28f85",
+        "allocationInBasisPoints": 60,
+        "allocationInBillionParts": 6000000
+    },
+    {
+        "address": "0xaC4Cb8282d291a74e8C881620E3AFaF6dE98d6aE",
+        "allocationInBasisPoints": 30,
+        "allocationInBillionParts": 3000000
+    },
+    {
+        "address": "0x7F1CA9Fe9C3728f5c632e5564b2BfF5585BE1748",
+        "allocationInBasisPoints": 7,
+        "allocationInBillionParts": 694063
+    },
+    {
+        "address": "0xd5f20543784f105f93ec06e918ae2d5e195b4438",
+        "allocationInBasisPoints": 1,
+        "allocationInBillionParts": 100000
+    }
+]

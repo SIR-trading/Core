@@ -1,7 +1,3 @@
-/*  TODOS
- *  Check every smart contract with a balance, if yes, then judge if it needs allocation
- */
-
 require("dotenv").config();
 const { ethers } = require("ethers");
 const fs = require("fs");
@@ -10,20 +6,29 @@ const path = require("path");
 // --- Configuration ---
 const DEPLOYMENT_BLOCK = 21888475;
 const SNAPSHOT_BLOCK = 22157899;
-const OUTPUT_FILE = path.join(__dirname, "../contributors/snapshot-allocations.json");
-const SIR_ADDRESS = "0x1278B112943Abc025a0DF081Ee42369414c3A834".toLowerCase();
-const VAULT_ADDRESS = "0xB91AE2c8365FD45030abA84a4666C4dB074E53E7".toLowerCase();
-const V2_POOL = "0xD213F59f057d32194592f22850f4f077405F9Bc1".toLowerCase();
-const V3_NFPM_ADDRESS = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88".toLowerCase();
+const OUTPUT_FILE = path.join(__dirname, "../contributors/posthack-compensations.json");
+
+// Important addresses
+const SIR_ADDRESS = ethers.getAddress("0x1278B112943Abc025a0DF081Ee42369414c3A834");
+const VAULT_ADDRESS = ethers.getAddress("0xB91AE2c8365FD45030abA84a4666C4dB074E53E7");
+const V2_POOL = ethers.getAddress("0xD213F59f057d32194592f22850f4f077405F9Bc1");
+const V3_NFPM_ADDRESS = ethers.getAddress("0xC36442b4a4522E871399CD717aBDD847Ab11FE88");
 const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
 
-// load your contributor JSONs
-const spiceContribPath = path.join(__dirname, "../contributors/spice-contributors.json");
-const fundraisingDataPath = path.join(__dirname, "../contributors/usd-contributors.json");
-const spiceContributors = JSON.parse(fs.readFileSync(spiceContribPath, "utf8"));
-const fundraisingData = JSON.parse(fs.readFileSync(fundraisingDataPath, "utf8"));
+// Load JSONs and normalize addresses
+const prehackContributorsPath = path.join(__dirname, "../contributors/prehack-contributors.json");
+const prehackPresalePath = path.join(__dirname, "../contributors/prehack-presale.json");
+const prehackContributors = JSON.parse(fs.readFileSync(prehackContributorsPath, "utf8")).map((c) => ({
+    ...c,
+    address: ethers.getAddress(c.address)
+}));
+const prehackPresale = JSON.parse(fs.readFileSync(prehackPresalePath, "utf8"));
+prehackPresale.contributors = prehackPresale.contributors.map((c) => ({
+    ...c,
+    address: ethers.getAddress(c.address)
+}));
 
-// hard-coded contributor set from Contributors.sol
+// Hard-coded contributor set from Contributors.sol
 const CONTRIBUTOR_ADDRESSES = new Set(
     [
         "0xAacc079965F0F9473BF4299d930eF639690a9792",
@@ -72,7 +77,7 @@ const CONTRIBUTOR_ADDRESSES = new Set(
         "0x0D5f69C67DAE06ce606246A8bd88B552d1DdE140",
         "0xde3697dDA384ce178d04D8879F7a66423F72A326",
         "0x79C1134a1dFdF7e0d58E58caFC84a514991372e6"
-    ].map((a) => a.toLowerCase())
+    ].map((addr) => ethers.getAddress(addr))
 );
 
 const addressesToIgnore = [
@@ -80,11 +85,11 @@ const addressesToIgnore = [
     "0x000000000004444c5dc75cB358380D2e3dE08A90", // Ignore Uniswap v4 pool manager
     "0x000000fee13a103A10D593b9AE06b3e05F2E7E1c", // Ignore Uniswap fee collector
     "0x00700052c0608F670705380a4900e0a8080010CC", // Ignore Paraswap augustus fee vault
-    "0x9008d19f58aabd9ed0d60971565aa8510560ab41", // Ignore CoW Protocol fees
-    "0xad3b67bca8935cb510c8d18bd45f0b94f54a968f", // Ignore 1inch
+    "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", // Ignore CoW Protocol fees
+    "0xad3b67BCA8935Cb510C8D18bD45F0b94F54A968f", // Ignore 1inch
     "0xB6E981f235F70bDa631122DF1ee8303D7566AB62", // Ignore Uniswap v3 pool
     V2_POOL // Ignore Uniswap v2 pool
-].map((a) => a.toLowerCase());
+].map((addr) => ethers.getAddress(addr));
 
 // ABIs
 const SIR_ABI = [
@@ -214,8 +219,8 @@ async function main() {
     let transferEvents = await fetchAllTransfers(nfpm, DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK, 10_000);
     const v3Positions = {}; // addr → Set of tokenIds
     for (const ev of transferEvents) {
-        const from = ev.args.from.toLowerCase();
-        const to = ev.args.to.toLowerCase();
+        const from = ethers.getAddress(ev.args.from);
+        const to = ethers.getAddress(ev.args.to);
         const tokenId = ev.args.tokenId.toString();
         if (from !== ethers.ZeroAddress) {
             v3Positions[from] = v3Positions[from] || new Set();
@@ -234,8 +239,8 @@ async function main() {
     // 3) Uniswap V2 reserves
     const [r0, r1] = await uniV2.getReserves({ blockTag: SNAPSHOT_BLOCK });
     const totalSupplyV2 = await uniV2.totalSupply({ blockTag: SNAPSHOT_BLOCK });
-    const token0 = (await uniV2.token0()).toLowerCase();
-    const token1 = (await uniV2.token1()).toLowerCase();
+    const token0 = ethers.getAddress(await uniV2.token0());
+    const token1 = ethers.getAddress(await uniV2.token1());
     const [reserveSIR_V2, reserveETH_V2] =
         token0 === SIR_ADDRESS ? [r0, r1] : token1 === SIR_ADDRESS ? [r1, r0] : [0n, 0n];
 
@@ -292,7 +297,8 @@ async function main() {
             const [amount0, amount1] = collectReturn;
 
             // 7) split both sides
-            const [sirAmt, ethAmt] = pos.token0.toLowerCase() === SIR_ADDRESS ? [amount0, amount1] : [amount1, amount0];
+            const [sirAmt, ethAmt] =
+                ethers.getAddress(pos.token0) === SIR_ADDRESS ? [amount0, amount1] : [amount1, amount0];
             return { sirAmt, ethAmt };
         } catch {
             console.log(`Failed to simulate withdraw for token ${tokenId} with liquidity ${liquidity}.`);
@@ -305,12 +311,12 @@ async function main() {
     const logs = await sir.queryFilter(sir.filters.Transfer(), DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK);
     let holders = new Set();
     for (const lg of logs) {
-        const f = lg.args.from?.toLowerCase();
-        const t = lg.args.to?.toLowerCase();
+        const f = ethers.getAddress(lg.args.from);
+        const t = ethers.getAddress(lg.args.to);
         if (ethers.isAddress(f) && f !== ethers.ZeroAddress && f !== SIR_ADDRESS && f !== VAULT_ADDRESS) holders.add(f);
         if (ethers.isAddress(t) && t !== ethers.ZeroAddress && t !== SIR_ADDRESS && t !== VAULT_ADDRESS) holders.add(t);
     }
-    holders = new Set([...holders, ...CONTRIBUTOR_ADDRESSES].sort((a, b) => a.localeCompare(b)));
+    holders = new Set([...holders, ...CONTRIBUTOR_ADDRESSES]);
 
     // 5) For each holder snapshot balances + LP pulls
     console.log(`Processing ${holders.size} holders across ${vaultCount} vaults`);
@@ -320,10 +326,6 @@ async function main() {
 
         const code = await provider.getCode(addr);
         const isContract = code !== "0x";
-
-        // // TO REMOVE
-        // if (entries.length > 5) break;
-        // // TO REMOVE
 
         // on‐chain balance
         const sir_balance = await sir.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK });
@@ -371,7 +373,7 @@ async function main() {
                 }
             }
 
-            // Get leveragors claim of colalteral
+            // Get leveragors claim of collateral
             const apeBal = BigInt(
                 await vaultParamsArray[vid - 1].apeToken.balanceOf(addr, { blockTag: SNAPSHOT_BLOCK })
             );
@@ -445,23 +447,21 @@ async function main() {
     for (const contrib of CONTRIBUTOR_ADDRESSES) {
         const rec = entries.find((e) => e.addr === contrib);
 
-        // TO UNCOMMENT
         if (rec.sir_unminted_contributor === 0n) throw new Error(`No record found for contributor ${contrib}`);
-        // if (rec === undefined) continue;
-        // TO UNCOMMENT
 
-        // old allocation
-        let cdata = spiceContributors.find((c) => c.address.toLowerCase() === contrib) ?? {};
+        // Old allocation
+        let cdata = prehackContributors.find((c) => ethers.getAddress(c.address) === contrib) ?? {};
+        const allocationsContributors = BigInt(cdata.allocation || 0) * 1_000_000_000_000_000n;
 
-        const aSpice = BigInt(cdata.allocation || 0) * 1_000_000_000_000_000n;
-        cdata = fundraisingData.contributors.find((c) => c.address.toLowerCase() === contrib) ?? {};
+        cdata = prehackPresale.contributors.find((c) => ethers.getAddress(c.address) === contrib) ?? {};
+        const allocationPresale = BigInt(cdata.allocationPrecision || 0);
 
-        const aUsd = BigInt(cdata.allocationPrecision || 0);
-        rec.allocationOld = Number((aSpice + aUsd) / 1_000_000_000_000_000n);
+        const allocationOld = allocationsContributors + allocationPresale;
+        rec.allocationOld = Number(allocationOld / 1_000_000_000_000_000n);
 
-        // add remaining unminted contributor SIR
+        // Compute remaining unminted contributor SIR
         const remainC =
-            (issuance * (BigInt(tsIssuanceStart) + threeYears - BigInt(tsSnapshot)) * (aSpice + aUsd)) /
+            (issuance * (BigInt(tsIssuanceStart) + threeYears - BigInt(tsSnapshot)) * allocationOld) /
             10_000_000_000_000_000_000n;
         rec.sir_unminted_contributor += remainC;
     }
@@ -498,18 +498,18 @@ async function main() {
             SIR_ENTITLED += (e.lp_sir.usdc * pricesPrecision.usdc * 1_000_000n) / pricesPrecision.sir;
 
             // The extra term "+total3Y/2n" is to round to the nearest integer
-            let allocation = Number((SIR_ENTITLED * 10_000n + total3Y / 2n) / total3Y);
-            let allocationPrecision = Number((SIR_ENTITLED * 10_000_000_000_000_000_000n + total3Y / 2n) / total3Y);
+            let allocationInBasisPoints = Number((SIR_ENTITLED * 10_000n + total3Y / 2n) / total3Y);
+            let allocationInBillionParts = Number((SIR_ENTITLED * 1_000_000_000n + total3Y / 2n) / total3Y);
 
             // Exceptions
-            if (e.addr === "0x686748764c5C7Aa06FEc784E60D14b650bF79129".toLowerCase()) {
+            if (e.addr === "0x686748764c5C7Aa06FEc784E60D14b650bF79129") {
                 // Treasury will get a fixed allocation
-                allocation = 1_000;
-                allocationPrecision = 1_000_000_000_000_000_000;
+                allocationInBasisPoints = 1_000;
+                allocationInBillionParts = 100_000_000;
             } else if (SIR_ENTITLED < 1_000_000_000_000n) {
                 // Ignore balances less than 1 SIR
                 return undefined;
-            } else if (addressesToIgnore.includes(e.addr.toLowerCase())) {
+            } else if (addressesToIgnore.includes(e.addr)) {
                 // Ignore some addresses
                 return undefined;
             }
@@ -534,14 +534,19 @@ async function main() {
                 usdt_sir: bigIntToString(e.lp_sir.usdt),
                 SIR_ENTITLED: bigIntToString(SIR_ENTITLED),
                 allocationOld: e.allocationOld || 0,
-                allocation,
-                allocationPrecision
+                allocationInBasisPoints,
+                allocationInBillionParts
             };
         })
         .filter((e) => e !== undefined);
 
+    console.log(
+        `Total old team + presale allocation: ${allocations.reduce((acc, curr) => acc + curr.allocationOld, 0)}`
+    );
+
     const output = {
         allocations,
+        TOTAL_BASIS_POINTS: allocations.reduce((acc, curr) => acc + curr.allocationInBasisPoints, 0),
         prices
     };
 
@@ -556,7 +561,4 @@ function bigIntToString(x) {
     return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-});
+main();
