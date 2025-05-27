@@ -1,3 +1,7 @@
+/**
+ * MISSING: SENDERS OR RECEIVERS OF UNI V2 AND V3 POSITIONS
+ */
+
 require("dotenv").config();
 const { ethers } = require("ethers");
 const fs = require("fs");
@@ -116,7 +120,8 @@ const UNI_V2_ABI = [
     "function totalSupply() view returns (uint256)",
     "function balanceOf(address) view returns (uint256)",
     "function token0() view returns (address)",
-    "function token1() view returns (address)"
+    "function token1() view returns (address)",
+    "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
 
 const NFPM_ABI = [
@@ -134,6 +139,27 @@ const MaxUint128 = BigInt(2) ** BigInt(128) - 1n;
 
 async function main() {
     const provider = new ethers.JsonRpcProvider(`https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_KEY}`);
+
+    // ——————— Retry‐wrapper for ANY eth_call / eth_getLogs / etc ———————
+    const originalSend = provider.send.bind(provider);
+    provider.send = async (method, params) => {
+        const maxRetries = 5;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                return await originalSend(method, params);
+            } catch (err) {
+                const code = err.info?.error?.code ?? err.status;
+                if (code === 429 && i < maxRetries - 1) {
+                    const backoff = (i + 1) * 1000;
+                    // console.warn(`Rate-limited on ${method}, retrying in ${backoff}ms…`);
+                    await new Promise((r) => setTimeout(r, backoff));
+                    continue;
+                }
+                throw err;
+            }
+        }
+    };
+
     const sir = new ethers.Contract(SIR_ADDRESS, SIR_ABI, provider);
     const vault = new ethers.Contract(VAULT_ADDRESS, VAULT_ABI, provider);
     const uniV2 = new ethers.Contract(V2_POOL, UNI_V2_ABI, provider);
@@ -145,13 +171,12 @@ async function main() {
     }
 
     // a helper that pages through the full range in slices of `STEP` blocks
-    async function fetchAllTransfers(contract, fromBlock, toBlock, step = 10_000) {
-        const filter = contract.filters.Transfer(null, null);
+    async function fetchAllEvents(contract, filter, fromBlock, toBlock, step = 10_000) {
         let allEvents = [];
 
         for (let start = fromBlock; start <= toBlock; start += step) {
             const end = Math.min(start + step - 1, toBlock);
-            console.log(`Fetching Transfer events from blocks ${start} to ${end}…`);
+            // console.log(`Fetching ${filter.eventFragment.name} events from blocks ${start} to ${end}…`);
             const events = await contract.queryFilter(filter, start, end);
             allEvents = allEvents.concat(events);
         }
@@ -172,7 +197,10 @@ async function main() {
         const { debtToken, collateralToken, leverageTier } = await vault.paramsById(i);
         const apeToken = new ethers.Contract(
             initEvents[i - 1].args.ape,
-            ["function balanceOf(address) view returns (uint256)"],
+            [
+                "function balanceOf(address) view returns (uint256)",
+                "event Transfer(address indexed from, address indexed to, uint256 value)"
+            ],
             provider
         );
         const collateralSymbol = await new ethers.Contract(
@@ -216,22 +244,61 @@ async function main() {
 
     // 2) build V3‐positions map
     console.log("Fetching V3 NFT Transfer events…");
-    let transferEvents = await fetchAllTransfers(nfpm, DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK, 10_000);
-    const v3Positions = {}; // addr → Set of tokenIds
-    for (const ev of transferEvents) {
+    let rawV3Events = await fetchAllEvents(
+        nfpm,
+        nfpm.filters.Transfer(null, null, null),
+        DEPLOYMENT_BLOCK,
+        SNAPSHOT_BLOCK,
+        10_000
+    );
+    console.log(`Fetched ${rawV3Events.length} Uniswap V3 NFT Transfer events.`);
+
+    // 2a) dedupe tokenIds
+    const tokenIdStrings = Array.from(new Set(rawV3Events.map((ev) => ev.args.tokenId.toString())));
+
+    // 2b) fetch positions *once* per unique tokenId, in parallel (or via BatchProvider)
+    const positionPromises = tokenIdStrings.map(
+        (id) =>
+            nfpm
+                .positions(id, { blockTag: SNAPSHOT_BLOCK })
+                .then((pos) => ({ id, pos }))
+                .catch(() => null) // skip burned or invalid IDs
+    );
+    const positionsArr = await Promise.all(positionPromises);
+
+    // 2c) build a lookup map, and filter down to only SIR‐pool positions
+    const posMap = {};
+    for (const entry of positionsArr) {
+        if (!entry) continue;
+        const { id, pos } = entry;
+        const t0 = ethers.getAddress(pos.token0);
+        const t1 = ethers.getAddress(pos.token1);
+        if (t0 === SIR_ADDRESS || t1 === SIR_ADDRESS) {
+            posMap[id] = pos;
+        }
+    }
+    const sirTokenIds = new Set(Object.keys(posMap));
+    console.log(`Found ${sirTokenIds.size} unique V3 positions for our SIR pools.`);
+
+    // 2d) now filter your raw events down to just those tokenIds
+    const v3TransferEvents = rawV3Events.filter((ev) => sirTokenIds.has(ev.args.tokenId.toString()));
+    console.log(`Filtered down to ${v3TransferEvents.length} V3 Transfer events across SIR pools.`);
+
+    // 2e) build your v3Positions exactly as before, but now you never call `positions()` again:
+    const v3Positions = {};
+    for (const ev of v3TransferEvents) {
         const from = ethers.getAddress(ev.args.from);
         const to = ethers.getAddress(ev.args.to);
-        const tokenId = ev.args.tokenId.toString();
+        const id = ev.args.tokenId.toString();
         if (from !== ethers.ZeroAddress) {
             v3Positions[from] = v3Positions[from] || new Set();
-            v3Positions[from].delete(tokenId);
+            v3Positions[from].delete(id);
         }
         if (to !== ethers.ZeroAddress) {
             v3Positions[to] = v3Positions[to] || new Set();
-            v3Positions[to].add(tokenId);
+            v3Positions[to].add(id);
         }
     }
-    // convert Sets → Arrays
     for (const addr of Object.keys(v3Positions)) {
         v3Positions[addr] = Array.from(v3Positions[addr]);
     }
@@ -301,22 +368,101 @@ async function main() {
                 ethers.getAddress(pos.token0) === SIR_ADDRESS ? [amount0, amount1] : [amount1, amount0];
             return { sirAmt, ethAmt };
         } catch {
-            console.log(`Failed to simulate withdraw for token ${tokenId} with liquidity ${liquidity}.`);
+            // console.log(`Failed to simulate withdraw for token ${tokenId} with liquidity ${liquidity}.`);
             return { sirAmt: 0n, ethAmt: 0n };
         }
     }
 
     // 4) Gather all holders
-    console.log(`Fetching Transfer logs up to block ${SNAPSHOT_BLOCK}`);
+    console.log(`Fetching SIR Transfer logs up to block ${SNAPSHOT_BLOCK}`);
     const logs = await sir.queryFilter(sir.filters.Transfer(), DEPLOYMENT_BLOCK, SNAPSHOT_BLOCK);
-    let holders = new Set();
-    for (const lg of logs) {
-        const f = ethers.getAddress(lg.args.from);
-        const t = ethers.getAddress(lg.args.to);
-        if (ethers.isAddress(f) && f !== ethers.ZeroAddress && f !== SIR_ADDRESS && f !== VAULT_ADDRESS) holders.add(f);
-        if (ethers.isAddress(t) && t !== ethers.ZeroAddress && t !== SIR_ADDRESS && t !== VAULT_ADDRESS) holders.add(t);
+    console.log(`Found ${logs.length} SIR Transfer events.`);
+
+    // Include any TEA (ERC-1155) transfers from the vault itself:
+    console.log("Fetching TEA (ERC-1155) TransferSingle logs…");
+    const ERC1155_ABI = [
+        "event TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)"
+    ];
+    const erc1155 = new ethers.Contract(VAULT_ADDRESS, ERC1155_ABI, provider);
+    const teaEvents = await fetchAllEvents(
+        erc1155,
+        erc1155.filters.TransferSingle(null, null, null),
+        DEPLOYMENT_BLOCK,
+        SNAPSHOT_BLOCK,
+        10_000,
+        erc1155.filters.TransferSingle()
+    );
+    console.log(`Found ${teaEvents.length} TEA TransferSingle events.`);
+
+    // Include any APE (ERC-20) transfers on each vault’s apeToken:
+    console.log(`Fetching APE (ERC-20) Transfer log from ${vaultParamsArray.length} vaults…`);
+    let apeEvents = [];
+    for (const { apeToken } of vaultParamsArray) {
+        console.log(`Fetching APE events for vault ${apeToken.target}…`);
+        const events = await fetchAllEvents(
+            apeToken,
+            apeToken.filters.Transfer(null, null),
+            DEPLOYMENT_BLOCK,
+            SNAPSHOT_BLOCK,
+            10_000
+        );
+        apeEvents.push(...events);
+
+        // optional small pause to give Alchemy breathing room
+        await new Promise((r) => setTimeout(r, 200));
     }
-    holders = new Set([...holders, ...CONTRIBUTOR_ADDRESSES]);
+    console.log(`Found ${apeEvents.length} APE Transfer events.`);
+
+    console.log("Fetching Uniswap V2 LP-token Transfer logs…");
+    const v2TransferEvents = await fetchAllEvents(
+        uniV2,
+        uniV2.filters.Transfer(null, null),
+        DEPLOYMENT_BLOCK,
+        SNAPSHOT_BLOCK,
+        10_000
+    );
+    console.log(`Found ${v2TransferEvents.length} V2 LP-token Transfer events.`);
+
+    let holders = new Set(CONTRIBUTOR_ADDRESSES);
+    // Add SIR senders/receivers
+    for (const lg of logs) {
+        const from = ethers.getAddress(lg.args.from);
+        const to = ethers.getAddress(lg.args.to);
+        if (from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
+        if (to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
+    }
+
+    // Add TEA senders/receivers
+    for (const ev of teaEvents) {
+        const from = ethers.getAddress(ev.args.from);
+        const to = ethers.getAddress(ev.args.to);
+        if (from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
+        if (to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
+    }
+
+    // Add APE senders/receivers
+    for (const ev of apeEvents) {
+        const from = ethers.getAddress(ev.args.from);
+        const to = ethers.getAddress(ev.args.to);
+        if (from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
+        if (to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
+    }
+
+    // Add V2 LP-token senders/receivers
+    for (const ev of v2TransferEvents) {
+        const from = ethers.getAddress(ev.args.from);
+        const to = ethers.getAddress(ev.args.to);
+        if (from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
+        if (to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
+    }
+
+    // Add V3 NFT-position senders/receivers
+    for (const ev of v3TransferEvents) {
+        const from = ethers.getAddress(ev.args.from);
+        const to = ethers.getAddress(ev.args.to);
+        if (from !== ethers.ZeroAddress && from !== SIR_ADDRESS && from !== VAULT_ADDRESS) holders.add(from);
+        if (to !== ethers.ZeroAddress && to !== SIR_ADDRESS && to !== VAULT_ADDRESS) holders.add(to);
+    }
 
     // 5) For each holder snapshot balances + LP pulls
     console.log(`Processing ${holders.size} holders across ${vaultCount} vaults`);
@@ -486,6 +632,7 @@ async function main() {
                 e.sir_unminted_contributor +
                 e.sir_liquidity_mining +
                 e.sir_staked +
+                e.lp_sir.sir +
                 e.lp_uniswap_v2.sir +
                 e.lp_uniswap_v3.sir;
 
@@ -512,6 +659,9 @@ async function main() {
             } else if (addressesToIgnore.includes(e.addr)) {
                 // Ignore some addresses
                 return undefined;
+            } else if (e.addr === "0xFBc09531f02CAb8A0c78Da0cCDCf0AeF34D1c5EB") {
+                // Defi Collective cannot claim from their locking contract, so we swap it to their safe address
+                return (e.addr = "0x6665E62eF6F6Db29D5F8191fBAC472222C2cc80F");
             }
 
             return {

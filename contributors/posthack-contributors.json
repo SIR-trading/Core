@@ -2,12 +2,14 @@
     {
         "address": "0x0f1b084c7aAf82bB5ad3DE9A1222ecC805b28f85",
         "allocationInBasisPoints": 60,
-        "allocationInBillionParts": 6000000
+        "allocationInBillionParts": 6000000,
+        "name": "RedTiger"
     },
     {
         "address": "0xaC4Cb8282d291a74e8C881620E3AFaF6dE98d6aE",
         "allocationInBasisPoints": 30,
-        "allocationInBillionParts": 3000000
+        "allocationInBillionParts": 3000000,
+        "name": "Syzygy"
     },
     {
         "address": "0x7F1CA9Fe9C3728f5c632e5564b2BfF5585BE1748",
@@ -15,8 +17,24 @@
         "allocationInBillionParts": 694063
     },
     {
-        "address": "0xd5f20543784f105f93ec06e918ae2d5e195b4438",
+        "address": "0xd5f20543784F105F93ec06e918ae2D5e195B4438",
         "allocationInBasisPoints": 1,
-        "allocationInBillionParts": 100000
+        "allocationInBillionParts": 100000,
+        "name": "Bossen"
+    },
+    {
+        "address": "0xb9839FD6E4110575d01d47866dd4d1c3946bf29f",
+        "allocationInBasisPoints": 0,
+        "allocationInBillionParts": 13611
+    },
+    {
+        "address": "0x8D2a097607da5E2E3d599c72EC50FD0704a4D37f",
+        "allocationInBasisPoints": 1,
+        "allocationInBillionParts": 59444
+    },
+    {
+        "address": "0x0D5f69C67DAE06ce606246A8bd88B552d1DdE140",
+        "allocationInBasisPoints": 0,
+        "allocationInBillionParts": 41666
     }
 ]

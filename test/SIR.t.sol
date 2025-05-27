@@ -109,21 +109,24 @@ contract ContributorsTest is Test {
         // Get compensated contributors
         uint256 count = 0;
         while (true) {
+            CompensatedContributor memory compensatedContributors_;
             try compensations.getCompensations(count) returns (address addr, uint256 allocationInBillionParts) {
-                CompensatedContributor memory compensatedContributors_ = CompensatedContributor({
+                compensatedContributors_ = CompensatedContributor({
                     addr: addr,
                     allocationInBillionParts: allocationInBillionParts
                 });
-                compensatedContributors.push(compensatedContributors_);
-
-                uint256 issuance = (compensatedContributors_.allocationInBillionParts * SystemConstants.ISSUANCE) /
-                    1_000_000_000;
-
-                // Update the contributors issuance
-                contributorIssuance[compensatedContributors_.addr] += issuance;
             } catch {
+                // We reached the end of the array
                 break;
             }
+
+            compensatedContributors.push(compensatedContributors_);
+
+            uint256 issuance = (compensatedContributors_.allocationInBillionParts * SystemConstants.ISSUANCE) /
+                1_000_000_000;
+
+            // Update the contributors issuance
+            contributorIssuance[compensatedContributors_.addr] += issuance;
 
             count++;
         }
@@ -131,26 +134,29 @@ contract ContributorsTest is Test {
         // Get posthack contributors
         count = 0;
         while (true) {
+            PosthackContributor memory posthackContributors_;
             try compensations.getContributors(count) returns (
                 address addr,
                 uint256 allocationInBasisPoints,
                 uint256 allocationInBillionParts
             ) {
-                PosthackContributor memory posthackContributors_ = PosthackContributor({
+                posthackContributors_ = PosthackContributor({
                     addr: addr,
                     allocationInBasisPoints: allocationInBasisPoints,
                     allocationInBillionParts: allocationInBillionParts
                 });
-                posthackContributors.push(posthackContributors_);
-
-                uint256 issuance = (posthackContributors_.allocationInBillionParts * SystemConstants.ISSUANCE) /
-                    1_000_000_000;
-
-                // Update the contributors issuance
-                contributorIssuance[posthackContributors_.addr] += issuance;
             } catch {
+                // We reached the end of the array
                 break;
             }
+
+            posthackContributors.push(posthackContributors_);
+
+            uint256 issuance = (posthackContributors_.allocationInBillionParts * SystemConstants.ISSUANCE) /
+                1_000_000_000;
+
+            // Update the contributors issuance
+            contributorIssuance[posthackContributors_.addr] += issuance;
 
             count++;
         }
