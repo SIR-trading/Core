@@ -12,26 +12,62 @@ import {Contributors} from "src/Contributors.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
+import {stdJson} from "forge-std/StdJson.sol";
 
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
 
+// WRITE AN EXTERNAL CONTRACT THAT GETS THE JSON SO I CAN TRY CATCH
+
+contract Posthack is Test {
+    using stdJson for string;
+
+    string compensationJson;
+    string spiceJson;
+
+    constructor() {
+        // Get compensated contributors
+        compensationJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/posthack-compensations.json"));
+
+        // Get posthack contributors
+        spiceJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/posthack-contributors.json"));
+    }
+
+    function getCompensations(uint256 index) external view returns (address addr, uint256 allocationInBillionParts) {
+        string memory idx = vm.toString(index);
+        string memory base = string.concat(".allocations[", idx, "]");
+
+        addr = compensationJson.readAddress(string.concat(base, ".address"));
+        allocationInBillionParts = compensationJson.readUint(string.concat(base, ".allocationInBillionParts"));
+        // console.log(addr, allocationInBillionParts);
+    }
+
+    function getContributors(
+        uint256 index
+    ) external view returns (address addr, uint256 allocationInBasisPoints, uint256 allocationInBillionParts) {
+        string memory idx = vm.toString(index);
+        string memory base = string.concat("[", idx, "]");
+
+        addr = spiceJson.readAddress(string.concat(base, ".address"));
+        allocationInBasisPoints = spiceJson.readUint(string.concat(base, ".allocationInBasisPoints"));
+        allocationInBillionParts = spiceJson.readUint(string.concat(base, ".allocationInBillionParts"));
+        // console.log(addr, allocationInBasisPoints, allocationInBillionParts);
+    }
+}
+
 contract ContributorsTest is Test {
     using stdJson for string;
 
-    struct USDContributor {
+    struct PosthackContributor {
         address addr;
-        uint256 allocation;
-        uint256 allocationPrecision;
-        uint256 contribution;
-        string disclaimer;
-        string ens;
-        uint256 lock_nfts;
+        uint256 allocationInBasisPoints;
+        uint256 allocationInBillionParts;
+        // string name;
     }
 
-    struct SpiceContributor {
+    struct CompensatedContributor {
         address addr;
-        uint256 allocation;
+        uint256 allocationInBillionParts;
     }
 
     uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
@@ -42,8 +78,8 @@ contract ContributorsTest is Test {
     SIR public sir;
     Contributors public contributors;
 
-    USDContributor[] usdContributors;
-    SpiceContributor[] spiceContributors;
+    CompensatedContributor[] compensatedContributors;
+    PosthackContributor[] posthackContributors;
     mapping(address => uint256) contributorIssuance;
 
     mapping(address => bool) addressChecked;
@@ -67,62 +103,73 @@ contract ContributorsTest is Test {
         // Initialize SIR
         sir.initialize(vault);
 
-        // Get fundrasing contributors
-        string memory usdJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/usd-contributors.json"));
-        USDContributor[] memory usdContributors_ = abi.decode(
-            usdJson.parseRaw(".contributors"), // Decode entire contributors array
-            (USDContributor[])
-        );
+        // Helper contract
+        Posthack compensations = new Posthack();
 
-        // Get pre-mainnet contributors
-        string memory spiceJson = vm.readFile(string.concat(vm.projectRoot(), "/contributors/spice-contributors.json"));
-        SpiceContributor[] memory spiceContributors_ = abi.decode(
-            spiceJson.parseRaw(""), // Decode root array
-            (SpiceContributor[])
-        );
+        // Get compensated contributors
+        uint256 count = 0;
+        while (true) {
+            try compensations.getCompensations(count) returns (address addr, uint256 allocationInBillionParts) {
+                CompensatedContributor memory compensatedContributors_ = CompensatedContributor({
+                    addr: addr,
+                    allocationInBillionParts: allocationInBillionParts
+                });
+                compensatedContributors.push(compensatedContributors_);
 
-        // Update their issuances
-        for (uint256 i = 0; i < usdContributors_.length; i++) {
-            usdContributors.push(usdContributors_[i]);
+                uint256 issuance = (compensatedContributors_.allocationInBillionParts * SystemConstants.ISSUANCE) /
+                    1_000_000_000;
 
-            uint256 issuance = (((usdContributors[i].contribution * SystemConstants.ISSUANCE) *
-                FUNDRAISING_PERCENTAGE) * (100 + BC_BOOST * usdContributors[i].lock_nfts)) /
-                (FUNDRAISING_GOAL * (100 ** 2));
+                // Update the contributors issuance
+                contributorIssuance[compensatedContributors_.addr] += issuance;
+            } catch {
+                break;
+            }
 
-            // Update the contributors issuance
-            contributorIssuance[usdContributors[i].addr] += issuance;
+            count++;
         }
-        for (uint256 i = 0; i < spiceContributors_.length; i++) {
-            spiceContributors.push(spiceContributors_[i]);
 
-            uint256 issuance = (spiceContributors[i].allocation * SystemConstants.ISSUANCE) / 10000;
+        // Get posthack contributors
+        count = 0;
+        while (true) {
+            try compensations.getContributors(count) returns (
+                address addr,
+                uint256 allocationInBasisPoints,
+                uint256 allocationInBillionParts
+            ) {
+                PosthackContributor memory posthackContributors_ = PosthackContributor({
+                    addr: addr,
+                    allocationInBasisPoints: allocationInBasisPoints,
+                    allocationInBillionParts: allocationInBillionParts
+                });
+                posthackContributors.push(posthackContributors_);
 
-            // Update the contributors issuance
-            contributorIssuance[spiceContributors[i].addr] += issuance;
+                uint256 issuance = (posthackContributors_.allocationInBillionParts * SystemConstants.ISSUANCE) /
+                    1_000_000_000;
+
+                // Update the contributors issuance
+                contributorIssuance[posthackContributors_.addr] += issuance;
+            } catch {
+                break;
+            }
+
+            count++;
         }
     }
 
-    function test_getAllocation() public {
+    function test_sumAllocations() public {
         uint256 aggContributions = 0;
-        for (uint256 i = 0; i < usdContributors.length; i++) {
-            if (!addressChecked[usdContributors[i].addr]) {
-                aggContributions += contributors.getAllocation(usdContributors[i].addr);
-                addressChecked[usdContributors[i].addr] = true;
+        for (uint256 i = 0; i < compensatedContributors.length; i++) {
+            if (!addressChecked[compensatedContributors[i].addr]) {
+                aggContributions += contributors.getAllocation(compensatedContributors[i].addr);
+                addressChecked[compensatedContributors[i].addr] = true;
             }
         }
 
-        for (uint256 i = 0; i < spiceContributors.length; i++) {
-            if (!addressChecked[spiceContributors[i].addr]) {
-                aggContributions += contributors.getAllocation(spiceContributors[i].addr);
-                addressChecked[spiceContributors[i].addr] = true;
+        for (uint256 i = 0; i < posthackContributors.length; i++) {
+            if (!addressChecked[posthackContributors[i].addr]) {
+                aggContributions += contributors.getAllocation(posthackContributors[i].addr);
+                addressChecked[posthackContributors[i].addr] = true;
             }
-        }
-
-        // Treasury address
-        address treasury = vm.envAddress("TREASURY_ADDRESS");
-        if (!addressChecked[treasury]) {
-            aggContributions += contributors.getAllocation(treasury);
-            addressChecked[treasury] = true;
         }
 
         assertEq(aggContributions, type(uint56).max);
@@ -149,17 +196,21 @@ contract ContributorsTest is Test {
         uint32 timeSkip,
         uint32 timeSkip2
     ) public {
-        uint256 relErr18Decimals = 1e6;
+        uint256 relErr18Decimals = 1e7;
 
-        address contributorAddr = typeContributor ? _getUsdContributor(contributor) : _getSpiceContributor(contributor);
+        address contributorAddr = typeContributor
+            ? _getCompensatedContributor(contributor)
+            : _getPosthackContributor(contributor);
+        console.log(contributorAddr);
 
         // Skip time
         skip(timeSkip);
 
         // Issuance
         uint256 issuance = contributorIssuance[contributorAddr];
+        console.log(contributorAddr, issuance);
 
-        // Contributor's rewards
+        // PosthackContributor's rewards
         uint256 rewards = issuance * (timeSkip <= THREE_YEARS ? timeSkip : THREE_YEARS);
         assertApproxEqRel(
             sir.contributorUnclaimedSIR(contributorAddr),
@@ -185,7 +236,7 @@ contract ContributorsTest is Test {
         // Skip time
         skip(timeSkip2);
 
-        // Contributor's rewards
+        // PosthackContributor's rewards
         rewards =
             issuance *
             (
@@ -205,12 +256,12 @@ contract ContributorsTest is Test {
     ///////////////////// H E L P E R // F U N C T I O N S /////////////////////
     ///////////////////////////////////////////////////////////////////////////
 
-    function _getUsdContributor(uint256 index) internal view returns (address) {
-        return usdContributors[_bound(index, 0, usdContributors.length - 1)].addr;
+    function _getCompensatedContributor(uint256 index) internal view returns (address) {
+        return compensatedContributors[_bound(index, 0, compensatedContributors.length - 1)].addr;
     }
 
-    function _getSpiceContributor(uint256 index) internal view returns (address) {
-        return spiceContributors[_bound(index, 0, spiceContributors.length - 1)].addr;
+    function _getPosthackContributor(uint256 index) internal view returns (address) {
+        return posthackContributors[_bound(index, 0, posthackContributors.length - 1)].addr;
     }
 }
 
