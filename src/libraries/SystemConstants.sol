@@ -20,7 +20,7 @@ library SystemConstants {
 
     uint40 internal constant THREE_YEARS = 3 * 365 days;
 
-    int64 internal constant MAX_TICK_X42 = 1951133415219145403; // log_1.0001((2^128-1(/2^64))*2^42
+    int64 internal constant MAX_TICK_X42 = 1951133415219145403; // log_1.0001(x)*2^42 where x is the max possible Q64.64 value, i.e., 2^64 - 2^-64
 
     // Approximately 10 days. We did not choose 10 days precisely to avoid auctions always ending on the same day and time of the week.
     uint40 internal constant AUCTION_COOLDOWN = 247 hours; // 247h & 240h have no common factors

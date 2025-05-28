@@ -159,7 +159,7 @@ contract Oracle {
             }
 
             // Invert price if necessary
-            return collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42; // Unchecked is safe because |tickPriceX42| ≤ MAX_TICK_X42
+            return collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42; // Unchecked is safe because |tickPriceX42| ≤ 887272 * 2^42 ≤ type(uint64).max
         }
     }
 
@@ -405,7 +405,7 @@ contract Oracle {
         }
 
         // Invert price if necessary
-        tickPriceX42 = collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42; // Safe to take negative because |tickPriceX42| ≤ MAX_TICK_X42
+        tickPriceX42 = collateralToken == token1 ? -oracleState.tickPriceX42 : oracleState.tickPriceX42; // Safe to take negative because |tickPriceX42| ≤ 887272 * 2^42 ≤ type(uint64).max
     }
 
     /*////////////////////////////////////////////////////////////////

@@ -7,8 +7,9 @@ import {SystemConstants} from "./SystemConstants.sol";
 /// @notice Modified from Uniswap v3 TickMath
 /// @notice Math library for computing log_1.0001(x/y) and 1.0001^z where x and y are uint and z is Q21.42
 library TickMathPrecision {
-    /// @return uint128 in Q63.64
+    /// @return uint128 in Q64.64
     function getRatioAtTick(int64 tickX42) internal pure returns (uint128) {
+        // MAX_TICK_X42 is necessary as to not overflow ratioX64 which is Q64.64
         assert(tickX42 >= 0 && tickX42 <= SystemConstants.MAX_TICK_X42);
 
         uint256 ratioX64 = tickX42 & 0x1 != 0 ? 0x100000000000001A3 : 0x10000000000000000;
