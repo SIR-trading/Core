@@ -140,9 +140,9 @@ contract AllocationsTest is Test {
         // Validate allocations
         for (uint256 i = 0; i < allContributors.length; i++) {
             address addr = allContributors[i];
-            uint256 actual = ((contributorsContract.getAllocation(addr) *
-                uint256(SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) / type(uint56).max) *
-                365 days;
+            uint256 issuance = (contributorsContract.getAllocation(addr) *
+                uint256(SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS)) / type(uint56).max;
+            uint256 actual = issuance * 365 days;
 
             uint256 expected = (allocationsInBillionParts[addr] * YEAR_ISSUANCE) / 1e9;
 
