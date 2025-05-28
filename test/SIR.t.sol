@@ -17,8 +17,6 @@ import {stdJson} from "forge-std/StdJson.sol";
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
 
-// WRITE AN EXTERNAL CONTRACT THAT GETS THE JSON SO I CAN TRY CATCH
-
 contract Posthack is Test {
     using stdJson for string;
 

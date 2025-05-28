@@ -17,6 +17,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 import {APE} from "src/APE.sol";
+import {stdJson} from "forge-std/StdJson.sol";
 
 contract SystemControlInitializationTest is Test {
     address public vault;
@@ -54,6 +55,8 @@ contract SystemControlInitializationTest is Test {
 }
 
 contract SystemControlTest is ERC1155TokenReceiver, Test {
+    using stdJson for string;
+
     error FeeCannotBeZero();
     error ShutdownTooEarly();
 
@@ -124,10 +127,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.initialize(address(vault), sir);
 
         // Get 1 pre-mainnet contributor
-        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/spice-contributors.json"));
-        bytes memory data = vm.parseJson(json);
-        ContributorPreMainnet[] memory contributorsPreMainnet = abi.decode(data, (ContributorPreMainnet[]));
-        oneContributor = contributorsPreMainnet[0].addr;
+        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/posthack-contributors.json"));
+        oneContributor = json.readAddress("[0].address");
     }
 
     function test_haultMinting() public {
