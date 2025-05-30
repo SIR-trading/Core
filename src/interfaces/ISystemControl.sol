@@ -2,8 +2,6 @@
 pragma solidity ^0.8.0;
 
 interface ISystemControl {
-    type SystemStatus is uint8;
-
     error ArraysLengthMismatch();
     error FeeCannotBeZero();
     error NewTaxesTooHigh();
@@ -18,7 +16,7 @@ interface ISystemControl {
     event NewLPFee(uint16 lpFee);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-    event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
+    event SystemStatusChanged(uint8 indexed oldStatus, uint8 indexed newStatus);
     event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
 
     function acceptOwnership() external;
@@ -35,7 +33,7 @@ interface ISystemControl {
     function setLPFee(uint16 lpFee_) external;
     function shutdownSystem() external;
     function sir() external view returns (address);
-    function systemStatus() external view returns (SystemStatus);
+    function systemStatus() external view returns (uint8);
     function timestampStatusChanged() external view returns (uint40);
     function transferOwnership(address newOwner) external;
     function updateVaultsIssuances(

@@ -136,7 +136,7 @@ contract AllocationsTest is Test {
     }
 
     // Check the allocations match
-    function test_allocationsMatch() public {
+    function test_allocationsMatch() public view {
         // Validate allocations
         for (uint256 i = 0; i < allContributors.length; i++) {
             address addr = allContributors[i];
