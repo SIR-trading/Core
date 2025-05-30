@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface Vault {
+interface IVault {
     struct FeeStructure {
         uint16 fee;
         uint16 feeNew;

@@ -443,7 +443,7 @@ contract Staker {
             }
 
             /** We check if the bid is at least 1% higher.
-                Null bids are not possible because 100*0 <= 101* auction.bid is always true.
+                Null bids are not possible because 100*0 <= 101*bid is always true.
              */
             if (100 * uint256(amount) <= 101 * uint256(auction.bid)) revert BidTooLow();
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface Oracle {
+interface IOracle {
     struct OracleState {
         int64 tickPriceX42;
         uint40 timeStampPrice;

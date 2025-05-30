@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-interface APE {
+interface IAPE {
     struct Fees {
         uint144 collateralInOrWithdrawn;
         uint144 collateralFeeToStakers;

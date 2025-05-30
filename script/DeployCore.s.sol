@@ -50,6 +50,7 @@ contract DeployCore is Script {
 
         // Deploy Contributors
         address contributors = address(new Contributors());
+        console.log("Contributors deployed at: ", contributors);
 
         // Deploy SIR
         address payable sir = payable(
