@@ -508,7 +508,7 @@ contract Vault is TEA {
                 if (isPowerZone) {
                     /*
                         PRICE IN POWER ZONE
-                        priceSat = price*(R/(lA))^(r-1)
+                        priceSat = price*[R/(lA)]^[(1/(ℓ-1)]
                      */
 
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
@@ -526,7 +526,7 @@ contract Vault is TEA {
                 } else {
                     /*
                         PRICE IN SATURATION ZONE
-                        priceSat = r*price*L/R
+                        priceSat = ℓ/(ℓ-1)*price*L/R
                      */
 
                     int256 tickRatioX42 = TickMathPrecision.getTickAtRatio(
