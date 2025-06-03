@@ -589,6 +589,8 @@ contract StakerTest is Auxiliary {
         }
     }
 
+    error NoDividends();
+
     function testFuzz_stakeTwiceAndGetDividends(
         User memory user1,
         User memory user2,
@@ -609,9 +611,11 @@ contract StakerTest is Auxiliary {
         assertEq(staker.unclaimedDividends(account1), 0);
         assertEq(staker.unclaimedDividends(account2), 0);
         vm.prank(account1);
-        assertEq(staker.claim(), 0);
+        vm.expectRevert(NoDividends.selector);
+        staker.claim();
         vm.prank(account2);
-        assertEq(staker.claim(), 0);
+        vm.expectRevert(NoDividends.selector);
+        staker.claim();
 
         // This triggers a payment of dividends
         if (
@@ -680,7 +684,12 @@ contract StakerTest is Auxiliary {
 
             // Claim dividends of account1
             vm.prank(account1);
-            assertApproxEqAbs(staker.claim(), dividends, maxError1, "Claimed dividends of account1 are incorrect");
+            if (dividends == 0) {
+                vm.expectRevert(NoDividends.selector);
+                staker.claim();
+            } else {
+                assertApproxEqAbs(staker.claim(), dividends, maxError1, "Claimed dividends of account1 are incorrect");
+            }
             assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0 after claim");
             assertApproxEqAbs(account1.balance, dividends, maxError1, "Balance of account1 is incorrect");
 
@@ -699,7 +708,12 @@ contract StakerTest is Auxiliary {
 
             // Claim dividends of account2
             vm.prank(account2);
-            assertApproxEqAbs(staker.claim(), dividends, maxError2, "Claimed dividends of account2 are incorrect");
+            if (dividends == 0) {
+                vm.expectRevert(NoDividends.selector);
+                staker.claim();
+            } else {
+                assertApproxEqAbs(staker.claim(), dividends, maxError2, "Claimed dividends of account2 are incorrect");
+            }
             assertEq(staker.unclaimedDividends(account1), 0, "Donations of account2 should be 0 after claim");
             assertApproxEqAbs(account2.balance, dividends, maxError2, "Balance of account2 is incorrect");
 
@@ -799,12 +813,18 @@ contract StakerTest is Auxiliary {
 
             // Claim dividends
             vm.prank(account);
-            assertApproxEqAbs(
-                staker.claim(),
-                donations.stakerDonationsWETH + donations.stakerDonationsETH,
-                maxError,
-                "Claimed dividends are incorrect"
-            );
+            if (donations.stakerDonationsWETH + donations.stakerDonationsETH == 0) {
+                vm.expectRevert(NoDividends.selector);
+                staker.claim();
+            } else {
+                assertApproxEqAbs(
+                    staker.claim(),
+                    donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                    maxError,
+                    "Claimed dividends are incorrect"
+                );
+            }
+
             assertEq(staker.unclaimedDividends(account), 0, "Donations should be 0 after claim");
             assertApproxEqAbs(
                 account.balance,
@@ -858,7 +878,29 @@ contract StakerTest is Auxiliary {
         vm.expectEmit();
         emit Transfer(STAKING_VAULT, account, unstakeAmount);
         vm.prank(account);
-        uint96 dividends_ = staker.unstakeAndClaim(unstakeAmount);
+
+        uint96 dividends_;
+        bool testAgain = false;
+        try staker.unstakeAndClaim(unstakeAmount) returns (uint96 dividends__) {
+            dividends_ = dividends__;
+        } catch {
+            // If it failed, check again it was due to a NoDividends error
+            testAgain = true;
+            dividends_ = 0;
+        }
+
+        if (testAgain) {
+            vm.prank(account);
+            vm.expectRevert(NoDividends.selector);
+            staker.unstakeAndClaim(unstakeAmount);
+
+            // And unstake
+            vm.prank(account);
+            vm.expectEmit();
+            emit Transfer(STAKING_VAULT, account, unstakeAmount);
+            staker.unstake(unstakeAmount);
+        }
+
         assertEq(staker.unclaimedDividends(account), 0);
 
         assertEq(staker.balanceOf(account), user.mintAmount - user.stakeAmount + unstakeAmount, "Wrong balance");

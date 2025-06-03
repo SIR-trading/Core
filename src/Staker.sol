@@ -24,6 +24,7 @@ contract Staker {
     error BidTooLow();
     error InvalidSigner();
     error PermitDeadlineExpired();
+    error NoDividends();
     error NotTheAuctionWinner();
     error InsufficientUnlockedStake();
     error TransferToZeroAddress();
@@ -366,6 +367,9 @@ contract Staker {
         unchecked {
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
             dividends_ = _dividends(balances[msg.sender], stakingParams_, _stakersParams[msg.sender]);
+
+            // Check user has enough ETH to claim
+            if (dividends_ == 0) revert NoDividends();
 
             // Null the unclaimed dividends
             balances[msg.sender].unclaimedETH = 0;

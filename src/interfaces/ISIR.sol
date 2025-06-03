@@ -11,6 +11,7 @@ interface ISIR {
     error NewAuctionCannotStartYet();
     error NoAuction();
     error NoAuctionLot();
+    error NoDividends();
     error NoFeesCollected();
     error NotTheAuctionWinner();
     error PRBMath_MulDiv_Overflow(uint256 x, uint256 y, uint256 denominator);
