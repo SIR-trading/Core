@@ -38,6 +38,8 @@ contract Staker {
     event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event DividendsClaimed(address indexed staker, uint96 amount);
+    event Staked(address indexed staker, uint80 amount);
+    event Unstaked(address indexed staker, uint80 amount);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -316,6 +318,7 @@ contract Staker {
             stakingParams.stake = stakingParams_.stake + amount;
 
             emit Transfer(msg.sender, STAKING_VAULT, amount);
+            emit Staked(msg.sender, amount);
         }
     }
 
@@ -351,6 +354,7 @@ contract Staker {
             stakingParams.stake = stakingParams_.stake - amount;
 
             emit Transfer(STAKING_VAULT, msg.sender, amount);
+            emit Unstaked(msg.sender, amount);
         }
     }
 

@@ -30,7 +30,9 @@ interface ISIR {
     event DividendsClaimed(address indexed staker, uint96 amount);
     event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
+    event Staked(address indexed staker, uint80 amount);
     event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Unstaked(address indexed staker, uint80 amount);
 
     receive() external payable;
 
