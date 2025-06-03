@@ -12,7 +12,6 @@ gas_limit = "18446744073709551615"
 evm_version = "cancun"
 
 [fuzz]
-# seed = "0x10"
 runs = 100
 
 [rpc_endpoints]

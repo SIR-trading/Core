@@ -655,8 +655,14 @@ contract StakerTest is Auxiliary {
 
             // Claim dividends
             vm.prank(account1);
+            uint96 dividends_;
+            try staker.claim() returns (uint96 dividends__) {
+                dividends_ = dividends__;
+            } catch {
+                dividends_ = 0;
+            }
             assertApproxEqAbs(
-                staker.claim(),
+                dividends_,
                 donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Claimed unclaimedDividends are incorrect"

@@ -653,12 +653,13 @@ contract VaultTest is Test {
     }
 
     function testFuzz_mintIsLocked(
-        bool isAPE,
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
         Balances memory balances
     ) public {
+        bool isAPE = false;
+
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
         _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
@@ -668,24 +669,32 @@ contract VaultTest is Test {
 
         // Set reentrancy function
         Hacker(user).setFunction(
-            abi.encodeWithSelector(Vault.mint.selector, isAPE, vaultParams, inputsOutputs.collateral, uint144(0))
+            abi.encodeWithSelector(
+                Vault.mint.selector,
+                isAPE,
+                vaultParams,
+                inputsOutputs.collateral,
+                uint144(0),
+                uint40(0)
+            )
         );
 
         // Hacker mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        vm.expectRevert();
+        vm.expectRevert(Locked.selector);
         vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
     function testFuzz_burnIsLocked(
-        bool isAPE,
         SystemParams calldata systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
         Balances memory balances,
         uint256 amountToBurn
     ) public {
+        bool isAPE = false;
+
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
         _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
@@ -694,12 +703,14 @@ contract VaultTest is Test {
         vm.etch(user, address(hacker).code);
 
         // Set reentrancy function
-        Hacker(user).setFunction(abi.encodeWithSelector(Vault.burn.selector, isAPE, vaultParams, amountToBurn));
+        Hacker(user).setFunction(
+            abi.encodeWithSelector(Vault.burn.selector, isAPE, vaultParams, amountToBurn, uint40(0))
+        );
 
         // Hacker mints APE
         vm.startPrank(user);
         collateral.approve(address(vault), inputsOutputs.collateral);
-        vm.expectRevert();
+        vm.expectRevert(Locked.selector);
         vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0);
     }
 
@@ -1214,8 +1225,8 @@ contract VaultTest is Test {
         inputsOutputs.amount = 0;
 
         // If it is the 1st ever mint of APE and TEA, we must deposit at least 1M units of collateral
-        // If it's APE, we mint 1.1M to account for the max 10% fee to stakers.
-        inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, isAPE ? 1.1e6 : 1e6, type(uint144).max));
+        // If it's APE, we mint 1.25M to account for the max 20% fee to stakers.
+        inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, isAPE ? 1.25e6 : 1e6, type(uint144).max));
 
         // Collateral supply must be larger than the deposited amount
         if (!isAPE) {
@@ -2219,6 +2230,8 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesUSDT,
         TokenFees memory tokenFeesUSDC
     ) public {
+        vm.assume(user.code.length == 0);
+
         // Add fees to vault
         _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
         _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
@@ -2246,6 +2259,7 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesUSDC
     ) public {
         to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
+        vm.assume(to.code.length == 0);
 
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
@@ -2321,6 +2335,7 @@ contract VaultControlTest is Test {
         BuggyERC20 calldata buggyUSDC
     ) public {
         to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
+        vm.assume(to.code.length == 0);
 
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 

@@ -6,7 +6,9 @@ import {SirStructs} from "../libraries/SirStructs.sol";
 interface IVault {
     error AmountTooLow();
     error DeadlineExceeded();
+    error ExcessiveDeposit();
     error InsufficientCollateralReceivedFromUniswap();
+    error InsufficientDeposit();
     error LengthMismatch();
     error LeverageTierOutOfRange();
     error Locked();

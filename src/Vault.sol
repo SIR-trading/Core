@@ -56,6 +56,8 @@ import {TEA} from "./TEA.sol";
 contract Vault is TEA {
     error AmountTooLow();
     error InsufficientCollateralReceivedFromUniswap();
+    error InsufficientDeposit();
+    error ExcessiveDeposit();
     error Locked();
     error NotAWETHVault();
     error DeadlineExceeded();
@@ -192,7 +194,7 @@ contract Vault is TEA {
             // Minter deposited collateral
 
             // Check amount does not exceed max
-            require(amountToDeposit <= type(uint144).max);
+            if (amountToDeposit > type(uint144).max) revert ExcessiveDeposit();
 
             // Rest of the mint logic
             amount = _mint(msg.sender, ape, vaultParams, uint144(amountToDeposit), vaultState, reserves);
@@ -215,7 +217,7 @@ contract Vault is TEA {
             }
 
             // Check amount does not exceed max
-            require(amountToDeposit <= uint256(type(int256).max));
+            if (amountToDeposit > uint256(type(int256).max)) revert ExcessiveDeposit();
 
             // Encode data for swap callback
             bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
@@ -283,7 +285,7 @@ contract Vault is TEA {
         }
 
         // Rest of the mint logic
-        require(collateralToDeposit <= type(uint144).max);
+        if (collateralToDeposit > type(uint144).max) revert ExcessiveDeposit();
         uint256 amount = _mint(minter, ape, vaultParams, uint144(collateralToDeposit), vaultState, reserves);
 
         // Transfer debt token to the pool
@@ -315,6 +317,7 @@ contract Vault is TEA {
         require(!systemParams_.mintingStopped);
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
+
         SirStructs.Fees memory fees;
         bool isAPE = ape != address(0);
         if (isAPE) {
@@ -467,7 +470,7 @@ contract Vault is TEA {
                 We enforce that the reserve must be at least 10^6 to avoid division by zero, and
                 to mitigate inflation attacks.
              */
-            require(vaultState.reserve >= 1e6);
+            if (vaultState.reserve < 1e6) revert InsufficientDeposit();
 
             // Compute tickPriceSatX42
             if (reserves.reserveApes == 0) {

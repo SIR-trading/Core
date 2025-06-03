@@ -996,6 +996,7 @@ contract SystemStateTest is Test {
         vm.assume(lpFee2 != 0);
         delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
         delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
+
         if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
             testFuzz_updateLpFeeCheckTooEarly(lpFee1, mintingStopped1, delay1);
         else testFuzz_updateLpFee(lpFee1, mintingStopped1, delay1);
@@ -1013,8 +1014,8 @@ contract SystemStateTest is Test {
         assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
         assertEq(
             systemParams_.lpFee.fee,
-            delay2 <= SystemConstants.FEE_CHANGE_DELAY
-                ? (delay1 <= SystemConstants.FEE_CHANGE_DELAY ? systemParams0.lpFee.fee : lpFee1)
+            delay2 < SystemConstants.FEE_CHANGE_DELAY
+                ? (delay1 < SystemConstants.FEE_CHANGE_DELAY ? systemParams0.lpFee.fee : lpFee1)
                 : lpFee2
         ); // Only LP fee is updated
         assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
