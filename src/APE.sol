@@ -19,6 +19,7 @@ import {Vault} from "./Vault.sol";
 contract APE is Clone {
     error PermitDeadlineExpired();
     error InvalidSigner();
+    error TransferToZeroAddress();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -118,6 +119,8 @@ contract APE is Clone {
      * @notice Transfers `amount` tokens to `to`.
      */
     function transfer(address to, uint256 amount) external returns (bool) {
+        if (to == address(0)) revert TransferToZeroAddress();
+
         balanceOf[msg.sender] -= amount;
 
         // Cannot overflow because the sum of all user
@@ -135,6 +138,8 @@ contract APE is Clone {
      * @notice Transfers `amount` tokens from `from` to `to`.
      */
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        if (to == address(0)) revert TransferToZeroAddress();
+
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
 
         if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;

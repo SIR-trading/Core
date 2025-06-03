@@ -26,6 +26,7 @@ contract Staker {
     error PermitDeadlineExpired();
     error NotTheAuctionWinner();
     error InsufficientUnlockedStake();
+    error TransferToZeroAddress();
 
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event AuctionedTokensSentToWinner(
@@ -179,6 +180,7 @@ contract Staker {
      */
     function transfer(address to, uint256 amount) public returns (bool) {
         unchecked {
+            if (to == address(0)) revert TransferToZeroAddress();
             if (to == STAKING_VAULT) revert TransferToStakingVaultNotPermitted();
 
             uint80 balance = balances[msg.sender].balanceOfSIR;
@@ -201,6 +203,7 @@ contract Staker {
      * @param amount The amount of tokens to transfer.
      */
     function transferFrom(address from, address to, uint256 amount) public returns (bool) {
+        if (to == address(0)) revert TransferToZeroAddress();
         if (to == STAKING_VAULT) revert TransferToStakingVaultNotPermitted();
 
         uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.

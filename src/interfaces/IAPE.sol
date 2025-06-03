@@ -16,6 +16,7 @@ interface IAPE {
 
     error InvalidSigner();
     error PermitDeadlineExpired();
+    error TransferToZeroAddress();
 
     event Approval(address indexed owner, address indexed spender, uint256 amount);
     event Transfer(address indexed from, address indexed to, uint256 amount);

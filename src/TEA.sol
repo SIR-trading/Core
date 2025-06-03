@@ -23,6 +23,7 @@ contract TEA is SystemState {
     error NotAuthorized();
     error LengthMismatch();
     error UnsafeRecipient();
+    error TransferToZeroAddress();
 
     event TransferSingle(
         address indexed operator,
@@ -156,6 +157,7 @@ contract TEA is SystemState {
      */
     function safeTransferFrom(address from, address to, uint256 vaultId, uint256 amount, bytes calldata data) external {
         assert(from != address(this));
+        if (to == address(0)) revert TransferToZeroAddress();
         if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
         // Update balances
@@ -188,6 +190,7 @@ contract TEA is SystemState {
     ) external {
         unchecked {
             assert(from != address(this));
+            if (to == address(0)) revert TransferToZeroAddress();
             if (vaultIds.length != amounts.length) revert LengthMismatch();
             if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 

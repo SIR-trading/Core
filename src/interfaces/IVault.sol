@@ -14,6 +14,7 @@ interface IVault {
     error NotAuthorized();
     error StringsInsufficientHexLength(uint256 value, uint256 length);
     error TEAMaxSupplyExceeded();
+    error TransferToZeroAddress();
     error UnsafeRecipient();
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();

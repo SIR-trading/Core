@@ -16,6 +16,7 @@ interface ISIR {
     error PRBMath_MulDiv_Overflow(uint256 x, uint256 y, uint256 denominator);
     error PermitDeadlineExpired();
     error TransferToStakingVaultNotPermitted();
+    error TransferToZeroAddress();
 
     event Approval(address indexed owner, address indexed spender, uint256 amount);
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
