@@ -19,7 +19,6 @@ import {SirStructs} from "./libraries/SirStructs.sol";
 contract Oracle {
     error NoUniswapPool();
     error UniswapFeeTierIndexOutOfBounds();
-    error OracleAlreadyInitialized();
     error OracleNotInitialized();
 
     event UniswapFeeTierAdded(uint24 fee);

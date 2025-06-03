@@ -5,7 +5,6 @@ import {SirStructs} from "../libraries/SirStructs.sol";
 
 interface IOracle {
     error NoUniswapPool();
-    error OracleAlreadyInitialized();
     error OracleNotInitialized();
     error UniswapFeeTierIndexOutOfBounds();
 
