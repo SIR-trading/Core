@@ -52,7 +52,7 @@ contract FeesTest is Test {
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
         assertEq(
             fees.collateralFeeToStakers,
-            (uint256(totalFee) * tax) / (uint256(5) * type(uint8).max),
+            (uint256(totalFee) * tax) / (uint256(2) * type(uint8).max),
             "Stakers fee incorrect"
         );
         assertEq(fees.collateralFeeToLPers, totalFee - fees.collateralFeeToStakers, "LPers fee incorrect");
@@ -69,7 +69,7 @@ contract FeesTest is Test {
         uint256 totalFee = uint256(fees.collateralFeeToStakers) + fees.collateralFeeToLPers;
         assertEq(fees.collateralInOrWithdrawn + totalFee, collateralDepositedOrOut, "wrong collateral + fee");
 
-        assertEq(fees.collateralFeeToStakers, (totalFee * 20) / 100, "Max fee to stakers is not 20%");
+        assertEq(fees.collateralFeeToStakers, (totalFee * 50) / 100, "Max fee to stakers is not 50%");
     }
 
     function testFuzz_feeMintTEA(uint144 collateralDeposited, uint16 lpFee) public pure {

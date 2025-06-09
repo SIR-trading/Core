@@ -10,7 +10,7 @@ import {SirStructs} from "./SirStructs.sol";
 library Fees {
     /**
      *  @notice APES pay a fee to the LPers when they mint/burn APE
-     *  @notice If a non-zero tax is set for the vault, up to a maximum of 20% of the fee is sent to SIR stakers.
+     *  @notice If a non-zero tax is set for the vault, up to a maximum of 50% of the fee is sent to SIR stakers.
      *  @param collateralDepositedOrOut Amount of collateral deposited or taken out by the apes
      *  @param baseFee Base fee in basis points per unit of liquidity
      *  @param leverageTier Tier of the vault
@@ -38,8 +38,8 @@ library Fees {
             fees.collateralInOrWithdrawn = uint144((uint256(collateralDepositedOrOut) * feeNum) / feeDen);
             uint256 totalFees = collateralDepositedOrOut - fees.collateralInOrWithdrawn;
 
-            // Depending on the tax, between 0 and 20% of the fee is for SIR stakers
-            fees.collateralFeeToStakers = uint144((totalFees * tax) / (5 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
+            // Depending on the tax, between 0 and 50% of the fee is for SIR stakers
+            fees.collateralFeeToStakers = uint144((totalFees * tax) / (2 * uint256(type(uint8).max))); // Cannot overflow cuz fee is uint144 and tax is uint8
 
             // The rest is sent to the gentlemen, if there are none, then it is POL
             fees.collateralFeeToLPers = uint144(totalFees) - fees.collateralFeeToStakers;
