@@ -25,16 +25,25 @@
     {
         "address": "0xb9839FD6E4110575d01d47866dd4d1c3946bf29f",
         "allocationInBasisPoints": 0,
-        "allocationInBillionParts": 13611
+        "allocationInBillionParts": 13611,
+        "name": "presale-1"
     },
     {
         "address": "0x8D2a097607da5E2E3d599c72EC50FD0704a4D37f",
         "allocationInBasisPoints": 1,
-        "allocationInBillionParts": 59444
+        "allocationInBillionParts": 59444,
+        "name": "presale-2"
     },
     {
         "address": "0x0D5f69C67DAE06ce606246A8bd88B552d1DdE140",
         "allocationInBasisPoints": 0,
-        "allocationInBillionParts": 41666
+        "allocationInBillionParts": 41666,
+        "name": "presale-3"
+    },
+    {
+        "address": "0x03eAB50f733c4DbeaE6B120755776eE7c931243C",
+        "allocationInBasisPoints": 15,
+        "allocationInBillionParts": 1500000,
+        "name": "Guild"
     }
 ]
