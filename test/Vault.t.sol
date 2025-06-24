@@ -2142,6 +2142,8 @@ contract VaultControlTest is Test {
     }
 
     function testFuzz_withdrawFeesFailsCuzNotSIR(address user, TokenFees memory tokenFees) public {
+        vm.assume(user != sir);
+
         // Add fees to vault
         _setFees(Addresses.ADDR_WETH, tokenFees);
 
@@ -2230,6 +2232,7 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesUSDT,
         TokenFees memory tokenFeesUSDC
     ) public {
+        vm.assume(user != systemControl);
         vm.assume(user.code.length == 0);
 
         // Add fees to vault
