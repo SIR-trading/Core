@@ -80,7 +80,27 @@ contract Vault is TEA {
     error DeadlineExceeded();
 
     /// @dev This event is meant to make it easier to retrieve the prices of APE and TEA.
-    event ReservesChanged(uint48 indexed vaultId, bool isAPE, bool isMint, uint144 reserveLPers, uint144 reserveApes);
+    event ReservesChanged(uint48 indexed vaultId, uint144 reserveLPers, uint144 reserveApes);
+
+    event Mint(
+        uint48 indexed vaultId,
+        address indexed minter,
+        bool isAPE,
+        uint144 collateralIn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers,
+        uint256 tokenOut
+    );
+
+    event Burn(
+        uint48 indexed vaultId,
+        address indexed burner,
+        bool isAPE,
+        uint256 tokenIn,
+        uint144 collateralWithdrawn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers
+    );
 
     /// @dev The Oracle contract used for getting the price of collateral vs. debt token.
     Oracle public immutable ORACLE;
@@ -371,8 +391,17 @@ contract Vault is TEA {
         // Update total reserves
         totalReserves[vaultParams.collateralToken] += collateralToDeposit - fees.collateralFeeToStakers;
 
-        // Emit event
-        emit ReservesChanged(vaultState.vaultId, isAPE, true, reserves.reserveLPers, reserves.reserveApes);
+        // Emit events
+        emit ReservesChanged(vaultState.vaultId, reserves.reserveLPers, reserves.reserveApes);
+        emit Mint(
+            vaultState.vaultId,
+            minter,
+            isAPE,
+            fees.collateralInOrWithdrawn,
+            fees.collateralFeeToStakers,
+            fees.collateralFeeToLPers,
+            amount
+        );
 
         /*  
             Check if recipient is enabled for receiving TEA.
@@ -437,8 +466,17 @@ contract Vault is TEA {
             totalReserves[vaultParams.collateralToken] -= fees.collateralInOrWithdrawn + fees.collateralFeeToStakers;
         }
 
-        // Emit event
-        emit ReservesChanged(vaultState.vaultId, isAPE, false, reserves.reserveLPers, reserves.reserveApes);
+        // Emit events
+        emit ReservesChanged(vaultState.vaultId, reserves.reserveLPers, reserves.reserveApes);
+        emit Burn(
+            vaultState.vaultId,
+            msg.sender,
+            isAPE,
+            amount,
+            fees.collateralInOrWithdrawn,
+            fees.collateralFeeToStakers,
+            fees.collateralFeeToLPers
+        );
 
         // Send collateral to the user
         TransferHelper.safeTransfer(vaultParams.collateralToken, msg.sender, fees.collateralInOrWithdrawn);
