@@ -9,7 +9,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SIR} from "src/SIR.sol";
 
 /** @dev cli for local testnet:  forge script script/CollectWethFees.s.sol --rpc-url tarp_testnet --broadcast --legacy
-    @dev cli for Sepolia:        forge script script/CollectWethFees.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
+    @dev cli for Sepolia:        forge script script/CollectWethFees.s.sol --rpc-url sepolia --chain sepolia --broadcast
 */
 contract CollectWethFees is Script {
     uint256 privateKey;

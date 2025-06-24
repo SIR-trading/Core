@@ -34,8 +34,8 @@ contract InitializeVault is Script {
 
         vault.initialize(
             block.chainid == 1
-                ? SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, -1)
-                : SirStructs.VaultParameters(AddressesSepolia.ADDR_USDC, AddressesSepolia.ADDR_WETH, -1)
+                ? SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2)
+                : SirStructs.VaultParameters(AddressesSepolia.ADDR_USDC, AddressesSepolia.ADDR_WETH, 2)
         );
 
         vm.stopBroadcast();
