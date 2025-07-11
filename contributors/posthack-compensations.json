@@ -645,7 +645,7 @@
             "allocationInBillionParts": 702084
         },
         {
-            "address": "0xa1a841D79758Bd4b06c9206e97343dFeBcBE200b",
+            "address": "0x193AD6d624678b11Bec0C5cFD5723A34725A8433",
             "isContract": false,
             "sir_balance": "0",
             "sir_liquidity_mining": "0",
@@ -733,8 +733,8 @@
             "usdt_sir": "0",
             "SIR_ENTITLED": "151,125,000,000,000,359,688",
             "allocationOld": 250,
-            "allocationInBasisPoints": 250,
-            "allocationInBillionParts": 25000000
+            "allocationInBasisPoints": 200,
+            "allocationInBillionParts": 20000000
         },
         {
             "address": "0xdF58360e945F6a302FFFB012D114C9e2bE2F212a",

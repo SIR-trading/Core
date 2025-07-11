@@ -152,6 +152,177 @@ contract AllocationsTest is Test {
     }
 }
 
+contract ImportantAllocationsTest is Test {
+    uint256 public constant YEAR_ISSUANCE = 2_015_000_000 * 10 ** (SystemConstants.SIR_DECIMALS); // 2,015 M SIR per year
+    SIR public sir;
+
+    function setUp() public {
+        // Deploy oracle
+        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+
+        // Deploy SystemControl
+        address systemControl = address(new SystemControl());
+
+        // Deploy Contributors
+        address contributors = address(new Contributors());
+
+        // Deploy SIR
+        sir = new SIR(contributors, Addresses.ADDR_WETH, systemControl);
+
+        // Deploy APE implementation
+        address apeImplementation = address(new APE());
+
+        // Deploy Vault
+        address vault = address(new Vault(systemControl, address(sir), oracle, apeImplementation, Addresses.ADDR_WETH));
+
+        // Initialize SIR
+        sir.initialize(vault);
+    }
+
+    function test_allocationXatarrer() public {
+        address contributor = 0x193AD6d624678b11Bec0C5cFD5723A34725A8433;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 800, 1);
+    }
+
+    function test_allocationMrLivingstream() public {
+        address contributor = 0xC58D3aE892A104D663B01194f2EE325CfB5187f2;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 70, 1);
+    }
+
+    function test_allocationRedTiger() public {
+        address contributor = 0x0f1b084c7aAf82bB5ad3DE9A1222ecC805b28f85;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 60, 1);
+    }
+
+    function test_allocationTarp() public {
+        address contributor = 0xd11f322ad85730Eab11ef61eE9100feE84b63739;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 200, 1);
+    }
+
+    function test_allocationAbstrucked() public {
+        address contributor = 0x0e52b591Cbc9AB81c806F303DE8d9a3B0Dc4ea5C;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 100, 1);
+    }
+
+    function test_allocationJames() public {
+        address contributor = 0xE24d295154c2D78A7A860E809D57598E551813Bd;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 40, 1);
+    }
+
+    function test_allocationSyzygy() public {
+        address contributor = 0xaC4Cb8282d291a74e8C881620E3AFaF6dE98d6aE;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 30, 1);
+    }
+
+    function test_allocationGuild() public {
+        address contributor = 0x03eAB50f733c4DbeaE6B120755776eE7c931243C;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 15, 1);
+    }
+
+    function test_allocation0xAlix2() public {
+        address contributor = 0xe52a4EaeA658AB94437165CacA01a37A64c0f18e;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 60, 1);
+    }
+
+    function test_allocationDefiCollective() public {
+        address contributor = 0x6665E62eF6F6Db29D5F8191fBAC472222C2cc80F;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 130, 1);
+    }
+
+    function test_allocationWhale() public {
+        address contributor = 0x7F1CA9Fe9C3728f5c632e5564b2BfF5585BE1748;
+
+        // Skip 5 year
+        skip(5 * 365 days);
+
+        // Claim SIR
+        uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
+
+        // Allow for 1 basis point error difference
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 536, 1);
+    }
+}
+
 interface ITreasuryV1 {
     function relayCall(address to, bytes memory data) external returns (bytes memory);
 }
