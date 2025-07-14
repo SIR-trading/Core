@@ -733,8 +733,8 @@
             "usdt_sir": "0",
             "SIR_ENTITLED": "151,125,000,000,000,359,688",
             "allocationOld": 250,
-            "allocationInBasisPoints": 200,
-            "allocationInBillionParts": 20000000
+            "allocationInBasisPoints": 190,
+            "allocationInBillionParts": 19000000
         },
         {
             "address": "0xdF58360e945F6a302FFFB012D114C9e2bE2F212a",
