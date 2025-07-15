@@ -36,6 +36,18 @@ contract StartLiquidityMining is Script {
             newTaxes[0] = 228;
             newTaxes[1] = 114;
             systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
+        } else {
+            uint48[] memory oldVaults = new uint48[](2);
+            oldVaults[0] = 1;
+            oldVaults[1] = 2;
+
+            uint48[] memory newVaults = new uint48[](2);
+            uint8[] memory newTaxes = new uint8[](2);
+            newVaults[0] = 1;
+            newVaults[1] = 3;
+            newTaxes[0] = 228;
+            newTaxes[1] = 114;
+            systemControl.updateVaultsIssuances(oldVaults, newVaults, newTaxes);
         }
 
         vm.stopBroadcast();

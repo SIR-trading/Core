@@ -1,0 +1,275 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "forge-std/Script.sol";
+import "forge-std/console.sol";
+import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
+import {Addresses} from "src/libraries/Addresses.sol";
+import {Create2} from "openzeppelin-contracts/contracts/utils/Create2.sol";
+
+contract MineSalts is Script {
+    address constant DEPLOYER_ADDRESS = 0x4e59b44847b379578588920ca78fbf26c0b4956c;
+    uint256 constant MAX_ITERATIONS = 100_000_000;
+    uint256 constant DESIRED_PREFIX = 0x5120; // Desired prefix for the deployed addresses (0x512000)
+
+    /// @dev Desired prefix for the deployed addresses (0x512000)
+    uint256 numNibbles = countNonZeroHexDigits(DESIRED_PREFIX);
+    uint256 desired_prefix_max = type(uint256).max << (160 - numNibbles * 4);
+    uint256 desired_prefix_value = DESIRED_PREFIX << (160 - numNibbles * 4);
+
+    // Store mined salts and predicted addresses
+    struct ContractInfo {
+        bytes32 salt;
+        address predictedAddress;
+    }
+
+    // Constructor parameters for each contract
+    struct OracleParams {
+        address factory;
+    }
+
+    struct SIRParams {
+        address contributors;
+        address weth;
+        address systemControl;
+    }
+
+    struct VaultParams {
+        address systemControl;
+        address sir;
+        address oracle;
+        address apeImplementation;
+        address weth;
+    }
+
+    function run() public {
+        console.log("Starting salt mining for CREATE2 deployments...");
+        console.log("Deployer:", DEPLOYER_ADDRESS);
+        console.log("Max iterations per contract:", MAX_ITERATIONS);
+        console.log(string.concat("Target prefix: 0x", vm.toString(bytes32(DESIRED_PREFIX))));
+
+        // Mine salts for all contracts in deployment order
+        console.log("\nMining salts for all contracts...");
+
+        // 1. Mine salt for Oracle
+        ContractInfo memory oracle = mineOracleSalt();
+        console.log("Oracle - Salt:", vm.toString(oracle.salt), "Address:", oracle.predictedAddress);
+
+        // 2. Mine salt for SystemControl (no constructor params)
+        ContractInfo memory systemControl = mineSystemControlSalt();
+        console.log(
+            "SystemControl - Salt:",
+            vm.toString(systemControl.salt),
+            "Address:",
+            systemControl.predictedAddress
+        );
+
+        // 3. Mine salt for Contributors (no constructor params)
+        ContractInfo memory contributors = mineContributorsSalt();
+        console.log("Contributors - Salt:", vm.toString(contributors.salt), "Address:", contributors.predictedAddress);
+
+        // 4. Mine salt for SIR (uses Contributors, WETH, SystemControl)
+        ContractInfo memory sir = mineSIRSalt(contributors.predictedAddress, systemControl.predictedAddress);
+        console.log("SIR - Salt:", vm.toString(sir.salt), "Address:", sir.predictedAddress);
+
+        // 5. Mine salt for APE (no constructor params)
+        ContractInfo memory ape = mineAPESalt();
+        console.log("APE - Salt:", vm.toString(ape.salt), "Address:", ape.predictedAddress);
+
+        // 6. Mine salt for Vault (uses all previous contracts)
+        ContractInfo memory vault = mineVaultSalt(
+            systemControl.predictedAddress,
+            sir.predictedAddress,
+            oracle.predictedAddress,
+            ape.predictedAddress
+        );
+        console.log("Vault - Salt:", vm.toString(vault.salt), "Address:", vault.predictedAddress);
+
+        // Print summary
+
+        console.log("\n\n MINING RESULTS SUMMARY");
+        console.log("\nOracle      :", oracle.predictedAddress);
+        console.log("SystemControl:", systemControl.predictedAddress);
+        console.log("Contributors :", contributors.predictedAddress);
+        console.log("SIR         :", sir.predictedAddress);
+        console.log("APE         :", ape.predictedAddress);
+        console.log("Vault       :", vault.predictedAddress);
+
+        // Generate Solidity constants
+        console.log("\n SOLIDITY CONSTANTS:");
+        console.log("// Add these constants to your deployment script:");
+        console.log("bytes32 constant ORACLE_SALT =", vm.toString(oracle.salt), ";");
+        console.log("bytes32 constant SYSTEM_CONTROL_SALT =", vm.toString(systemControl.salt), ";");
+        console.log("bytes32 constant CONTRIBUTORS_SALT =", vm.toString(contributors.salt), ";");
+        console.log("bytes32 constant SIR_SALT =", vm.toString(sir.salt), ";");
+        console.log("bytes32 constant APE_SALT =", vm.toString(ape.salt), ";");
+        console.log("bytes32 constant VAULT_SALT =", vm.toString(vault.salt), ";");
+    }
+
+    function mineOracleSalt() internal returns (ContractInfo memory) {
+        console.log("\n--- Mining salt for Oracle ---");
+        OracleParams memory params = OracleParams({
+            factory: block.chainid == 1 ? Addresses.ADDR_UNISWAPV3_FACTORY : AddressesSepolia.ADDR_UNISWAPV3_FACTORY
+        });
+
+        bytes memory creationCode = vm.getCode("Oracle.sol:Oracle");
+        bytes memory constructorArgs = abi.encode(params.factory);
+        bytes memory initCode = abi.encodePacked(creationCode, constructorArgs);
+        bytes32 initCodeHash = keccak256(initCode);
+
+        bytes32 salt = mineSaltWithInitCodeHash(initCodeHash, "Oracle");
+        address predictedAddress = computeCreate2AddressWithHash(DEPLOYER_ADDRESS, salt, initCodeHash);
+
+        return ContractInfo({salt: salt, predictedAddress: predictedAddress});
+    }
+
+    function mineSystemControlSalt() internal returns (ContractInfo memory) {
+        console.log("\n--- Mining salt for SystemControl ---");
+
+        bytes memory creationCode = vm.getCode("SystemControl.sol:SystemControl");
+        bytes32 initCodeHash = keccak256(creationCode);
+
+        bytes32 salt = mineSaltWithInitCodeHash(initCodeHash, "SystemControl");
+        address predictedAddress = computeCreate2AddressWithHash(DEPLOYER_ADDRESS, salt, initCodeHash);
+
+        return ContractInfo({salt: salt, predictedAddress: predictedAddress});
+    }
+
+    function mineContributorsSalt() internal returns (ContractInfo memory) {
+        console.log("\n--- Mining salt for Contributors ---");
+
+        bytes memory creationCode = vm.getCode("Contributors.sol:Contributors");
+        bytes32 initCodeHash = keccak256(creationCode);
+
+        bytes32 salt = mineSaltWithInitCodeHash(initCodeHash, "Contributors");
+        address predictedAddress = computeCreate2AddressWithHash(DEPLOYER_ADDRESS, salt, initCodeHash);
+
+        return ContractInfo({salt: salt, predictedAddress: predictedAddress});
+    }
+
+    function mineSIRSalt(address contributors, address systemControl) internal returns (ContractInfo memory) {
+        console.log("\n--- Mining salt for SIR ---");
+        SIRParams memory params = SIRParams({
+            contributors: contributors,
+            weth: block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH,
+            systemControl: systemControl
+        });
+
+        bytes memory creationCode = vm.getCode("SIR.sol:SIR");
+        bytes memory constructorArgs = abi.encode(params.contributors, params.weth, params.systemControl);
+        bytes memory initCode = abi.encodePacked(creationCode, constructorArgs);
+        bytes32 initCodeHash = keccak256(initCode);
+
+        bytes32 salt = mineSaltWithInitCodeHash(initCodeHash, "SIR");
+        address predictedAddress = computeCreate2AddressWithHash(DEPLOYER_ADDRESS, salt, initCodeHash);
+
+        return ContractInfo({salt: salt, predictedAddress: predictedAddress});
+    }
+
+    function mineAPESalt() internal returns (ContractInfo memory) {
+        console.log("\n--- Mining salt for APE ---");
+
+        bytes memory creationCode = vm.getCode("APE.sol:APE");
+        bytes32 initCodeHash = keccak256(creationCode);
+
+        bytes32 salt = mineSaltWithInitCodeHash(initCodeHash, "APE");
+        address predictedAddress = computeCreate2AddressWithHash(DEPLOYER_ADDRESS, salt, initCodeHash);
+
+        return ContractInfo({salt: salt, predictedAddress: predictedAddress});
+    }
+
+    function mineVaultSalt(
+        address systemControl,
+        address sir,
+        address oracle,
+        address apeImplementation
+    ) internal returns (ContractInfo memory) {
+        console.log("\n--- Mining salt for Vault ---");
+        VaultParams memory params = VaultParams({
+            systemControl: systemControl,
+            sir: sir,
+            oracle: oracle,
+            apeImplementation: apeImplementation,
+            weth: block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH
+        });
+
+        bytes memory creationCode = vm.getCode("Vault.sol:Vault");
+        bytes memory constructorArgs = abi.encode(
+            params.systemControl,
+            params.sir,
+            params.oracle,
+            params.apeImplementation,
+            params.weth
+        );
+        bytes memory initCode = abi.encodePacked(creationCode, constructorArgs);
+        bytes32 initCodeHash = keccak256(initCode);
+
+        bytes32 salt = mineSaltWithInitCodeHash(initCodeHash, "Vault");
+        address predictedAddress = computeCreate2AddressWithHash(DEPLOYER_ADDRESS, salt, initCodeHash);
+
+        return ContractInfo({salt: salt, predictedAddress: predictedAddress});
+    }
+
+    function mineSaltWithInitCodeHash(bytes32 initCodeHash, string memory contractName) internal returns (bytes32) {
+        console.log("Init code hash:", vm.toString(initCodeHash));
+
+        // Start with a random initial salt value
+        uint256 baseSalt = uint256(
+            keccak256(abi.encodePacked(contractName, block.timestamp, block.prevrandao, block.number))
+        );
+
+        // Memory leak prevention - store initial free memory pointer
+        bytes32 free_mem;
+        assembly ("memory-safe") {
+            free_mem := mload(0x40)
+        }
+
+        for (uint256 i = 0; i < MAX_ITERATIONS; i++) {
+            // Reset memory pointer to prevent memory leak
+            assembly ("memory-safe") {
+                mstore(0x40, free_mem)
+            }
+
+            // increment from the random starting point
+            bytes32 salt = bytes32(baseSalt + i);
+
+            // compute the prospective CREATE2 address
+            address predicted = Create2.computeAddress(salt, initCodeHash, DEPLOYER_ADDRESS);
+
+            // check prefix using bitwise operations (no memory allocation)
+            if ((uint256(uint160(predicted)) & desired_prefix_max) == desired_prefix_value) {
+                console.log("Found matching address after", i + 1, "iterations");
+                return salt;
+            }
+
+            if (i % 100000 == 0 && i > 0) {
+                console.log("   Attempted", i, "iterations...");
+            }
+        }
+
+        console.log(" Could not find salt after", MAX_ITERATIONS, "attempts");
+        return bytes32(0);
+    }
+
+    function computeCreate2AddressWithHash(
+        address deployer,
+        bytes32 salt,
+        bytes32 initCodeHash
+    ) internal pure returns (address) {
+        return Create2.computeAddress(salt, initCodeHash, deployer);
+    }
+
+    function countNonZeroHexDigits(uint256 value) public pure returns (uint256 count) {
+        // if value is zero, it has no non‑zero digits
+        while (value != 0) {
+            // extract lowest nibble (4 bits)
+            uint256 nibble = value & 0xF;
+            // if not zero, increment
+            if (nibble != 0) {
+                count++;
+            }
+            // shift down one hex digit
+            value >>= 4;
+        }
+    }
+}

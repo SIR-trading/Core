@@ -1,0 +1,213 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import "forge-std/Script.sol";
+import {Create2} from "openzeppelin-contracts/contracts/utils/Create2.sol";
+
+import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
+import {Oracle} from "src/Oracle.sol";
+import {SystemControl} from "src/SystemControl.sol";
+import {Contributors} from "src/Contributors.sol";
+import {SIR} from "src/SIR.sol";
+import {Vault} from "src/Vault.sol";
+import {APE} from "src/APE.sol";
+
+/** @dev cli for Sepolia:        forge script script/DeployWithCreate2.s.sol --rpc-url sepolia --chain sepolia --broadcast
+    @dev cli for mainnet:        forge script script/DeployWithCreate2.s.sol --rpc-url mainnet --chain 1 --broadcast --verify --slow --etherscan-api-key YOUR_KEY --ledger --hd-paths PATHS
+    @dev Mine salts first:       node script/mineSalts.js
+    @dev Steps:
+        1. Deploy Oracle.sol using CREATE2
+        2. Deploy SystemControl.sol using CREATE2
+        3. Deploy Contributors.sol using CREATE2
+        4. Deploy SIR.sol using CREATE2 with addresses of Contributors, WETH, and SystemControl
+        5. Deploy APE.sol implementation using CREATE2
+        6. Deploy Vault.sol using CREATE2 with addresses of SystemControl, SIR, Oracle, APE, and WETH
+        7. Initialize SIR.sol with address of Vault.sol
+        8. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
+*/
+contract DeployCoreWithCreate2 is Script {
+    uint256 deployerPrivateKey;
+
+    // Pre-mined salts for CREATE2 deployment
+    // These should be generated using the mineSalts.js script
+    // Update these values after running the salt mining script
+    bytes32 constant ORACLE_SALT = 0xc46189f8870d9c173394d6a57ca73102b837718cfb5dc0a53db521cbebb92d5a;
+    bytes32 constant SYSTEM_CONTROL_SALT = 0x0000000000000000000000000000000000000000000000000000000000000002;
+    bytes32 constant CONTRIBUTORS_SALT = 0x8613afee9b5adbbefc131ab3187af1496ff57071b7c7d521e5fc0055d3390976;
+    bytes32 constant SIR_SALT = 0x9f8e84e9d088da57c9281c2a3b8837b8ac1434d0d0fdff5318a404f26ccac36c;
+    bytes32 constant APE_SALT = 0x0000000000000000000000000000000000000000000000000000000000000005;
+    bytes32 constant VAULT_SALT = 0x0000000000000000000000000000000000000000000000000000000000000006;
+
+    function setUp() public {
+        if (block.chainid == 11155111) {
+            deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        } else if (block.chainid != 1) {
+            revert("Network not supported");
+        }
+    }
+
+    function run() public {
+        if (block.chainid == 1) vm.startBroadcast();
+        else vm.startBroadcast(deployerPrivateKey);
+
+        console.log("Deploying contracts using CREATE2...");
+        console.log("Deployer address:", msg.sender);
+
+        _deployContracts();
+        _printSaltSummary();
+
+        vm.stopBroadcast();
+    }
+
+    function _deployContracts() internal {
+        // Get network-specific addresses
+        address wethAddress = block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH;
+        address uniswapFactory = block.chainid == 1
+            ? Addresses.ADDR_UNISWAPV3_FACTORY
+            : AddressesSepolia.ADDR_UNISWAPV3_FACTORY;
+
+        // Deploy and verify Oracle
+        address oracle = _deployOracle(uniswapFactory);
+
+        // Deploy and verify SystemControl
+        address systemControl = _deploySystemControl();
+
+        // Deploy and verify Contributors
+        address contributors = _deployContributors();
+
+        // Deploy and verify SIR
+        address payable sir = _deploySir(contributors, wethAddress, systemControl);
+
+        // Deploy and verify APE
+        address apeImplementation = _deployApe();
+
+        // Deploy and verify Vault
+        address vault = _deployVault(systemControl, sir, oracle, apeImplementation, wethAddress);
+
+        // Initialize contracts
+        SIR(sir).initialize(vault);
+        console.log("SIR initialized.");
+
+        SystemControl(systemControl).initialize(vault, sir);
+        console.log("SystemControl initialized.");
+
+        console.log("");
+        console.log("All contracts deployed successfully using CREATE2!");
+    }
+
+    function _deployOracle(address uniswapFactory) internal returns (address) {
+        address expected = getOracleAddress(uniswapFactory);
+        bytes memory bytecode = abi.encodePacked(type(Oracle).creationCode, abi.encode(uniswapFactory));
+        address deployed = Create2.deploy(0, ORACLE_SALT, bytecode);
+        require(deployed == expected, "Oracle address mismatch");
+        console.log("Oracle deployed at:", deployed);
+        return deployed;
+    }
+
+    function _deploySystemControl() internal returns (address) {
+        address expected = getSystemControlAddress();
+        address deployed = Create2.deploy(0, SYSTEM_CONTROL_SALT, type(SystemControl).creationCode);
+        require(deployed == expected, "SystemControl address mismatch");
+        console.log("SystemControl deployed at:", deployed);
+        return deployed;
+    }
+
+    function _deployContributors() internal returns (address) {
+        address expected = getContributorsAddress();
+        address deployed = Create2.deploy(0, CONTRIBUTORS_SALT, type(Contributors).creationCode);
+        require(deployed == expected, "Contributors address mismatch");
+        console.log("Contributors deployed at:", deployed);
+        return deployed;
+    }
+
+    function _deploySir(
+        address contributors,
+        address wethAddress,
+        address systemControl
+    ) internal returns (address payable) {
+        address expected = getSirAddress(contributors, wethAddress, systemControl);
+        bytes memory bytecode = abi.encodePacked(
+            type(SIR).creationCode,
+            abi.encode(contributors, wethAddress, systemControl)
+        );
+        address payable deployed = payable(Create2.deploy(0, SIR_SALT, bytecode));
+        require(deployed == expected, "SIR address mismatch");
+        console.log("SIR deployed at:", deployed);
+        return deployed;
+    }
+
+    function _deployApe() internal returns (address) {
+        address expected = getApeAddress();
+        address deployed = Create2.deploy(0, APE_SALT, type(APE).creationCode);
+        require(deployed == expected, "APE address mismatch");
+        console.log("APE implementation deployed at:", deployed);
+        return deployed;
+    }
+
+    function _deployVault(
+        address systemControl,
+        address sir,
+        address oracle,
+        address apeImplementation,
+        address wethAddress
+    ) internal returns (address) {
+        address expected = getVaultAddress(systemControl, sir, oracle, apeImplementation, wethAddress);
+        bytes memory bytecode = abi.encodePacked(
+            type(Vault).creationCode,
+            abi.encode(systemControl, sir, oracle, apeImplementation, wethAddress)
+        );
+        address deployed = Create2.deploy(0, VAULT_SALT, bytecode);
+        require(deployed == expected, "Vault address mismatch");
+        console.log("Vault deployed at:", deployed);
+        return deployed;
+    }
+
+    function _printSaltSummary() internal view {
+        console.log("");
+        console.log("=== SALT SUMMARY ===");
+        console.log("ORACLE_SALT:", vm.toString(ORACLE_SALT));
+        console.log("SYSTEM_CONTROL_SALT:", vm.toString(SYSTEM_CONTROL_SALT));
+        console.log("CONTRIBUTORS_SALT:", vm.toString(CONTRIBUTORS_SALT));
+        console.log("SIR_SALT:", vm.toString(SIR_SALT));
+        console.log("APE_SALT:", vm.toString(APE_SALT));
+        console.log("VAULT_SALT:", vm.toString(VAULT_SALT));
+    }
+
+    // Helper functions to compute addresses
+    function getOracleAddress(address uniswapFactory) internal view returns (address) {
+        bytes memory bytecode = abi.encodePacked(type(Oracle).creationCode, abi.encode(uniswapFactory));
+        return Create2.computeAddress(ORACLE_SALT, keccak256(bytecode));
+    }
+
+    function getSystemControlAddress() internal view returns (address) {
+        return Create2.computeAddress(SYSTEM_CONTROL_SALT, keccak256(type(SystemControl).creationCode));
+    }
+
+    function getContributorsAddress() internal view returns (address) {
+        return Create2.computeAddress(CONTRIBUTORS_SALT, keccak256(type(Contributors).creationCode));
+    }
+
+    function getSirAddress(address contributors, address weth, address systemControl) internal view returns (address) {
+        bytes memory bytecode = abi.encodePacked(type(SIR).creationCode, abi.encode(contributors, weth, systemControl));
+        return Create2.computeAddress(SIR_SALT, keccak256(bytecode));
+    }
+
+    function getApeAddress() internal view returns (address) {
+        return Create2.computeAddress(APE_SALT, keccak256(type(APE).creationCode));
+    }
+
+    function getVaultAddress(
+        address systemControl,
+        address sir,
+        address oracle,
+        address apeImplementation,
+        address weth
+    ) internal view returns (address) {
+        bytes memory bytecode = abi.encodePacked(
+            type(Vault).creationCode,
+            abi.encode(systemControl, sir, oracle, apeImplementation, weth)
+        );
+        return Create2.computeAddress(VAULT_SALT, keccak256(bytecode));
+    }
+}

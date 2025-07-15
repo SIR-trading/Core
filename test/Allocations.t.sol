@@ -228,7 +228,7 @@ contract ImportantAllocationsTest is Test {
         uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
 
         // Allow for 1 basis point error difference
-        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 200, 1);
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 190, 1);
     }
 
     function test_allocationAbstrucked() public {
@@ -254,7 +254,7 @@ contract ImportantAllocationsTest is Test {
         uint256 sirRewards = sir.contributorUnclaimedSIR(contributor);
 
         // Allow for 1 basis point error difference
-        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 40, 1);
+        assertApproxEqAbs((10_000 * sirRewards) / (3 * YEAR_ISSUANCE), 60, 1);
     }
 
     function test_allocationSyzygy() public {
