@@ -5,10 +5,11 @@ import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import {Create2} from "openzeppelin-contracts/contracts/utils/Create2.sol";
 
-/**
+/** 
   Init code hash: 0x7c75ff90a0c68974e3774ad926338939a8693a266f57198a74781f5cb06449b9
-  Salt: 0x5c6090c0461491a2941743bda5c3658bf1ea53bbd3edcde54e16205e1b753cdc
-  Address: 0x5120001C6E43624Bd738B52E3162C70e5e6b4A8C
+  Deployer: 0xce0042B868300000d44A59004Da54A005ffdcf9f
+  Salt: 0x5c6090c0461491a2941743bda5c3658bf1ea53bbd3edcde54e16205e19c67e4b
+  Address: 0x512000415AC7f9c1C4771eBf1C566Da7c42eB80d
  */
 
 /// @notice Script to mine a CREATE2 salt for a single library contract
@@ -16,7 +17,7 @@ contract MineSaltVaultExternal is Script {
     uint256 constant DESIRED_PREFIX = 0x512000; // Desired prefix for the deployed address (0x512000)
 
     /// @dev The address that will deploy the library
-    address constant DEPLOYER_ADDRESS = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+    address constant DEPLOYER_ADDRESS = 0xce0042B868300000d44A59004Da54A005ffdcf9f;
 
     /// @dev Adjust as needed: maximum iterations to try
     uint256 constant MAX_ITERATIONS = 100_000_000;
@@ -59,6 +60,7 @@ contract MineSaltVaultExternal is Script {
             // check prefix using bitwise operations (no memory allocation)
             if (uint160(predicted) >> (160 - numNibbles * 4) == DESIRED_PREFIX) {
                 // Only log when found to minimize memory usage
+                console.log("Deployer:", DEPLOYER_ADDRESS);
                 console.log("Salt:", vm.toString(salt));
                 console.log("Address:", predicted);
                 return;

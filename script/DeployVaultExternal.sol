@@ -10,7 +10,7 @@ import {VaultExternal} from "src/libraries/VaultExternal.sol";
 contract DeployVaultExternal is Script {
     uint256 deployerPrivateKey;
 
-    bytes32 constant VAULT_EXTERNAL_SALT = 0x5c6090c0461491a2941743bda5c3658bf1ea53bbd3edcde54e16205e1b753cdc;
+    bytes32 constant VAULT_EXTERNAL_SALT = 0x5c6090c0461491a2941743bda5c3658bf1ea53bbd3edcde54e16205e19c67e4b;
 
     function setUp() public {
         if (block.chainid == 11155111) {
@@ -21,21 +21,19 @@ contract DeployVaultExternal is Script {
     }
 
     function run() external {
-        bytes memory init = type(VaultExternal).creationCode;
-        bytes32 initHash = keccak256(init);
-        console.log("Init hash:", vm.toString(initHash));
-        bytes memory data = abi.encodePacked(VAULT_EXTERNAL_SALT, init); // no selector
+        IFactory factory = IFactory(0xce0042B868300000d44A59004Da54A005ffdcf9f);
 
-        address factory = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        bytes memory creationCode = vm.getCode("VaultExternal.sol:VaultExternal");
 
         vm.startBroadcast(deployerPrivateKey);
 
-        (bool ok, bytes memory ret) = factory.call(data);
-        require(ok, "create2 deploy failed");
-
-        address lib = abi.decode(ret, (address)); // proxy returns the new address
+        address lib = factory.deploy(creationCode, VAULT_EXTERNAL_SALT);
         console.log("VaultExternal deployed at:", lib);
 
         vm.stopBroadcast();
     }
+}
+
+interface IFactory {
+    function deploy(bytes memory _initCode, bytes32 _salt) external returns (address payable createdContract);
 }
