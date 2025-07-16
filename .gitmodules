@@ -42,6 +42,3 @@
 [submodule "lib/prb-math"]
 	path = lib/prb-math
 	url = https://github.com/PaulRBerg/prb-math
-[submodule "lib/axelar-gmp-sdk-solidity"]
-	path = lib/axelar-gmp-sdk-solidity
-	url = https://github.com/axelarnetwork/axelar-gmp-sdk-solidity

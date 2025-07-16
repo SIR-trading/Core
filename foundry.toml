@@ -7,6 +7,9 @@ optimizer_runs = 20000 # 2^32-1
 solc = "0.8.28"
 fs_permissions = [{ access = "read-write", path = "./"}, { access = "read-write", path = "./src/interfaces"}]
 # libraries = ["lib/v3-periphery/contracts/libraries/PoolAddress.sol:PoolAddress:0xD09971D8ed6C6a5e57581e90d593ee5B94e348D4"]
+libraries = [
+  "src/VaultExternal.sol:VaultExternal:0x512000415AC7f9c1C4771eBf1C566Da7c42eB80d"
+]
 gas_reports = ["Vault","Oracle"]
 gas_limit = "18446744073709551615"
 evm_version = "cancun"

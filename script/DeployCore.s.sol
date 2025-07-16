@@ -45,7 +45,7 @@ contract DeployCore is Script {
         console.log("Oracle deployed at: ", oracle);
 
         // Deploy SystemControl
-        address systemControl = address(new SystemControl());
+        address systemControl = address(new SystemControl(vm.addr(deployerPrivateKey)));
         console.log("SystemControl deployed at: ", systemControl);
 
         // Deploy Contributors
@@ -58,7 +58,8 @@ contract DeployCore is Script {
                 new SIR(
                     contributors,
                     (block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH),
-                    systemControl
+                    systemControl,
+                    vm.addr(deployerPrivateKey) // DIFFERENT WHEN USING LEDGER!!! NEEDS FIX
                 )
             )
         );
@@ -81,7 +82,7 @@ contract DeployCore is Script {
         console.log("Vault deployed at: ", vault);
 
         // Initialize SIR
-        SIR(sir).initialize(vault);
+        SIR(sir).initialize(vault, vm.addr(deployerPrivateKey));
         console.log("SIR initialized.");
 
         // Initialize SystemControl
