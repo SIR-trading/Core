@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Vault} from "./Vault.sol";
+import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
 import {UD60x18, uEXP2_MAX_INPUT, uUNIT, convert} from "prb/UD60x18.sol";
@@ -500,7 +501,8 @@ contract Staker {
                 /** Retrieve fees from the vault to be auctioned next.
                     This function must come after _payAuctionWinner to avoid paying the previous auction winner twice.
                 */
-                totalFees = vault.withdrawFees(token);
+                vault.withdrawFees(token);
+                totalFees = IERC20(token).balanceOf(address(this));
 
                 // Do not start a new auction if there are no new fees to auction
                 if (totalFees == 0) revert NoFeesCollected();
