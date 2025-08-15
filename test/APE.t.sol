@@ -338,8 +338,9 @@ contract APETest is Test {
         );
     }
 
-    function testFail_mintByNonOwner() public {
+    function test_RevertWhen_MintByNonOwner() public {
         vm.prank(alice);
+        vm.expectRevert();
         ape.mint(bob, 0, 0, SirStructs.Reserves(0, 0, 0), 10); // This should fail because bob is not the owner
     }
 

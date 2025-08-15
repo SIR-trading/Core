@@ -132,7 +132,8 @@ contract TEATest is Test, TEATestConstants {
         );
     }
 
-    function testFail_initialConditionsVaultId0() public view {
+    function test_RevertWhen_InitialConditionsVaultId0() public {
+        vm.expectRevert();
         tea.uri(0);
     }
 

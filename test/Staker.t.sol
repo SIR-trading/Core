@@ -271,7 +271,8 @@ contract StakerTest is Auxiliary {
         charlie = vm.addr(3);
     }
 
-    function testFail_initializeTwice() public {
+    function test_RevertWhen_InitializeTwice() public {
+        vm.expectRevert();
         staker.initialize(address(0));
     }
 
@@ -282,11 +283,12 @@ contract StakerTest is Auxiliary {
         staker.initialize(address(0));
     }
 
-    function testFail_initializeWrongCaller() public {
+    function test_RevertWhen_InitializeWrongCaller() public {
         // Reset _initialized to false
         vm.store(address(staker), bytes32(uint256(SLOT_INITIALIZED)), bytes32(0));
 
         vm.prank(alice);
+        vm.expectRevert();
         staker.initialize(address(0));
     }
 

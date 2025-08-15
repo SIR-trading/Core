@@ -126,9 +126,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Initialize SystemControl
         systemControl.initialize(address(vault), sir);
 
-        // Get 1 pre-mainnet contributor
-        string memory json = vm.readFile(string.concat(vm.projectRoot(), "/contributors/posthack-contributors.json"));
-        oneContributor = json.readAddress("[0].address");
+        // Use a test contributor address
+        oneContributor = address(0x193AD6d624678b11Bec0C5cFD5723A34725A8433);
     }
 
     function test_haultMinting() public {

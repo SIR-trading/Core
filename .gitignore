@@ -23,3 +23,5 @@ cache_hardhat
 
 # Others
 Core.code-workspace*
+.claude/
+CLAUDE.md
