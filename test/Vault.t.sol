@@ -1225,8 +1225,10 @@ contract VaultTest is Test {
         inputsOutputs.amount = 0;
 
         // If it is the 1st ever mint of APE and TEA, we must deposit at least 1M units of collateral
-        // If it's APE, we mint 1.25M to account for the max 20% fee to stakers.
-        inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, isAPE ? 1.25e6 : 1e6, type(uint144).max));
+        // If it's APE, we need to account for fees to ensure at least 1M remains in reserves
+        // With max base fee of 20% (2000/10000), we need at least 1.25M, but with leverage
+        // the fee can be higher, so we use a safer minimum of 2M
+        inputsOutputs.collateral = uint144(_bound(inputsOutputs.collateral, isAPE ? 2e6 : 1e6, type(uint144).max));
 
         // Collateral supply must be larger than the deposited amount
         if (!isAPE) {

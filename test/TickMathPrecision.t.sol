@@ -56,6 +56,7 @@ contract TickMathPrecisionTest is Test {
         assertApproxEqAbs(ratioX64, ratioX64Bis, 2); // We found out that ABDKMathQuad can result in ±2 error
     }
 
+    /// forge-config: default.allow_internal_expect_revert = true
     function testFuzz_getRatioAtTickOverflows(uint64 tickX42Uint) public {
         int64 tickX42 = int64(
             int256(_bound(tickX42Uint, uint64(SystemConstants.MAX_TICK_X42) + 1, uint64(type(int64).max)))
@@ -121,6 +122,7 @@ contract TickMathPrecisionTest is Test {
     //     assertLe(tickX42, tickX42Bis, "Not rounding down");
     // }
 
+    /// forge-config: default.allow_internal_expect_revert = true
     function testFuzz_getTickAtRatioWrongNumerator(uint256 num, uint256 den) public {
         vm.assume(den > 0);
         num = _bound(num, 0, den - 1);
@@ -129,6 +131,7 @@ contract TickMathPrecisionTest is Test {
         TickMathPrecision.getTickAtRatio(num, den);
     }
 
+    /// forge-config: default.allow_internal_expect_revert = true
     function testFuzz_getTickAtRatioWrongDenominator(uint256 num) public {
         uint256 den = 0;
         num = _bound(num, den, type(uint256).max);

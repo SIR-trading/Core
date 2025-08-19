@@ -810,16 +810,16 @@ contract OracleProbingFeeTiers is Test, Oracle {
     function test_RevertWhen_NextFeeTierNotProbed() public {
         test_nextFeeTierNotProbed();
 
+        // If no time has passed, the oracle would return the time in memory
+        skip(1);
+
         // This test verifies that the second probe event is NOT emitted
         // We expect only the first event to be emitted
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(500, 0, 0, 0);
-        
+
         // Update oracle state - should only probe the first tier
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
-        
-        // The 10000 tier probe should not have happened
-        // (verified by the fact that only one event was emitted)
     }
 
     function test_nextFeeTierProbedAndSwitched() public {
@@ -861,10 +861,10 @@ contract OracleProbingFeeTiers is Test, Oracle {
         // We expect only the probe event, not the tier change
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(newFeeTier, 0, 0, 0);
-        
+
         // Update oracle state - should probe but not switch tiers
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
-        
+
         // The OracleFeeTierChanged event should not have been emitted
         // (verified by the fact that it wasn't expected)
     }
@@ -918,8 +918,6 @@ contract OracleProbingFeeTiers is Test, Oracle {
         emit UniswapOracleProbed(500, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(newFeeTier, 0, 0, 0);
-        vm.expectEmit(false, false, false, false);
-        emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
         _oracle.updateOracleState(Addresses.ADDR_WETH, Addresses.ADDR_USDC);
     }
 

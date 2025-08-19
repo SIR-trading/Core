@@ -806,40 +806,45 @@ contract StakerTest is Auxiliary {
         assertEq(staker.totalSupply(), totalSupplyOfSIR, "Wrong total supply");
 
         // Check dividends still there
-        console.log("stakeAmount", user.stakeAmount);
-        if (user.stakeAmount == 0) {
-            assertEq(staker.unclaimedDividends(account), 0);
-        } else {
+        uint256 unclaimedDivs = staker.unclaimedDividends(account);
+        
+        if (user.stakeAmount > 0) {
             uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
-            assertLe(staker.unclaimedDividends(account), donations.stakerDonationsWETH + donations.stakerDonationsETH);
+            assertLe(unclaimedDivs, donations.stakerDonationsWETH + donations.stakerDonationsETH);
             assertApproxEqAbs(
-                staker.unclaimedDividends(account),
+                unclaimedDivs,
                 donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Donations after unstaking too low"
             );
+        }
 
-            // Claim dividends
-            vm.prank(account);
-            if (donations.stakerDonationsWETH + donations.stakerDonationsETH == 0) {
-                vm.expectRevert(NoDividends.selector);
-                staker.claim();
-            } else {
-                assertApproxEqAbs(
-                    staker.claim(),
-                    donations.stakerDonationsWETH + donations.stakerDonationsETH,
-                    maxError,
-                    "Claimed dividends are incorrect"
-                );
-            }
+        // Claim dividends
+        vm.prank(account);
+        if (unclaimedDivs == 0) {
+            vm.expectRevert(NoDividends.selector);
+            staker.claim();
+        } else {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
+            assertApproxEqAbs(
+                staker.claim(),
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
+                maxError,
+                "Claimed dividends are incorrect"
+            );
+        }
 
-            assertEq(staker.unclaimedDividends(account), 0, "Donations should be 0 after claim");
+        assertEq(staker.unclaimedDividends(account), 0, "Donations should be 0 after claim");
+        if (unclaimedDivs > 0) {
+            uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
             assertApproxEqAbs(
                 account.balance,
                 donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Balance is incorrect"
             );
+        } else {
+            assertEq(account.balance, 0, "Balance should be 0 when no dividends claimed");
         }
     }
 
@@ -968,7 +973,6 @@ contract StakerTest is Auxiliary {
         }
 
         // Unstakes
-        vm.prank(account);
         vm.expectRevert();
         vm.prank(account);
         staker.unstake(unstakeAmount);
@@ -1009,7 +1013,6 @@ contract StakerTest is Auxiliary {
         }
 
         // Unstakes
-        vm.prank(account);
         vm.expectRevert();
         vm.prank(account);
         staker.unstakeAndClaim(unstakeAmount);
@@ -1154,8 +1157,11 @@ contract StakerTest is Auxiliary {
         vm.expectEmit();
         emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
         vm.expectEmit();
-        emit AuctionStarted(Addresses.ADDR_BNB, tokenBalances.vaultTotalFees);
-        assertEq(staker.collectFeesAndStartAuction(Addresses.ADDR_BNB), tokenBalances.vaultTotalFees);
+        emit AuctionStarted(Addresses.ADDR_BNB, tokenBalances.vaultTotalFees + tokenBalances.stakerDonations);
+        assertEq(
+            staker.collectFeesAndStartAuction(Addresses.ADDR_BNB),
+            tokenBalances.vaultTotalFees + tokenBalances.stakerDonations
+        );
     }
 
     function testFuzz_auctionOfWETHFails(

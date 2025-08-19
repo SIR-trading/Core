@@ -1002,6 +1002,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         _verifySIRRewards(testMintParams.tsCheck);
     }
 
+    /// forge-config: default.allow_internal_expect_revert = true
     function testFuzz_mintOverflows(uint16 lpFee, uint8 tax) public {
         SirStructs.Reserves memory reserves = testFuzz_mint1stTime(
             TestMintParams({reserveLPers: 0, collateralDeposited: SystemConstants.TEA_MAX_SUPPLY, tsCheck: 0}),
@@ -1084,6 +1085,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         _verifySIRRewards(testBurnParams.tsCheck);
     }
 
+    /// forge-config: default.allow_internal_expect_revert = true
     function testFuzz_burnExceedsBalance(
         TestMintParams memory testMintParams0,
         TestMintParams memory testMintParams,
