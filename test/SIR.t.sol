@@ -50,7 +50,7 @@ contract BasicSIRTest is Test {
 
     function test_sirContributorMintReverts() public {
         address fakeContributor = vm.addr(100);
-        
+
         // Skip time
         skip(100);
 
@@ -61,6 +61,93 @@ contract BasicSIRTest is Test {
         vm.prank(fakeContributor);
         vm.expectRevert();
         sir.contributorMint();
+    }
+
+    function test_allocationsSum() public {
+        // Use Node.js to extract addresses from Contributors.sol
+        string[] memory inputs = new string[](3);
+        inputs[0] = "node";
+        inputs[1] = "-e";
+        inputs[2] = string.concat(
+            "const fs = require('fs'); ",
+            "const content = fs.readFileSync('src/Contributors.sol', 'utf8'); ",
+            "const addresses = content.match(/0x[0-9a-fA-F]{40}/g); ",
+            "console.log(addresses.join('\\n'));"
+        );
+
+        bytes memory result = vm.ffi(inputs);
+
+        // Parse the result - addresses are separated by newlines
+        address[] memory addresses = new address[](200);
+        uint256 addressCount = 0;
+
+        uint256 pos = 0;
+        while (pos < result.length) {
+            // Find the end of the current line
+            uint256 endPos = pos;
+            while (endPos < result.length && result[endPos] != 0x0a) {
+                endPos++;
+            }
+
+            // Extract address if we have exactly 42 characters (0x + 40 hex chars)
+            if (endPos - pos == 42) {
+                // Parse the address
+                address addr = parseAddress(result, pos);
+
+                // Check if this address has an allocation
+                uint56 allocation = contributors.allocations(addr);
+                if (allocation > 0) {
+                    addresses[addressCount] = addr;
+                    addressCount++;
+                }
+            }
+
+            pos = endPos + 1;
+        }
+
+        // Sum all allocations
+        uint256 totalAllocations = 0;
+        for (uint256 i = 0; i < addressCount; i++) {
+            totalAllocations += contributors.allocations(addresses[i]);
+        }
+
+        console.log("Total unique addresses found:", addressCount);
+        console.log("Total allocations sum:", totalAllocations);
+        console.log("Expected (type(uint56).max):", type(uint56).max);
+
+        // Also verify we found the expected number of addresses
+        require(addressCount > 100, "Should find more than 100 addresses with allocations");
+
+        // Verify the sum equals type(uint56).max
+        assertEq(totalAllocations, type(uint56).max, "Allocations do not sum to type(uint56).max");
+        
+        // Additional check to ensure we found all contributor addresses
+        assertEq(addressCount, 137, "Should find exactly 137 contributor addresses");
+    }
+
+    function parseAddress(bytes memory data, uint256 offset) private pure returns (address) {
+        require(data.length >= offset + 42, "Invalid data length");
+        require(data[offset] == 0x30 && data[offset + 1] == 0x78, "Invalid address prefix");
+
+        uint160 addr = 0;
+        for (uint256 i = 2; i < 42; i++) {
+            uint8 b = uint8(data[offset + i]);
+            uint8 nibble;
+
+            if (b >= 0x30 && b <= 0x39) {
+                nibble = b - 0x30; // 0-9
+            } else if (b >= 0x61 && b <= 0x66) {
+                nibble = b - 0x57; // a-f
+            } else if (b >= 0x41 && b <= 0x46) {
+                nibble = b - 0x37; // A-F
+            } else {
+                revert("Invalid hex character");
+            }
+
+            addr = addr * 16 + nibble;
+        }
+
+        return address(addr);
     }
 }
 
