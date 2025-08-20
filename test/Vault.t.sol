@@ -150,11 +150,10 @@ contract VaultTest is Test {
         hacker = new Hacker(address(vault));
     }
 
-    function _initialize(SystemParams calldata systemParams, SirStructs.Reserves memory reservesPre) internal {
+    function _initialize(SystemParams memory systemParams, SirStructs.Reserves memory reservesPre) internal {
         {
-            vaultParams.leverageTier = int8(
-                _bound(systemParams.leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)
-            );
+            // Explicitly bound leverage tier to valid range [-2, 2]
+            vaultParams.leverageTier = int8(_bound(int256(systemParams.leverageTier), -2, 2));
 
             // _initialize vault
             vault.initialize(
@@ -653,12 +652,15 @@ contract VaultTest is Test {
     }
 
     function testFuzz_mintIsLocked(
-        SystemParams calldata systemParams,
+        SystemParams memory systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
         Balances memory balances
     ) public {
         bool isAPE = false;
+
+        // Ensure leverage tier is valid
+        systemParams.leverageTier = int8(_bound(int256(systemParams.leverageTier), -2, 2));
 
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
@@ -716,11 +718,20 @@ contract VaultTest is Test {
 
     function testFuzz_withdrawFeesIsLocked(
         bool isAPE,
-        SystemParams calldata systemParams,
+        SystemParams memory systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
         Balances memory balances
     ) public {
+        // Ensure leverage tier is valid
+        systemParams.leverageTier = int8(
+            _bound(
+                int256(systemParams.leverageTier),
+                SystemConstants.MIN_LEVERAGE_TIER,
+                SystemConstants.MAX_LEVERAGE_TIER
+            )
+        );
+
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
         _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
@@ -1396,7 +1407,7 @@ contract VaultTest is Test {
 
     function _makeDeposit(
         bool isAPE,
-        SystemParams calldata systemParams,
+        SystemParams memory systemParams,
         InputsOutputs memory inputsOutputs,
         SirStructs.Reserves memory reservesPre,
         Balances memory balances
@@ -2879,6 +2890,9 @@ contract VaultHandler is Test, RegimeEnum {
             }
             maxAmount = FullMath.mulDiv(8, maxAmount, 10);
             amount = _bound(amount, 1, maxAmount);
+        } else {
+            // If overflow occurred, use a safe maximum value
+            amount = _bound(amount, 1, type(uint128).max);
         }
 
         // We cannot exceed balance

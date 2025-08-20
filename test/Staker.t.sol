@@ -682,9 +682,10 @@ contract StakerTest is Auxiliary {
             uint256 dividends = (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) *
                 user1.stakeAmount) / (user1.stakeAmount + user2.stakeAmount);
             uint256 maxError1 = ErrorComputation.maxErrorBalance(80, user1.stakeAmount, 1);
-            assertLe(staker.unclaimedDividends(account1), dividends, "Donations of account1 too high");
+            uint256 unclaimedDivs1 = staker.unclaimedDividends(account1);
+            assertLe(unclaimedDivs1, dividends, "Donations of account1 too high");
             assertApproxEqAbs(
-                staker.unclaimedDividends(account1),
+                unclaimedDivs1,
                 dividends,
                 maxError1,
                 "Donations of account1 too low"
@@ -692,23 +693,24 @@ contract StakerTest is Auxiliary {
 
             // Claim dividends of account1
             vm.prank(account1);
-            if (dividends == 0) {
+            if (unclaimedDivs1 == 0) {
                 vm.expectRevert(NoDividends.selector);
                 staker.claim();
             } else {
-                assertApproxEqAbs(staker.claim(), dividends, maxError1, "Claimed dividends of account1 are incorrect");
+                assertApproxEqAbs(staker.claim(), unclaimedDivs1, maxError1, "Claimed dividends of account1 are incorrect");
             }
             assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0 after claim");
-            assertApproxEqAbs(account1.balance, dividends, maxError1, "Balance of account1 is incorrect");
+            assertApproxEqAbs(account1.balance, unclaimedDivs1, maxError1, "Balance of account1 is incorrect");
 
             // Verify balances of account2
             dividends =
                 (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) * user2.stakeAmount) /
                 (user1.stakeAmount + user2.stakeAmount);
             uint256 maxError2 = ErrorComputation.maxErrorBalance(80, user2.stakeAmount, 1);
-            assertLe(staker.unclaimedDividends(account2), dividends, "Donations of account2 too high");
+            uint256 unclaimedDivs2 = staker.unclaimedDividends(account2);
+            assertLe(unclaimedDivs2, dividends, "Donations of account2 too high");
             assertApproxEqAbs(
-                staker.unclaimedDividends(account2),
+                unclaimedDivs2,
                 dividends,
                 maxError2,
                 "Donations of account2 too low"
@@ -716,14 +718,14 @@ contract StakerTest is Auxiliary {
 
             // Claim dividends of account2
             vm.prank(account2);
-            if (dividends == 0) {
+            if (unclaimedDivs2 == 0) {
                 vm.expectRevert(NoDividends.selector);
                 staker.claim();
             } else {
-                assertApproxEqAbs(staker.claim(), dividends, maxError2, "Claimed dividends of account2 are incorrect");
+                assertApproxEqAbs(staker.claim(), unclaimedDivs2, maxError2, "Claimed dividends of account2 are incorrect");
             }
-            assertEq(staker.unclaimedDividends(account1), 0, "Donations of account2 should be 0 after claim");
-            assertApproxEqAbs(account2.balance, dividends, maxError2, "Balance of account2 is incorrect");
+            assertEq(staker.unclaimedDividends(account2), 0, "Donations of account2 should be 0 after claim");
+            assertApproxEqAbs(account2.balance, unclaimedDivs2, maxError2, "Balance of account2 is incorrect");
 
             // Verify balances of staker
             assertApproxEqAbs(address(staker).balance, 0, maxError1 + maxError2, "Balance staker is incorrect");
