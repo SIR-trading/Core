@@ -85,7 +85,7 @@ contract VaultExternalTest is Test {
         APE ape = APE(AddressClone.getAddress(address(this), vaultId));
         assertGt(address(ape).code.length, 0);
 
-        assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)), "Symbol is not correct");
+        assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)), "Symbol is not correct");
         assertEq(ape.name(), string.concat("Tokenized (WETH/USDC)^", leverageStr), "Name is not correct");
         assertEq(ape.decimals(), 18, "Decimals is not correct");
         assertEq(ape.debtToken(), Addresses.ADDR_USDC, "Debt token is not correct");
@@ -113,7 +113,7 @@ contract VaultExternalTest is Test {
         APE ape = APE(AddressClone.getAddress(address(this), vaultId));
         assertGt(address(ape).code.length, 0);
 
-        assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)), "Symbol is not correct");
+        assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)), "Symbol is not correct");
         console.log(ape.name());
         assertEq(ape.name(), "Tokenized (MKR/WETH)^2", "Name is not correct");
         assertEq(ape.decimals(), 18, "Decimals is not correct");
@@ -178,7 +178,7 @@ contract VaultExternalTest is Test {
             APE ape = APE(AddressClone.getAddress(address(this), vaultId));
             assertGt(address(ape).code.length, 0);
 
-            assertEq(ape.symbol(), string.concat("APE-", Strings.toString(vaultId)));
+            assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)));
             assertEq(ape.decimals(), 18);
             assertEq(ape.debtToken(), Addresses.ADDR_USDC);
             assertEq(ape.collateralToken(), Addresses.ADDR_WETH);
@@ -244,8 +244,8 @@ contract VaultExternalTest is Test {
 
         string memory output = string(vm.ffi(inputs));
 
-        assertEq(vm.parseJsonString(output, "$.name"), string.concat("LP Token for APE-", vm.toString(vaultId_)));
-        assertEq(vm.parseJsonString(output, "$.symbol"), string.concat("TEA-", vm.toString(vaultId_)));
+        assertEq(vm.parseJsonString(output, "$.name"), string.concat("LP Token for HyperAPE-", vm.toString(vaultId_)));
+        assertEq(vm.parseJsonString(output, "$.symbol"), string.concat("HyperTEA", vm.toString(vaultId_)));
         assertEq(vm.parseJsonUint(output, "$.decimals"), 18);
         assertEq(vm.parseJsonUint(output, "$.chain_id"), 1);
         assertEq(vm.parseJsonUint(output, "$.vault_id"), vaultId_);

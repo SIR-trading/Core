@@ -63,10 +63,10 @@ contract Staker {
     Vault public vault;
 
     /// @dev The protocol's full name.
-    string public constant name = "Synthetics Implemented Right";
+    string public constant name = "Hyper Synthetics Implemented Right";
 
     /// @dev The protocol's ERC20 token symbol.
-    string public constant symbol = "SIR";
+    string public constant symbol = "HyperSIR";
 
     /// @dev Number of decimals of the protocol's token.
     uint8 public immutable decimals = SystemConstants.SIR_DECIMALS;

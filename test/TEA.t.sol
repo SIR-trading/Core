@@ -112,9 +112,9 @@ contract TEATest is Test, TEATestConstants {
         assertEq(
             tea.uri(VAULT_ID),
             string.concat(
-                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-",
+                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20HyperAPE-",
                 vm.toString(VAULT_ID),
-                "%22%2C%22symbol%22%3A%22TEA-",
+                "%22%2C%22symbol%22%3A%22HyperTEA",
                 vm.toString(VAULT_ID),
                 "%22%2C%22decimals%22%3A",
                 vm.toString(DECIMALS),

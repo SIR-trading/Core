@@ -44,8 +44,8 @@ contract BasicSIRTest is Test {
         assertEq(address(sir.vault()), vault);
         assertEq(sir.SYSTEM_CONTROL(), vm.addr(10));
         assertEq(sir.decimals(), 12);
-        assertEq(sir.name(), "Synthetics Implemented Right");
-        assertEq(sir.symbol(), "SIR");
+        assertEq(sir.name(), "Hyper Synthetics Implemented Right");
+        assertEq(sir.symbol(), "HyperSIR");
     }
 
     function test_sirContributorMintReverts() public {
@@ -120,7 +120,7 @@ contract BasicSIRTest is Test {
 
         // Verify the sum equals type(uint56).max
         assertEq(totalAllocations, type(uint56).max, "Allocations do not sum to type(uint56).max");
-        
+
         // Additional check to ensure we found all contributor addresses
         assertEq(addressCount, 137, "Should find exactly 137 contributor addresses");
     }

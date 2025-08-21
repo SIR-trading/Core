@@ -90,7 +90,7 @@ library VaultExternal {
             abi.encodeWithSignature(
                 "initialize(string,string,uint8,address,address)",
                 name,
-                string.concat("APE-", Strings.toString(vaultId)),
+                string.concat("HyperAPE-", Strings.toString(vaultId)),
                 IERC20(vaultParams.collateralToken).decimals(),
                 vaultParams.debtToken,
                 vaultParams.collateralToken
@@ -122,9 +122,9 @@ library VaultExternal {
 
         return
             string.concat(
-                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20APE-",
+                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20HyperAPE-",
                 vaultIdStr,
-                "%22%2C%22symbol%22%3A%22TEA-",
+                "%22%2C%22symbol%22%3A%22HyperTEA",
                 vaultIdStr,
                 "%22%2C%22decimals%22%3A",
                 Strings.toString(IERC20(params.collateralToken).decimals()),

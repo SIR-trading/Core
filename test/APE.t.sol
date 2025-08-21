@@ -59,7 +59,7 @@ contract APETest is Test {
         );
 
         // Initialize APE clone
-        ape.initialize("Tokenized (ETH/USDC)^1.25", "APE-42", 18, Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        ape.initialize("Tokenized (ETH/USDC)^1.25", "HyperAPE-42", 18, Addresses.ADDR_USDC, Addresses.ADDR_WETH);
 
         alice = vm.addr(1);
         bob = vm.addr(2);
@@ -74,7 +74,7 @@ contract APETest is Test {
         assertEq(ape.collateralToken(), Addresses.ADDR_WETH);
         assertEq(ape.leverageTier(), LEVERAGE_TIER);
         assertEq(ape.name(), "Tokenized (ETH/USDC)^1.25");
-        assertEq(ape.symbol(), "APE-42");
+        assertEq(ape.symbol(), "HyperAPE-42");
         assertEq(ape.decimals(), 18);
     }
 
