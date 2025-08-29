@@ -5,31 +5,33 @@ import "forge-std/Script.sol";
 
 import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
-import {Vault} from "src/Vault.sol";
+import {SIR} from "src/SIR.sol";
 
-/** @dev cli for HyperEVM testnet: forge script script/InitializeVault.s.sol --rpc-url hypertest --chain 998 --broadcast
+/** @dev cli for HyperEVM testnet: forge script script/CollectWhypeFees.s.sol --rpc-url hypertest --chain 998 --broadcast
 */
-contract InitializeVault is Script {
+contract CollectWhypeFees is Script {
     uint256 privateKey;
 
-    Vault vault;
+    address whype;
+    SIR sir;
 
     function setUp() public {
         if (block.chainid == 998) {
             privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
+            whype = AddressesHyperEVMTest.ADDR_WHYPE;
         } else {
             revert("Only HyperEVM testnet (chain 998) is supported");
         }
 
-        vault = Vault(vm.envAddress("VAULT"));
+        sir = SIR(payable(vm.envAddress("SIR")));
     }
 
     function run() public {
         vm.startBroadcast(privateKey);
 
-        vault.initialize(
-            SirStructs.VaultParameters(AddressesHyperEVMTest.ADDR_USDC, AddressesHyperEVMTest.ADDR_WHYPE, 2)
-        );
+        // Collect WHYPE fees
+        uint256 totalFees = sir.collectFeesAndStartAuction(whype);
+        console.log("Total WHYPE fees collected:", totalFees);
 
         vm.stopBroadcast();
     }

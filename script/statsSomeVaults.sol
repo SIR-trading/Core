@@ -4,16 +4,14 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 // import "forge-std/console.sol";
 
-import {Addresses} from "src/libraries/Addresses.sol";
-import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
+import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 
-/** @dev cli for local testnet:  forge script script/statsSomeVaults.s.sol --rpc-url mainnet --chain 1 --broadcast
-    @dev cli for Sepolia:        forge script script/statsSomeVaults.s.sol --rpc-url sepolia --chain sepolia --broadcast
+/** @dev cli for HyperEVM testnet: forge script script/statsSomeVaults.sol --rpc-url hypertest --chain 998 --broadcast
 */
 contract statsSomeVaults is Script {
     uint48[4] vaultsIds = [1, 2, 8, 10];
@@ -22,12 +20,10 @@ contract statsSomeVaults is Script {
     Vault vault;
 
     function setUp() public {
-        if (block.chainid == 1) {
-            privateKey = vm.envUint("TARP_TESTNET_PRIVATE_KEY");
-        } else if (block.chainid == 11155111) {
-            privateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        if (block.chainid == 998) {
+            privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
         } else {
-            revert("Network not supported");
+            revert("Only HyperEVM testnet (chain 998) is supported");
         }
 
         vault = Vault(vm.envAddress("VAULT"));

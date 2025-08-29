@@ -5,8 +5,7 @@ import "forge-std/Script.sol";
 
 import {SystemControl} from "src/SystemControl.sol";
 
-/** @dev cli for local testnet:  forge script script/StartLiquidityMining.s.sol --rpc-url mainnet --chain 1 --broadcast --ledger --hd-paths PATHS
-    @dev cli for Sepolia:        forge script script/StartLiquidityMining.s.sol --rpc-url sepolia --chain sepolia --broadcast 
+/** @dev cli for HyperEVM testnet: forge script script/StartLiquidityMining.s.sol --rpc-url hypertest --chain 998 --broadcast
 */
 contract StartLiquidityMining is Script {
     uint256 privateKey;
@@ -14,18 +13,17 @@ contract StartLiquidityMining is Script {
     SystemControl systemControl;
 
     function setUp() public {
-        if (block.chainid == 11155111) {
-            privateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
-        } else if (block.chainid != 1) {
-            revert("Network not supported");
+        if (block.chainid == 998) {
+            privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
+        } else {
+            revert("Only HyperEVM testnet (chain 998) is supported");
         }
 
         systemControl = SystemControl(vm.envAddress("SYSTEM_CONTROL"));
     }
 
     function run() public {
-        if (block.chainid == 1) vm.startBroadcast();
-        else vm.startBroadcast(privateKey);
+        vm.startBroadcast(privateKey);
 
         // Start liquidity mining if not already started
         if (systemControl.hashActiveVaults() == 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470) {

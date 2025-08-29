@@ -3,12 +3,11 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemControl} from "src/SystemControl.sol";
 
-/** @dev cli for local testnet:  forge script script/ChangeLiquidityMining.s.sol --rpc-url tarp_testnet --broadcast --legacy
-    @dev cli for Sepolia:        forge script script/ChangeLiquidityMining.s.sol --rpc-url sepolia --chain sepolia --broadcast --slow
+/** @dev cli for HyperEVM testnet: forge script script/ChangeLiquidityMining.s.sol --rpc-url hypertest --chain 998 --broadcast
 */
 contract ChangeLiquidityMining is Script {
     uint256 privateKey;
@@ -16,12 +15,10 @@ contract ChangeLiquidityMining is Script {
     SystemControl systemControl;
 
     function setUp() public {
-        if (block.chainid == 1) {
-            privateKey = vm.envUint("TARP_TESTNET_DEPLOYER_PRIVATE_KEY");
-        } else if (block.chainid == 11155111) {
-            privateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
+        if (block.chainid == 998) {
+            privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
         } else {
-            revert("Network not supported");
+            revert("Only HyperEVM testnet (chain 998) is supported");
         }
 
         systemControl = SystemControl(vm.envAddress("SYSTEM_CONTROL"));

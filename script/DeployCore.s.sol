@@ -3,8 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import {Addresses} from "src/libraries/Addresses.sol";
-import {AddressesSepolia} from "src/libraries/AddressesSepolia.sol";
+import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SystemControl} from "src/SystemControl.sol";
 import {Contributors} from "src/Contributors.sol";
@@ -13,8 +12,7 @@ import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
-/** @dev cli for local testnet:  forge script script/DeployCore.s.sol --rpc-url mainnet --chain 1 --broadcast --verify --slow --etherscan-api-key YOUR_KEY --ledger --hd-paths PATHS
-    @dev cli for Sepolia:        forge script script/DeployCore.s.sol --rpc-url sepolia --chain sepolia --broadcast
+/** @dev cli for HyperEVM testnet: forge script script/DeployCore.s.sol --rpc-url hypertest --chain 998 --broadcast
     @dev Steps:
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol
@@ -27,20 +25,19 @@ contract DeployCore is Script {
     uint256 deployerPrivateKey;
 
     function setUp() public {
-        if (block.chainid == 11155111) {
-            deployerPrivateKey = vm.envUint("SEPOLIA_DEPLOYER_PRIVATE_KEY");
-        } else if (block.chainid != 1) {
-            revert("Network not supported");
+        if (block.chainid == 998) {
+            deployerPrivateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
+        } else {
+            revert("Only HyperEVM testnet (chain 998) is supported");
         }
     }
 
     function run() public {
-        if (block.chainid == 1) vm.startBroadcast();
-        else vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(deployerPrivateKey);
 
         // Deploy oracle
         address oracle = address(
-            new Oracle(block.chainid == 1 ? Addresses.ADDR_UNISWAPV3_FACTORY : AddressesSepolia.ADDR_UNISWAPV3_FACTORY)
+            new Oracle(AddressesHyperEVMTest.ADDR_UNISWAPV3_FACTORY)
         );
         console.log("Oracle deployed at: ", oracle);
 
@@ -57,7 +54,7 @@ contract DeployCore is Script {
             address(
                 new SIR(
                     contributors,
-                    (block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH),
+                    AddressesHyperEVMTest.ADDR_WHYPE,
                     systemControl
                 )
             )
@@ -75,7 +72,7 @@ contract DeployCore is Script {
                 sir,
                 oracle,
                 apeImplementation,
-                block.chainid == 1 ? Addresses.ADDR_WETH : AddressesSepolia.ADDR_WETH
+                AddressesHyperEVMTest.ADDR_WHYPE
             )
         );
         console.log("Vault deployed at: ", vault);

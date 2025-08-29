@@ -57,7 +57,7 @@ contract Staker {
     address public constant STAKING_VAULT = 0x000000000051200beef00Add2e55000000000000;
 
     address private immutable _deployer; // Just used to make sure function initialize() is not called by anyone else.
-    IWETH9 private immutable _WETH;
+    IWETH9 private immutable _WHYPE;
 
     /// @dev The staking vault.
     Vault public vault;
@@ -97,8 +97,8 @@ contract Staker {
 
     mapping(address => uint256) public nonces;
 
-    constructor(address weth) {
-        _WETH = IWETH9(payable(weth));
+    constructor(address whype) {
+        _WHYPE = IWETH9(payable(whype));
 
         _deployer = msg.sender;
 
@@ -442,7 +442,7 @@ contract Staker {
             if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
 
             // Transfer the bid to the contract
-            _WETH.transferFrom(msg.sender, address(this), amount);
+            _WHYPE.transferFrom(msg.sender, address(this), amount);
 
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
@@ -451,7 +451,7 @@ contract Staker {
             } else {
                 // Return the previous bid to the previous bidder
                 totalWinningBids += amount - auction.bid;
-                _WETH.transfer(auction.bidder, auction.bid);
+                _WHYPE.transfer(auction.bidder, auction.bid);
             }
 
             /** We check if the bid is at least 1% higher.
@@ -475,7 +475,7 @@ contract Staker {
             uint96 totalWinningBids_ = totalWinningBids;
 
             // Because ETH is the dividend paying token, we do not need to start an auction if fees are in WETH.
-            if (token != address(_WETH)) {
+            if (token != address(_WHYPE)) {
                 SirStructs.Auction memory auction = _auctions[token];
 
                 uint40 newStartTime = auction.startTime + SystemConstants.AUCTION_COOLDOWN;
@@ -551,19 +551,19 @@ contract Staker {
 
     function _distributeDividends(uint96 totalWinningBids_) private returns (bool noDividends) {
         unchecked {
-            // Any excess WETH in the contract will be distributed.
-            uint256 excessWETH = _WETH.balanceOf(address(this)) - totalWinningBids_;
+            // Any excess WHYPE in the contract will be distributed.
+            uint256 excessWHYPE = _WHYPE.balanceOf(address(this)) - totalWinningBids_;
 
             // Any excess ETH from when stake was 0, or from donations
             uint96 unclaimedETH = _supply.unclaimedETH;
             uint256 excessETH = address(this).balance - unclaimedETH;
 
             // Compute dividends
-            uint256 dividends_ = excessWETH + excessETH;
+            uint256 dividends_ = excessWHYPE + excessETH;
             if (dividends_ == 0) return true;
 
-            // Unwrap WETH dividends to ETH
-            _WETH.withdraw(excessWETH);
+            // Unwrap WHYPE dividends to ETH
+            _WHYPE.withdraw(excessWHYPE);
 
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
             if (stakingParams_.stake == 0) return true;

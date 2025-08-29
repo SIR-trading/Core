@@ -17,6 +17,8 @@ runs = 100
 [rpc_endpoints]
 mainnet = "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
 sepolia = "https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}"
+hyperevm = "https://hyperliquid-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
+hypertest = "https://spectrum-01.simplystaking.xyz/hyperliquid-tn-rpc/evm"
 tarp_testnet = "${RPC_TARP}"
 
 [invariant]

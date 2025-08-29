@@ -23,9 +23,9 @@ contract SIR is Staker, SystemControlAccess {
 
     constructor(
         address contributors,
-        address weth,
+        address whype,
         address systemControl
-    ) Staker(weth) SystemControlAccess(systemControl) {
+    ) Staker(whype) SystemControlAccess(systemControl) {
         _CONTRIBUTORS = Contributors(contributors);
     }
 

@@ -108,7 +108,7 @@ contract Vault is TEA {
     /// @dev The address of the APE implementation.
     address public immutable APE_IMPLEMENTATION;
 
-    address private immutable _WETH;
+    address private immutable _WHYPE;
 
     mapping(address debtToken => mapping(address collateralToken => mapping(int8 leverageTier => SirStructs.VaultState)))
         internal _vaultStates; // Do not use vaultId 0
@@ -124,7 +124,7 @@ contract Vault is TEA {
         address sir,
         address oracle,
         address apeImplementation,
-        address weth
+        address whype
     ) TEA(systemControl, sir) {
         // Price ORACLE
         ORACLE = Oracle(oracle);
@@ -133,7 +133,7 @@ contract Vault is TEA {
         APE_IMPLEMENTATION = apeImplementation;
 
         // WETH
-        _WETH = weth;
+        _WHYPE = whype;
 
         // Push empty parameters to avoid vaultId 0
         _paramsById.push(SirStructs.VaultParameters(address(0), address(0), 0));
@@ -185,7 +185,7 @@ contract Vault is TEA {
     /**
      * @notice Function for minting APE or TEA, the protocol's synthetic tokens.
      * @dev You can mint by depositing collateral token or, alternatively, with debt token if collateralToDepositMin set to a non-zero amount.
-     * You also have the option to mint with vanilla ETH when the token is WETH by simply sending ETH with the call. In this case, amountToDeposit is ignored.
+     * You also have the option to mint with vanilla ETH when the token is WHYPE by simply sending ETH with the call. In this case, amountToDeposit is ignored.
      * @param isAPE If true, mint APE. If false, mint TEA
      * @param vaultParams The 3 parameters identifying a vault.
      * @param amountToDeposit Amount of collateral to deposit, or if collateralToDepositMin > 0, amount of debt token to deposit.
@@ -206,14 +206,14 @@ contract Vault is TEA {
         bool isETH = msg.value != 0;
         if (isETH) {
             // Minter sent ETH, so we need to check that this is a WETH vault
-            if ((collateralToDepositMin == 0 ? vaultParams.collateralToken : vaultParams.debtToken) != _WETH)
+            if ((collateralToDepositMin == 0 ? vaultParams.collateralToken : vaultParams.debtToken) != _WHYPE)
                 revert NotAWETHVault();
 
             // msg.value is the amount to deposit
             amountToDeposit = msg.value;
 
             // We must wrap it to WETH
-            IWETH9(_WETH).deposit{value: msg.value}();
+            IWETH9(_WHYPE).deposit{value: msg.value}();
         }
 
         // Cannot deposit 0
