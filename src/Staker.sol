@@ -11,8 +11,8 @@ import {exp2} from "prb/Common.sol";
 
 /**
  * @notice The Staker contract handles mostly the staking of SIR tokens, and the token auctions.
- * Collection of fees from the vault can be triggered by anyone and also start an auction to convert them to ETH.
- * Stakers only receive dividends in the form of ETH.
+ * Collection of fees from the vault can be triggered by anyone and also start an auction to convert them to HYPE.
+ * Stakers only receive dividends in the form of HYPE.
  * @dev Mod of Solmate's ERC20.
  */
 contract Staker {
@@ -37,7 +37,7 @@ contract Staker {
         address indexed token,
         uint256 reward
     );
-    event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
+    event DividendsPaid(uint96 amountHYPE, uint80 amountStakedSIR);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event DividendsClaimed(address indexed staker, uint96 amount);
     event Staked(address indexed staker, uint80 amount);
@@ -63,7 +63,7 @@ contract Staker {
     Vault public vault;
 
     /// @dev The protocol's full name.
-    string public constant name = "Hyper Synthetics Implemented Right";
+    string public constant name = "Synthetics Implemented Right";
 
     /// @dev The protocol's ERC20 token symbol.
     string public constant symbol = "HyperSIR";
@@ -73,13 +73,13 @@ contract Staker {
 
     struct Balance {
         uint80 balanceOfSIR; // Amount of transferable SIR
-        uint96 unclaimedETH; // Amount of ETH owed to the staker(s)
+        uint96 unclaimedHYPE; // Amount of HYPE owed to the staker(s)
     }
 
-    SirStructs.StakingParams internal stakingParams; // Total staked SIR and cumulative ETH per SIR
+    SirStructs.StakingParams internal stakingParams; // Total staked SIR and cumulative HYPE per SIR
 
-    Balance private _supply; // Total unstaked SIR and ETH owed to the stakers
-    uint96 internal totalWinningBids; // Total amount of WETH deposited by the bidders
+    Balance private _supply; // Total unstaked SIR and HYPE owed to the stakers
+    uint96 internal totalWinningBids; // Total amount of WHYPE deposited by the bidders
     bool private _initialized;
 
     mapping(address token => SirStructs.Auction) internal _auctions;
@@ -106,7 +106,7 @@ contract Staker {
         INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
     }
 
-    /// @dev Necessary so the contract can unwrap WETH to ETH
+    /// @dev Necessary so the contract can unwrap WHYPE to HYPE
     receive() external payable {}
 
     /**
@@ -292,7 +292,7 @@ contract Staker {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Stake SIR tokens to get ETH dividends from the protocol.
+     * @notice Stake SIR tokens to get HYPE dividends from the protocol.
      * @dev Staked SIR is unlocked gradually, and after 30 days half of the stake will be unlocked.
      * @param amount Amount of SIR to stake.
      */
@@ -310,7 +310,7 @@ contract Staker {
             // Update staker info
             stakerParams.stake += amount;
             stakerParams.lockedStake += amount;
-            stakerParams.cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
+            stakerParams.cumulativeHYPEPerSIRx80 = stakingParams_.cumulativeHYPEPerSIRx80;
             _stakersParams[msg.sender] = stakerParams;
 
             // Update _supply
@@ -338,7 +338,7 @@ contract Staker {
             // Check user has enough unlocked SIR to unstake
             if (amount > stakerParams.stake - stakerParams.lockedStake) revert InsufficientUnlockedStake();
 
-            // Update balance of SIR and ETH dividends
+            // Update balance of SIR and HYPE dividends
             balances[msg.sender] = Balance(
                 balance.balanceOfSIR + amount,
                 _dividends(balance, stakingParams_, stakerParams)
@@ -346,7 +346,7 @@ contract Staker {
 
             // Update staker info
             stakerParams.stake -= amount;
-            stakerParams.cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
+            stakerParams.cumulativeHYPEPerSIRx80 = stakingParams_.cumulativeHYPEPerSIRx80;
             _stakersParams[msg.sender] = stakerParams;
 
             // Update _supply of SIR
@@ -361,25 +361,25 @@ contract Staker {
     }
 
     /**
-     * @notice Claim ETH dividends. You can still claim even if you already unstaked you SIR.
-     * @return dividends_ Amount of ETH received.
+     * @notice Claim HYPE dividends. You can still claim even if you already unstaked you SIR.
+     * @return dividends_ Amount of HYPE received.
      */
     function claim() public returns (uint96 dividends_) {
         unchecked {
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
             dividends_ = _dividends(balances[msg.sender], stakingParams_, _stakersParams[msg.sender]);
 
-            // Check user has enough ETH to claim
+            // Check user has enough HYPE to claim
             if (dividends_ == 0) revert NoDividends();
 
             // Null the unclaimed dividends
-            balances[msg.sender].unclaimedETH = 0;
+            balances[msg.sender].unclaimedHYPE = 0;
 
             // Update staker info
-            _stakersParams[msg.sender].cumulativeETHPerSIRx80 = stakingParams_.cumulativeETHPerSIRx80;
+            _stakersParams[msg.sender].cumulativeHYPEPerSIRx80 = stakingParams_.cumulativeHYPEPerSIRx80;
 
-            // Update ETH _supply in the contract
-            _supply.unclaimedETH -= dividends_;
+            // Update HYPE _supply in the contract
+            _supply.unclaimedHYPE -= dividends_;
 
             // Emit event
             emit DividendsClaimed(msg.sender, dividends_);
@@ -391,9 +391,9 @@ contract Staker {
     }
 
     /**
-     * @notice Convenient function for unstaking SIR and claim ETH dividens in one call.
+     * @notice Convenient function for unstaking SIR and claim HYPE dividens in one call.
      * @param amount Amount of SIR to unstake.
-     * @return dividends_ Amount of ETH received.
+     * @return dividends_ Amount of HYPE received.
      */
     function unstakeAndClaim(uint80 amount) external returns (uint96 dividends_) {
         unstake(amount);
@@ -401,8 +401,8 @@ contract Staker {
     }
 
     /**
-     * @notice Returns the amount of unclaimed ETH for a staker.
-     * @return Amount of unclaimed ETH
+     * @notice Returns the amount of unclaimed HYPE for a staker.
+     * @return Amount of unclaimed HYPE
      */
     function unclaimedDividends(address staker) external view returns (uint96) {
         if (staker == STAKING_VAULT) return 0; // _dividends function would not decode balances[STAKING_VAULT] properly
@@ -415,10 +415,10 @@ contract Staker {
         SirStructs.StakerParams memory stakerParams
     ) private pure returns (uint96 dividends_) {
         unchecked {
-            dividends_ = balance.unclaimedETH;
+            dividends_ = balance.unclaimedHYPE;
             if (stakerParams.stake > 0) {
-                dividends_ += uint96( // Safe to cast to uint96 because _supply.unclaimedETH is uint96
-                    (uint256(stakingParams_.cumulativeETHPerSIRx80 - stakerParams.cumulativeETHPerSIRx80) *
+                dividends_ += uint96( // Safe to cast to uint96 because _supply.unclaimedHYPE is uint96
+                    (uint256(stakingParams_.cumulativeHYPEPerSIRx80 - stakerParams.cumulativeHYPEPerSIRx80) *
                         stakerParams.stake) >> 80
                 );
             }
@@ -432,7 +432,7 @@ contract Staker {
     /**
      * @notice Bid on an auction.
      * @param token Contract address of the token being auctioned.
-     * @param amount Amount of WETH to bid.
+     * @param amount Amount of WHYPE to bid.
      */
     function bid(address token, uint96 amount) external {
         unchecked {
@@ -474,7 +474,7 @@ contract Staker {
         unchecked {
             uint96 totalWinningBids_ = totalWinningBids;
 
-            // Because ETH is the dividend paying token, we do not need to start an auction if fees are in WETH.
+            // Because HYPE is the dividend paying token, we do not need to start an auction if fees are in WHYPE.
             if (token != address(_WHYPE)) {
                 SirStructs.Auction memory auction = _auctions[token];
 
@@ -510,13 +510,13 @@ contract Staker {
                 // Emit event with the new auction's details
                 emit AuctionStarted(token, totalFees);
             } else {
-                //  Retrieve WETH from the vault to be distributed as dividends.
+                //  Retrieve WHYPE from the vault to be distributed as dividends.
                 totalFees = vault.withdrawFees(token);
 
-                // Distribute WETH as ETH dividends
+                // Distribute WHYPE as HYPE dividends
                 bool noDividends = _distributeDividends(totalWinningBids_);
 
-                //  Revert if there is no (W)ETH be to distributed.
+                //  Revert if there is no (W)HYPE be to distributed.
                 if (noDividends) revert NoFeesCollected();
             }
         }
@@ -524,7 +524,7 @@ contract Staker {
 
     /**
      * @notice Winner of the auction can call this function to get the auction lot.
-     * @dev If the transfer of the auction lot fails, the function reverts and the dividends (WETH) are not distributed, allowing the bidder to try again later.
+     * @dev If the transfer of the auction lot fails, the function reverts and the dividends (WHYPE) are not distributed, allowing the bidder to try again later.
      * @param token Contract address of the token in the lot.
      * @param beneficiary Address to send the auction lot. If it is 0, the auction lot is sent to the bidder address.
      */
@@ -554,29 +554,29 @@ contract Staker {
             // Any excess WHYPE in the contract will be distributed.
             uint256 excessWHYPE = _WHYPE.balanceOf(address(this)) - totalWinningBids_;
 
-            // Any excess ETH from when stake was 0, or from donations
-            uint96 unclaimedETH = _supply.unclaimedETH;
-            uint256 excessETH = address(this).balance - unclaimedETH;
+            // Any excess HYPE from when stake was 0, or from donations
+            uint96 unclaimedHYPE = _supply.unclaimedHYPE;
+            uint256 excessHYPE = address(this).balance - unclaimedHYPE;
 
             // Compute dividends
-            uint256 dividends_ = excessWHYPE + excessETH;
+            uint256 dividends_ = excessWHYPE + excessHYPE;
             if (dividends_ == 0) return true;
 
-            // Unwrap WHYPE dividends to ETH
+            // Unwrap WHYPE dividends to HYPE
             _WHYPE.withdraw(excessWHYPE);
 
             SirStructs.StakingParams memory stakingParams_ = stakingParams;
             if (stakingParams_.stake == 0) return true;
 
-            // Update cumulativeETHPerSIRx80
-            stakingParams.cumulativeETHPerSIRx80 =
-                stakingParams_.cumulativeETHPerSIRx80 +
+            // Update cumulativeHYPEPerSIRx80
+            stakingParams.cumulativeHYPEPerSIRx80 =
+                stakingParams_.cumulativeHYPEPerSIRx80 +
                 uint176((dividends_ << 80) / stakingParams_.stake);
 
             // Update _supply
-            _supply.unclaimedETH = unclaimedETH + uint96(dividends_);
+            _supply.unclaimedHYPE = unclaimedHYPE + uint96(dividends_);
 
-            // Dividends are considered paid after unclaimedETH is updated
+            // Dividends are considered paid after unclaimedHYPE is updated
             emit DividendsPaid(uint96(dividends_), stakingParams_.stake);
         }
     }

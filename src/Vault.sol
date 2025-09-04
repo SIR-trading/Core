@@ -76,7 +76,7 @@ contract Vault is TEA {
     error InsufficientDeposit();
     error ExcessiveDeposit();
     error Locked();
-    error NotAWETHVault();
+    error NotAWHYPEVault();
     error DeadlineExceeded();
 
     /// @dev This event is meant to make it easier to retrieve the prices of APE and TEA.
@@ -132,7 +132,7 @@ contract Vault is TEA {
         // Save the address of the APE implementation
         APE_IMPLEMENTATION = apeImplementation;
 
-        // WETH
+        // WHYPE
         _WHYPE = whype;
 
         // Push empty parameters to avoid vaultId 0
@@ -185,7 +185,7 @@ contract Vault is TEA {
     /**
      * @notice Function for minting APE or TEA, the protocol's synthetic tokens.
      * @dev You can mint by depositing collateral token or, alternatively, with debt token if collateralToDepositMin set to a non-zero amount.
-     * You also have the option to mint with vanilla ETH when the token is WHYPE by simply sending ETH with the call. In this case, amountToDeposit is ignored.
+     * You also have the option to mint with vanilla HYPE when the token is WHYPE by simply sending HYPE with the call. In this case, amountToDeposit is ignored.
      * @param isAPE If true, mint APE. If false, mint TEA
      * @param vaultParams The 3 parameters identifying a vault.
      * @param amountToDeposit Amount of collateral to deposit, or if collateralToDepositMin > 0, amount of debt token to deposit.
@@ -202,17 +202,17 @@ contract Vault is TEA {
     ) external payable nonReentrant returns (uint256 amount) {
         if (block.timestamp > deadline && deadline != 0) revert DeadlineExceeded();
 
-        // Check if user sent vanilla ETH
-        bool isETH = msg.value != 0;
-        if (isETH) {
-            // Minter sent ETH, so we need to check that this is a WETH vault
+        // Check if user sent vanilla HYPE
+        bool isHYPE = msg.value != 0;
+        if (isHYPE) {
+            // Minter sent HYPE, so we need to check that this is a WHYPE vault
             if ((collateralToDepositMin == 0 ? vaultParams.collateralToken : vaultParams.debtToken) != _WHYPE)
-                revert NotAWETHVault();
+                revert NotAWHYPEVault();
 
             // msg.value is the amount to deposit
             amountToDeposit = msg.value;
 
-            // We must wrap it to WETH
+            // We must wrap it to WHYPE
             IWETH9(_WHYPE).deposit{value: msg.value}();
         }
 
@@ -236,7 +236,7 @@ contract Vault is TEA {
             // Rest of the mint logic
             amount = _mint(msg.sender, ape, vaultParams, uint144(amountToDeposit), vaultState, reserves);
 
-            // If the user didn't send ETH, transfer the ERC20 collateral from the minter
+            // If the user didn't send HYPE, transfer the ERC20 collateral from the minter
             if (msg.value == 0) {
                 TransferHelper.safeTransferFrom(
                     vaultParams.collateralToken,
@@ -258,7 +258,7 @@ contract Vault is TEA {
 
             // Encode data for swap callback
             bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
-            bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne, isETH);
+            bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne, isHYPE);
 
             // Swap
             int256 amountToDepositInt = int256(amountToDeposit);
@@ -305,7 +305,7 @@ contract Vault is TEA {
             SirStructs.VaultState memory vaultState,
             SirStructs.Reserves memory reserves,
             bool zeroForOne,
-            bool isETH
+            bool isHYPE
         ) = abi.decode(
                 data,
                 (address, address, SirStructs.VaultParameters, SirStructs.VaultState, SirStructs.Reserves, bool, bool)
@@ -316,8 +316,8 @@ contract Vault is TEA {
             ? (uint256(-amount1Delta), uint256(amount0Delta))
             : (uint256(-amount0Delta), uint256(amount1Delta));
 
-        // If this is an ETH mint, transfer WETH to the pool asap
-        if (isETH) {
+        // If this is an HYPE mint, transfer WHYPE to the pool asap
+        if (isHYPE) {
             TransferHelper.safeTransfer(vaultParams.debtToken, uniswapPool, debtTokenToSwap);
         }
 
@@ -327,7 +327,7 @@ contract Vault is TEA {
 
         // Transfer debt token to the pool
         // This is done last to avoid reentrancy attack from a bogus debt token contract
-        if (!isETH) {
+        if (!isHYPE) {
             TransferHelper.safeTransferFrom(vaultParams.debtToken, minter, uniswapPool, debtTokenToSwap);
         }
 
