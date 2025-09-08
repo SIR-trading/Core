@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
 import {APE} from "src/APE.sol";
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
@@ -114,10 +114,10 @@ contract VaultTest is Test {
         collateral = new MockERC20("Collateral", "COL", 18);
         vaultParams.collateralToken = address(collateral);
 
-        // vm.createSelectFork("mainnet", 18128102);
+        // vm.createSelectFork("hyperevm", 12523857);
 
         // Deploy oracle
-        oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        oracle = address(new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY));
 
         // Mock oracle initialization
         vm.mockCall(
@@ -135,7 +135,7 @@ contract VaultTest is Test {
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, oracle, address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(systemControl, sir, oracle, address(apeImplementation), AddressesHyperEVM.ADDR_WHYPE);
 
         // Vauld id
         vaultId = 1;
@@ -1721,11 +1721,11 @@ contract VaultTest is Test {
 }
 
 contract VaultTestETH is Test {
-    error NotAWETHVault();
+    error NotAWHYPEVault();
     error AmountTooLow();
 
     Vault public vault;
-    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
     Oracle public oracle;
     IERC20 public ape;
 
@@ -1733,19 +1733,25 @@ contract VaultTestETH is Test {
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2);
+        SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, 2);
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
 
         // Deploy oracle
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(
+            vm.addr(1),
+            vm.addr(2),
+            address(oracle),
+            address(apeImplementation),
+            AddressesHyperEVM.ADDR_WHYPE
+        );
 
         // _initialize vault
         vault.initialize(vaultParams);
@@ -1757,48 +1763,48 @@ contract VaultTestETH is Test {
         ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function testFuzz_mintWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
-        // Constraint the amount of ETH
-        amountETH = _bound(amountETH, 1e6, 2 ** 96);
+    function testFuzz_mintWithHYPE(bool isAPE, uint256 amountHYPE, uint144 falseAmountHYPE) public {
+        // Constraint the amount of HYPE
+        amountHYPE = _bound(amountHYPE, 1e6, 2 ** 96);
 
         // Alice mints
-        deal(user, amountETH);
+        deal(user, amountHYPE);
         vm.prank(user);
-        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0, 0);
+        uint256 amount = vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, 0, 0);
 
         // Checks
-        assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
+        assertEq(whype.balanceOf(address(vault)), amountHYPE, "Wrong total reserve");
         assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
     }
 
-    function testFuzz_mintWithTooLittleETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
-        // Constraint the amount of ETH
-        amountETH = _bound(amountETH, 0, 1e6 - 1);
+    function testFuzz_mintWithTooLittleETH(bool isAPE, uint256 amountHYPE, uint144 falseAmountHYPE) public {
+        // Constraint the amount of HYPE
+        amountHYPE = _bound(amountHYPE, 0, 1e6 - 1);
 
         // User mints
-        deal(user, amountETH);
+        deal(user, amountHYPE);
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0, 0);
+        vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, 0, 0);
     }
 
-    function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
-        // _initialize a non-WETH vault
+    function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountHYPE, uint144 falseAmountHYPE) public {
+        // _initialize a non-WHYPE vault
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
-            Addresses.ADDR_WETH,
-            Addresses.ADDR_USDC,
+            AddressesHyperEVM.ADDR_WHYPE,
+            AddressesHyperEVM.ADDR_USDT0,
             -1
         );
         vault.initialize(vaultParams2);
 
-        // Constraint the amount of ETH
-        amountETH = _bound(amountETH, 2, 2 ** 96);
+        // Constraint the amount of HYPE
+        amountHYPE = _bound(amountHYPE, 2, 2 ** 96);
 
         // User mints
-        deal(user, amountETH);
+        deal(user, amountHYPE);
         vm.prank(user);
-        vm.expectRevert(NotAWETHVault.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0, 0);
+        vm.expectRevert(NotAWHYPEVault.selector);
+        vault.mint{value: amountHYPE}(isAPE, vaultParams2, falseAmountHYPE, 0, 0);
     }
 }
 
@@ -1807,7 +1813,7 @@ contract VaultTestDebtToken is Test {
     error InsufficientCollateralReceivedFromUniswap();
 
     Vault public vault;
-    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
     ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
     Oracle public oracle;
@@ -1817,19 +1823,25 @@ contract VaultTestDebtToken is Test {
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, 2);
+        SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, 2);
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
 
         // Deploy oracle
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(
+            vm.addr(1),
+            vm.addr(2),
+            address(oracle),
+            address(apeImplementation),
+            AddressesHyperEVM.ADDR_WHYPE
+        );
 
         // _initialize vault
         vault.initialize(vaultParams);
@@ -1845,11 +1857,14 @@ contract VaultTestDebtToken is Test {
         amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
 
         // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        SirStructs.OracleState memory oracleState = oracle.state(
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE
+        );
         (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
             IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: Addresses.ADDR_USDC,
-                tokenOut: Addresses.ADDR_WETH,
+                tokenIn: AddressesHyperEVM.ADDR_USDT0,
+                tokenOut: AddressesHyperEVM.ADDR_WHYPE,
                 amountIn: amountDebtToken,
                 fee: oracleState.uniswapFeeTier.fee,
                 sqrtPriceLimitX96: 0
@@ -1861,17 +1876,17 @@ contract VaultTestDebtToken is Test {
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
 
         // Deal USDC to user
-        deal(Addresses.ADDR_USDC, user, amountDebtToken, true);
+        deal(AddressesHyperEVM.ADDR_USDT0, user, amountDebtToken, true);
 
         // Approve vault
         vm.startPrank(user);
-        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+        IERC20(AddressesHyperEVM.ADDR_USDT0).approve(address(vault), amountDebtToken);
 
         // User mints
         uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin, 0);
 
         // Checks
-        assertEq(weth.balanceOf(address(vault)), amountOut, "Wrong total reserve");
+        assertEq(whype.balanceOf(address(vault)), amountOut, "Wrong total reserve");
         assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
     }
 
@@ -1879,11 +1894,14 @@ contract VaultTestDebtToken is Test {
         amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
 
         // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        SirStructs.OracleState memory oracleState = oracle.state(
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE
+        );
         (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
             IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: Addresses.ADDR_USDC,
-                tokenOut: Addresses.ADDR_WETH,
+                tokenIn: AddressesHyperEVM.ADDR_USDT0,
+                tokenOut: AddressesHyperEVM.ADDR_WHYPE,
                 amountIn: amountDebtToken,
                 fee: oracleState.uniswapFeeTier.fee,
                 sqrtPriceLimitX96: 0
@@ -1896,11 +1914,11 @@ contract VaultTestDebtToken is Test {
         console.log(collateralTokenMin);
 
         // Deal USDC to user
-        deal(Addresses.ADDR_USDC, user, amountDebtToken, true);
+        deal(AddressesHyperEVM.ADDR_USDT0, user, amountDebtToken, true);
 
         // Approve vault
         vm.startPrank(user);
-        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+        IERC20(AddressesHyperEVM.ADDR_USDT0).approve(address(vault), amountDebtToken);
 
         // User mints
         vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
@@ -1912,11 +1930,11 @@ contract VaultTestDebtToken is Test {
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
 
         // Deal USDC to user
-        deal(Addresses.ADDR_USDC, user, amountDebtToken);
+        deal(AddressesHyperEVM.ADDR_USDT0, user, amountDebtToken);
 
         // Approve vault
         vm.startPrank(user);
-        IERC20(Addresses.ADDR_USDC).approve(address(vault), amountDebtToken);
+        IERC20(AddressesHyperEVM.ADDR_USDT0).approve(address(vault), amountDebtToken);
 
         // User mints
         vm.expectRevert();
@@ -1939,12 +1957,12 @@ contract VaultTestDebtToken is Test {
 }
 
 contract VaultTestETHDebtToken is Test {
-    error NotAWETHVault();
+    error NotAWHYPEVault();
     error AmountTooLow();
     error InsufficientCollateralReceivedFromUniswap();
 
     Vault public vault;
-    IWETH9 public weth = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
     ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
     IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
     Oracle public oracle;
@@ -1954,19 +1972,25 @@ contract VaultTestETHDebtToken is Test {
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(Addresses.ADDR_WETH, Addresses.ADDR_USDC, 2);
+        SirStructs.VaultParameters(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0, 2);
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
 
         // Deploy oracle
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(vm.addr(1), vm.addr(2), address(oracle), address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(
+            vm.addr(1),
+            vm.addr(2),
+            address(oracle),
+            address(apeImplementation),
+            AddressesHyperEVM.ADDR_WHYPE
+        );
 
         // _initialize vault
         vault.initialize(vaultParams);
@@ -1978,21 +2002,24 @@ contract VaultTestETHDebtToken is Test {
         ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function testFuzz_mintWithEthAsDebtToken(
+    function testFuzz_mintWithHypeAsDebtToken(
         bool isAPE,
-        uint256 amountETH,
-        uint256 falseAmountETH,
+        uint256 amountHYPE,
+        uint256 falseAmountHYPE,
         uint144 collateralTokenMin
     ) public {
-        amountETH = _bound(amountETH, 1e15, 2 ** 96); // Too little amount of ETH will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
+        amountHYPE = _bound(amountHYPE, 1e15, 2 ** 96); // Too little amount of HYPE will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
 
         // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        SirStructs.OracleState memory oracleState = oracle.state(
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE
+        );
         (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
             IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: Addresses.ADDR_WETH,
-                tokenOut: Addresses.ADDR_USDC,
-                amountIn: amountETH,
+                tokenIn: AddressesHyperEVM.ADDR_WHYPE,
+                tokenOut: AddressesHyperEVM.ADDR_USDT0,
+                amountIn: amountHYPE,
                 fee: oracleState.uniswapFeeTier.fee,
                 sqrtPriceLimitX96: 0
             })
@@ -2002,30 +2029,30 @@ contract VaultTestETHDebtToken is Test {
         // Upperbound minimum collateral required
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
 
-        // Deal ETH to user
-        deal(user, amountETH);
+        // Deal HYPE to user
+        deal(user, amountHYPE);
 
         // User mints
         vm.prank(user);
-        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin, 0);
+        uint256 amount = vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, collateralTokenMin, 0);
 
         // Checks
-        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), amountOut, "Wrong total reserve");
+        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), amountOut, "Wrong total reserve");
         assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
     }
 
-    function testFuzz_mintWrongVaultWithEthAsDebtToken(
+    function testFuzz_mintWrongVaultWithHypeAsDebtToken(
         bool isAPE,
-        uint256 amountETH,
-        uint256 falseAmountETH,
+        uint256 amountHYPE,
+        uint256 falseAmountHYPE,
         uint144 collateralTokenMin
     ) public {
-        amountETH = _bound(amountETH, 1e15, 2 ** 96);
+        amountHYPE = _bound(amountHYPE, 1e15, 2 ** 96);
 
-        // _initialize a non-WETH vault
+        // _initialize a non-WHYPE vault
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
-            Addresses.ADDR_USDC,
-            Addresses.ADDR_WETH,
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE,
             -1
         );
         vault.initialize(vaultParams2);
@@ -2033,30 +2060,33 @@ contract VaultTestETHDebtToken is Test {
         // Upperbound minimum collateral required
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
 
-        // Deal ETH to user
-        deal(user, amountETH);
+        // Deal HYPE to user
+        deal(user, amountHYPE);
 
         // User mints
         vm.prank(user);
-        vm.expectRevert(NotAWETHVault.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, collateralTokenMin, 0);
+        vm.expectRevert(NotAWHYPEVault.selector);
+        vault.mint{value: amountHYPE}(isAPE, vaultParams2, falseAmountHYPE, collateralTokenMin, 0);
     }
 
-    function testFuzz_mintWithEthBadUniswapTrade(
+    function testFuzz_mintWithHypeBadUniswapTrade(
         bool isAPE,
-        uint256 amountETH,
-        uint256 falseAmountETH,
+        uint256 amountHYPE,
+        uint256 falseAmountHYPE,
         uint144 collateralTokenMin
     ) public {
-        amountETH = _bound(amountETH, 1e15, 2 ** 96); // Too little amount of ETH will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
+        amountHYPE = _bound(amountHYPE, 1e15, 2 ** 96); // Too little amount of HYPE will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
 
         // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        SirStructs.OracleState memory oracleState = oracle.state(
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE
+        );
         (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
             IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: Addresses.ADDR_WETH,
-                tokenOut: Addresses.ADDR_USDC,
-                amountIn: amountETH,
+                tokenIn: AddressesHyperEVM.ADDR_WHYPE,
+                tokenOut: AddressesHyperEVM.ADDR_USDT0,
+                amountIn: amountHYPE,
                 fee: oracleState.uniswapFeeTier.fee,
                 sqrtPriceLimitX96: 0
             })
@@ -2066,31 +2096,34 @@ contract VaultTestETHDebtToken is Test {
         // Wrong minimum collateral required
         collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
 
-        // Deal ETH to user
-        deal(user, amountETH);
+        // Deal HYPE to user
+        deal(user, amountHYPE);
 
         // User mints
         vm.prank(user);
         vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin, 0);
+        vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, collateralTokenMin, 0);
     }
 
-    function testFuzz_mintWithTooLittleEthAsDebtToken(
+    function testFuzz_mintWithTooLittleHypeAsDebtToken(
         bool isAPE,
-        uint256 amountETH,
-        uint256 falseAmountETH,
+        uint256 amountHYPE,
+        uint256 falseAmountHYPE,
         uint144 collateralTokenMin
     ) public {
-        amountETH = _bound(amountETH, 0, 1e15);
+        amountHYPE = _bound(amountHYPE, 0, 1e15);
 
         // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        SirStructs.OracleState memory oracleState = oracle.state(
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE
+        );
         try
             quoter.quoteExactInputSingle(
                 IQuoterV2.QuoteExactInputSingleParams({
-                    tokenIn: Addresses.ADDR_WETH,
-                    tokenOut: Addresses.ADDR_USDC,
-                    amountIn: amountETH,
+                    tokenIn: AddressesHyperEVM.ADDR_WHYPE,
+                    tokenOut: AddressesHyperEVM.ADDR_USDT0,
+                    amountIn: amountHYPE,
                     fee: oracleState.uniswapFeeTier.fee,
                     sqrtPriceLimitX96: 0
                 })
@@ -2102,23 +2135,23 @@ contract VaultTestETHDebtToken is Test {
         // Upperbound minimum collateral required
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
 
-        // Deal ETH to user
-        deal(user, amountETH);
+        // Deal HYPE to user
+        deal(user, amountHYPE);
 
         // User mints
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, collateralTokenMin, 0);
+        vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, collateralTokenMin, 0);
     }
 }
 
 contract VaultControlTest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     uint256 constant SLOT_TOTAL_RESERVES = 10;
-    uint96 constant ETH_SUPPLY = 120e6 * 10 ** 18;
+    uint96 constant HYPE_SUPPLY = 120e6 * 10 ** 18;
 
     address public systemControl = vm.addr(1);
     address public sir = vm.addr(2);
@@ -2138,55 +2171,55 @@ contract VaultControlTest is Test {
     }
 
     struct Balances4Tokens {
-        uint256 balanceOfWETH;
+        uint256 balanceOfHYPE;
         uint256 balanceOfBNB;
         uint256 balanceOfUSDT;
         uint256 balanceOfUSDC;
     }
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, vm.addr(3), address(apeImplementation), Addresses.ADDR_WETH);
+        vault = new Vault(systemControl, sir, vm.addr(3), address(apeImplementation), AddressesHyperEVM.ADDR_WHYPE);
     }
 
     function testFuzz_withdrawFeesFailsCuzNotSIR(address user, TokenFees memory tokenFees) public {
         vm.assume(user != sir);
 
         // Add fees to vault
-        _setFees(Addresses.ADDR_WETH, tokenFees);
+        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFees);
 
-        // Withdraw WETH
+        // Withdraw WHYPE
         vm.expectRevert();
         vm.prank(user);
-        vault.withdrawFees(Addresses.ADDR_WETH);
+        vault.withdrawFees(AddressesHyperEVM.ADDR_WHYPE);
     }
 
     function testFuzz_withdrawWETH(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(Addresses.ADDR_WETH, tokenFees);
+        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFees);
 
-        // Withdraw WETH
+        // Withdraw WHYPE
         if (tokenFees.fees != 0) {
             vm.expectEmit();
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_WETH);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_WHYPE);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(WETH.balanceOf(sir), tokenFees.fees);
-        assertEq(WETH.balanceOf(address(vault)), tokenFees.total);
+        assertEq(WHYPE.balanceOf(sir), tokenFees.fees);
+        assertEq(WHYPE.balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawBNB(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(Addresses.ADDR_BNB, tokenFees);
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFees);
 
         // Withdraw BNB
         vm.assume(tokenFees.fees > 0);
@@ -2194,17 +2227,25 @@ contract VaultControlTest is Test {
         emit Transfer(address(vault), sir, tokenFees.fees);
 
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_BNB);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_kHYPE);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees, "Wrong total fees to stakers");
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(sir), tokenFees.fees, "Wrong BNB balance of SIR contract");
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(address(vault)), tokenFees.total, "Wrong BNB balance of vault");
+        assertEq(
+            IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(sir),
+            tokenFees.fees,
+            "Wrong kHYPE balance of SIR contract"
+        );
+        assertEq(
+            IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(address(vault)),
+            tokenFees.total,
+            "Wrong kHYPE balance of vault"
+        );
     }
 
     function testFuzz_withdrawUSDT(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(Addresses.ADDR_USDT, tokenFees);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFees);
 
         // Withdraw USDT
         if (tokenFees.fees != 0) {
@@ -2212,17 +2253,17 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDT);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_USDT0);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(address(vault)), tokenFees.total);
+        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(sir), tokenFees.fees);
+        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawUSDC(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(Addresses.ADDR_USDC, tokenFees);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFees);
 
         // Withdraw USDC
         if (tokenFees.fees != 0) {
@@ -2230,17 +2271,17 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(Addresses.ADDR_USDC);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_USDT0);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(Addresses.ADDR_USDC).balanceOf(address(vault)), tokenFees.total);
+        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(sir), tokenFees.fees);
+        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawToSaveSystemFailsCuzNotSystemControl(
         address user,
-        TokenFees memory tokenFeesWETH,
+        TokenFees memory tokenFeesHYPE,
         TokenFees memory tokenFeesBNB,
         TokenFees memory tokenFeesUSDT,
         TokenFees memory tokenFeesUSDC
@@ -2249,17 +2290,17 @@ contract VaultControlTest is Test {
         vm.assume(user.code.length == 0);
 
         // Add fees to vault
-        _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
-        _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
-        _setFees(Addresses.ADDR_USDT, tokenFeesUSDT);
-        _setFees(Addresses.ADDR_USDC, tokenFeesUSDC);
+        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
         address[] memory tokens = new address[](4);
-        tokens[0] = Addresses.ADDR_WETH;
-        tokens[1] = Addresses.ADDR_BNB;
-        tokens[2] = Addresses.ADDR_USDT;
-        tokens[3] = Addresses.ADDR_USDC;
+        tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
+        tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
+        tokens[2] = AddressesHyperEVM.ADDR_USDT0;
+        tokens[3] = AddressesHyperEVM.ADDR_USDT0;
 
         // Fails to save system
         vm.prank(user);
@@ -2269,7 +2310,7 @@ contract VaultControlTest is Test {
 
     function testFuzz_withdrawToSaveSystem(
         address to,
-        TokenFees memory tokenFeesWETH,
+        TokenFees memory tokenFeesHYPE,
         TokenFees memory tokenFeesBNB,
         TokenFees memory tokenFeesUSDT,
         TokenFees memory tokenFeesUSDC
@@ -2280,20 +2321,20 @@ contract VaultControlTest is Test {
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
         // Add fees to vault
-        _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
-        _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
-        _setFees(Addresses.ADDR_USDT, tokenFeesUSDT);
-        _setFees(Addresses.ADDR_USDC, tokenFeesUSDC);
+        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
         address[] memory tokens = new address[](4);
-        tokens[0] = Addresses.ADDR_WETH;
-        tokens[1] = Addresses.ADDR_BNB;
-        tokens[2] = Addresses.ADDR_USDT;
-        tokens[3] = Addresses.ADDR_USDC;
-        if (tokenFeesWETH.total + tokenFeesWETH.fees > 0) {
+        tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
+        tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
+        tokens[2] = AddressesHyperEVM.ADDR_USDT0;
+        tokens[3] = AddressesHyperEVM.ADDR_USDT0;
+        if (tokenFeesHYPE.total + tokenFeesHYPE.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesWETH.total + tokenFeesWETH.fees);
+            emit Transfer(address(vault), to, tokenFeesHYPE.total + tokenFeesHYPE.fees);
         }
         if (tokenFeesBNB.total + tokenFeesBNB.fees > 0) {
             vm.expectEmit();
@@ -2311,21 +2352,21 @@ contract VaultControlTest is Test {
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Assert balances
-        assertEq(amounts[0], tokenFeesWETH.total + tokenFeesWETH.fees, "Wrong amounts[0]");
+        assertEq(amounts[0], tokenFeesHYPE.total + tokenFeesHYPE.fees, "Wrong amounts[0]");
         assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
         assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
         assertEq(amounts[3], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[3]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
-            balances4Tokens.balanceOfWETH - preBalances4Tokens.balanceOfWETH,
-            tokenFeesWETH.total + tokenFeesWETH.fees,
-            "Wrong WETH balance"
+            balances4Tokens.balanceOfHYPE - preBalances4Tokens.balanceOfHYPE,
+            tokenFeesHYPE.total + tokenFeesHYPE.fees,
+            "Wrong WHYPE balance"
         );
         assertEq(
             balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
             tokenFeesBNB.total + tokenFeesBNB.fees,
-            "Wrong BNB balance"
+            "Wrong kHYPE balance"
         );
         assertEq(
             balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
@@ -2341,8 +2382,8 @@ contract VaultControlTest is Test {
 
     function testFuzz_withdrawToSaveSystemBuggyERC20(
         address to,
-        TokenFees memory tokenFeesWETH,
-        BuggyERC20 calldata buggyWETH,
+        TokenFees memory tokenFeesHYPE,
+        BuggyERC20 calldata buggyWHYPE,
         TokenFees memory tokenFeesBNB,
         BuggyERC20 calldata buggyBNB,
         TokenFees memory tokenFeesUSDT,
@@ -2356,35 +2397,35 @@ contract VaultControlTest is Test {
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
         // Add fees to vault
-        _setFees(Addresses.ADDR_WETH, tokenFeesWETH);
-        _setFees(Addresses.ADDR_BNB, tokenFeesBNB);
-        _setFees(Addresses.ADDR_USDT, tokenFeesUSDT);
-        _setFees(Addresses.ADDR_USDC, tokenFeesUSDC);
+        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
+        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC);
 
         // Modify ERC20 behavior
-        _modifyERC20(Addresses.ADDR_WETH, tokenFeesWETH, buggyWETH);
-        _modifyERC20(Addresses.ADDR_BNB, tokenFeesBNB, buggyBNB);
-        _modifyERC20(Addresses.ADDR_USDT, tokenFeesUSDT, buggyUSDT);
-        _modifyERC20(Addresses.ADDR_USDC, tokenFeesUSDC, buggyUSDC);
+        _modifyERC20(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE, buggyWHYPE);
+        _modifyERC20(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB, buggyBNB);
+        _modifyERC20(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT, buggyUSDT);
+        _modifyERC20(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC, buggyUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
         address[] memory tokens = new address[](4);
-        tokens[0] = Addresses.ADDR_WETH;
-        tokens[1] = Addresses.ADDR_BNB;
-        tokens[2] = Addresses.ADDR_USDT;
-        tokens[3] = Addresses.ADDR_USDC;
+        tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
+        tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
+        tokens[2] = AddressesHyperEVM.ADDR_USDT0;
+        tokens[3] = AddressesHyperEVM.ADDR_USDT0;
         vm.prank(systemControl);
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Set amounts to 0 if buggy ERC20
         if (
-            buggyWETH.balanceOfReverts ||
-            buggyWETH.balanceOfReturnsWrongLength ||
-            buggyWETH.transferReverts ||
-            buggyWETH.transferReturnsFalse
+            buggyWHYPE.balanceOfReverts ||
+            buggyWHYPE.balanceOfReturnsWrongLength ||
+            buggyWHYPE.transferReverts ||
+            buggyWHYPE.transferReturnsFalse
         ) {
-            tokenFeesWETH.total = 0;
-            tokenFeesWETH.fees = 0;
+            tokenFeesHYPE.total = 0;
+            tokenFeesHYPE.fees = 0;
         }
         if (
             buggyBNB.balanceOfReverts ||
@@ -2416,21 +2457,21 @@ contract VaultControlTest is Test {
 
         // Assert balances
         vm.clearMockedCalls();
-        assertEq(amounts[0], tokenFeesWETH.total + tokenFeesWETH.fees, "Wrong amounts[0]");
+        assertEq(amounts[0], tokenFeesHYPE.total + tokenFeesHYPE.fees, "Wrong amounts[0]");
         assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
         assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
         assertEq(amounts[3], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[3]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
-            balances4Tokens.balanceOfWETH - preBalances4Tokens.balanceOfWETH,
-            tokenFeesWETH.total + tokenFeesWETH.fees,
-            "Wrong WETH balance"
+            balances4Tokens.balanceOfHYPE - preBalances4Tokens.balanceOfHYPE,
+            tokenFeesHYPE.total + tokenFeesHYPE.fees,
+            "Wrong WHYPE balance"
         );
         assertEq(
             balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
             tokenFeesBNB.total + tokenFeesBNB.fees,
-            "Wrong BNB balance"
+            "Wrong kHYPE balance"
         );
         assertEq(
             balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
@@ -2460,10 +2501,10 @@ contract VaultControlTest is Test {
     function _computeBalances(address to) private view returns (Balances4Tokens memory) {
         return
             Balances4Tokens({
-                balanceOfWETH: WETH.balanceOf(to),
-                balanceOfBNB: IERC20(Addresses.ADDR_BNB).balanceOf(to),
-                balanceOfUSDT: IERC20(Addresses.ADDR_USDT).balanceOf(to),
-                balanceOfUSDC: IERC20(Addresses.ADDR_USDC).balanceOf(to)
+                balanceOfHYPE: WHYPE.balanceOf(to),
+                balanceOfBNB: IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(to),
+                balanceOfUSDT: IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(to),
+                balanceOfUSDC: IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(to)
             });
     }
 
@@ -2489,15 +2530,15 @@ contract VaultControlTest is Test {
         // Bound variables
         tokenFees.fees = _bound(tokenFees.fees, 0, type(uint256).max - IERC20(token).totalSupply());
         tokenFees.total = _bound(tokenFees.total, 0, type(uint256).max - IERC20(token).totalSupply() - tokenFees.fees);
-        if (token == Addresses.ADDR_WETH) {
-            tokenFees.total = _bound(tokenFees.total, 0, ETH_SUPPLY);
+        if (token == AddressesHyperEVM.ADDR_WHYPE) {
+            tokenFees.total = _bound(tokenFees.total, 0, HYPE_SUPPLY);
         } else {
             // Each vault can have at most 2^144 tokens and there are at most 2^48 vaults
             tokenFees.total = _bound(tokenFees.total, 0, 2 ** (144 + 48));
         }
 
         // Send tokens to Vault
-        if (token == Addresses.ADDR_WETH) _dealWETH(address(vault), tokenFees.total + tokenFees.fees);
+        if (token == AddressesHyperEVM.ADDR_WHYPE) _dealWHYPE(address(vault), tokenFees.total + tokenFees.fees);
         else _dealToken(token, address(vault), tokenFees.total + tokenFees.fees);
 
         // Set total reserves
@@ -2512,12 +2553,12 @@ contract VaultControlTest is Test {
         );
     }
 
-    function _dealWETH(address to, uint256 amount) internal {
+    function _dealWHYPE(address to, uint256 amount) internal {
         vm.deal(vm.addr(2), amount);
         vm.prank(vm.addr(2));
-        WETH.deposit{value: amount}();
+        WHYPE.deposit{value: amount}();
         vm.prank(vm.addr(2));
-        WETH.transfer(address(to), amount);
+        WHYPE.transfer(address(to), amount);
     }
 
     function _dealToken(address token, address to, uint256 amount) internal {
@@ -2553,7 +2594,7 @@ contract VaultHandler is Test, RegimeEnum {
     uint256 public constant TIME_ADVANCE = 5 minutes;
     Regime immutable regime;
 
-    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
     Vault public vault;
     Oracle public oracle;
     address public apeImplementation;
@@ -2578,15 +2619,15 @@ contract VaultHandler is Test, RegimeEnum {
 
     SirStructs.VaultParameters public vaultParameters1 =
         SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDT,
-            collateralToken: Addresses.ADDR_WETH,
+            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
             leverageTier: int8(1)
         });
 
     SirStructs.VaultParameters public vaultParameters2 =
         SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDC,
-            collateralToken: Addresses.ADDR_WETH,
+            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
             leverageTier: int8(-2)
         });
 
@@ -2651,9 +2692,9 @@ contract VaultHandler is Test, RegimeEnum {
         blockNumber = blockNumber_;
         regime = regime_;
 
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
         apeImplementation = address(new APE());
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation, Addresses.ADDR_WETH);
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation, AddressesHyperEVM.ADDR_WHYPE);
 
         // Set tax between 2 vaults
         vm.prank(vm.addr(100));
@@ -2668,30 +2709,30 @@ contract VaultHandler is Test, RegimeEnum {
             vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
         }
 
-        // Intialize vault 2xETH/USDT
+        // Intialize vault 2xHYPE/USDT
         vault.initialize(vaultParameters1);
 
-        // Intialize vault 1.25xETH/USDC
+        // Intialize vault 1.25xHYPE/USDT0
         vault.initialize(vaultParameters2);
     }
 
     // This mint performs no checks
     function setupMint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        // Deal ETH to user
+        // Deal HYPE to user
         vm.deal(user, inputOutput.amountCollateral);
 
         console.log("------Setup--Mint--Attempt------");
         // console.log(inputOutput.amountCollateral, "collateral");
 
-        // Convert ETH to WETH
+        // Convert HYPE to WHYPE
         vm.startPrank(user);
-        _WETH.deposit{value: inputOutput.amountCollateral}();
-        _WETH.approve(address(vault), inputOutput.amountCollateral);
+        _WHYPE.deposit{value: inputOutput.amountCollateral}();
+        _WHYPE.approve(address(vault), inputOutput.amountCollateral);
 
         // Check regime stays the same
         _checkRegime();
 
-        // Mint with WETH
+        // Mint with WHYPE
         vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0, 0);
         vm.stopPrank();
     }
@@ -2825,18 +2866,18 @@ contract VaultHandler is Test, RegimeEnum {
             _bound(inputOutput.amountCollateral, collateralLowerbound, collateralUpperbound)
         );
 
-        // Deal ETH to user
+        // Deal HYPE to user
         vm.deal(user, inputOutput.amountCollateral);
 
-        // Convert ETH to WETH
+        // Convert HYPE to WHYPE
         vm.startPrank(user);
-        _WETH.deposit{value: inputOutput.amountCollateral}();
-        _WETH.approve(address(vault), inputOutput.amountCollateral);
+        _WHYPE.deposit{value: inputOutput.amountCollateral}();
+        _WHYPE.approve(address(vault), inputOutput.amountCollateral);
 
         // Check regime stays the same
         _checkRegime();
 
-        // Mint with WETH
+        // Mint with WHYPE
         vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0, 0);
         vm.stopPrank();
         console.log("Minting Over");
@@ -2909,8 +2950,8 @@ contract VaultHandler is Test, RegimeEnum {
         _checkRegime();
         inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount, 0);
 
-        // Unwrap ETH
-        _WETH.withdraw(inputOutput.amountCollateral);
+        // Unwrap HYPE
+        _WHYPE.withdraw(inputOutput.amountCollateral);
         vm.stopPrank();
         console.log("B. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
         console.log("Burning Over");
@@ -2958,8 +2999,8 @@ contract VaultHandler is Test, RegimeEnum {
     }
 
     function _invariantTotalCollateral() private view {
-        uint256 totalReserves = vault.totalReserves(address(_WETH));
-        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
+        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
 
         SirStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
         SirStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
@@ -3061,8 +3102,8 @@ contract VaultHandler is Test, RegimeEnum {
 }
 
 contract VaultInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 18128302;
-    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+    uint256 constant BLOCK_NUMBER_START = 12523857;
+    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     VaultHandler public vaultHandler;
     Vault public vault;
@@ -3089,7 +3130,7 @@ contract VaultInvariantTest is Test, RegimeEnum {
         targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
 
         vault = vaultHandler.vault();
-        vm.makePersistent(address(Addresses.ADDR_WETH));
+        vm.makePersistent(address(AddressesHyperEVM.ADDR_WHYPE));
         vm.makePersistent(address(vaultHandler));
         vm.makePersistent(address(vault));
         vm.makePersistent(address(vaultHandler.oracle()));
@@ -3097,25 +3138,25 @@ contract VaultInvariantTest is Test, RegimeEnum {
         vm.makePersistent(ape2);
         vm.makePersistent(apeImplementation);
 
-        // Mint 1 ETH worth of TEA for vault 1
+        // Mint 1 HYPE worth of TEA for vault 1
         vaultHandler.setupMint(
             false,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 1 ether})
         );
 
-        // Mint 1 ETH worth of APE for vault 1
+        // Mint 1 HYPE worth of APE for vault 1
         vaultHandler.setupMint(
             true,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 1 ether})
         );
 
-        // Mint 1 ETH worth of TEA for vault 2
+        // Mint 1 HYPE worth of TEA for vault 2
         vaultHandler.setupMint(
             false,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 2, userId: 1, amountCollateral: 1 ether})
         );
 
-        // Mint 1 ETH worth of APE for vault 2
+        // Mint 1 HYPE worth of APE for vault 2
         vaultHandler.setupMint(
             true,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 2, userId: 2, amountCollateral: 1 ether})
@@ -3125,14 +3166,14 @@ contract VaultInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_totalCollateral() public view {
-        uint256 totalReserves = vault.totalReserves(address(_WETH));
-        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
+        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
     }
 }
 
 contract PowerZoneInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 15210000; // July 25, 2022
-    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+    uint256 constant BLOCK_NUMBER_START = 12523857; // July 25, 2022
+    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     VaultHandler public vaultHandler;
     Vault public vault;
@@ -3160,20 +3201,20 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
 
         vault = vaultHandler.vault();
         Oracle oracle = vaultHandler.oracle();
-        vm.makePersistent(address(Addresses.ADDR_WETH));
+        vm.makePersistent(address(AddressesHyperEVM.ADDR_WHYPE));
         vm.makePersistent(address(vaultHandler));
         vm.makePersistent(address(vault));
         vm.makePersistent(address(oracle));
         vm.makePersistent(ape);
         vm.makePersistent(apeImplementation);
 
-        // Mint 8 ETH worth of TEA
+        // Mint 8 HYPE worth of TEA
         vaultHandler.setupMint(
             false,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 8 ether})
         );
 
-        // Mint 2 ETH worth of APE
+        // Mint 2 HYPE worth of APE
         vaultHandler.setupMint(
             true,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 2 ether})
@@ -3183,8 +3224,8 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 1
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public view {
-        uint256 totalReserves = vault.totalReserves(address(_WETH));
-        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
+        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
         assertEq(reserveApes + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
@@ -3192,8 +3233,8 @@ contract PowerZoneInvariantTest is Test, RegimeEnum {
 }
 
 contract SaturationInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 15210000; // July 25, 2022
-    IWETH9 private constant _WETH = IWETH9(Addresses.ADDR_WETH);
+    uint256 constant BLOCK_NUMBER_START = 12523857; // July 25, 2022
+    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     VaultHandler public vaultHandler;
     Vault public vault;
@@ -3221,20 +3262,20 @@ contract SaturationInvariantTest is Test, RegimeEnum {
 
         vault = vaultHandler.vault();
         Oracle oracle = vaultHandler.oracle();
-        vm.makePersistent(address(Addresses.ADDR_WETH));
+        vm.makePersistent(address(AddressesHyperEVM.ADDR_WHYPE));
         vm.makePersistent(address(vaultHandler));
         vm.makePersistent(address(vault));
         vm.makePersistent(address(oracle));
         vm.makePersistent(ape);
         vm.makePersistent(apeImplementation);
 
-        // Mint 8 ETH worth of APE
+        // Mint 8 HYPE worth of APE
         vaultHandler.setupMint(
             true,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 8 ether})
         );
 
-        // Mint 2 ETH worth of TEA
+        // Mint 2 HYPE worth of TEA
         vaultHandler.setupMint(
             false,
             VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 2 ether})
@@ -3244,8 +3285,8 @@ contract SaturationInvariantTest is Test, RegimeEnum {
     /// forge-config: default.invariant.runs = 3
     /// forge-config: default.invariant.depth = 10
     function invariant_dummy() public view {
-        uint256 totalReserves = vault.totalReserves(address(_WETH));
-        assertLe(totalReserves, _WETH.balanceOf(address(vault)), "Total collateral is wrong");
+        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
+        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
         // vm.writeLine("./log.log", "assertLe");
 
         (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();

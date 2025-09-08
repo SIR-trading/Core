@@ -6,24 +6,26 @@ import "forge-std/Script.sol";
 import {SystemControl} from "src/SystemControl.sol";
 
 /** @dev cli for HyperEVM testnet: forge script script/StartLiquidityMining.s.sol --rpc-url hypertest --chain 998 --broadcast
+    @dev cli for HyperEVM mainnet: forge script script/StartLiquidityMining.s.sol --rpc-url hyperevm --chain 999 --broadcast --ledger
 */
 contract StartLiquidityMining is Script {
-    uint256 privateKey;
-
     SystemControl systemControl;
 
     function setUp() public {
-        if (block.chainid == 998) {
-            privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
-        } else {
-            revert("Only HyperEVM testnet (chain 998) is supported");
+        if (block.chainid != 998 && block.chainid != 999) {
+            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
         }
 
         systemControl = SystemControl(vm.envAddress("SYSTEM_CONTROL"));
     }
 
     function run() public {
-        vm.startBroadcast(privateKey);
+        if (block.chainid == 998) {
+            vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
+        } else {
+            // Chain 999 - use ledger
+            vm.startBroadcast();
+        }
 
         // Start liquidity mining if not already started
         if (systemControl.hashActiveVaults() == 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470) {

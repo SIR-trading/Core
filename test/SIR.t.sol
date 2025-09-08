@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
@@ -28,13 +28,13 @@ contract BasicSIRTest is Test {
         contributors = (new Contributors());
 
         // Deploy SIR
-        sir = new SIR(address(contributors), Addresses.ADDR_WETH, vm.addr(10));
+        sir = new SIR(address(contributors), AddressesHyperEVM.ADDR_WHYPE, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape, Addresses.ADDR_WETH));
+        vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape, AddressesHyperEVM.ADDR_WHYPE));
 
         // Initialize SIR
         sir.initialize(vault);
@@ -44,7 +44,7 @@ contract BasicSIRTest is Test {
         assertEq(address(sir.vault()), vault);
         assertEq(sir.SYSTEM_CONTROL(), vm.addr(10));
         assertEq(sir.decimals(), 12);
-        assertEq(sir.name(), "Hyper Synthetics Implemented Right");
+        assertEq(sir.name(), "Synthetics Implemented Right");
         assertEq(sir.symbol(), "HyperSIR");
     }
 
@@ -154,7 +154,7 @@ contract BasicSIRTest is Test {
 contract GentlemenTest is Test {
     uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
 
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     SIR public sir;
     Vault public vault;
@@ -164,28 +164,28 @@ contract GentlemenTest is Test {
 
     SirStructs.VaultParameters vaultParameters =
         SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDT,
-            collateralToken: Addresses.ADDR_WETH,
+            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
             leverageTier: -1
         });
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
 
         // Deploy oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy Contributors
         address contributors = address(new Contributors());
 
         // Deploy SIR
-        sir = new SIR(contributors, Addresses.ADDR_WETH, vm.addr(10));
+        sir = new SIR(contributors, AddressesHyperEVM.ADDR_WHYPE, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(vm.addr(10), address(sir), oracle, ape, Addresses.ADDR_WETH);
+        vault = new Vault(vm.addr(10), address(sir), oracle, ape, AddressesHyperEVM.ADDR_WHYPE);
 
         // Initialize SIR
         sir.initialize(address(vault));
@@ -202,10 +202,10 @@ contract GentlemenTest is Test {
         vm.prank(vm.addr(10));
         vault.updateVaults(oldVaults, newVaults, newTaxes, 1);
 
-        // First gentleman deposits 1 WETH
+        // First gentleman deposits 1 WHYPE
         _dealWETH(alice, 1 ether);
         vm.prank(alice);
-        WETH.approve(address(vault), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
 
         // Alice mints TEA
         vm.prank(alice);
@@ -315,8 +315,8 @@ contract GentlemenTest is Test {
     function _dealWETH(address to, uint256 amount) internal {
         vm.deal(vm.addr(101), amount);
         vm.prank(vm.addr(101));
-        WETH.deposit{value: amount}();
+        WHYPE.deposit{value: amount}();
         vm.prank(vm.addr(101));
-        WETH.transfer(address(to), amount);
+        WHYPE.transfer(address(to), amount);
     }
 }

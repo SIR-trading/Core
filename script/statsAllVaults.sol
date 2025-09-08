@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 // import "forge-std/console.sol";
 
 import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
@@ -12,24 +13,26 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 
 /** @dev cli for HyperEVM testnet: forge script script/statsAllVaults.sol --rpc-url hypertest --chain 998 --broadcast
+    @dev cli for HyperEVM mainnet: forge script script/statsAllVaults.sol --rpc-url hyperevm --chain 999 --broadcast --ledger
 */
 contract statsAllVaults is Script {
-    uint256 privateKey;
-
     Vault vault;
 
     function setUp() public {
-        if (block.chainid == 998) {
-            privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
-        } else {
-            revert("Only HyperEVM testnet (chain 998) is supported");
+        if (block.chainid != 998 && block.chainid != 999) {
+            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
         }
 
         vault = Vault(vm.envAddress("VAULT"));
     }
 
     function run() public {
-        vm.startBroadcast(privateKey);
+        if (block.chainid == 998) {
+            vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
+        } else {
+            // Chain 999 - use ledger
+            vm.startBroadcast();
+        }
 
         console.log("Vault bytecode length:", address(vault).code.length);
 
@@ -40,11 +43,12 @@ contract statsAllVaults is Script {
         console.log("");
         console.log("------ WHYPE Total Reserves ------");
         console.log("");
-        uint256 whypeReserves = vault.totalReserves(AddressesHyperEVMTest.ADDR_WHYPE);
+        address whype = block.chainid == 998 ? AddressesHyperEVMTest.ADDR_WHYPE : AddressesHyperEVM.ADDR_WHYPE;
+        uint256 whypeReserves = vault.totalReserves(whype);
         console.log("WHYPE reserves:", whypeReserves);
         console.log(
             "WHYPE fees:",
-            IERC20(AddressesHyperEVMTest.ADDR_WHYPE).balanceOf(address(vault)) - whypeReserves
+            IERC20(whype).balanceOf(address(vault)) - whypeReserves
         );
 
         // Check vaults

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
@@ -32,7 +32,7 @@ contract SystemControlInitializationTest is Test {
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = address(new Vault(address(systemControl), sir, vm.addr(11), ape, Addresses.ADDR_WETH));
+        vault = address(new Vault(address(systemControl), sir, vm.addr(11), ape, AddressesHyperEVM.ADDR_WHYPE));
     }
 
     function testFuzz_initializationWrongCaller(address caller) public {
@@ -72,12 +72,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     uint256 constant SLOT_SYSTEM_STATUS = 3;
     uint256 constant OFFSET_SYSTEM_STATUS = 21 * 8;
 
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     SirStructs.VaultParameters vaultParameters =
         SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDT,
-            collateralToken: Addresses.ADDR_WETH,
+            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
             leverageTier: -1
         });
 
@@ -99,11 +99,11 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     address oneContributor;
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
         // vm.writeFile("./numNewVaults.log", "");
 
         // Deploy Oracle
-        address oracle = address(new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy SystemControl
         systemControl = new SystemControl();
@@ -112,13 +112,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         address contributors = address(new Contributors());
 
         // Deploy SIR
-        sir = payable(address(new SIR(contributors, Addresses.ADDR_WETH, address(systemControl))));
+        sir = payable(address(new SIR(contributors, AddressesHyperEVM.ADDR_WHYPE, address(systemControl))));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, oracle, ape, Addresses.ADDR_WETH);
+        vault = new Vault(address(systemControl), sir, oracle, ape, AddressesHyperEVM.ADDR_WHYPE);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));
@@ -139,13 +139,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertTrue(!systemParams.mintingStopped, "mintingStopped not set to false");
 
         // Successfully mint APE
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether, 0, 0);
 
         // Successfully mint TEA
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether, 0, 0);
 
         // Successfully mint SIR
@@ -172,14 +172,14 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(systemParams_.cumulativeTax, systemParams.cumulativeTax, "cumulativeTax not saved correctly");
 
         // Failure to mint APE
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         vm.expectRevert();
         vault.mint(true, vaultParameters, 1 ether, 0, 0);
 
         // Failure to mint TEA
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         vm.expectRevert();
         vault.mint(false, vaultParameters, 1 ether, 0, 0);
 
@@ -208,13 +208,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         skip(SystemConstants.FEE_CHANGE_DELAY);
 
         // Successfully mint APE
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         vault.mint(true, vaultParameters, 1 ether, 0, 0);
 
         // Successfully mint TEA
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         vault.mint(false, vaultParameters, 1 ether, 0, 0);
 
         // Successfully mint SIR
@@ -250,13 +250,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _initializeVault();
 
         // Successfully mint APE
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether, 0, 0);
 
         // Successfully mint TEA
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether, 0, 0);
 
         // Hault minting
@@ -274,14 +274,14 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         assertEq(uint256(systemControl.systemStatus()), uint256(SystemStatus.Shutdown));
 
         // Failure to mint APE
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         vm.expectRevert();
         vault.mint(true, vaultParameters, 1 ether, 0, 0);
 
         // Failure to mint TEA
-        _dealWETH(address(this), 1 ether);
-        WETH.approve(address(vault), 1 ether);
+        _dealWHYPE(address(this), 1 ether);
+        WHYPE.approve(address(vault), 1 ether);
         vm.expectRevert();
         vault.mint(false, vaultParameters, 1 ether, 0, 0);
 
@@ -300,7 +300,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Attempt to withdraw funds
         address[] memory tokens = new address[](1);
-        tokens[0] = Addresses.ADDR_USDC;
+        tokens[0] = AddressesHyperEVM.ADDR_USDT0;
         vm.prank(caller);
         vm.expectRevert();
         systemControl.saveFunds(tokens, vm.addr(20));
@@ -309,7 +309,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
     function test_saveFundsWrongState() public {
         // Arary of tokens to withdraw
         address[] memory tokens = new address[](1);
-        tokens[0] = Addresses.ADDR_USDC;
+        tokens[0] = AddressesHyperEVM.ADDR_USDT0;
 
         // Set state to Unstoppable
         _setState(SystemStatus.Unstoppable);
@@ -345,23 +345,23 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Arary of tokens to withdraw
         address[] memory tokens = new address[](1);
-        tokens[0] = Addresses.ADDR_USDC;
+        tokens[0] = AddressesHyperEVM.ADDR_USDT0;
 
         // Withdraw funds
         vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_USDC, 0);
+        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_USDT0, 0);
         systemControl.saveFunds(tokens, vm.addr(20));
     }
 
     function test_saveFunds() public {
-        // Add some WETH
-        _dealWETH(address(vault), 1 ether);
+        // Add some WHYPE
+        _dealWHYPE(address(vault), 1 ether);
 
         // Add some BNB
-        deal(Addresses.ADDR_BNB, address(vault), 2 ether, true);
+        deal(AddressesHyperEVM.ADDR_kHYPE, address(vault), 2 ether, true);
 
         // Add some USDT
-        deal(Addresses.ADDR_USDT, address(vault), 3 ether, true);
+        deal(AddressesHyperEVM.ADDR_USDT0, address(vault), 3 ether, true);
 
         // Mock token whose totalSupply function reverts
         MockERC20 token = new MockERC20("Mock", "MCK", 18);
@@ -399,19 +399,19 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Arary of tokens to withdraw
         address[] memory tokens = new address[](9);
-        tokens[0] = Addresses.ADDR_USDC;
+        tokens[0] = AddressesHyperEVM.ADDR_USDT0;
         tokens[1] = address(token5);
         tokens[2] = address(token4);
         tokens[3] = address(token3);
         tokens[4] = address(token2);
         tokens[5] = address(token);
-        tokens[6] = Addresses.ADDR_USDT;
-        tokens[7] = Addresses.ADDR_BNB;
-        tokens[8] = Addresses.ADDR_WETH;
+        tokens[6] = AddressesHyperEVM.ADDR_USDT0;
+        tokens[7] = AddressesHyperEVM.ADDR_kHYPE;
+        tokens[8] = AddressesHyperEVM.ADDR_WHYPE;
 
         // Expected events
         vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_USDC, 0);
+        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_USDT0, 0);
         vm.expectEmit();
         emit FundsWithdrawn(vm.addr(20), address(token5), 0);
         vm.expectEmit();
@@ -423,19 +423,19 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         vm.expectEmit();
         emit FundsWithdrawn(vm.addr(20), address(token), 0);
         vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_USDT, 3 ether);
+        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_USDT0, 3 ether);
         vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_BNB, 2 ether);
+        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_kHYPE, 2 ether);
         vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), Addresses.ADDR_WETH, 1 ether);
+        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_WHYPE, 1 ether);
 
         // Withdraw funds
         systemControl.saveFunds(tokens, vm.addr(20));
 
         // Assert balances
-        assertEq(IERC20(Addresses.ADDR_USDT).balanceOf(vm.addr(20)), 3 ether, "USDC balance wrong");
-        assertEq(IERC20(Addresses.ADDR_BNB).balanceOf(vm.addr(20)), 2 ether, "BNB balance wrong");
-        assertEq(IERC20(Addresses.ADDR_WETH).balanceOf(vm.addr(20)), 1 ether, "WETH balance wrong");
+        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(vm.addr(20)), 3 ether, "USDC balance wrong");
+        assertEq(IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(vm.addr(20)), 2 ether, "kHYPE balance wrong");
+        assertEq(IERC20(AddressesHyperEVM.ADDR_WHYPE).balanceOf(vm.addr(20)), 1 ether, "WHYPE balance wrong");
     }
 
     /////////////////////////////////////////////////////////////////
@@ -456,12 +456,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         vault.updateVaults(oldVaults, newVaults, newTaxes, 1);
     }
 
-    function _dealWETH(address to, uint256 amount) internal {
+    function _dealWHYPE(address to, uint256 amount) internal {
         vm.deal(vm.addr(2), amount);
         vm.prank(vm.addr(2));
-        WETH.deposit{value: amount}();
+        WHYPE.deposit{value: amount}();
         vm.prank(vm.addr(2));
-        WETH.transfer(address(to), amount);
+        WHYPE.transfer(address(to), amount);
     }
 
     function _setState(SystemStatus systemStatus) private {
@@ -518,13 +518,13 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         address contributors = address(new Contributors());
 
         // Deploy SIR
-        sir = payable(address(new SIR(contributors, Addresses.ADDR_WETH, address(systemControl))));
+        sir = payable(address(new SIR(contributors, AddressesHyperEVM.ADDR_WHYPE, address(systemControl))));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(address(systemControl), sir, sir, ape, Addresses.ADDR_WETH);
+        vault = new Vault(address(systemControl), sir, sir, ape, AddressesHyperEVM.ADDR_WHYPE);
 
         // Initialize SIR
         SIR(sir).initialize(address(vault));

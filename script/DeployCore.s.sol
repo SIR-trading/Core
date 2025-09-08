@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 
 import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SystemControl} from "src/SystemControl.sol";
 import {Contributors} from "src/Contributors.sol";
@@ -13,6 +14,7 @@ import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 
 /** @dev cli for HyperEVM testnet: forge script script/DeployCore.s.sol --rpc-url hypertest --chain 998 --broadcast
+    @dev cli for HyperEVM mainnet: forge script script/DeployCore.s.sol --rpc-url hyperevm --chain 999 --broadcast --ledger
     @dev Steps:
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol
@@ -22,22 +24,35 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
         6. Initialize SystemControl.sol with addresses of Vault.sol and SIR.sol
 */
 contract DeployCore is Script {
-    uint256 deployerPrivateKey;
-
     function setUp() public {
-        if (block.chainid == 998) {
-            deployerPrivateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
-        } else {
-            revert("Only HyperEVM testnet (chain 998) is supported");
+        if (block.chainid != 998 && block.chainid != 999) {
+            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
         }
     }
 
     function run() public {
-        vm.startBroadcast(deployerPrivateKey);
+        if (block.chainid == 998) {
+            vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
+        } else {
+            // Chain 999 - use ledger
+            vm.startBroadcast();
+        }
+
+        // Get the correct addresses based on chain
+        address uniswapFactory;
+        address whype;
+        
+        if (block.chainid == 998) {
+            uniswapFactory = AddressesHyperEVMTest.ADDR_UNISWAPV3_FACTORY;
+            whype = AddressesHyperEVMTest.ADDR_WHYPE;
+        } else {
+            uniswapFactory = AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY;
+            whype = AddressesHyperEVM.ADDR_WHYPE;
+        }
 
         // Deploy oracle
         address oracle = address(
-            new Oracle(AddressesHyperEVMTest.ADDR_UNISWAPV3_FACTORY)
+            new Oracle(uniswapFactory)
         );
         console.log("Oracle deployed at: ", oracle);
 
@@ -54,7 +69,7 @@ contract DeployCore is Script {
             address(
                 new SIR(
                     contributors,
-                    AddressesHyperEVMTest.ADDR_WHYPE,
+                    whype,
                     systemControl
                 )
             )
@@ -72,7 +87,7 @@ contract DeployCore is Script {
                 sir,
                 oracle,
                 apeImplementation,
-                AddressesHyperEVMTest.ADDR_WHYPE
+                whype
             )
         );
         console.log("Vault deployed at: ", vault);

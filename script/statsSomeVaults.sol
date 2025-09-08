@@ -12,25 +12,28 @@ import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 
 /** @dev cli for HyperEVM testnet: forge script script/statsSomeVaults.sol --rpc-url hypertest --chain 998 --broadcast
+    @dev cli for HyperEVM mainnet: forge script script/statsSomeVaults.sol --rpc-url hyperevm --chain 999 --broadcast --ledger
 */
 contract statsSomeVaults is Script {
     uint48[4] vaultsIds = [1, 2, 8, 10];
-    uint256 privateKey;
 
     Vault vault;
 
     function setUp() public {
-        if (block.chainid == 998) {
-            privateKey = vm.envUint("HYPERTEST_DEPLOYER_PRIVATE_KEY");
-        } else {
-            revert("Only HyperEVM testnet (chain 998) is supported");
+        if (block.chainid != 998 && block.chainid != 999) {
+            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
         }
 
         vault = Vault(vm.envAddress("VAULT"));
     }
 
     function run() public {
-        vm.startBroadcast(privateKey);
+        if (block.chainid == 998) {
+            vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
+        } else {
+            // Chain 999 - use ledger
+            vm.startBroadcast();
+        }
 
         // Check vaults
         for (uint48 i = 0; i < vaultsIds.length; i++) {

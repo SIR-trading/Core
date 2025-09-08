@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {Oracle} from "src/Oracle.sol";
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
@@ -14,9 +14,9 @@ import "forge-std/Test.sol";
 
 contract GasConsumption is Test, ERC1155TokenReceiver {
     uint256 public constant TIME_ADVANCE = 1 days;
-    uint256 public constant BLOCK_NUMBER_START = 18128102;
+    uint256 public constant BLOCK_NUMBER_START = 12523857;
 
-    IWETH9 private constant WETH = IWETH9(Addresses.ADDR_WETH);
+    IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
     Vault public vault;
     APE public ape;
 
@@ -32,27 +32,27 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 | updateVaults                 | 102235          | 102235 | 102235 | 102235 | 4       |
      */
 
-    // WETH/USDT's Uniswap TWAP has a long cardinality
+    // WHYPE/USDT's Uniswap TWAP has a long cardinality
     SirStructs.VaultParameters public vaultParameters1 =
         SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_USDT,
-            collateralToken: address(WETH),
+            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            collateralToken: address(WHYPE),
             leverageTier: int8(-1)
         });
 
-    // WETH/BNB's Uniswap TWAP is of cardinality 1
+    // WHYPE/BNB's Uniswap TWAP is of cardinality 1
     SirStructs.VaultParameters public vaultParameters2 =
         SirStructs.VaultParameters({
-            debtToken: Addresses.ADDR_BNB,
-            collateralToken: address(WETH),
+            debtToken: AddressesHyperEVM.ADDR_kHYPE,
+            collateralToken: address(WHYPE),
             leverageTier: int8(0)
         });
 
-    // USDT/WETH to mint with debt token
+    // USDT/WHYPE to mint with debt token
     SirStructs.VaultParameters public vaultParameters3 =
         SirStructs.VaultParameters({
-            debtToken: address(WETH),
-            collateralToken: Addresses.ADDR_USDT,
+            debtToken: address(WHYPE),
+            collateralToken: AddressesHyperEVM.ADDR_USDT0,
             leverageTier: int8(1)
         });
 
@@ -63,8 +63,8 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
 
         ape = new APE();
 
-        Oracle oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), address(ape), Addresses.ADDR_WETH);
+        Oracle oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), address(ape), AddressesHyperEVM.ADDR_WHYPE);
 
         // Set tax between 2 vaults
         {
@@ -82,19 +82,19 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         ape = APE(AddressClone.getAddress(address(vault), 1));
     }
 
-    function _prepareWETH(uint256 amount) private {
-        // Deal ETH
+    function _prepareWHYPE(uint256 amount) private {
+        // Deal HYPE
         vm.deal(address(this), amount);
 
-        // Wrap ETH to WETH
-        WETH.deposit{value: amount}();
+        // Wrap HYPE to WHYPE
+        WHYPE.deposit{value: amount}();
 
-        // Deposit WETH to vault
-        WETH.approve(address(vault), amount);
+        // Deposit WHYPE to vault
+        WHYPE.approve(address(vault), amount);
     }
 
-    function _prepareETH(uint256 amount) private {
-        // Deal ETH
+    function _prepareHYPE(uint256 amount) private {
+        // Deal HYPE
         vm.deal(address(this), amount);
     }
 
@@ -108,20 +108,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Intialize vault
         vault.initialize(vaultParameters1);
 
-        // Mint some APE with WETH
-        _prepareWETH(2 ether);
+        // Mint some APE with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(true, vaultParameters1, 2 ether, 0, 0);
 
-        // Mint some TEA with WETH
-        _prepareWETH(2 ether);
+        // Mint some TEA with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(false, vaultParameters1, 2 ether, 0, 0);
 
-        // Mint some APE with ETH
-        _prepareETH(2 ether);
+        // Mint some APE with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0, 0);
 
-        // Mint some TEA with ETH
-        _prepareETH(2 ether);
+        // Mint some TEA with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0, 0);
 
         // Burn some APE
@@ -138,20 +138,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Skip
         skip(TIME_ADVANCE);
 
-        // Mint some APE with WETH
-        _prepareWETH(2 ether);
+        // Mint some APE with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(true, vaultParameters1, 2 ether, 0, 0);
 
-        // Mint some TEA with WETH
-        _prepareWETH(2 ether);
+        // Mint some TEA with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(false, vaultParameters1, 2 ether, 0, 0);
 
-        // Mint some APE with ETH
-        _prepareETH(2 ether);
+        // Mint some APE with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(true, vaultParameters1, 0, 0, 0);
 
-        // Mint some TEA with ETH
-        _prepareETH(2 ether);
+        // Mint some TEA with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(false, vaultParameters1, 0, 0, 0);
 
         // Burn some APE
@@ -168,20 +168,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Intialize vault
         vault.initialize(vaultParameters2);
 
-        // Mint some APE with WETH
-        _prepareWETH(2 ether);
+        // Mint some APE with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(true, vaultParameters2, 2 ether, 0, 0);
 
-        // Mint some TEA with WETH
-        _prepareWETH(2 ether);
+        // Mint some TEA with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(false, vaultParameters2, 2 ether, 0, 0);
 
-        // Mint some APE with ETH
-        _prepareETH(2 ether);
+        // Mint some APE with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0, 0);
 
-        // Mint some TEA with ETH
-        _prepareETH(2 ether);
+        // Mint some TEA with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0, 0);
 
         // Burn some APE
@@ -198,20 +198,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Skip
         skip(TIME_ADVANCE);
 
-        // Mint some APE with WETH
-        _prepareWETH(2 ether);
+        // Mint some APE with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(true, vaultParameters2, 2 ether, 0, 0);
 
-        // Mint some TEA with WETH
-        _prepareWETH(2 ether);
+        // Mint some TEA with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(false, vaultParameters2, 2 ether, 0, 0);
 
-        // Mint some APE with ETH
-        _prepareETH(2 ether);
+        // Mint some APE with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(true, vaultParameters2, 0, 0, 0);
 
-        // Mint some TEA with ETH
-        _prepareETH(2 ether);
+        // Mint some TEA with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(false, vaultParameters2, 0, 0, 0);
 
         // Burn some APE
@@ -228,20 +228,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Intialize vault
         vault.initialize(vaultParameters3);
 
-        // Mint some APE with WETH
-        _prepareWETH(2 ether);
+        // Mint some APE with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(true, vaultParameters3, 2 ether, 1, 0);
 
-        // Mint some TEA with WETH
-        _prepareWETH(2 ether);
+        // Mint some TEA with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(false, vaultParameters3, 2 ether, 1, 0);
 
-        // Mint some APE with ETH
-        _prepareETH(2 ether);
+        // Mint some APE with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1, 0);
 
-        // Mint some TEA with ETH
-        _prepareETH(2 ether);
+        // Mint some TEA with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1, 0);
 
         // Burn some APE
@@ -258,20 +258,20 @@ contract GasConsumption is Test, ERC1155TokenReceiver {
         // Skip
         skip(TIME_ADVANCE);
 
-        // Mint some APE with WETH
-        _prepareWETH(2 ether);
+        // Mint some APE with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(true, vaultParameters3, 2 ether, 1, 0);
 
-        // Mint some TEA with WETH
-        _prepareWETH(2 ether);
+        // Mint some TEA with WHYPE
+        _prepareWHYPE(2 ether);
         vault.mint(false, vaultParameters3, 2 ether, 1, 0);
 
-        // Mint some APE with ETH
-        _prepareETH(2 ether);
+        // Mint some APE with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(true, vaultParameters3, 0, 1, 0);
 
-        // Mint some TEA with ETH
-        _prepareETH(2 ether);
+        // Mint some TEA with HYPE
+        _prepareHYPE(2 ether);
         vault.mint{value: 2 ether}(false, vaultParameters3, 0, 1, 0);
 
         // Burn some APE

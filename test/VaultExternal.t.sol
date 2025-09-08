@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import {VaultExternal} from "src/libraries/VaultExternal.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
@@ -40,7 +40,7 @@ contract VaultExternalTest is Test {
     Oracle oracle;
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 18128102);
+        vm.createSelectFork("hyperevm", 12523857);
 
         // Expand array to VAULT_ID elements
         for (vaultId = 0; vaultId < VAULT_ID; vaultId++) {
@@ -48,7 +48,7 @@ contract VaultExternalTest is Test {
         }
 
         // Deploy oracle
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         apeImplementation = address(new APE());
@@ -69,14 +69,14 @@ contract VaultExternalTest is Test {
         else if (leverageTier == 2) leverageStr = "5";
 
         // vm.expectEmit();
-        // emit VaultInitialized(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier, vaultId);
+        // emit VaultInitialized(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, leverageTier, vaultId);
         VaultExternal.deploy(
             oracle,
-            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[AddressesHyperEVM.ADDR_USDT0][AddressesHyperEVM.ADDR_WHYPE][leverageTier],
             paramsById,
             SirStructs.VaultParameters({
-                debtToken: Addresses.ADDR_USDC,
-                collateralToken: Addresses.ADDR_WETH,
+                debtToken: AddressesHyperEVM.ADDR_USDT0,
+                collateralToken: AddressesHyperEVM.ADDR_WHYPE,
                 leverageTier: leverageTier
             }),
             apeImplementation
@@ -86,15 +86,15 @@ contract VaultExternalTest is Test {
         assertGt(address(ape).code.length, 0);
 
         assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)), "Symbol is not correct");
-        assertEq(ape.name(), string.concat("Tokenized (WETH/USDC)^", leverageStr), "Name is not correct");
+        assertEq(ape.name(), string.concat("Tokenized (WHYPE/USDT0)^", leverageStr), "Name is not correct");
         assertEq(ape.decimals(), 18, "Decimals is not correct");
-        assertEq(ape.debtToken(), Addresses.ADDR_USDC, "Debt token is not correct");
-        assertEq(ape.collateralToken(), Addresses.ADDR_WETH, "Collateral token is not correct");
+        assertEq(ape.debtToken(), AddressesHyperEVM.ADDR_USDT0, "Debt token is not correct");
+        assertEq(ape.collateralToken(), AddressesHyperEVM.ADDR_WHYPE, "Collateral token is not correct");
         assertEq(ape.leverageTier(), leverageTier, "Leverage tier is not correct");
 
         SirStructs.VaultParameters memory params = paramsById[vaultId];
-        assertEq(params.debtToken, Addresses.ADDR_USDC, "Debt token is not correct");
-        assertEq(params.collateralToken, Addresses.ADDR_WETH, "Collateral token is not correct");
+        assertEq(params.debtToken, AddressesHyperEVM.ADDR_USDT0, "Debt token is not correct");
+        assertEq(params.collateralToken, AddressesHyperEVM.ADDR_WHYPE, "Collateral token is not correct");
         assertEq(params.leverageTier, leverageTier, "Leverage tier is not correct");
     }
 
@@ -104,9 +104,9 @@ contract VaultExternalTest is Test {
 
         VaultExternal.deploy(
             oracle,
-            vaultState[Addresses.ADDR_WETH][makerToken][0],
+            vaultState[AddressesHyperEVM.ADDR_WHYPE][makerToken][0],
             paramsById,
-            SirStructs.VaultParameters({debtToken: Addresses.ADDR_WETH, collateralToken: makerToken, leverageTier: 0}),
+            SirStructs.VaultParameters({debtToken: AddressesHyperEVM.ADDR_WHYPE, collateralToken: makerToken, leverageTier: 0}),
             apeImplementation
         );
 
@@ -115,9 +115,9 @@ contract VaultExternalTest is Test {
 
         assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)), "Symbol is not correct");
         console.log(ape.name());
-        assertEq(ape.name(), "Tokenized (MKR/WETH)^2", "Name is not correct");
+        assertEq(ape.name(), "Tokenized (MKR/WHYPE)^2", "Name is not correct");
         assertEq(ape.decimals(), 18, "Decimals is not correct");
-        assertEq(ape.debtToken(), Addresses.ADDR_WETH, "Debt token is not correct");
+        assertEq(ape.debtToken(), AddressesHyperEVM.ADDR_WHYPE, "Debt token is not correct");
         assertEq(ape.collateralToken(), makerToken, "Collateral token is not correct");
         assertEq(ape.leverageTier(), 0, "Leverage tier is not correct");
     }
@@ -141,11 +141,11 @@ contract VaultExternalTest is Test {
         vm.expectRevert(LeverageTierOutOfRange.selector);
         VaultExternal.deploy(
             oracle,
-            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[AddressesHyperEVM.ADDR_USDT0][AddressesHyperEVM.ADDR_WHYPE][leverageTier],
             paramsById,
             SirStructs.VaultParameters({
-                debtToken: Addresses.ADDR_USDC,
-                collateralToken: Addresses.ADDR_WETH,
+                debtToken: AddressesHyperEVM.ADDR_USDT0,
+                collateralToken: AddressesHyperEVM.ADDR_WHYPE,
                 leverageTier: leverageTier
             }),
             apeImplementation
@@ -157,19 +157,19 @@ contract VaultExternalTest is Test {
         for (; vaultId < VAULT_ID + 6; vaultId++) {
             vm.expectEmit();
             emit VaultInitialized(
-                Addresses.ADDR_USDC,
-                Addresses.ADDR_WETH,
+                AddressesHyperEVM.ADDR_USDT0,
+                AddressesHyperEVM.ADDR_WHYPE,
                 leverageTier,
                 vaultId,
                 AddressClone.getAddress(address(this), vaultId)
             );
             VaultExternal.deploy(
                 oracle,
-                vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+                vaultState[AddressesHyperEVM.ADDR_USDT0][AddressesHyperEVM.ADDR_WHYPE][leverageTier],
                 paramsById,
                 SirStructs.VaultParameters({
-                    debtToken: Addresses.ADDR_USDC,
-                    collateralToken: Addresses.ADDR_WETH,
+                    debtToken: AddressesHyperEVM.ADDR_USDT0,
+                    collateralToken: AddressesHyperEVM.ADDR_WHYPE,
                     leverageTier: leverageTier
                 }),
                 apeImplementation
@@ -180,13 +180,13 @@ contract VaultExternalTest is Test {
 
             assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)));
             assertEq(ape.decimals(), 18);
-            assertEq(ape.debtToken(), Addresses.ADDR_USDC);
-            assertEq(ape.collateralToken(), Addresses.ADDR_WETH);
+            assertEq(ape.debtToken(), AddressesHyperEVM.ADDR_USDT0);
+            assertEq(ape.collateralToken(), AddressesHyperEVM.ADDR_WHYPE);
             assertEq(ape.leverageTier(), leverageTier);
 
             SirStructs.VaultParameters memory params = paramsById[vaultId];
-            assertEq(params.debtToken, Addresses.ADDR_USDC);
-            assertEq(params.collateralToken, Addresses.ADDR_WETH);
+            assertEq(params.debtToken, AddressesHyperEVM.ADDR_USDT0);
+            assertEq(params.collateralToken, AddressesHyperEVM.ADDR_WHYPE);
             assertEq(params.leverageTier, leverageTier);
 
             leverageTier++;
@@ -199,11 +199,11 @@ contract VaultExternalTest is Test {
         vm.expectRevert(LeverageTierOutOfRange.selector);
         VaultExternal.deploy(
             oracle,
-            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[AddressesHyperEVM.ADDR_USDT0][AddressesHyperEVM.ADDR_WHYPE][leverageTier],
             paramsById,
             SirStructs.VaultParameters({
-                debtToken: Addresses.ADDR_USDC,
-                collateralToken: Addresses.ADDR_WETH,
+                debtToken: AddressesHyperEVM.ADDR_USDT0,
+                collateralToken: AddressesHyperEVM.ADDR_WHYPE,
                 leverageTier: leverageTier
             }),
             apeImplementation
@@ -213,11 +213,11 @@ contract VaultExternalTest is Test {
         vm.expectRevert(VaultAlreadyInitialized.selector);
         VaultExternal.deploy(
             oracle,
-            vaultState[Addresses.ADDR_USDC][Addresses.ADDR_WETH][leverageTier],
+            vaultState[AddressesHyperEVM.ADDR_USDT0][AddressesHyperEVM.ADDR_WHYPE][leverageTier],
             paramsById,
             SirStructs.VaultParameters({
-                debtToken: Addresses.ADDR_USDC,
-                collateralToken: Addresses.ADDR_WETH,
+                debtToken: AddressesHyperEVM.ADDR_USDT0,
+                collateralToken: AddressesHyperEVM.ADDR_WHYPE,
                 leverageTier: leverageTier
             }),
             apeImplementation
@@ -228,7 +228,7 @@ contract VaultExternalTest is Test {
         vaultId_ = _bound(vaultId_, 1, VAULT_ID - 1);
         leverageTier_ = int8(_bound(leverageTier_, -3, 2)); // Only accepted values in the system
 
-        paramsById[vaultId_] = SirStructs.VaultParameters(Addresses.ADDR_USDC, Addresses.ADDR_WETH, leverageTier_);
+        paramsById[vaultId_] = SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, leverageTier_);
 
         string memory uriStr = VaultExternal.teaURI(paramsById, vaultId_, totalSupply_);
 
@@ -249,8 +249,8 @@ contract VaultExternalTest is Test {
         assertEq(vm.parseJsonUint(output, "$.decimals"), 18);
         assertEq(vm.parseJsonUint(output, "$.chain_id"), 1);
         assertEq(vm.parseJsonUint(output, "$.vault_id"), vaultId_);
-        assertEq(vm.parseJsonString(output, "$.debt_token"), Strings.toHexString(Addresses.ADDR_USDC));
-        assertEq(vm.parseJsonString(output, "$.collateral_token"), Strings.toHexString(Addresses.ADDR_WETH));
+        assertEq(vm.parseJsonString(output, "$.debt_token"), Strings.toHexString(AddressesHyperEVM.ADDR_USDT0));
+        assertEq(vm.parseJsonString(output, "$.collateral_token"), Strings.toHexString(AddressesHyperEVM.ADDR_WHYPE));
         assertEq(vm.parseJsonInt(output, "$.leverage_tier"), leverageTier_);
         assertEq(vm.parseJsonUint(output, "$.total_supply"), totalSupply_);
     }
@@ -281,10 +281,10 @@ contract VaultExternalGetReserves is Test {
 
         _collateralToken = new MockERC20("Collateral token", "TKN", 18);
 
-        vaultParams = SirStructs.VaultParameters(Addresses.ADDR_USDC, address(_collateralToken), 0);
+        vaultParams = SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, address(_collateralToken), 0);
 
         alice = vm.addr(1);
-        oracle = new Oracle(Addresses.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
     }
 
     function _preprocess(

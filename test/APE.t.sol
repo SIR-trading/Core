@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "forge-std/Test.sol";
 import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
-import {Addresses} from "src/libraries/Addresses.sol";
+import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {FullMath} from "src/libraries/FullMath.sol";
 import {Strings} from "openzeppelin/utils/Strings.sol";
@@ -59,7 +59,7 @@ contract APETest is Test {
         );
 
         // Initialize APE clone
-        ape.initialize("Tokenized (ETH/USDC)^1.25", "HyperAPE-42", 18, Addresses.ADDR_USDC, Addresses.ADDR_WETH);
+        ape.initialize("Tokenized (HYPE/USDT0)^1.25", "HyperAPE-42", 18, AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE);
 
         alice = vm.addr(1);
         bob = vm.addr(2);
@@ -70,10 +70,10 @@ contract APETest is Test {
         assertEq(ape.totalSupply(), 0);
         assertEq(ape.balanceOf(alice), 0);
         assertEq(ape.balanceOf(bob), 0);
-        assertEq(ape.debtToken(), Addresses.ADDR_USDC);
-        assertEq(ape.collateralToken(), Addresses.ADDR_WETH);
+        assertEq(ape.debtToken(), AddressesHyperEVM.ADDR_USDT0);
+        assertEq(ape.collateralToken(), AddressesHyperEVM.ADDR_WHYPE);
         assertEq(ape.leverageTier(), LEVERAGE_TIER);
-        assertEq(ape.name(), "Tokenized (ETH/USDC)^1.25");
+        assertEq(ape.name(), "Tokenized (HYPE/USDT0)^1.25");
         assertEq(ape.symbol(), "HyperAPE-42");
         assertEq(ape.decimals(), 18);
     }
