@@ -454,10 +454,10 @@ contract Staker {
                 _WHYPE.transfer(auction.bidder, auction.bid);
             }
 
-            /** We check if the bid is at least 1% higher.
-                Null bids are not possible because 100*0 <= 101*bid is always true.
+            /** We check if the bid is at least 5% higher.
+                Null bids are not possible because 100*0 <= 105*bid is always true.
              */
-            if (100 * uint256(amount) <= 101 * uint256(auction.bid)) revert BidTooLow();
+            if (100 * uint256(amount) <= 105 * uint256(auction.bid)) revert BidTooLow();
 
             // Update bidder & bid
             _auctions[token] = SirStructs.Auction({bidder: msg.sender, bid: amount, startTime: auction.startTime});

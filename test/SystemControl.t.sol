@@ -357,10 +357,10 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Add some WHYPE
         _dealWHYPE(address(vault), 1 ether);
 
-        // Add some BNB
+        // Add some kHYPE
         deal(AddressesHyperEVM.ADDR_kHYPE, address(vault), 2 ether, true);
 
-        // Add some USDT
+        // Add some USDT0
         deal(AddressesHyperEVM.ADDR_USDT0, address(vault), 3 ether, true);
 
         // Mock token whose totalSupply function reverts
@@ -398,20 +398,19 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         systemControl.shutdownSystem();
 
         // Arary of tokens to withdraw
-        address[] memory tokens = new address[](9);
+        address[] memory tokens = new address[](8);
         tokens[0] = AddressesHyperEVM.ADDR_USDT0;
         tokens[1] = address(token5);
         tokens[2] = address(token4);
         tokens[3] = address(token3);
         tokens[4] = address(token2);
         tokens[5] = address(token);
-        tokens[6] = AddressesHyperEVM.ADDR_USDT0;
-        tokens[7] = AddressesHyperEVM.ADDR_kHYPE;
-        tokens[8] = AddressesHyperEVM.ADDR_WHYPE;
+        tokens[6] = AddressesHyperEVM.ADDR_kHYPE;
+        tokens[7] = AddressesHyperEVM.ADDR_WHYPE;
 
         // Expected events
         vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_USDT0, 0);
+        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_USDT0, 3 ether);
         vm.expectEmit();
         emit FundsWithdrawn(vm.addr(20), address(token5), 0);
         vm.expectEmit();
@@ -422,8 +421,6 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         emit FundsWithdrawn(vm.addr(20), address(token2), 0);
         vm.expectEmit();
         emit FundsWithdrawn(vm.addr(20), address(token), 0);
-        vm.expectEmit();
-        emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_USDT0, 3 ether);
         vm.expectEmit();
         emit FundsWithdrawn(vm.addr(20), AddressesHyperEVM.ADDR_kHYPE, 2 ether);
         vm.expectEmit();

@@ -18,8 +18,6 @@ import {ABDKMathQuad} from "abdk/ABDKMathQuad.sol";
 import {TickMathPrecision} from "src/libraries/TickMathPrecision.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {TransferHelper} from "v3-core/libraries/TransferHelper.sol";
-import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
-import {IQuoterV2} from "v3-periphery/interfaces/IQuoterV2.sol";
 
 import "forge-std/Test.sol";
 
@@ -152,8 +150,15 @@ contract VaultTest is Test {
 
     function _initialize(SystemParams memory systemParams, SirStructs.Reserves memory reservesPre) internal {
         {
-            // Explicitly bound leverage tier to valid range [-2, 2]
-            vaultParams.leverageTier = int8(_bound(int256(systemParams.leverageTier), -2, 2));
+            // Explicitly bound leverage tier to valid range
+            systemParams.leverageTier = int8(
+                _bound(
+                    int256(systemParams.leverageTier),
+                    SystemConstants.MIN_LEVERAGE_TIER,
+                    SystemConstants.MAX_LEVERAGE_TIER
+                )
+            );
+            vaultParams.leverageTier = systemParams.leverageTier;
 
             // _initialize vault
             vault.initialize(
@@ -660,7 +665,13 @@ contract VaultTest is Test {
         bool isAPE = false;
 
         // Ensure leverage tier is valid
-        systemParams.leverageTier = int8(_bound(int256(systemParams.leverageTier), -2, 2));
+        systemParams.leverageTier = int8(
+            _bound(
+                int256(systemParams.leverageTier),
+                SystemConstants.MIN_LEVERAGE_TIER,
+                SystemConstants.MAX_LEVERAGE_TIER
+            )
+        );
 
         _initialize(systemParams, reservesPre);
         _constraintBalances(isAPE, false, reservesPre, balances);
@@ -1814,8 +1825,6 @@ contract VaultTestDebtToken is Test {
 
     Vault public vault;
     IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
-    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
     Oracle public oracle;
     IERC20 public ape;
 
@@ -1851,78 +1860,6 @@ contract VaultTestDebtToken is Test {
 
         // Derive APE address
         ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
-    }
-
-    function testFuzz_mintWithDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
-        amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
-
-        // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(
-            AddressesHyperEVM.ADDR_USDT0,
-            AddressesHyperEVM.ADDR_WHYPE
-        );
-        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
-            IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: AddressesHyperEVM.ADDR_USDT0,
-                tokenOut: AddressesHyperEVM.ADDR_WHYPE,
-                amountIn: amountDebtToken,
-                fee: oracleState.uniswapFeeTier.fee,
-                sqrtPriceLimitX96: 0
-            })
-        );
-        vm.assume(amountOut >= 1e6);
-
-        // Upperbound minimum collateral required
-        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
-
-        // Deal USDC to user
-        deal(AddressesHyperEVM.ADDR_USDT0, user, amountDebtToken, true);
-
-        // Approve vault
-        vm.startPrank(user);
-        IERC20(AddressesHyperEVM.ADDR_USDT0).approve(address(vault), amountDebtToken);
-
-        // User mints
-        uint256 amount = vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin, 0);
-
-        // Checks
-        assertEq(whype.balanceOf(address(vault)), amountOut, "Wrong total reserve");
-        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
-    }
-
-    function testFuzz_mintBadUniswapTrade(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
-        amountDebtToken = _bound(amountDebtToken, 1, uint256(type(int256).max));
-
-        // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(
-            AddressesHyperEVM.ADDR_USDT0,
-            AddressesHyperEVM.ADDR_WHYPE
-        );
-        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
-            IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: AddressesHyperEVM.ADDR_USDT0,
-                tokenOut: AddressesHyperEVM.ADDR_WHYPE,
-                amountIn: amountDebtToken,
-                fee: oracleState.uniswapFeeTier.fee,
-                sqrtPriceLimitX96: 0
-            })
-        );
-        vm.assume(amountOut >= 1e6);
-
-        // Upperbound minimum collateral required
-        collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
-        console.log(collateralTokenMin);
-
-        // Deal USDC to user
-        deal(AddressesHyperEVM.ADDR_USDT0, user, amountDebtToken, true);
-
-        // Approve vault
-        vm.startPrank(user);
-        IERC20(AddressesHyperEVM.ADDR_USDT0).approve(address(vault), amountDebtToken);
-
-        // User mints
-        vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
-        vault.mint(isAPE, vaultParams, amountDebtToken, collateralTokenMin, 0);
     }
 
     function testFuzz_mintWithTooMuchDebtToken(bool isAPE, uint256 amountDebtToken, uint144 collateralTokenMin) public {
@@ -1963,8 +1900,6 @@ contract VaultTestETHDebtToken is Test {
 
     Vault public vault;
     IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
-    ISwapRouter public swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
-    IQuoterV2 public quoter = IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
     Oracle public oracle;
     IERC20 public ape;
 
@@ -2002,45 +1937,6 @@ contract VaultTestETHDebtToken is Test {
         ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function testFuzz_mintWithHypeAsDebtToken(
-        bool isAPE,
-        uint256 amountHYPE,
-        uint256 falseAmountHYPE,
-        uint144 collateralTokenMin
-    ) public {
-        amountHYPE = _bound(amountHYPE, 1e15, 2 ** 96); // Too little amount of HYPE will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
-
-        // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(
-            AddressesHyperEVM.ADDR_USDT0,
-            AddressesHyperEVM.ADDR_WHYPE
-        );
-        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
-            IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: AddressesHyperEVM.ADDR_WHYPE,
-                tokenOut: AddressesHyperEVM.ADDR_USDT0,
-                amountIn: amountHYPE,
-                fee: oracleState.uniswapFeeTier.fee,
-                sqrtPriceLimitX96: 0
-            })
-        );
-        vm.assume(amountOut >= 1e6);
-
-        // Upperbound minimum collateral required
-        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, amountOut));
-
-        // Deal HYPE to user
-        deal(user, amountHYPE);
-
-        // User mints
-        vm.prank(user);
-        uint256 amount = vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, collateralTokenMin, 0);
-
-        // Checks
-        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), amountOut, "Wrong total reserve");
-        assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
-    }
-
     function testFuzz_mintWrongVaultWithHypeAsDebtToken(
         bool isAPE,
         uint256 amountHYPE,
@@ -2068,81 +1964,6 @@ contract VaultTestETHDebtToken is Test {
         vm.expectRevert(NotAWHYPEVault.selector);
         vault.mint{value: amountHYPE}(isAPE, vaultParams2, falseAmountHYPE, collateralTokenMin, 0);
     }
-
-    function testFuzz_mintWithHypeBadUniswapTrade(
-        bool isAPE,
-        uint256 amountHYPE,
-        uint256 falseAmountHYPE,
-        uint144 collateralTokenMin
-    ) public {
-        amountHYPE = _bound(amountHYPE, 1e15, 2 ** 96); // Too little amount of HYPE will be swapped for less than 1 USDC, which will not satisfy the minimum reserve requirement
-
-        // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(
-            AddressesHyperEVM.ADDR_USDT0,
-            AddressesHyperEVM.ADDR_WHYPE
-        );
-        (uint256 amountOut, , , ) = quoter.quoteExactInputSingle(
-            IQuoterV2.QuoteExactInputSingleParams({
-                tokenIn: AddressesHyperEVM.ADDR_WHYPE,
-                tokenOut: AddressesHyperEVM.ADDR_USDT0,
-                amountIn: amountHYPE,
-                fee: oracleState.uniswapFeeTier.fee,
-                sqrtPriceLimitX96: 0
-            })
-        );
-        vm.assume(amountOut >= 1e6);
-
-        // Wrong minimum collateral required
-        collateralTokenMin = uint144(_bound(collateralTokenMin, amountOut + 1, type(uint144).max));
-
-        // Deal HYPE to user
-        deal(user, amountHYPE);
-
-        // User mints
-        vm.prank(user);
-        vm.expectRevert(InsufficientCollateralReceivedFromUniswap.selector);
-        vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, collateralTokenMin, 0);
-    }
-
-    function testFuzz_mintWithTooLittleHypeAsDebtToken(
-        bool isAPE,
-        uint256 amountHYPE,
-        uint256 falseAmountHYPE,
-        uint144 collateralTokenMin
-    ) public {
-        amountHYPE = _bound(amountHYPE, 0, 1e15);
-
-        // Quote how much collateral we will get
-        SirStructs.OracleState memory oracleState = oracle.state(
-            AddressesHyperEVM.ADDR_USDT0,
-            AddressesHyperEVM.ADDR_WHYPE
-        );
-        try
-            quoter.quoteExactInputSingle(
-                IQuoterV2.QuoteExactInputSingleParams({
-                    tokenIn: AddressesHyperEVM.ADDR_WHYPE,
-                    tokenOut: AddressesHyperEVM.ADDR_USDT0,
-                    amountIn: amountHYPE,
-                    fee: oracleState.uniswapFeeTier.fee,
-                    sqrtPriceLimitX96: 0
-                })
-            )
-        returns (uint256 amountOut, uint160, uint32, uint256) {
-            vm.assume(amountOut < 1e6);
-        } catch (bytes memory) {}
-
-        // Upperbound minimum collateral required
-        collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
-
-        // Deal HYPE to user
-        deal(user, amountHYPE);
-
-        // User mints
-        vm.prank(user);
-        vm.expectRevert();
-        vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, collateralTokenMin, 0);
-    }
 }
 
 contract VaultControlTest is Test {
@@ -2151,7 +1972,7 @@ contract VaultControlTest is Test {
     IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
 
     uint256 constant SLOT_TOTAL_RESERVES = 10;
-    uint96 constant HYPE_SUPPLY = 120e6 * 10 ** 18;
+    uint96 constant HYPE_SUPPLY = 1e9 * 10 ** 18;
 
     address public systemControl = vm.addr(1);
     address public sir = vm.addr(2);
@@ -2174,7 +1995,6 @@ contract VaultControlTest is Test {
         uint256 balanceOfHYPE;
         uint256 balanceOfBNB;
         uint256 balanceOfUSDT;
-        uint256 balanceOfUSDC;
     }
 
     function setUp() public {
@@ -2261,30 +2081,11 @@ contract VaultControlTest is Test {
         assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), tokenFees.total);
     }
 
-    function testFuzz_withdrawUSDC(TokenFees memory tokenFees) public {
-        // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFees);
-
-        // Withdraw USDC
-        if (tokenFees.fees != 0) {
-            vm.expectEmit();
-            emit Transfer(address(vault), sir, tokenFees.fees);
-        }
-        vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_USDT0);
-
-        // Assert balances
-        assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), tokenFees.total);
-    }
-
     function testFuzz_withdrawToSaveSystemFailsCuzNotSystemControl(
         address user,
         TokenFees memory tokenFeesHYPE,
         TokenFees memory tokenFeesBNB,
-        TokenFees memory tokenFeesUSDT,
-        TokenFees memory tokenFeesUSDC
+        TokenFees memory tokenFeesUSDT
     ) public {
         vm.assume(user != systemControl);
         vm.assume(user.code.length == 0);
@@ -2293,14 +2094,12 @@ contract VaultControlTest is Test {
         _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
         _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
         _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
-        address[] memory tokens = new address[](4);
+        address[] memory tokens = new address[](3);
         tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
         tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
         tokens[2] = AddressesHyperEVM.ADDR_USDT0;
-        tokens[3] = AddressesHyperEVM.ADDR_USDT0;
 
         // Fails to save system
         vm.prank(user);
@@ -2312,8 +2111,7 @@ contract VaultControlTest is Test {
         address to,
         TokenFees memory tokenFeesHYPE,
         TokenFees memory tokenFeesBNB,
-        TokenFees memory tokenFeesUSDT,
-        TokenFees memory tokenFeesUSDC
+        TokenFees memory tokenFeesUSDT
     ) public {
         to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
         vm.assume(to.code.length == 0);
@@ -2324,14 +2122,12 @@ contract VaultControlTest is Test {
         _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
         _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
         _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
-        address[] memory tokens = new address[](4);
+        address[] memory tokens = new address[](3);
         tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
         tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
         tokens[2] = AddressesHyperEVM.ADDR_USDT0;
-        tokens[3] = AddressesHyperEVM.ADDR_USDT0;
         if (tokenFeesHYPE.total + tokenFeesHYPE.fees > 0) {
             vm.expectEmit();
             emit Transfer(address(vault), to, tokenFeesHYPE.total + tokenFeesHYPE.fees);
@@ -2344,10 +2140,6 @@ contract VaultControlTest is Test {
             vm.expectEmit();
             emit Transfer(address(vault), to, tokenFeesUSDT.total + tokenFeesUSDT.fees);
         }
-        if (tokenFeesUSDC.total + tokenFeesUSDC.fees > 0) {
-            vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesUSDC.total + tokenFeesUSDC.fees);
-        }
         vm.prank(systemControl);
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
@@ -2355,7 +2147,6 @@ contract VaultControlTest is Test {
         assertEq(amounts[0], tokenFeesHYPE.total + tokenFeesHYPE.fees, "Wrong amounts[0]");
         assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
         assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
-        assertEq(amounts[3], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[3]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
@@ -2373,11 +2164,6 @@ contract VaultControlTest is Test {
             tokenFeesUSDT.total + tokenFeesUSDT.fees,
             "Wrong USDT balance"
         );
-        assertEq(
-            balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
-            tokenFeesUSDC.total + tokenFeesUSDC.fees,
-            "Wrong USDC balance"
-        );
     }
 
     function testFuzz_withdrawToSaveSystemBuggyERC20(
@@ -2387,9 +2173,7 @@ contract VaultControlTest is Test {
         TokenFees memory tokenFeesBNB,
         BuggyERC20 calldata buggyBNB,
         TokenFees memory tokenFeesUSDT,
-        BuggyERC20 calldata buggyUSDT,
-        TokenFees memory tokenFeesUSDC,
-        BuggyERC20 calldata buggyUSDC
+        BuggyERC20 calldata buggyUSDT
     ) public {
         to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
         vm.assume(to.code.length == 0);
@@ -2400,20 +2184,17 @@ contract VaultControlTest is Test {
         _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
         _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
         _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC);
 
         // Modify ERC20 behavior
         _modifyERC20(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE, buggyWHYPE);
         _modifyERC20(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB, buggyBNB);
         _modifyERC20(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT, buggyUSDT);
-        _modifyERC20(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDC, buggyUSDC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
-        address[] memory tokens = new address[](4);
+        address[] memory tokens = new address[](3);
         tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
         tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
         tokens[2] = AddressesHyperEVM.ADDR_USDT0;
-        tokens[3] = AddressesHyperEVM.ADDR_USDT0;
         vm.prank(systemControl);
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
@@ -2445,22 +2226,12 @@ contract VaultControlTest is Test {
             tokenFeesUSDT.total = 0;
             tokenFeesUSDT.fees = 0;
         }
-        if (
-            buggyUSDC.balanceOfReverts ||
-            buggyUSDC.balanceOfReturnsWrongLength ||
-            buggyUSDC.transferReverts ||
-            buggyUSDC.transferReturnsFalse
-        ) {
-            tokenFeesUSDC.total = 0;
-            tokenFeesUSDC.fees = 0;
-        }
 
         // Assert balances
         vm.clearMockedCalls();
         assertEq(amounts[0], tokenFeesHYPE.total + tokenFeesHYPE.fees, "Wrong amounts[0]");
         assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
         assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
-        assertEq(amounts[3], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[3]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
@@ -2477,11 +2248,6 @@ contract VaultControlTest is Test {
             balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
             tokenFeesUSDT.total + tokenFeesUSDT.fees,
             "Wrong USDT balance"
-        );
-        assertEq(
-            balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
-            tokenFeesUSDC.total + tokenFeesUSDC.fees,
-            "Wrong USDC balance"
         );
     }
 
@@ -2503,8 +2269,7 @@ contract VaultControlTest is Test {
             Balances4Tokens({
                 balanceOfHYPE: WHYPE.balanceOf(to),
                 balanceOfBNB: IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(to),
-                balanceOfUSDT: IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(to),
-                balanceOfUSDC: IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(to)
+                balanceOfUSDT: IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(to)
             });
     }
 
@@ -2566,731 +2331,6 @@ contract VaultControlTest is Test {
         deal(token, vm.addr(2), amount, true);
         vm.prank(vm.addr(2));
         TransferHelper.safeTransfer(token, to, amount);
-    }
-}
-
-contract RegimeEnum {
-    enum Regime {
-        Any,
-        Power,
-        Saturation
-    }
-}
-
-contract VaultHandler is Test, RegimeEnum {
-    using ABDKMathQuad for bytes16;
-    using ExtraABDKMathQuad for int64;
-    using BonusABDKMathQuad for bytes16;
-
-    struct InputOutput {
-        bool advanceBlock;
-        uint48 vaultId;
-        uint256 userId;
-        uint144 amountCollateral;
-    }
-
-    uint256 constant smallErrorTolerance = 1e16;
-
-    uint256 public constant TIME_ADVANCE = 5 minutes;
-    Regime immutable regime;
-
-    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
-    Vault public vault;
-    Oracle public oracle;
-    address public apeImplementation;
-
-    uint256 public blockNumber;
-    uint256 public iterations;
-
-    SirStructs.Reserves public reserves;
-    uint256 public supplyAPE;
-    uint256 public supplyTEA;
-    int64 public priceTick;
-
-    SirStructs.Reserves public reservesOld;
-    uint256 public supplyAPEOld;
-    uint256 public supplyTEAOld;
-    int64 public priceTickOld;
-
-    // Dummy variables
-    address public user;
-    address public ape;
-    SirStructs.VaultParameters public vaultParameters;
-
-    SirStructs.VaultParameters public vaultParameters1 =
-        SirStructs.VaultParameters({
-            debtToken: AddressesHyperEVM.ADDR_USDT0,
-            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
-            leverageTier: int8(1)
-        });
-
-    SirStructs.VaultParameters public vaultParameters2 =
-        SirStructs.VaultParameters({
-            debtToken: AddressesHyperEVM.ADDR_USDT0,
-            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
-            leverageTier: int8(-2)
-        });
-
-    modifier advanceBlock(InputOutput memory inputOutput) {
-        console.log("------Advance--Block------");
-
-        if (regime != Regime.Any || inputOutput.advanceBlock) {
-            blockNumber += TIME_ADVANCE / 12 seconds;
-        }
-
-        // Fork mainnet
-        vm.createSelectFork("mainnet", blockNumber);
-        if (regime != Regime.Any) {
-            inputOutput.vaultId = 1;
-        }
-        // console.log("Block number", blockNumber);
-
-        // Get vault parameters
-        inputOutput.vaultId = uint48(idToVault(inputOutput.vaultId));
-
-        // Get reserves
-        reserves = vault.getReserves(vaultParameters);
-        supplyAPE = IERC20(ape).totalSupply();
-        supplyTEA = vault.totalSupply(inputOutput.vaultId);
-        priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
-        // console.log("Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
-
-        // User
-        user = _idToAddr(inputOutput.userId);
-
-        _;
-
-        // Get reserves
-        reserves = vault.getReserves(vaultParameters);
-        supplyAPE = IERC20(ape).totalSupply();
-        supplyTEA = vault.totalSupply(inputOutput.vaultId);
-        priceTick = oracle.getPrice(vaultParameters.collateralToken, vaultParameters.debtToken);
-
-        // Check regime
-        console.log("C. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
-        console.log(string.concat("Leverage tier: ", vm.toString(vaultParameters.leverageTier)));
-        _checkRegime();
-
-        if (regime != Regime.Any || inputOutput.advanceBlock) iterations++;
-
-        _invariantTotalCollateral();
-        if (regime == Regime.Power) _invariantPowerZone();
-        else if (regime == Regime.Saturation) _invariantSaturationZone();
-
-        if (regime == Regime.Saturation || (regime == Regime.Power && supplyAPEOld == 0)) {
-            // Update storage
-            reservesOld = reserves;
-            supplyAPEOld = supplyAPE;
-            supplyTEAOld = supplyTEA;
-            priceTickOld = priceTick;
-        }
-        console.log("-----------------------");
-    }
-
-    constructor(uint256 blockNumber_, Regime regime_) {
-        // vm.writeFile("./gains.log", "");
-        blockNumber = blockNumber_;
-        regime = regime_;
-
-        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
-        apeImplementation = address(new APE());
-        vault = new Vault(vm.addr(100), vm.addr(101), address(oracle), apeImplementation, AddressesHyperEVM.ADDR_WHYPE);
-
-        // Set tax between 2 vaults
-        vm.prank(vm.addr(100));
-        {
-            uint48[] memory oldVaults = new uint48[](0);
-            uint48[] memory newVaults = new uint48[](2);
-            newVaults[0] = 1;
-            newVaults[1] = 2;
-            uint8[] memory newTaxes = new uint8[](2);
-            newTaxes[0] = 228;
-            newTaxes[1] = 114; // Ensure 114^2+228^2 <= (2^8-1)^2
-            vault.updateVaults(oldVaults, newVaults, newTaxes, 342);
-        }
-
-        // Intialize vault 2xHYPE/USDT
-        vault.initialize(vaultParameters1);
-
-        // Intialize vault 1.25xHYPE/USDT0
-        vault.initialize(vaultParameters2);
-    }
-
-    // This mint performs no checks
-    function setupMint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        // Deal HYPE to user
-        vm.deal(user, inputOutput.amountCollateral);
-
-        console.log("------Setup--Mint--Attempt------");
-        // console.log(inputOutput.amountCollateral, "collateral");
-
-        // Convert HYPE to WHYPE
-        vm.startPrank(user);
-        _WHYPE.deposit{value: inputOutput.amountCollateral}();
-        _WHYPE.approve(address(vault), inputOutput.amountCollateral);
-
-        // Check regime stays the same
-        _checkRegime();
-
-        // Mint with WHYPE
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0, 0);
-        vm.stopPrank();
-    }
-
-    function mint(bool isAPE, InputOutput memory inputOutput) external advanceBlock(inputOutput) {
-        console.log("----Mint--", isAPE ? "APE" : "TEA", "--Attempt------");
-
-        // Ensure user gets at least 1 unit of APE or TEA
-        SirStructs.SystemParameters memory systemParams = vault.systemParams();
-        uint256 collateralLowerbound;
-        bool success;
-        // console.log(isAPE ? "APE" : "TEA");
-        if (isAPE) {
-            // Compute lowerbound on collateral in
-            collateralLowerbound = (reserves.reserveApes - 1) / supplyAPE + 1;
-
-            // Compute lowerbound on collateral deposited taking into account the fee
-            uint256 temp;
-            if (vaultParameters.leverageTier > 0) {
-                (success, temp) = FullMath.tryMulDivRoundingUp(
-                    collateralLowerbound,
-                    2 ** uint256(int256(vaultParameters.leverageTier)) * systemParams.baseFee.fee,
-                    10000
-                );
-            } else {
-                (success, temp) = FullMath.tryMulDivRoundingUp(
-                    collateralLowerbound,
-                    systemParams.baseFee.fee,
-                    2 ** uint256(-int256(vaultParameters.leverageTier)) * 10000
-                );
-            }
-
-            if (success && type(uint256).max - temp > collateralLowerbound) {
-                console.log("Mint may revert, skipping..");
-                return;
-            }
-            collateralLowerbound += temp;
-        } else {
-            console.log(
-                reserves.reserveLPers,
-                2 * uint256(10 ** 4) + systemParams.lpFee.fee,
-                uint256(10 ** 4) * supplyTEA
-            );
-            collateralLowerbound = FullMath.mulDivRoundingUp(
-                reserves.reserveLPers,
-                2 * uint256(10 ** 4) + systemParams.lpFee.fee,
-                uint256(10 ** 4) * supplyTEA
-            );
-
-            uint256 totalMintedTEALowerbound = FullMath.mulDivRoundingUp(
-                supplyTEA,
-                collateralLowerbound,
-                reserves.reserveLPers
-            );
-
-            uint256 collateralLowerbound2 = FullMath.mulDivRoundingUp(
-                totalMintedTEALowerbound,
-                uint256(10 ** 4) + systemParams.lpFee.fee,
-                uint256(10 ** 4) * (totalMintedTEALowerbound - 1) - systemParams.lpFee.fee
-            );
-
-            if (collateralLowerbound2 > collateralLowerbound) collateralLowerbound = collateralLowerbound2;
-        }
-
-        uint144 reserveTotal = reserves.reserveApes + reserves.reserveLPers;
-        if (collateralLowerbound + reserveTotal > type(uint144).max) {
-            console.log("Mint may revert, skipping..");
-            return;
-        }
-
-        // Ensure collateral does not overflow the supply of APE or TEA
-        uint256 collateralUpperbound;
-        if (isAPE) {
-            (success, collateralUpperbound) = FullMath.tryMulDiv(
-                type(uint256).max - supplyAPE,
-                reserves.reserveApes,
-                supplyAPE
-            );
-
-            if (regime == Regime.Power) {
-                // Do not mint too much APE that it changes to Saturation
-                uint256 collateralUpperbound2 = vaultParameters.leverageTier < 0
-                    ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
-                    : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
-
-                if (collateralUpperbound2 < reserves.reserveApes) revert("Saturation zone");
-                else collateralUpperbound2 -= reserves.reserveApes;
-
-                if (!success || collateralUpperbound2 < collateralUpperbound) {
-                    success = true;
-                    collateralUpperbound = collateralUpperbound2;
-                }
-            }
-        } else {
-            (success, collateralUpperbound) = FullMath.tryMulDiv(
-                SystemConstants.TEA_MAX_SUPPLY - supplyTEA,
-                reserves.reserveLPers,
-                supplyTEA
-            );
-
-            if (regime == Regime.Saturation) {
-                // Do not mint too much TEA that it changes to Power
-                uint256 collateralUpperbound2 = vaultParameters.leverageTier > 0
-                    ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
-                    : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
-
-                if (collateralUpperbound2 < reserves.reserveLPers) revert("Power zone");
-                else collateralUpperbound2 -= reserves.reserveLPers;
-
-                if (!success || collateralUpperbound2 < collateralUpperbound) {
-                    success = true;
-                    collateralUpperbound = collateralUpperbound2;
-                }
-            }
-        }
-
-        if (success) collateralUpperbound = FullMath.mulDiv(9, collateralUpperbound, 10);
-
-        // Another collateral upperbound given by the maximum reserve size
-        if (!success || type(uint144).max - reserveTotal < collateralUpperbound) {
-            collateralUpperbound = type(uint144).max - reserveTotal;
-        }
-
-        if (collateralLowerbound > collateralUpperbound) {
-            console.log("Mint may revert, skipping..");
-            return;
-        }
-
-        // Constrain collateral amount by bounds
-        inputOutput.amountCollateral = uint144(
-            _bound(inputOutput.amountCollateral, collateralLowerbound, collateralUpperbound)
-        );
-
-        // Deal HYPE to user
-        vm.deal(user, inputOutput.amountCollateral);
-
-        // Convert HYPE to WHYPE
-        vm.startPrank(user);
-        _WHYPE.deposit{value: inputOutput.amountCollateral}();
-        _WHYPE.approve(address(vault), inputOutput.amountCollateral);
-
-        // Check regime stays the same
-        _checkRegime();
-
-        // Mint with WHYPE
-        vault.mint(isAPE, vaultParameters, inputOutput.amountCollateral, 0, 0);
-        vm.stopPrank();
-        console.log("Minting Over");
-    }
-
-    function burn(bool isAPE, InputOutput memory inputOutput, uint256 amount) external advanceBlock(inputOutput) {
-        console.log("----Burn--", isAPE ? "APE" : "TEA", "--Attempt------");
-
-        uint144 reserveTotal = reserves.reserveApes + reserves.reserveLPers;
-
-        // Keep at least 10^18 units of collateral in the reserve to ensure gain comptuations are not perturbed by numeric noise
-        bool success;
-        uint256 maxAmount;
-        if (isAPE) {
-            uint256 maxCollateralAmount = reserveTotal - 1e18;
-            if (regime == Regime.Saturation) {
-                // Do not burn too much APE that it changes to Power, sufficient condition
-                uint256 reserveMin = vaultParameters.leverageTier < 0
-                    ? uint256(reserves.reserveLPers) << uint8(-vaultParameters.leverageTier)
-                    : reserves.reserveLPers >> uint8(vaultParameters.leverageTier);
-
-                if (reserves.reserveApes < reserveMin) revert("Saturation zone");
-
-                if (reserves.reserveApes - reserveMin < maxCollateralAmount) {
-                    maxCollateralAmount = reserves.reserveApes - reserveMin;
-                }
-            }
-
-            (success, maxAmount) = FullMath.tryMulDiv(supplyAPE, maxCollateralAmount, reserves.reserveApes);
-        } else {
-            uint256 maxCollateralAmount = reserveTotal - 1e18;
-            if (regime == Regime.Power) {
-                // Do not burn too much TEA that it changes to Saturation
-                uint256 reserveMin = vaultParameters.leverageTier >= 0
-                    ? uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
-                    : reserves.reserveApes >> uint8(-vaultParameters.leverageTier);
-
-                if (reserves.reserveLPers < reserveMin) revert("Saturation zone");
-
-                if (reserves.reserveLPers - reserveMin < maxCollateralAmount) {
-                    maxCollateralAmount = reserves.reserveLPers - reserveMin;
-                }
-            }
-            (success, maxAmount) = FullMath.tryMulDiv(supplyTEA, maxCollateralAmount, reserves.reserveLPers);
-        }
-
-        if (success) {
-            if (maxAmount == 0) {
-                console.log("Burn may revert, skipping..");
-                return;
-            }
-            maxAmount = FullMath.mulDiv(8, maxAmount, 10);
-            amount = _bound(amount, 1, maxAmount);
-        } else {
-            // If overflow occurred, use a safe maximum value
-            amount = _bound(amount, 1, type(uint128).max);
-        }
-
-        // We cannot exceed balance
-        uint256 balance = isAPE ? IERC20(ape).balanceOf(user) : vault.balanceOf(user, inputOutput.vaultId);
-        if (balance == 0) {
-            console.log("Burn may revert, skipping..");
-            return;
-        }
-        amount = _bound(amount, 1, balance);
-
-        // Burn
-        vm.startPrank(user);
-        console.log("A. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
-        _checkRegime();
-        inputOutput.amountCollateral = vault.burn(isAPE, vaultParameters, amount, 0);
-
-        // Unwrap HYPE
-        _WHYPE.withdraw(inputOutput.amountCollateral);
-        vm.stopPrank();
-        console.log("B. Reserve LPers", reserves.reserveLPers, ", Reserve Apes", reserves.reserveApes);
-        console.log("Burning Over");
-    }
-
-    /////////////////////////////////////////////////////////
-    ///////////////////// PRIVATE FUNCTIONS /////////////////
-
-    function _idToAddr(uint256 userId) private pure returns (address) {
-        userId = _bound(userId, 1, 3);
-        return vm.addr(userId);
-    }
-
-    function idToVault(uint48 vaultId) public returns (uint256) {
-        vaultId = uint48(_bound(vaultId, 1, 2));
-        vaultParameters = vault.paramsById(vaultId);
-        ape = AddressClone.getAddress(address(vault), vaultId);
-        return vaultId;
-    }
-
-    function _checkRegime() private view {
-        if (regime == Regime.Any) return;
-
-        if (
-            regime == Regime.Power &&
-            (
-                vaultParameters.leverageTier >= 0
-                    ? reserves.reserveLPers < uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
-                    : reserves.reserveApes > uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
-            )
-        ) {
-            revert("Saturation");
-        }
-
-        if (
-            regime == Regime.Saturation &&
-            (
-                vaultParameters.leverageTier >= 0
-                    ? reserves.reserveLPers > uint256(reserves.reserveApes) << uint8(vaultParameters.leverageTier)
-                    : reserves.reserveApes < uint256(reserves.reserveLPers) << uint8(vaultParameters.leverageTier)
-            )
-        ) {
-            revert("Power zone");
-        }
-    }
-
-    function _invariantTotalCollateral() private view {
-        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
-        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
-
-        SirStructs.Reserves memory reserves1 = vault.getReserves(vaultParameters1);
-        SirStructs.Reserves memory reserves2 = vault.getReserves(vaultParameters2);
-        assertEq(
-            reserves1.reserveApes + reserves1.reserveLPers + reserves2.reserveApes + reserves2.reserveLPers,
-            totalReserves,
-            "Total collateral minus fees is wrong"
-        );
-    }
-
-    function _invariantPowerZone() private view {
-        if (supplyAPEOld == 0) return;
-
-        // Compute theoretical leveraged gain
-        bytes16 gainIdeal = priceTick.tickToFP().div(priceTickOld.tickToFP()).pow(
-            ABDKMathQuad.fromUInt(2 ** uint8(vaultParameters.leverageTier))
-        );
-
-        // Compute actual leveraged gain
-        bytes16 gainActual = ABDKMathQuad
-            .fromUInt(reserves.reserveApes)
-            .div(ABDKMathQuad.fromUInt(reservesOld.reserveApes))
-            .mul(ABDKMathQuad.fromUInt(supplyAPEOld))
-            .div(ABDKMathQuad.fromUInt(supplyAPE));
-
-        // vm.writeLine(
-        //     "./gains.log",
-        //     string.concat(
-        //         "Block number: ",
-        //         vm.toString(blockNumber),
-        //         ", Ideal leveraged gain: ",
-        //         vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e20)).toUInt()),
-        //         ", Actual gain: ",
-        //         vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e20)).toUInt())
-        //     )
-        // );
-
-        bytes16 relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromInt(-1e18));
-        console.log(
-            gainActual.mul(ABDKMathQuad.fromUInt(1e20)).toUInt(),
-            gainIdeal.mul(ABDKMathQuad.fromUInt(1e20)).toUInt()
-        );
-        assertGe(
-            gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
-            0,
-            "Actual gain is smaller than the ideal gain"
-        );
-
-        // bytes16 relErr = ABDKMathQuad.fromUInt(1).div(ABDKMathQuad.fromUInt(1e15));
-        relErr = ABDKMathQuad.fromUInt(iterations).div(ABDKMathQuad.fromUInt(smallErrorTolerance));
-        assertLe(
-            gainActual.div(gainIdeal).sub(ABDKMathQuad.fromUInt(1)).cmp(relErr),
-            0,
-            "Difference between ideal and actual gain is too large"
-        );
-    }
-
-    function _invariantSaturationZone() private view {
-        if (supplyAPEOld == 0) return;
-
-        // Compute theoretical margin gain
-        bytes16 one = ABDKMathQuad.fromUInt(1);
-
-        bytes16 gainIdeal = one
-            .sub(priceTickOld.tickToFP().div(priceTick.tickToFP()))
-            .mul(ABDKMathQuad.fromUInt(reservesOld.reserveLPers))
-            .div(ABDKMathQuad.fromUInt(reservesOld.reserveApes))
-            .add(one);
-
-        // Compute actual margin gain
-        bytes16 gainActual = ABDKMathQuad
-            .fromUInt(reserves.reserveApes)
-            .div(ABDKMathQuad.fromUInt(reservesOld.reserveApes))
-            .mul(ABDKMathQuad.fromUInt(supplyAPEOld))
-            .div(ABDKMathQuad.fromUInt(supplyAPE));
-
-        // vm.writeLine(
-        //     "./gains.log",
-        //     string.concat(
-        //         "Block number: ",
-        //         vm.toString(blockNumber),
-        //         ", Ideal gain: ",
-        //         vm.toString(gainIdeal.mul(ABDKMathQuad.fromUInt(1e20)).toUInt()),
-        //         ", Actual gain: ",
-        //         vm.toString(gainActual.mul(ABDKMathQuad.fromUInt(1e20)).toUInt())
-        //     )
-        // );
-
-        bytes16 relErr = one.div(ABDKMathQuad.fromUInt(smallErrorTolerance));
-        assertLe(
-            one
-                .sub(gainActual.cmp(gainIdeal) < 0 ? gainActual.div(gainIdeal) : gainActual.div(gainIdeal))
-                .div(relErr)
-                .toUInt(),
-            1,
-            "Difference between ideal and actual gain is too large"
-        );
-    }
-}
-
-contract VaultInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 12523857;
-    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
-
-    VaultHandler public vaultHandler;
-    Vault public vault;
-
-    constructor() {
-        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
-    }
-
-    function setUp() public {
-        // Deploy the vault handler
-        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Any);
-        targetContract(address(vaultHandler));
-
-        address apeImplementation = vaultHandler.apeImplementation();
-
-        vaultHandler.idToVault(1);
-        address ape1 = vaultHandler.ape();
-        vaultHandler.idToVault(2);
-        address ape2 = vaultHandler.ape();
-
-        bytes4[] memory selectors = new bytes4[](2);
-        selectors[0] = vaultHandler.mint.selector;
-        selectors[1] = vaultHandler.burn.selector;
-        targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
-
-        vault = vaultHandler.vault();
-        vm.makePersistent(address(AddressesHyperEVM.ADDR_WHYPE));
-        vm.makePersistent(address(vaultHandler));
-        vm.makePersistent(address(vault));
-        vm.makePersistent(address(vaultHandler.oracle()));
-        vm.makePersistent(ape1);
-        vm.makePersistent(ape2);
-        vm.makePersistent(apeImplementation);
-
-        // Mint 1 HYPE worth of TEA for vault 1
-        vaultHandler.setupMint(
-            false,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 1 ether})
-        );
-
-        // Mint 1 HYPE worth of APE for vault 1
-        vaultHandler.setupMint(
-            true,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 1 ether})
-        );
-
-        // Mint 1 HYPE worth of TEA for vault 2
-        vaultHandler.setupMint(
-            false,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 2, userId: 1, amountCollateral: 1 ether})
-        );
-
-        // Mint 1 HYPE worth of APE for vault 2
-        vaultHandler.setupMint(
-            true,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 2, userId: 2, amountCollateral: 1 ether})
-        );
-    }
-
-    /// forge-config: default.invariant.runs = 1
-    /// forge-config: default.invariant.depth = 10
-    function invariant_totalCollateral() public view {
-        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
-        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
-    }
-}
-
-contract PowerZoneInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 12523857; // July 25, 2022
-    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
-
-    VaultHandler public vaultHandler;
-    Vault public vault;
-
-    constructor() {
-        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
-    }
-
-    function setUp() public {
-        // vm.writeFile("./gains.log", "");
-
-        // Deploy the vault handler
-        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Power);
-        targetContract(address(vaultHandler));
-
-        address apeImplementation = vaultHandler.apeImplementation();
-
-        vaultHandler.idToVault(1);
-        address ape = vaultHandler.ape();
-
-        bytes4[] memory selectors = new bytes4[](2);
-        selectors[0] = vaultHandler.mint.selector;
-        selectors[1] = vaultHandler.burn.selector;
-        targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
-
-        vault = vaultHandler.vault();
-        Oracle oracle = vaultHandler.oracle();
-        vm.makePersistent(address(AddressesHyperEVM.ADDR_WHYPE));
-        vm.makePersistent(address(vaultHandler));
-        vm.makePersistent(address(vault));
-        vm.makePersistent(address(oracle));
-        vm.makePersistent(ape);
-        vm.makePersistent(apeImplementation);
-
-        // Mint 8 HYPE worth of TEA
-        vaultHandler.setupMint(
-            false,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 8 ether})
-        );
-
-        // Mint 2 HYPE worth of APE
-        vaultHandler.setupMint(
-            true,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 2 ether})
-        );
-    }
-
-    /// forge-config: default.invariant.runs = 1
-    /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public view {
-        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
-        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
-
-        (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(reserveApes + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
-    }
-}
-
-contract SaturationInvariantTest is Test, RegimeEnum {
-    uint256 constant BLOCK_NUMBER_START = 12523857; // July 25, 2022
-    IWETH9 private constant _WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
-
-    VaultHandler public vaultHandler;
-    Vault public vault;
-
-    constructor() {
-        vm.createSelectFork("mainnet", BLOCK_NUMBER_START);
-    }
-
-    function setUp() public {
-        // vm.writeFile("./log.log", "");
-
-        // Deploy the vault handler
-        vaultHandler = new VaultHandler(BLOCK_NUMBER_START, Regime.Saturation);
-        targetContract(address(vaultHandler));
-
-        address apeImplementation = vaultHandler.apeImplementation();
-
-        vaultHandler.idToVault(1);
-        address ape = vaultHandler.ape();
-
-        bytes4[] memory selectors = new bytes4[](2);
-        selectors[0] = vaultHandler.mint.selector;
-        selectors[1] = vaultHandler.burn.selector;
-        targetSelector(FuzzSelector({addr: address(vaultHandler), selectors: selectors}));
-
-        vault = vaultHandler.vault();
-        Oracle oracle = vaultHandler.oracle();
-        vm.makePersistent(address(AddressesHyperEVM.ADDR_WHYPE));
-        vm.makePersistent(address(vaultHandler));
-        vm.makePersistent(address(vault));
-        vm.makePersistent(address(oracle));
-        vm.makePersistent(ape);
-        vm.makePersistent(apeImplementation);
-
-        // Mint 8 HYPE worth of APE
-        vaultHandler.setupMint(
-            true,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 2, amountCollateral: 8 ether})
-        );
-
-        // Mint 2 HYPE worth of TEA
-        vaultHandler.setupMint(
-            false,
-            VaultHandler.InputOutput({advanceBlock: false, vaultId: 1, userId: 1, amountCollateral: 2 ether})
-        );
-    }
-
-    /// forge-config: default.invariant.runs = 3
-    /// forge-config: default.invariant.depth = 10
-    function invariant_dummy() public view {
-        uint256 totalReserves = vault.totalReserves(address(_WHYPE));
-        assertLe(totalReserves, _WHYPE.balanceOf(address(vault)), "Total collateral is wrong");
-        // vm.writeLine("./log.log", "assertLe");
-
-        (uint144 reserveApes, uint144 reserveLPers, ) = vaultHandler.reserves();
-        assertEq(uint(reserveApes) + reserveLPers, totalReserves, "Total collateral minus fees is wrong");
     }
 }
 

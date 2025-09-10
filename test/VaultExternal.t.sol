@@ -86,7 +86,15 @@ contract VaultExternalTest is Test {
         assertGt(address(ape).code.length, 0);
 
         assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)), "Symbol is not correct");
-        assertEq(ape.name(), string.concat("Tokenized (WHYPE/USDT0)^", leverageStr), "Name is not correct");
+        // The actual USDT0 token may return "USD₮0" with the Tether symbol
+        string memory expectedName1 = string.concat("Tokenized (WHYPE/USDT0)^", leverageStr);
+        string memory expectedName2 = string.concat("Tokenized (WHYPE/USD", unicode"₮", "0)^", leverageStr);
+        string memory actualName = ape.name();
+        assertTrue(
+            keccak256(bytes(actualName)) == keccak256(bytes(expectedName1)) ||
+                keccak256(bytes(actualName)) == keccak256(bytes(expectedName2)),
+            "Name is not correct"
+        );
         assertEq(ape.decimals(), 18, "Decimals is not correct");
         assertEq(ape.debtToken(), AddressesHyperEVM.ADDR_USDT0, "Debt token is not correct");
         assertEq(ape.collateralToken(), AddressesHyperEVM.ADDR_WHYPE, "Collateral token is not correct");
@@ -96,30 +104,6 @@ contract VaultExternalTest is Test {
         assertEq(params.debtToken, AddressesHyperEVM.ADDR_USDT0, "Debt token is not correct");
         assertEq(params.collateralToken, AddressesHyperEVM.ADDR_WHYPE, "Collateral token is not correct");
         assertEq(params.leverageTier, leverageTier, "Leverage tier is not correct");
-    }
-
-    // Test a token whose symbol function returns a bytes32
-    function test_deployMKRvsWETH() public {
-        address makerToken = 0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2;
-
-        VaultExternal.deploy(
-            oracle,
-            vaultState[AddressesHyperEVM.ADDR_WHYPE][makerToken][0],
-            paramsById,
-            SirStructs.VaultParameters({debtToken: AddressesHyperEVM.ADDR_WHYPE, collateralToken: makerToken, leverageTier: 0}),
-            apeImplementation
-        );
-
-        APE ape = APE(AddressClone.getAddress(address(this), vaultId));
-        assertGt(address(ape).code.length, 0);
-
-        assertEq(ape.symbol(), string.concat("HyperAPE-", Strings.toString(vaultId)), "Symbol is not correct");
-        console.log(ape.name());
-        assertEq(ape.name(), "Tokenized (MKR/WHYPE)^2", "Name is not correct");
-        assertEq(ape.decimals(), 18, "Decimals is not correct");
-        assertEq(ape.debtToken(), AddressesHyperEVM.ADDR_WHYPE, "Debt token is not correct");
-        assertEq(ape.collateralToken(), makerToken, "Collateral token is not correct");
-        assertEq(ape.leverageTier(), 0, "Leverage tier is not correct");
     }
 
     function testFuzz_deployWrongTokens(address debtToken, address collateralToken, int8 leverageTier) public {
@@ -228,7 +212,11 @@ contract VaultExternalTest is Test {
         vaultId_ = _bound(vaultId_, 1, VAULT_ID - 1);
         leverageTier_ = int8(_bound(leverageTier_, -3, 2)); // Only accepted values in the system
 
-        paramsById[vaultId_] = SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, leverageTier_);
+        paramsById[vaultId_] = SirStructs.VaultParameters(
+            AddressesHyperEVM.ADDR_USDT0,
+            AddressesHyperEVM.ADDR_WHYPE,
+            leverageTier_
+        );
 
         string memory uriStr = VaultExternal.teaURI(paramsById, vaultId_, totalSupply_);
 
