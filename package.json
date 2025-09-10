@@ -1,7 +1,10 @@
 {
     "dependencies": {
+        "@ledgerhq/hw-app-eth": "^6.45.17",
+        "@ledgerhq/hw-transport-node-hid": "^6.29.11",
+        "@nktkas/hyperliquid": "^0.16.0",
         "decimal.js": "^10.4.3",
         "dotenv": "^16.4.7",
-        "ethers": "^6.8.1"
+        "ethers": "^6.15.0"
     }
 }
