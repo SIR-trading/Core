@@ -19,8 +19,8 @@ mainnet = "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
 sepolia = "https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}"
 hyperevm = "https://hyperliquid-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}"
 #hypertest = "https://spectrum-01.simplystaking.xyz/hyperliquid-tn-rpc/evm"
-hypertest = "https://hyperliquid-testnet.drpc.org"
 #hypertest = "https://998.rpc.thirdweb.com"
+hypertest = "https://hyperliquid-testnet.drpc.org"
 
 [invariant]
 fail_on_revert = true   # Fail the test if the contract reverts
