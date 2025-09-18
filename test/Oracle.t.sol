@@ -860,7 +860,7 @@ contract OracleGetPriceTWAP is Test, Oracle {
     }
 
     // Callback for Uniswap V3 pool swaps - required when using pool.swap directly
-    // HyperEVM uses "hyperswapV3SwapCallback" instead of "uniswapV3SwapCallback"
+    // HyperEVM uses "hyperswapV3SwapCallback" instead of "hyperswapV3SwapCallback"
     function hyperswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
         // Decode the token that was swapped in
         MockERC20 tokenIn = abi.decode(data, (MockERC20));

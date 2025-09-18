@@ -9,7 +9,7 @@ contract Contributors {
     mapping(address => uint56) public allocations;
 
     constructor() {
-        allocations[0x686748764c5C7Aa06FEc784E60D14b650bF79129] = 16394809541679089; // 5%
+        allocations[0xEF6854fD28FEe7B0B233781e9B7D938a23B7F7BC] = 16394809541679089; // 5% (treasury)
         allocations[0x193AD6d624678b11Bec0C5cFD5723A34725A8433] = 13115847633343272; // 4.0%
         allocations[0x7F1CA9Fe9C3728f5c632e5564b2BfF5585BE1748] = 8793796790160060; // 2.7%
         allocations[0x36D11126eBc59cb962AE8ddD3bcD0741b4e337Dc] = 3924196032658140; // 1.2%

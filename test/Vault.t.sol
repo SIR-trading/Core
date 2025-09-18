@@ -2259,7 +2259,7 @@ contract VaultControlTest is Test {
     ) public {
         vm.prank(caller);
         vm.expectRevert();
-        vault.uniswapV3SwapCallback(amount0Delta, amount1Delta, data);
+        vault.hyperswapV3SwapCallback(amount0Delta, amount1Delta, data);
     }
 
     //////////////////////////////////////////////////////////////////

@@ -93,7 +93,7 @@ interface IVault {
     function totalReserves(address collateral) external view returns (uint256);
     function totalSupply(uint256 vaultId) external view returns (uint256);
     function unclaimedRewards(uint256 vaultId, address lper) external view returns (uint80);
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes memory data) external;
+    function hyperswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes memory data) external;
     function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external;
     function updateVaults(
         uint48[] memory oldVaults,

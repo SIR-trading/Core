@@ -289,7 +289,7 @@ contract Vault is TEA {
      * This function is in charge of sending the debt token to the uniswwap pool.
      * It will revert if any external actor that is not a Uniswap pool calls this function.
      */
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+    function hyperswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
         // Check caller is the legit Uniswap pool
         address uniswapPool;
         assembly {
@@ -339,7 +339,7 @@ contract Vault is TEA {
 
     /**
      * @dev Remainer mint logic of the mint function above.
-     * It is apart from the mint function because this logic needs to be executed in uniswapV3SwapCallback when minting with debt token
+     * It is apart from the mint function because this logic needs to be executed in hyperswapV3SwapCallback when minting with debt token
      * to ensure there is no reentrancy attack when minting with debt token.
      */
     function _mint(
