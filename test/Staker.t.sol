@@ -1504,14 +1504,14 @@ contract StakerTest is Auxiliary {
         tokenBalances.vaultTotalReserves = _bound(tokenBalances.vaultTotalReserves, 1000, 1e20);
         tokenBalances.vaultTotalFees = _bound(tokenBalances.vaultTotalFees, 1000, 1e20);
         tokenBalances.stakerDonations = _bound(tokenBalances.stakerDonations, 1000, 1e20);
-        
+
         testFuzz_auctionOfkHYPE(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
         vm.assume(bidder1.amount + bidder2.amount > 0);
 
-        // Bound the second auction values to reasonable amounts  
+        // Bound the second auction values to reasonable amounts
         tokenBalances2.vaultTotalFees = _bound(tokenBalances2.vaultTotalFees, 1000, 1e18);
         tokenBalances2.stakerDonations = _bound(tokenBalances2.stakerDonations, 1000, 1e18);
-        
+
         // Set up fees for 2nd auction
         _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances2);
 
@@ -1527,10 +1527,256 @@ contract StakerTest is Auxiliary {
             0,
             "Should have kHYPE for auction"
         );
-        
+
         // Verify auction is active
         SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
         assertGt(auction.startTime, 0, "Auction should have started");
+    }
+
+    // /////////////////////////////////////////////////////////
+    // ///////////// NATIVE HYPE BIDDING TESTS ///////////////
+    // ///////////////////////////////////////////////////////
+
+    function test_nativeHYPEBidding() public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // Test native HYPE bidding
+        uint96 bidAmount = 10e18;
+        vm.deal(alice, bidAmount);
+
+        vm.expectEmit();
+        emit BidReceived(alice, AddressesHyperEVM.ADDR_kHYPE, 0, bidAmount);
+
+        vm.prank(alice);
+        staker.bid{value: bidAmount}(AddressesHyperEVM.ADDR_kHYPE, 0); // amount param ignored
+
+        // Verify bid was recorded correctly
+        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        assertEq(auction.bidder, alice, "Wrong bidder");
+        assertEq(auction.bid, bidAmount, "Wrong bid amount");
+
+        // Verify WHYPE was wrapped
+        assertEq(WHYPE.balanceOf(address(staker)), bidAmount, "WHYPE not wrapped correctly");
+    }
+
+    function testFuzz_nativeHYPEBiddingIgnoresAmountParam(uint96 amountParam, uint96 msgValue) public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // Bound msg.value to reasonable amount
+        msgValue = uint96(_bound(msgValue, 1e15, HYPE_SUPPLY));
+        vm.deal(alice, msgValue);
+
+        // Bid with native HYPE - amount param should be ignored
+        vm.prank(alice);
+        staker.bid{value: msgValue}(AddressesHyperEVM.ADDR_kHYPE, amountParam);
+
+        // Verify only msg.value was used, not amountParam
+        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        assertEq(auction.bid, msgValue, "Should use msg.value, not amount param");
+        assertEq(WHYPE.balanceOf(address(staker)), msgValue, "Wrong WHYPE balance");
+    }
+
+    function test_mixedNativeAndWHYPEBidding() public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // First bid with native HYPE
+        uint96 nativeBid = 10e18;
+        vm.deal(alice, nativeBid);
+        vm.prank(alice);
+        staker.bid{value: nativeBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Second bid with WHYPE (must be 5% higher)
+        uint96 whypeBid = 11e18; // More than 5% higher
+        _dealWHYPE(bob, whypeBid);
+        vm.prank(bob);
+        WHYPE.approve(address(staker), whypeBid);
+
+        vm.expectEmit();
+        emit BidReceived(bob, AddressesHyperEVM.ADDR_kHYPE, nativeBid, whypeBid);
+
+        vm.prank(bob);
+        staker.bid(AddressesHyperEVM.ADDR_kHYPE, whypeBid);
+
+        // Verify alice got refunded in WHYPE
+        assertEq(WHYPE.balanceOf(alice), nativeBid, "Alice should receive WHYPE refund");
+
+        // Third bid with native HYPE again (must be 5% higher than bob's bid)
+        uint96 secondNativeBid = 12e18; // More than 5% higher than 11e18
+        vm.deal(charlie, secondNativeBid);
+
+        vm.expectEmit();
+        emit BidReceived(charlie, AddressesHyperEVM.ADDR_kHYPE, whypeBid, secondNativeBid);
+
+        vm.prank(charlie);
+        staker.bid{value: secondNativeBid}(AddressesHyperEVM.ADDR_kHYPE, 999e18); // amount ignored
+
+        // Verify bob got refunded in WHYPE
+        assertEq(WHYPE.balanceOf(bob), whypeBid, "Bob should receive WHYPE refund");
+
+        // Verify final auction state
+        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        assertEq(auction.bidder, charlie, "Charlie should be the winner");
+        assertEq(auction.bid, secondNativeBid, "Wrong final bid amount");
+    }
+
+    function test_nativeHYPEBidIncrease() public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // First bid with native HYPE
+        uint96 firstBid = 10e18;
+        vm.deal(alice, firstBid);
+        vm.prank(alice);
+        staker.bid{value: firstBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Same bidder increases bid with more native HYPE
+        uint96 increaseBid = 5e18;
+        vm.deal(alice, increaseBid);
+
+        vm.expectEmit();
+        emit BidReceived(alice, AddressesHyperEVM.ADDR_kHYPE, firstBid, firstBid + increaseBid);
+
+        vm.prank(alice);
+        staker.bid{value: increaseBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Verify bid was increased correctly
+        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        assertEq(auction.bidder, alice, "Wrong bidder");
+        assertEq(auction.bid, firstBid + increaseBid, "Wrong bid amount");
+        assertEq(WHYPE.balanceOf(address(staker)), firstBid + increaseBid, "Wrong WHYPE balance");
+    }
+
+    function testFuzz_nativeHYPEBidTooLow(uint96 firstBid, uint96 secondBid) public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // First bid
+        firstBid = uint96(_bound(firstBid, 1e15, 1000e18));
+        vm.deal(alice, firstBid);
+        vm.prank(alice);
+        staker.bid{value: firstBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Second bid that's too low (not 5% higher)
+        secondBid = uint96(_bound(secondBid, 1, (firstBid * 105) / 100 - 1));
+        vm.deal(bob, secondBid);
+
+        vm.prank(bob);
+        vm.expectRevert(BidTooLow.selector);
+        staker.bid{value: secondBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Verify first bidder is still the winner
+        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        assertEq(auction.bidder, alice, "Alice should still be the winner");
+        assertEq(auction.bid, firstBid, "Bid should not have changed");
+    }
+
+    function test_nativeHYPEBidZeroValue() public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // Try to bid with 0 msg.value - should fall back to WHYPE transfer
+        // Since alice has no WHYPE and no approval, this should revert with transfer error
+        vm.prank(alice);
+        vm.expectRevert();
+        staker.bid{value: 0}(AddressesHyperEVM.ADDR_kHYPE, 10e18);
+    }
+
+    function test_nativeHYPEAndWHYPERefunds() public {
+        // Start an auction
+        User memory user = User(1, 1000e18, 500e18);
+        testFuzz_stake(user, 1000e18, 0);
+
+        TokenBalances memory tokenBalances;
+        tokenBalances.vaultTotalFees = 100e18;
+        tokenBalances.stakerDonations = 50e18;
+        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+
+        Donations memory donations;
+        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+
+        // Alice bids with native HYPE
+        uint96 aliceBid = 10e18;
+        vm.deal(alice, aliceBid);
+        vm.prank(alice);
+        staker.bid{value: aliceBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Bob outbids with WHYPE
+        uint96 bobBid = 11e18;
+        _dealWHYPE(bob, bobBid);
+        vm.prank(bob);
+        WHYPE.approve(address(staker), bobBid);
+        vm.prank(bob);
+        staker.bid(AddressesHyperEVM.ADDR_kHYPE, bobBid);
+
+        // Alice should receive WHYPE refund (not native HYPE)
+        assertEq(alice.balance, 0, "Alice should not receive ETH refund");
+        assertEq(WHYPE.balanceOf(alice), aliceBid, "Alice should receive WHYPE refund");
+
+        // Charlie outbids with native HYPE
+        uint96 charlieBid = 12e18;
+        vm.deal(charlie, charlieBid);
+        vm.prank(charlie);
+        staker.bid{value: charlieBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+
+        // Bob should receive WHYPE refund (bob gets back the same amount he bid)
+        assertEq(WHYPE.balanceOf(bob), bobBid, "Bob should receive full WHYPE refund");
     }
 }
 
@@ -1615,7 +1861,8 @@ contract StakerHandler is Auxiliary {
         uint256 timeSkip,
         uint256 userId,
         bool collateralSelect,
-        uint96 amount
+        uint96 amount,
+        bool useNativeHYPE
     ) external advanceTime(timeSkip) {
         address user = _idToAddress(userId);
         address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
@@ -1631,14 +1878,23 @@ contract StakerHandler is Auxiliary {
         //         vm.toString(collateral),
         //         " collateral with ",
         //         vm.toString(amount),
-        //         " HYPE"
+        //         useNativeHYPE ? " native HYPE" : " WHYPE"
         //     )
         // );
-        _dealWHYPE(user, amount);
-        vm.prank(user);
-        WHYPE.approve(address(staker), amount);
-        vm.prank(user);
-        staker.bid(collateral, amount);
+
+        if (useNativeHYPE) {
+            // Bid with native HYPE
+            vm.deal(user, amount);
+            vm.prank(user);
+            staker.bid{value: amount}(collateral, 0); // amount param ignored when using native
+        } else {
+            // Bid with WHYPE
+            _dealWHYPE(user, amount);
+            vm.prank(user);
+            WHYPE.approve(address(staker), amount);
+            vm.prank(user);
+            staker.bid(collateral, amount);
+        }
     }
 
     function collectFeesAndStartAuction(

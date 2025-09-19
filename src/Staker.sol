@@ -432,17 +432,25 @@ contract Staker {
     /**
      * @notice Bid on an auction.
      * @param token Contract address of the token being auctioned.
-     * @param amount Amount of WHYPE to bid.
+     * @param amount Amount of WHYPE to bid (ignored if msg.value > 0).
      */
-    function bid(address token, uint96 amount) external {
+    function bid(address token, uint96 amount) external payable {
         unchecked {
             SirStructs.Auction memory auction = _auctions[token];
 
             // Unchecked because time stamps cannot overflow
             if (block.timestamp >= auction.startTime + SystemConstants.AUCTION_DURATION) revert NoAuction();
 
-            // Transfer the bid to the contract
-            _WHYPE.transferFrom(msg.sender, address(this), amount);
+            // Handle native HYPE bidding
+            if (msg.value > 0) {
+                // Override amount with msg.value for native HYPE
+                amount = uint96(msg.value);
+                // Wrap native HYPE to WHYPE
+                _WHYPE.deposit{value: msg.value}();
+            } else {
+                // Transfer the bid to the contract
+                _WHYPE.transferFrom(msg.sender, address(this), amount);
+            }
 
             if (msg.sender == auction.bidder) {
                 // If the bidder is the current winner, we just increase the bid
