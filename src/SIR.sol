@@ -41,7 +41,7 @@ contract SIR is Staker, SystemControlAccess {
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
             // Get the contributor's allocation
-            uint256 allocation = _CONTRIBUTORS.getAllocation(contributor);
+            uint256 allocation = _CONTRIBUTORS.allocations(contributor);
 
             // No allocation, no rewards
             if (allocation == 0) return 0;

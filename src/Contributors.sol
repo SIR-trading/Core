@@ -147,9 +147,4 @@ contract Contributors {
         allocations[0x6DD894c4a549e9bB9a7F0e35A0E26cCE7935Ef97] = 13443743824;
         allocations[0x8504a563Be3C2218fB20F8090f473a8CDE22B906] = 8525300962;
     }
-
-    /// @notice Lookup your contributor allocation
-    function getAllocation(address contributor) external view returns (uint56) {
-        return allocations[contributor];
-    }
 }
