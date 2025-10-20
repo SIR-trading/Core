@@ -10,11 +10,7 @@ const ALCHEMY_KEY = process.env.ALCHEMY_KEY || "YOUR_KEY_HERE";
 const SIR_DECIMALS = 12; // SIR token uses 12 decimals
 
 // Block range configuration
-// START_BLOCK: First block to query for events (set to your deployment block to speed up queries)
-// Set to 0 to query from genesis, or to a specific block number to skip earlier blocks
-const START_BLOCK = 22931060; // Change this to your deployment block for faster queries
-// SNAPSHOT_BLOCK: Block number for the snapshot (can be overridden by command line argument)
-// Set to "latest" for current block, or a specific number
+const START_BLOCK = 22931060;
 const SNAPSHOT_BLOCK = "latest"; // Can be overridden with: node ethereum-balance-snapshot.js <blockNumber>
 
 // Contract addresses - hardcoded from Ethereum mainnet deployment
@@ -136,6 +132,7 @@ class SIRBalanceSnapshot {
         this.results = {
             blockNumber: blockNumber,
             timestamp: null,
+            timestampGMT: null,
             balances: {},
             summary: {
                 totalSIRSupply: "0",
@@ -292,10 +289,11 @@ class SIRBalanceSnapshot {
         const block = await this.provider.getBlock(this.blockNumber);
         this.blockNumber = block.number; // Convert "latest" to actual number
         this.results.timestamp = block.timestamp;
+        this.results.timestampGMT = new Date(block.timestamp * 1000).toISOString();
         this.results.blockNumber = this.blockNumber; // Update results with actual number
 
         console.log(
-            `Initializing snapshot for block ${this.blockNumber} (${new Date(block.timestamp * 1000).toISOString()})`
+            `Initializing snapshot for block ${this.blockNumber} (${this.results.timestampGMT})`
         );
     }
 
@@ -1728,10 +1726,10 @@ class SIRBalanceSnapshot {
     // Save results to file
     saveResults(filename = null) {
         if (!filename) {
-            filename = `ethereum-snapshot-block-${this.blockNumber}.json`;
+            filename = `ethereum-snapshot.json`;
         }
 
-        const outputPath = path.join(process.cwd(), "snapshots", filename);
+        const outputPath = path.join(process.cwd(), "allocations", filename);
 
         // Create directory if it doesn't exist
         if (!fs.existsSync(path.dirname(outputPath))) {

@@ -1,21 +1,22 @@
 {
-  "blockNumber": 23619485,
-  "timestamp": 1760971427,
+  "blockNumber": 23620372,
+  "timestamp": 1760982191,
+  "timestampGMT": "2025-10-20T17:43:11.000Z",
   "balances": {
     "0x686748764c5C7Aa06FEc784E60D14b650bF79129": {
       "sirBalance": "8766810882795967296",
-      "unclaimedContributorRewards": "535493150684884224",
-      "unissuedContributorRewards": "551397695966465772480",
+      "unclaimedContributorRewards": "604269977168896416",
+      "unissuedContributorRewards": "551328919139981760288",
       "isContract": true
     },
     "0x5000Ff6Cc1864690d947B864B9FB0d603E8d1F1A": {
       "sirBalance": "32",
       "stakedSIR": {
-        "unlockedStake": "9781316962941101",
-        "lockedStake": "1193294196832962"
+        "unlockedStake": "9784746904940307",
+        "lockedStake": "1189864254833756"
       },
-      "uniswapV3Equity": "5361837498116744848",
-      "uniswapV3StakingRewards": "631980249607046842",
+      "uniswapV3Equity": "5379342470108123758",
+      "uniswapV3StakingRewards": "639170997275809246",
       "isContract": false
     },
     "0x000000000051200beef00Add2e55000000000000": {
@@ -25,72 +26,68 @@
     "0xAA7A9d80971E58641442774C373C94AaFee87d66": {
       "sirBalance": "39921592498300124",
       "stakedSIR": {
-        "unlockedStake": "320104678850799137",
-        "lockedStake": "1143298149507999637"
+        "unlockedStake": "323390914844420248",
+        "lockedStake": "1140011913514378526"
       },
-      "unclaimedContributorRewards": "39773850293037600",
-      "unissuedContributorRewards": "3717969898258974000",
+      "unclaimedContributorRewards": "40237599366412200",
+      "unissuedContributorRewards": "3717506149185599400",
       "isContract": false
     },
     "0x7F1CA9Fe9C3728f5c632e5564b2BfF5585BE1748": {
       "sirBalance": "16",
       "stakedSIR": {
-        "unlockedStake": "129416982539716935",
-        "lockedStake": "461323974272584140"
+        "unlockedStake": "130742987877543556",
+        "lockedStake": "459997968934757519"
       },
-      "unclaimedContributorRewards": "1589449608879196224",
-      "unissuedContributorRewards": "295756975801648677840",
-      "uniswapV3Equity": "15943664354671741588",
+      "unclaimedContributorRewards": "1626339908484987960",
+      "unissuedContributorRewards": "295720085502042886104",
+      "uniswapV3Equity": "16000321499891511654",
       "uniswapV3UnclaimedFees": "358093263826238369",
-      "uniswapV3StakingRewards": "1011753169760118904",
+      "uniswapV3StakingRewards": "1035026970775535557",
       "isContract": false
     },
     "0x0e52b591Cbc9AB81c806F303DE8d9a3B0Dc4ea5C": {
       "sirBalance": "99796363975166608",
       "stakedSIR": {
-        "unlockedStake": "1634588923913247306",
-        "lockedStake": "1607249680698777542"
+        "unlockedStake": "1639208717755930690",
+        "lockedStake": "1602629886856094158"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "0",
           "apeBalance": "902077680468345847",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "703531033328084036"
+          "apeEquitySIR": "705841820736865610"
         }
       },
-      "unclaimedContributorRewards": "584535557319187968",
-      "unissuedContributorRewards": "55218139751102458080",
-      "uniswapV3StakingRewards": "48769427092580337",
+      "unclaimedContributorRewards": "591423015217928400",
+      "unissuedContributorRewards": "55211252293203717648",
+      "uniswapV3StakingRewards": "49287534726880532",
       "isContract": false
     },
     "0xA6f4fa9840Aa6825446c820aF6d5eCcf9f78BA05": {
       "sirBalance": "50250354574837656",
-      "unclaimedContributorRewards": "322572425674075704",
-      "unissuedContributorRewards": "3871274999733518640",
+      "unclaimedContributorRewards": "323055296768525760",
+      "unissuedContributorRewards": "3870792128639068584",
       "isContract": false
     },
     "0xFc3C962FAD2C1cC77f1a0d46e7B8a2De79A21774": {
       "sirBalance": "42222279164525093204",
-      "unclaimedContributorRewards": "2657914755139140120",
-      "unissuedContributorRewards": "27598954484817803880",
+      "unclaimedContributorRewards": "2661357222377628372",
+      "unissuedContributorRewards": "27595512017579315628",
       "isContract": false
     },
     "0xF61DD58087160120c39b3DC312aB201cA8dCdD8f": {
       "sirBalance": "65850253152108212",
       "stakedSIR": {
-        "unlockedStake": "9248612641620999328",
-        "lockedStake": "3204583496161979073"
+        "unlockedStake": "9257823727665513208",
+        "lockedStake": "3195372410117465193"
       },
-      "unclaimedContributorRewards": "452549831683030488",
-      "unissuedContributorRewards": "4969377997273347120",
-      "uniswapV3Equity": "3158554449894328181",
-      "uniswapV3StakingRewards": "466499543983859709",
+      "unclaimedContributorRewards": "453169671139655136",
+      "unissuedContributorRewards": "4968758157816722472",
+      "uniswapV3Equity": "3171167853695796009",
+      "uniswapV3StakingRewards": "471680917825830591",
       "isContract": false
-    },
-    "0xD632204b44Ddf050019676BE26f23aDFC539DBAa": {
-      "sirBalance": "31461095438937999209",
-      "isContract": true
     },
     "0x349BE9963b502Fc7d938602890887BaCeEE17891": {
       "sirBalance": "150000000009529081",
@@ -100,10 +97,6 @@
       "sirBalance": "192829744700000000",
       "isContract": false
     },
-    "0x000000fee13a103A10D593b9AE06b3e05F2E7E1c": {
-      "sirBalance": "158339051927085460",
-      "isContract": true
-    },
     "0xA6a49d09321f701AB4295e5eB115E65EcF9b83B5": {
       "sirBalance": "1908654983813931269",
       "vaultEquity": {
@@ -111,23 +104,23 @@
           "teaBalance": "0",
           "apeBalance": "667663264835565009811",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "875937990092945713"
+          "apeEquitySIR": "886397983157687816"
         }
       },
-      "unclaimedContributorRewards": "49077922645773900",
-      "unissuedContributorRewards": "872200875443273400",
-      "uniswapV3Equity": "215894381060804138",
-      "uniswapV3StakingRewards": "28344387673136159",
+      "unclaimedContributorRewards": "49186713829901760",
+      "unissuedContributorRewards": "872092084259145540",
+      "uniswapV3Equity": "216599218739098725",
+      "uniswapV3StakingRewards": "28633923120239349",
       "isContract": false
     },
     "0x7DF76FDEedE91d3cB80e4a86158dD9f6D206c98E": {
       "sirBalance": "379359164650975495",
       "stakedSIR": {
-        "unlockedStake": "619690527020561785",
-        "lockedStake": "7894026464476246534"
+        "unlockedStake": "642380700982028469",
+        "lockedStake": "7871336290514779850"
       },
-      "unclaimedContributorRewards": "85728365232979104",
-      "unissuedContributorRewards": "6093617245583336640",
+      "unclaimedContributorRewards": "86488433073351360",
+      "unissuedContributorRewards": "6092857177742964384",
       "isContract": false
     },
     "0x81695c4A090caAbE58973e76ce970ccB473cD6e3": {
@@ -137,17 +130,17 @@
           "teaBalance": "0",
           "apeBalance": "4923982378041482184375",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "6459997808231951734"
+          "apeEquitySIR": "6537139721285848839"
         }
       },
-      "unclaimedContributorRewards": "1557527694893686404",
-      "unissuedContributorRewards": "86153105436380792520",
+      "unclaimedContributorRewards": "1568273726708837712",
+      "unissuedContributorRewards": "86142359404565641212",
       "isContract": false
     },
     "0x15CD073EcbBF3b6C9d3CDB599033e62D92095a49": {
       "sirBalance": "483497534001840",
-      "unclaimedContributorRewards": "1713344783736960",
-      "unissuedContributorRewards": "22811322680821200",
+      "unclaimedContributorRewards": "1716190081048440",
+      "unissuedContributorRewards": "22808477383509720",
       "isContract": false
     },
     "0x147CF09E7373B8FDA6f12021F1b0f98D6da1A566": {
@@ -157,18 +150,18 @@
     "0xF77259F9584d6C1EECAA4C77AfbAccEA63d7E226": {
       "sirBalance": "173295350866188745",
       "stakedSIR": {
-        "unlockedStake": "42308873241975610",
-        "lockedStake": "48194916531267619"
+        "unlockedStake": "42447402172056336",
+        "lockedStake": "48056387601186893"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "2856816077992797656755435",
           "apeBalance": "0",
-          "teaEquitySIR": "3569963342927593072",
+          "teaEquitySIR": "3559384521505847894",
           "apeEquitySIR": "0"
         }
       },
-      "unclaimedLperRewards": "2831591494621543",
+      "unclaimedLperRewards": "9463282279675131",
       "isContract": true
     },
     "0x589F8D40370C9B5904f83B9C17815DDdB3eb6af9": {
@@ -177,8 +170,8 @@
     },
     "0x36D11126eBc59cb962AE8ddD3bcD0741b4e337Dc": {
       "sirBalance": "4145231554210666696",
-      "unclaimedContributorRewards": "12710355084236553120",
-      "unissuedContributorRewards": "131980346915735990880",
+      "unclaimedContributorRewards": "12726817230316458672",
+      "unissuedContributorRewards": "131963884769656085328",
       "isContract": false
     },
     "0xA6D84984352c9FcB906f4FC30DFd54Da055E02D5": {
@@ -191,11 +184,11 @@
         "16": {
           "teaBalance": "2377590994349806693000000",
           "apeBalance": "0",
-          "teaEquitySIR": "2971109256801436589",
+          "teaEquitySIR": "2962305011145955661",
           "apeEquitySIR": "0"
         }
       },
-      "unclaimedLperRewards": "259745262088696627",
+      "unclaimedLperRewards": "265264500239629409",
       "uniswapV3Equity": "13673495719904905926",
       "uniswapV3StakingRewards": "4875664120324683",
       "isContract": false
@@ -215,15 +208,15 @@
     "0x80BfB857770a802f7eF375921AD5E83c76214a2d": {
       "sirBalance": "885430070692439134",
       "stakedSIR": {
-        "unlockedStake": "955399378003632024",
-        "lockedStake": "2393335976387624580"
+        "unlockedStake": "962278656898483684",
+        "lockedStake": "2386456697492772920"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "0",
           "apeBalance": "487804878048780488",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "380439376061229397"
+          "apeEquitySIR": "381688950676080881"
         }
       },
       "isContract": false
@@ -242,8 +235,8 @@
     },
     "0xAEe989FdA15dfA276bEbF116B81d26ba233235Ce": {
       "sirBalance": "823912630962576356",
-      "unclaimedContributorRewards": "6433344127715640",
-      "unissuedContributorRewards": "66801830804652360",
+      "unclaimedContributorRewards": "6441676440236484",
+      "unissuedContributorRewards": "66793498492131516",
       "isContract": true
     },
     "0x9008D19f58AAbD9eD0D60971565AA8510560ab41": {
@@ -257,8 +250,8 @@
     "0x83C08b5C096d598b7e51acD6A7E844Bf011e5700": {
       "sirBalance": "16844361184623920023",
       "stakedSIR": {
-        "unlockedStake": "3597063730413701625",
-        "lockedStake": "6402936269586298375"
+        "unlockedStake": "3615467993241408899",
+        "lockedStake": "6384532006758591101"
       },
       "isContract": false
     },
@@ -273,8 +266,8 @@
     "0x0D55E988161e80c94322fA5833602e92BAEb129f": {
       "sirBalance": "777829057579833690",
       "stakedSIR": {
-        "unlockedStake": "73441562692560856",
-        "lockedStake": "133620654757806163"
+        "unlockedStake": "73825634865987610",
+        "lockedStake": "133236582584379409"
       },
       "isContract": true
     },
@@ -293,18 +286,18 @@
     "0x7edB0CBfe1217Fe53Af0Fb871D92c1c627C6673C": {
       "sirBalance": "156475325668672572",
       "stakedSIR": {
-        "unlockedStake": "271915601922450524",
-        "lockedStake": "528084398077549476"
+        "unlockedStake": "273433499906785572",
+        "lockedStake": "526566500093214428"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "242405957614887143113881",
           "apeBalance": "184190061034390842",
-          "teaEquitySIR": "302917779502425727",
-          "apeEquitySIR": "143649961388036996"
+          "teaEquitySIR": "302020147569824469",
+          "apeEquitySIR": "144121787798418862"
         }
       },
-      "unclaimedLperRewards": "6329582053071822",
+      "unclaimedLperRewards": "6892292886205404",
       "isContract": false
     },
     "0x29FFebb88C81b44871E48Df9f21C4F944E967810": {
@@ -322,41 +315,41 @@
     "0x8B77edDCa6A168D90f456BE6b8E00877D4fd6048": {
       "sirBalance": "123424412824427972",
       "stakedSIR": {
-        "unlockedStake": "217599918064578814",
-        "lockedStake": "516115938061114395"
+        "unlockedStake": "219083414537714749",
+        "lockedStake": "514632441587978460"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "392538918526793713356508",
           "apeBalance": "62289095227761381867",
-          "teaEquitySIR": "256399361267944965",
-          "apeEquitySIR": "81719914442126772"
+          "teaEquitySIR": "253068320139741644",
+          "apeEquitySIR": "82695770893135665"
         }
       },
-      "uniswapV3StakingRewards": "110499055792018813",
+      "uniswapV3StakingRewards": "113787521770103179",
       "isContract": false
     },
     "0x17A779123dbC283eb0e0e87602cc783bdb1DC55a": {
       "sirBalance": "1000070758936668541",
       "stakedSIR": {
-        "unlockedStake": "37575530826472511",
-        "lockedStake": "163695659975252943"
+        "unlockedStake": "38046049011113791",
+        "lockedStake": "163225141790611663"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "13342813662471177338977",
           "apeBalance": "0",
-          "teaEquitySIR": "8715285896782498",
+          "teaEquitySIR": "8602060280218287",
           "apeEquitySIR": "0"
         },
         "16": {
           "teaBalance": "76127622662003278765246",
           "apeBalance": "242209715820020015",
-          "teaEquitySIR": "95131368232330700",
-          "apeEquitySIR": "188899531983199000"
+          "teaEquitySIR": "94849466806611630",
+          "apeEquitySIR": "189519983163535132"
         }
       },
-      "unclaimedLperRewards": "9750198141865088",
+      "unclaimedLperRewards": "9926917552535150",
       "isContract": false
     },
     "0x4122Ac127311bB4bD22ceC65AE3A8007d8ab9489": {
@@ -368,17 +361,17 @@
       "isContract": false
     },
     "0xFfe296bbbc86dFaC056B42c6180d9f8b4cB412aa": {
-      "sirBalance": "197377444616838119",
+      "sirBalance": "98688722308419060",
       "stakedSIR": {
-        "unlockedStake": "179414683337122550",
-        "lockedStake": "349888506562877450"
+        "unlockedStake": "180420384434877383",
+        "lockedStake": "348882805465122617"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "0",
           "apeBalance": "270927229128418813",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "211296341315607445"
+          "apeEquitySIR": "211990356080988838"
         }
       },
       "isContract": false
@@ -397,18 +390,18 @@
     },
     "0xa7C4baa91E13427D2bc71B28E8a9F6246C93d223": {
       "sirBalance": "7722596240157240",
-      "unclaimedContributorRewards": "1684476915554520",
-      "unissuedContributorRewards": "97680101800800240",
+      "unclaimedContributorRewards": "1696660730361216",
+      "unissuedContributorRewards": "97667917985993544",
       "isContract": false
     },
     "0x03eAB50f733c4DbeaE6B120755776eE7c931243C": {
       "sirBalance": "56230293948742600",
       "stakedSIR": {
-        "unlockedStake": "212792570859320616",
-        "lockedStake": "443203790435694384"
+        "unlockedStake": "214066492494955081",
+        "lockedStake": "441929868800059919"
       },
-      "unclaimedContributorRewards": "34307905250809200",
-      "unissuedContributorRewards": "8270965439417593200",
+      "unclaimedContributorRewards": "35339557648059480",
+      "unissuedContributorRewards": "8269933787020342920",
       "isContract": false
     },
     "0x608a7a10EC8AE5cA837b4B265808bfd172047907": {
@@ -418,8 +411,8 @@
     "0x9b9AE2dF9Fc756023df3Aa93B8EB34B200110324": {
       "sirBalance": "484040484450284640",
       "stakedSIR": {
-        "unlockedStake": "456731716629120605",
-        "lockedStake": "2099158971922132799"
+        "unlockedStake": "462765428634017834",
+        "lockedStake": "2093125259917235570"
       },
       "isContract": false
     },
@@ -438,14 +431,14 @@
     "0x7A4538B44577699119Bf27c0f1F26331CD22B401": {
       "sirBalance": "14606042862296928",
       "stakedSIR": {
-        "unlockedStake": "1098720765641389",
-        "lockedStake": "144162114155424874"
+        "unlockedStake": "1513092754835934",
+        "lockedStake": "143747742166230329"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "26352423068235054602202",
           "apeBalance": "0",
-          "teaEquitySIR": "17212928766187875",
+          "teaEquitySIR": "16989305066918644",
           "apeEquitySIR": "0"
         }
       },
@@ -454,10 +447,6 @@
     "0xd9Aa5AB0C282e6555028aF36369229fBfC58eaAc": {
       "sirBalance": "182816427909021025",
       "isContract": false
-    },
-    "0xe34139463bA50bD61336E0c446Bd8C0867c6fE65": {
-      "sirBalance": "8840700521423046330",
-      "isContract": true
     },
     "0x9803d2482De87781e053277b510f158b024663A3": {
       "sirBalance": "10000000000000000",
@@ -477,164 +466,164 @@
     },
     "0xE19618C08F74b7e80278Ec14b63797419dACCDf8": {
       "sirBalance": "1090105317497206296",
-      "unclaimedContributorRewards": "52026471972796464",
-      "unissuedContributorRewards": "11859538840475709240",
+      "unclaimedContributorRewards": "53505733585564260",
+      "unissuedContributorRewards": "11858059578862941444",
       "isContract": false
     },
     "0xC58D3aE892A104D663B01194f2EE325CfB5187f2": {
       "stakedSIR": {
-        "unlockedStake": "2122367975104704195",
-        "lockedStake": "2602814198423224757"
+        "unlockedStake": "2129849367169623857",
+        "lockedStake": "2595332806358305095"
       },
-      "unclaimedContributorRewards": "6248520508274616",
-      "unissuedContributorRewards": "38538420101905078680",
+      "unclaimedContributorRewards": "11055486971329788",
+      "unissuedContributorRewards": "38533613135442023508",
       "isContract": false
     },
     "0x241F1A461Da47Ccd40B48c38340896A9948A4725": {
       "stakedSIR": {
-        "unlockedStake": "1141170637215188630",
-        "lockedStake": "1831584612041759940"
+        "unlockedStake": "1146435247570802678",
+        "lockedStake": "1826320001686145892"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "222093607167283890141703",
           "apeBalance": "0",
-          "teaEquitySIR": "145067549564511716",
+          "teaEquitySIR": "143182888184789803",
           "apeEquitySIR": "0"
         }
       },
       "unclaimedLperRewards": "5753656866311354",
-      "unclaimedContributorRewards": "151863129292834944",
-      "unissuedContributorRewards": "8071431155236072320",
+      "unclaimedContributorRewards": "152869893419892672",
+      "unissuedContributorRewards": "8070424391109014592",
       "isContract": false
     },
     "0xBA5EDc0d2Ae493C9574328d77dc36eEF19F699e2": {
       "stakedSIR": {
-        "unlockedStake": "12481821283162929",
-        "lockedStake": "1603578868521399"
+        "unlockedStake": "12486430525816399",
+        "lockedStake": "1598969625867929"
       },
-      "unclaimedContributorRewards": "617477825476440432",
-      "unissuedContributorRewards": "6557954759343987240",
+      "unclaimedContributorRewards": "618295810970164428",
+      "unissuedContributorRewards": "6557136773850263244",
       "isContract": false
     },
     "0xa485B739e99334f4B92B04da2122e2923a054688": {
       "stakedSIR": {
-        "unlockedStake": "804309729629212794",
-        "lockedStake": "1255919130065424898"
+        "unlockedStake": "807919677438604781",
+        "lockedStake": "1252309182256032911"
       },
-      "unclaimedContributorRewards": "12033951103432476",
-      "unissuedContributorRewards": "7168170047524013160",
+      "unclaimedContributorRewards": "12928049847719640",
+      "unissuedContributorRewards": "7167275948779725996",
       "isContract": false
     },
     "0xfdcc69463b0106888D1CA07CE118A64AdF9fe458": {
       "stakedSIR": {
-        "unlockedStake": "1493183980753270360",
-        "lockedStake": "447925018483092872"
+        "unlockedStake": "1494471472838179260",
+        "lockedStake": "446637526398183972"
       },
-      "unclaimedContributorRewards": "3369121404105073248",
-      "unissuedContributorRewards": "55139769596577539520",
+      "unclaimedContributorRewards": "3375999086753465856",
+      "unissuedContributorRewards": "55132891913929146912",
       "isContract": false
     },
     "0xEdA726014938d2E6Ed51c7d5A53193cf9713cdF7": {
       "stakedSIR": {
-        "unlockedStake": "550421077911139774",
-        "lockedStake": "302626388808823010"
+        "unlockedStake": "551290931266496905",
+        "lockedStake": "301756535453465879"
       },
-      "unclaimedContributorRewards": "254135572373302656",
-      "unissuedContributorRewards": "11496641960850862560",
+      "unclaimedContributorRewards": "255569569205488080",
+      "unissuedContributorRewards": "11495207964018677136",
       "isContract": false
     },
     "0xe52a4EaeA658AB94437165CacA01a37A64c0f18e": {
       "stakedSIR": {
-        "unlockedStake": "1948486015963037354",
-        "lockedStake": "1503364868939283617"
+        "unlockedStake": "1952807208773486480",
+        "lockedStake": "1499043676128834491"
       },
-      "unclaimedContributorRewards": "77618904109444512",
-      "unissuedContributorRewards": "33083861757929264280",
+      "unclaimedContributorRewards": "81745513698477924",
+      "unissuedContributorRewards": "33079735148340230868",
       "isContract": false
     },
     "0x18e17dd452Ef58F91E45fD20Eb2F839ac13AA648": {
       "stakedSIR": {
-        "unlockedStake": "120388425180464303",
-        "lockedStake": "16979607473190349"
+        "unlockedStake": "120437230470020635",
+        "lockedStake": "16930802183634017"
       },
-      "unclaimedContributorRewards": "2178696392083828668",
-      "unissuedContributorRewards": "24049287705199300680",
+      "unclaimedContributorRewards": "2181696102999677640",
+      "unissuedContributorRewards": "24046287994283451708",
       "isContract": false
     },
     "0x6ab791754298D6D6d7C182DC1572126B4eD24897": {
       "stakedSIR": {
-        "unlockedStake": "174931721248201409",
-        "lockedStake": "1354457490921520747"
+        "unlockedStake": "178824902532900846",
+        "lockedStake": "1350564309636821310"
       },
-      "unclaimedContributorRewards": "45720178584596604",
-      "unissuedContributorRewards": "16355442664210593240",
+      "unclaimedContributorRewards": "47760222368628000",
+      "unissuedContributorRewards": "16353402620426561844",
       "isContract": false
     },
     "0xd11f322ad85730Eab11ef61eE9100feE84b63739": {
       "stakedSIR": {
-        "unlockedStake": "5281409662094411589",
-        "lockedStake": "3369456117963427083"
+        "unlockedStake": "5291094649320659874",
+        "lockedStake": "3359771130737178798"
       },
-      "unclaimedContributorRewards": "1438571986300863648",
-      "unissuedContributorRewards": "104765562233600881680",
+      "unclaimedContributorRewards": "1451639583332822520",
+      "unissuedContributorRewards": "104752494636568922808",
       "isContract": false
     },
     "0x8D2a097607da5E2E3d599c72EC50FD0704a4D37f": {
       "stakedSIR": {
-        "unlockedStake": "1140717096095523500",
-        "lockedStake": "1031122510891434772"
+        "unlockedStake": "1143680900340796357",
+        "lockedStake": "1028158706646161915"
       },
-      "unclaimedContributorRewards": "89946297683157408",
-      "unissuedContributorRewards": "23485676550271900320",
+      "unclaimedContributorRewards": "92875708365816336",
+      "unissuedContributorRewards": "23482747139589241392",
       "isContract": false
     },
     "0x32dd21D4Ad7A68322E1104baDB61c4c1363E6101": {
       "stakedSIR": {
-        "unlockedStake": "1093123234457508077",
-        "lockedStake": "669189828579290851"
+        "unlockedStake": "1095046718460511810",
+        "lockedStake": "667266344576287118"
       },
-      "unclaimedContributorRewards": "39996791974544856",
-      "unissuedContributorRewards": "1820676594229096440",
+      "unclaimedContributorRewards": "40223888241215532",
+      "unissuedContributorRewards": "1820449497962425764",
       "isContract": false
     },
     "0x6665E62eF6F6Db29D5F8191fBAC472222C2cc80F": {
       "stakedSIR": {
-        "unlockedStake": "908579511824447896",
-        "lockedStake": "163897183178646728"
+        "unlockedStake": "909050609256772581",
+        "lockedStake": "163426085746322043"
       },
-      "unclaimedContributorRewards": "5856820124333173416",
-      "unissuedContributorRewards": "71951648245634979960",
+      "unclaimedContributorRewards": "5865794782847034300",
+      "unissuedContributorRewards": "71942673587121119076",
       "isContract": true
     },
     "0x193AD6d624678b11Bec0C5cFD5723A34725A8433": {
       "stakedSIR": {
-        "unlockedStake": "6492155576997417875",
-        "lockedStake": "1259920526503568605"
+        "unlockedStake": "6495777026210013770",
+        "lockedStake": "1256299077290972710"
       },
-      "unclaimedContributorRewards": "34729767123288681240",
-      "unissuedContributorRewards": "441118156773224396280",
+      "unclaimedContributorRewards": "34784788584475897452",
+      "unissuedContributorRewards": "441063135312037180068",
       "isContract": false
     },
     "0xE24d295154c2D78A7A860E809D57598E551813Bd": {
       "stakedSIR": {
-        "unlockedStake": "96707465298561113",
-        "lockedStake": "2878635333161347775"
+        "unlockedStake": "104981663108130939",
+        "lockedStake": "2870361135351777949"
       },
-      "unclaimedContributorRewards": "47347899543290832",
-      "unissuedContributorRewards": "33083861757929264280",
+      "unclaimedContributorRewards": "51474509132324244",
+      "unissuedContributorRewards": "33079735148340230868",
       "isContract": false
     },
     "0x47bc8346c92261fF4a03d51425947Df78d098F79": {
       "stakedSIR": {
-        "unlockedStake": "81678565208254556",
-        "lockedStake": "30941958795630363"
+        "unlockedStake": "81767503145179495",
+        "lockedStake": "30853020858705424"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "1348637082003008249847437",
           "apeBalance": "0",
-          "teaEquitySIR": "880905485004116101",
+          "teaEquitySIR": "869461102357849912",
           "apeEquitySIR": "0"
         }
       },
@@ -643,112 +632,112 @@
     },
     "0x78086Ad810f8F99A0B6c92a9A6c8857d3c665622": {
       "stakedSIR": {
-        "unlockedStake": "394820636401106274",
-        "lockedStake": "157573064556339486"
+        "unlockedStake": "395273556119897967",
+        "lockedStake": "157120144837547793"
       },
-      "unclaimedContributorRewards": "715742421662874480",
-      "unissuedContributorRewards": "13167928377341567760",
+      "unclaimedContributorRewards": "717384881056134984",
+      "unissuedContributorRewards": "13166285917948307256",
       "isContract": false
     },
     "0x1E6a29e9c42839e982a68DD6E42d465BA99323ff": {
       "stakedSIR": {
-        "unlockedStake": "706895132458910563",
-        "lockedStake": "994615075820112423"
+        "unlockedStake": "709754001655335669",
+        "lockedStake": "991756206623687317"
       },
       "isContract": false
     },
     "0x0f1b084c7aAf82bB5ad3DE9A1222ecC805b28f85": {
       "stakedSIR": {
-        "unlockedStake": "142155871975137614",
-        "lockedStake": "487852579323981010"
+        "unlockedStake": "143558129738298760",
+        "lockedStake": "486450321560819864"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "0",
           "apeBalance": "2860771545140243818",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "2231117790458090691"
+          "apeEquitySIR": "2238446022836568935"
         }
       },
-      "unclaimedContributorRewards": "366601187213929248",
-      "unissuedContributorRewards": "33083861757929264280",
+      "unclaimedContributorRewards": "370727796802962660",
+      "unissuedContributorRewards": "33079735148340230868",
       "isContract": false
     },
     "0x8851A0af3a12121E335761Fe7B6Aa58198C12751": {
       "stakedSIR": {
-        "unlockedStake": "515736529929827510",
-        "lockedStake": "4248117005340268586"
+        "unlockedStake": "527947093739513309",
+        "lockedStake": "4235906441530582787"
       },
       "isContract": false
     },
     "0x0ae44FC0e1c6E86e5dE1Ace32057a44BfE85C9EA": {
       "stakedSIR": {
-        "unlockedStake": "2197380465175870359",
-        "lockedStake": "6107456141416833476"
+        "unlockedStake": "2214935415483472413",
+        "lockedStake": "6089901191109231422"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "2620085258416974048772595",
           "apeBalance": "5217750365542842258900",
-          "teaEquitySIR": "1711392565218513765",
-          "apeEquitySIR": "6845405474159124539"
+          "teaEquitySIR": "1689158816300212707",
+          "apeEquitySIR": "6927149723860469600"
         },
         "16": {
           "teaBalance": "4450358321320118023854680",
           "apeBalance": "12388339007544559483",
-          "teaEquitySIR": "5561301685605276247",
-          "apeEquitySIR": "9661674523053746166"
+          "teaEquitySIR": "5544821959694078870",
+          "apeEquitySIR": "9693408838638950486"
         }
       },
-      "unclaimedLperRewards": "18093421833114104",
-      "unclaimedContributorRewards": "13867736341105344",
-      "unissuedContributorRewards": "760818540867976320",
-      "uniswapV3Equity": "292474404448128930",
-      "uniswapV3StakingRewards": "19421839243002961",
+      "unclaimedLperRewards": "28424293497215537",
+      "unclaimedContributorRewards": "13962634606284672",
+      "unissuedContributorRewards": "760723642602796992",
+      "uniswapV3Equity": "293429255515483722",
+      "uniswapV3StakingRewards": "19814075979512923",
       "isContract": false
     },
     "0xdBb8c7baC5c9B11765F5Bc65592751D944FC1889": {
       "stakedSIR": {
-        "unlockedStake": "36580166213031",
-        "lockedStake": "28468507651569"
+        "unlockedStake": "36661994592242",
+        "lockedStake": "28386679272358"
       },
-      "unclaimedContributorRewards": "38500818874200",
-      "unissuedContributorRewards": "1075225505821200",
+      "unclaimedContributorRewards": "38634933685680",
+      "unissuedContributorRewards": "1075091391009720",
       "isContract": false
     },
     "0xe0D209b7324d982BACb757F724EbE00a9792aC28": {
       "stakedSIR": {
-        "unlockedStake": "139704294478891968",
-        "lockedStake": "222485853670344769"
+        "unlockedStake": "140343796100334845",
+        "lockedStake": "221846352048901892"
       },
       "isContract": true
     },
     "0x86b6fF368b87D98da27bED6573E205a9C4F1dae5": {
       "stakedSIR": {
-        "unlockedStake": "15645502044728525",
-        "lockedStake": "23756279833936173"
+        "unlockedStake": "15713785844451643",
+        "lockedStake": "23687996034213055"
       },
       "isContract": true
     },
     "0xbe1E110f4A2fD54622CD516e86b29f619ad994bF": {
       "stakedSIR": {
-        "unlockedStake": "77756753784048818",
-        "lockedStake": "117823324579137562"
+        "unlockedStake": "78095418943514605",
+        "lockedStake": "117484659419671775"
       },
-      "unclaimedContributorRewards": "57771014178578700",
-      "unissuedContributorRewards": "2630718407435530920",
+      "unclaimedContributorRewards": "58099148417731368",
+      "unissuedContributorRewards": "2630390273196378252",
       "isContract": true
     },
     "0x078a4afb6A3cC50e67600945AB7f0f222B170761": {
       "stakedSIR": {
-        "unlockedStake": "95176859028546555",
-        "lockedStake": "340214450241353687"
+        "unlockedStake": "96154753528257134",
+        "lockedStake": "339236555741643108"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "14047078718797787806724",
           "apeBalance": "0",
-          "teaEquitySIR": "9175299164468593",
+          "teaEquitySIR": "9056097233819183",
           "apeEquitySIR": "0"
         }
       },
@@ -756,23 +745,23 @@
     },
     "0x26610e89A8B825F23E89e58879cE97D791aD4438": {
       "stakedSIR": {
-        "unlockedStake": "2722099105924349742",
-        "lockedStake": "4946404951614394514"
+        "unlockedStake": "2736316791834202765",
+        "lockedStake": "4932187265704541491"
       },
-      "unclaimedContributorRewards": "523830993149982816",
-      "unissuedContributorRewards": "27569884798288769760",
+      "unclaimedContributorRewards": "527269834474179120",
+      "unissuedContributorRewards": "27566445956964573456",
       "isContract": false
     },
     "0xB25e55e36CC998a546639365272F88FE2ce50753": {
       "stakedSIR": {
-        "unlockedStake": "714278121046926637",
-        "lockedStake": "1443520770100985118"
+        "unlockedStake": "718427301131130327",
+        "lockedStake": "1439371590016781428"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "350930215474794870164014",
           "apeBalance": "0",
-          "teaEquitySIR": "229221304820041712",
+          "teaEquitySIR": "226243350467737139",
           "apeEquitySIR": "0"
         }
       },
@@ -780,123 +769,123 @@
     },
     "0xa233f74638Bd28A24CC2Ce23475eea7dC76881AC": {
       "stakedSIR": {
-        "unlockedStake": "84180312788517823",
-        "lockedStake": "188385723998025521"
+        "unlockedStake": "84721798792980521",
+        "lockedStake": "187844237993562823"
       },
-      "unclaimedContributorRewards": "3810214779667296",
-      "unissuedContributorRewards": "2869804448360157360",
+      "unclaimedContributorRewards": "4168170650777640",
+      "unissuedContributorRewards": "2869446492489047016",
       "isContract": false
     },
     "0xfAB22550fcD520A7eCED27414CD74Bc70a6ac1a9": {
       "stakedSIR": {
-        "unlockedStake": "200495181749399635",
-        "lockedStake": "395000870653280119"
+        "unlockedStake": "201630551450829738",
+        "lockedStake": "393865500951850016"
       },
       "isContract": false
     },
     "0xDf1c75a141C7dd0A62B0BEfA6EB92331cD0aa520": {
       "stakedSIR": {
-        "unlockedStake": "4733364268845993",
-        "lockedStake": "11958698897811498"
+        "unlockedStake": "4767737723199765",
+        "lockedStake": "11924325443457726"
       },
       "isContract": false
     },
     "0x1ccD2496090C53687572EDc2b62c3b58B6799BBD": {
       "stakedSIR": {
-        "unlockedStake": "97643980766918137",
-        "lockedStake": "254085142929113451"
+        "unlockedStake": "98374309721353460",
+        "lockedStake": "253354813974678128"
       },
       "isContract": false
     },
     "0xb4D502361a3c6f823EEb9A99Af09E110382206ee": {
       "stakedSIR": {
-        "unlockedStake": "40096130928596143",
-        "lockedStake": "334592580130637478"
+        "unlockedStake": "41057866220914277",
+        "lockedStake": "333630844838319344"
       },
       "isContract": false
     },
     "0xD84129917fB529c9621364C6294ceA6a4CE3e88D": {
       "stakedSIR": {
-        "unlockedStake": "310489279506661197",
-        "lockedStake": "811589523994576441"
+        "unlockedStake": "312822069695243708",
+        "lockedStake": "809256733805993930"
       },
       "isContract": false
     },
     "0xADc73EB8E4673e5FD5A9c709c4379c074991F2D3": {
       "stakedSIR": {
-        "unlockedStake": "4027247542127093",
-        "lockedStake": "10972752457872907"
+        "unlockedStake": "4058787043954918",
+        "lockedStake": "10941212956045082"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "0",
           "apeBalance": "10101710172149118937",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "13252895839451349"
+          "apeEquitySIR": "13411154985802224"
         }
       },
       "isContract": true
     },
     "0x0D5f69C67DAE06ce606246A8bd88B552d1DdE140": {
       "stakedSIR": {
-        "unlockedStake": "122856323017196837",
-        "lockedStake": "589826231728676192"
+        "unlockedStake": "124551688476786536",
+        "lockedStake": "588130866269086493"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "139693465672996771952378",
           "apeBalance": "0",
-          "teaEquitySIR": "91245259212220428",
+          "teaEquitySIR": "90059836168705701",
           "apeEquitySIR": "0"
         }
       },
-      "unclaimedContributorRewards": "24125859221886576",
-      "unissuedContributorRewards": "1883938451843244720",
+      "unclaimedContributorRewards": "24360846253854264",
+      "unissuedContributorRewards": "1883703464811277032",
       "isContract": false
     },
     "0xcf88FA6eE6D111b04bE9b06ef6fAD6bD6691B88c": {
       "stakedSIR": {
-        "unlockedStake": "234828722046733408",
-        "lockedStake": "774999558402389623"
+        "unlockedStake": "237056339965085143",
+        "lockedStake": "772771940484037888"
       },
       "isContract": false
     },
     "0x93721d340C48A77d247aC83D915e4719283AD0dB": {
       "stakedSIR": {
-        "unlockedStake": "5530033243420552",
-        "lockedStake": "33114734044593747"
+        "unlockedStake": "5625216491100403",
+        "lockedStake": "33019550796913896"
       },
       "vaultEquity": {
         "16": {
           "teaBalance": "18971048584699658150036",
           "apeBalance": "0",
-          "teaEquitySIR": "23706793218505163",
+          "teaEquitySIR": "23636543216516308",
           "apeEquitySIR": "0"
         }
       },
-      "unclaimedLperRewards": "2556295887937974",
+      "unclaimedLperRewards": "2600334469578256",
       "isContract": false
     },
     "0x3E0c233A3682122C7bC5AD86Cc56cfc13a910C28": {
       "stakedSIR": {
-        "unlockedStake": "44952261724930148",
-        "lockedStake": "500017057335602886"
+        "unlockedStake": "46389484423093251",
+        "lockedStake": "498579834637439783"
       },
       "vaultEquity": {
         "6": {
           "teaBalance": "1599124285141935036861878",
           "apeBalance": "0",
-          "teaEquitySIR": "1044519220762220270",
+          "teaEquitySIR": "1030949231873200262",
           "apeEquitySIR": "0"
         },
         "16": {
           "teaBalance": "552630562063583248070739",
           "apeBalance": "0",
-          "teaEquitySIR": "690583780995312002",
+          "teaEquitySIR": "688537383933455347",
           "apeEquitySIR": "0"
         }
       },
-      "unclaimedLperRewards": "126653915677207646",
+      "unclaimedLperRewards": "127936768652661003",
       "isContract": false
     },
     "0x02fEb744cA516FD6E41D940Ae2d0F7Cb6FCB1ac3": {
@@ -904,13 +893,13 @@
         "6": {
           "teaBalance": "2733558347057040585988715",
           "apeBalance": "0",
-          "teaEquitySIR": "1785511145759790846",
+          "teaEquitySIR": "1762314476969435057",
           "apeEquitySIR": "0"
         }
       },
       "unclaimedLperRewards": "82077838194698321",
-      "unclaimedContributorRewards": "53843686611396516",
-      "unissuedContributorRewards": "2476911534058269720",
+      "unclaimedContributorRewards": "54152636242561704",
+      "unissuedContributorRewards": "2476602584427104532",
       "isContract": false
     },
     "0x14747B8bE932B3bf759062a0fdb14E2331b1fDcd": {
@@ -918,7 +907,7 @@
         "6": {
           "teaBalance": "1323545419879790143807415",
           "apeBalance": "0",
-          "teaEquitySIR": "864516062610817596",
+          "teaEquitySIR": "853284604988192639",
           "apeEquitySIR": "0"
         }
       },
@@ -929,7 +918,7 @@
         "6": {
           "teaBalance": "633894038112279373958953",
           "apeBalance": "0",
-          "teaEquitySIR": "414048184301126578",
+          "teaEquitySIR": "408669030764454370",
           "apeEquitySIR": "0"
         }
       },
@@ -940,7 +929,7 @@
         "6": {
           "teaBalance": "1337425714201750053748254",
           "apeBalance": "0",
-          "teaEquitySIR": "873582421207102063",
+          "teaEquitySIR": "862233176967467156",
           "apeEquitySIR": "0"
         }
       },
@@ -952,28 +941,17 @@
           "teaBalance": "0",
           "apeBalance": "50000000000000000000",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "65597288051236089"
+          "apeEquitySIR": "66380616535492164"
         },
         "16": {
           "teaBalance": "467436020801774258012540",
           "apeBalance": "0",
-          "teaEquitySIR": "584122118424482282",
+          "teaEquitySIR": "582391197687846186",
           "apeEquitySIR": "0"
         }
       },
-      "unclaimedLperRewards": "11145117100278417",
+      "unclaimedLperRewards": "12230203107611178",
       "isContract": false
-    },
-    "0xCeFeF7bb8c4E32451f5FcEAF2127B0c26c89975b": {
-      "vaultEquity": {
-        "6": {
-          "teaBalance": "0",
-          "apeBalance": "999998009234",
-          "teaEquitySIR": "0",
-          "apeEquitySIR": "1311943149"
-        }
-      },
-      "isContract": true
     },
     "0x193641EA463C3B9244cF9F00b77EE5220d4154e9": {
       "vaultEquity": {
@@ -981,505 +959,505 @@
           "teaBalance": "0",
           "apeBalance": "216124976354629710",
           "teaEquitySIR": "0",
-          "apeEquitySIR": "168556024868986731"
+          "apeEquitySIR": "169109656651367382"
         }
       },
       "isContract": false
     },
     "0x30E14c4b4768F9B5F520a2F6214d2cCc21255fDa": {
-      "unclaimedContributorRewards": "1350492052508929440",
-      "unissuedContributorRewards": "74684474478424257480",
+      "unclaimedContributorRewards": "1359807581354673132",
+      "unissuedContributorRewards": "74675158949578513788",
       "isContract": false
     },
     "0x79C1134a1dFdF7e0d58E58caFC84a514991372e6": {
-      "unclaimedContributorRewards": "2493471788192071440",
-      "unissuedContributorRewards": "25891430211759256560",
+      "unclaimedContributorRewards": "2496701272856449464",
+      "unissuedContributorRewards": "25888200727094878536",
       "isContract": false
     },
     "0xFe202706E36F31aFBaf4b4543C2A8bBa4ddB2deE": {
-      "unclaimedContributorRewards": "2378983220693173800",
-      "unissuedContributorRewards": "24702616779227386200",
+      "unclaimedContributorRewards": "2382064422519648780",
+      "unissuedContributorRewards": "24699535577400911220",
       "isContract": false
     },
     "0x1A519D7f13F485818bef6dA1c3a08D8Bf4D0a9A4": {
-      "unclaimedContributorRewards": "434892646165958904",
-      "unissuedContributorRewards": "23439783720066117360",
+      "unclaimedContributorRewards": "437816332553353248",
+      "unissuedContributorRewards": "23436860033678723016",
       "isContract": false
     },
     "0x3424cd7D170949636C300e62674a3DFB7706Fc35": {
-      "unclaimedContributorRewards": "480882650461450536",
-      "unissuedContributorRewards": "21887279395248093240",
+      "unclaimedContributorRewards": "483612690191731932",
+      "unissuedContributorRewards": "21884549355517811844",
       "isContract": false
     },
     "0xaC4Cb8282d291a74e8C881620E3AFaF6dE98d6aE": {
-      "unclaimedContributorRewards": "1593069120997444440",
-      "unissuedContributorRewards": "16541930878921483560",
+      "unclaimedContributorRewards": "1595132425791955764",
+      "unissuedContributorRewards": "16539867574126972236",
       "isContract": false
     },
     "0xca4aD39F872E89Ef23eABd5716363Fc22513E147": {
-      "unclaimedContributorRewards": "1112514510420664560",
-      "unissuedContributorRewards": "11552002289551207440",
+      "unclaimedContributorRewards": "1113955412446232136",
+      "unissuedContributorRewards": "11550561387525639864",
       "isContract": false
     },
     "0xde3697dDA384ce178d04D8879F7a66423F72A326": {
-      "unclaimedContributorRewards": "835989572391834480",
-      "unissuedContributorRewards": "8680653927524741520",
+      "unclaimedContributorRewards": "837072325971162888",
+      "unissuedContributorRewards": "8679571173945413112",
       "isContract": true
     },
     "0x65665e10EB86D72b02067863342277EA2DF78516": {
-      "unclaimedContributorRewards": "796534560494566800",
-      "unissuedContributorRewards": "8270965439417593200",
+      "unclaimedContributorRewards": "797566212891817080",
+      "unissuedContributorRewards": "8269933787020342920",
       "isContract": false
     },
     "0x32cf4d1df6fb7bB173183CF8b51EF9499c803634": {
-      "unclaimedContributorRewards": "722620932494502960",
-      "unissuedContributorRewards": "7503469472499449040",
+      "unclaimedContributorRewards": "723556853739211176",
+      "unissuedContributorRewards": "7502533551254740824",
       "isContract": false
     },
     "0x1ff241abaD54DEcB967Bd0f57c2a584C7d1ca8BD": {
-      "unclaimedContributorRewards": "637227648395653440",
-      "unissuedContributorRewards": "6616772351534074560",
+      "unclaimedContributorRewards": "638052970313453664",
+      "unissuedContributorRewards": "6615947029616274336",
       "isContract": false
     },
     "0xe59813A4a120288dbf42630C051e3921E5dAbCd8": {
-      "unclaimedContributorRewards": "531023040332481480",
-      "unissuedContributorRewards": "5513976959640494520",
+      "unclaimedContributorRewards": "531710808597318588",
+      "unissuedContributorRewards": "5513289191375657412",
       "isContract": false
     },
     "0x8D677d312F2CA04dF98eB22ce886bE8E7804280d": {
-      "unclaimedContributorRewards": "287104510051693800",
-      "unissuedContributorRewards": "2981203324892866200",
+      "unclaimedContributorRewards": "287476360905060780",
+      "unissuedContributorRewards": "2980831474039499220",
       "isContract": false
     },
     "0x40FEfD52714f298b9EaD6760753aAA720438D4bB": {
-      "unclaimedContributorRewards": "265511520162085320",
-      "unissuedContributorRewards": "2756988479777098680",
+      "unclaimedContributorRewards": "265855404294498492",
+      "unissuedContributorRewards": "2756644595644685508",
       "isContract": true
     },
     "0x16fD74300dcDc02E9b1E594f293c6EfFB299a3fc": {
-      "unclaimedContributorRewards": "265511520162085320",
-      "unissuedContributorRewards": "2756988479777098680",
+      "unclaimedContributorRewards": "265855404294498492",
+      "unissuedContributorRewards": "2756644595644685508",
       "isContract": true
     },
     "0xdF58360e945F6a302FFFB012D114C9e2bE2F212a": {
-      "unclaimedContributorRewards": "209223077885030520",
-      "unissuedContributorRewards": "2172506922036393480",
+      "unclaimedContributorRewards": "209494058581368612",
+      "unissuedContributorRewards": "2172235941340055388",
       "isContract": false
     },
     "0x65a831D9fB2CC87A7956eB8E4720956f6bfC6eeA": {
-      "unclaimedContributorRewards": "204889929881830800",
-      "unissuedContributorRewards": "2127512870107129200",
+      "unclaimedContributorRewards": "205155298389135480",
+      "unissuedContributorRewards": "2127247501599824520",
       "isContract": false
     },
     "0x6422D607CA13457589A1f2dbf0ec63d5Adf87BFB": {
-      "unclaimedContributorRewards": "192230340595255440",
-      "unissuedContributorRewards": "1996059659336872560",
+      "unclaimedContributorRewards": "192479312707119864",
+      "unissuedContributorRewards": "1995810687225008136",
       "isContract": false
     },
     "0xF613cfD07af6D011fD671F98064214aB5B2942CF": {
-      "unclaimedContributorRewards": "178625530304431680",
-      "unissuedContributorRewards": "1854791569656784320",
+      "unclaimedContributorRewards": "178856881793354208",
+      "unissuedContributorRewards": "1854560218167861792",
       "isContract": false
     },
     "0xc4Ab0e3F12309f37A5cdf3A4b3B7C70A53eeBBa9": {
-      "unclaimedContributorRewards": "148038603179512200",
-      "unissuedContributorRewards": "1537186496763127800",
+      "unclaimedContributorRewards": "148230339216377820",
+      "unissuedContributorRewards": "1536994760726262180",
       "isContract": false
     },
     "0xAacc079965F0F9473BF4299d930eF639690a9792": {
-      "unclaimedContributorRewards": "138065990484616800",
-      "unissuedContributorRewards": "1433634009487543200",
+      "unclaimedContributorRewards": "138244810233472080",
+      "unissuedContributorRewards": "1433455189738687920",
       "isContract": false
     },
     "0xBC10d1926BF88367422e4343bFdC5515204aF3E2": {
-      "unclaimedContributorRewards": "135569651173773600",
-      "unissuedContributorRewards": "1407712803818546400",
+      "unclaimedContributorRewards": "135745237724018160",
+      "unissuedContributorRewards": "1407537217268301840",
       "isContract": true
     },
     "0x13E009E182bc7ee1F64fE5Ac09DA2Db33c02e3be": {
-      "unclaimedContributorRewards": "132922501315823760",
-      "unissuedContributorRewards": "1380225628655088240",
+      "unclaimedContributorRewards": "133094659341265656",
+      "unissuedContributorRewards": "1380053470629646344",
       "isContract": false
     },
     "0x81B55FBe66C5FFbb8468328E924AF96a84438F14": {
-      "unclaimedContributorRewards": "132755760076887240",
-      "unissuedContributorRewards": "1378494239845400760",
+      "unclaimedContributorRewards": "132927702143088444",
+      "unissuedContributorRewards": "1378322297779199556",
       "isContract": false
     },
     "0xb1f55485d7ebA772F0d454Ceb0EA9a27586Ad86f": {
-      "unclaimedContributorRewards": "125321437511052360",
-      "unissuedContributorRewards": "1301298562398179640",
+      "unclaimedContributorRewards": "125483750821544316",
+      "unissuedContributorRewards": "1301136249087687684",
       "isContract": false
     },
     "0xF2684832BDd60D89769fCe3bd784fBfA0Ba80435": {
-      "unclaimedContributorRewards": "95420592160439640",
-      "unissuedContributorRewards": "990817547800728360",
+      "unclaimedContributorRewards": "95544178615480884",
+      "unissuedContributorRewards": "990693961345687116",
       "isContract": false
     },
     "0x1C5EB68630cCd90C3152FB9Dee3a1C2A7201631D": {
-      "unclaimedContributorRewards": "89211870773396880",
-      "unissuedContributorRewards": "926348129194059120",
+      "unclaimedContributorRewards": "89327415841886328",
+      "unissuedContributorRewards": "926232584125569672",
       "isContract": false
     },
     "0xDABc594e331F3cC74D97dA9C2ad3cAB557bC3FbB": {
-      "unclaimedContributorRewards": "88929897535487760",
-      "unissuedContributorRewards": "923420207392224240",
+      "unclaimedContributorRewards": "89045077399024056",
+      "unissuedContributorRewards": "923305027528687944",
       "isContract": false
     },
     "0xC2789bABe1a5cd95E81AE5f2444E82E1391bF7ce": {
-      "unclaimedContributorRewards": "86191411720465560",
-      "unissuedContributorRewards": "894984628252606440",
+      "unclaimedContributorRewards": "86303044763065236",
+      "unissuedContributorRewards": "894872995210006764",
       "isContract": false
     },
     "0xe4F047C5DEB2659f3659057fe5cAFB5bC6bD4307": {
-      "unclaimedContributorRewards": "65846857000995000",
-      "unissuedContributorRewards": "683733142993005000",
+      "unclaimedContributorRewards": "65932140265834500",
+      "unissuedContributorRewards": "683647859728165500",
       "isContract": false
     },
     "0xc867F80f97Df7753b7bc24d95CFd436ec90a5AF1": {
-      "unclaimedContributorRewards": "64695599045201760",
-      "unissuedContributorRewards": "671778840899310240",
+      "unclaimedContributorRewards": "64779391228437456",
+      "unissuedContributorRewards": "671695048716074544",
       "isContract": false
     },
     "0x3Aa9bd87EB687EBaa7c6f23701075C61846c6641": {
-      "unclaimedContributorRewards": "61677795106190280",
-      "unissuedContributorRewards": "640442909829345720",
+      "unclaimedContributorRewards": "61757678702375868",
+      "unissuedContributorRewards": "640363026233160132",
       "isContract": false
     },
     "0x562dB95A5547c841C3784F5EE0c1d29d12f89Fc3": {
-      "unclaimedContributorRewards": "61447331108245080",
-      "unissuedContributorRewards": "638049843845050920",
+      "unclaimedContributorRewards": "61526916213005748",
+      "unissuedContributorRewards": "637970258740290252",
       "isContract": false
     },
     "0x64E8f7C2B4fd33f5E8470F3C6Df04974F90fc2cA": {
-      "unclaimedContributorRewards": "59024272978157160",
-      "unissuedContributorRewards": "612889567008834840",
+      "unclaimedContributorRewards": "59100719796329196",
+      "unissuedContributorRewards": "612813120190662804",
       "isContract": false
     },
     "0x07bfeB5488ad97aA3920cf241E59d2A817054eA3": {
-      "unclaimedContributorRewards": "56288442268743960",
-      "unissuedContributorRewards": "584481557654408040",
+      "unclaimedContributorRewards": "56361345704808276",
+      "unissuedContributorRewards": "584408654218343724",
       "isContract": true
     },
     "0xC3632CD03BEd246719965bB74279af79bE4bd813": {
-      "unclaimedContributorRewards": "56288442268743960",
-      "unissuedContributorRewards": "584481557654408040",
+      "unclaimedContributorRewards": "56361345704808276",
+      "unissuedContributorRewards": "584408654218343724",
       "isContract": false
     },
     "0x940A7c15C8c3b8183DF903788e62b26339640256": {
-      "unclaimedContributorRewards": "55211527544260440",
-      "unissuedContributorRewards": "573299212393867560",
+      "unclaimedContributorRewards": "55283036186285364",
+      "unissuedContributorRewards": "573227703751842636",
       "isContract": false
     },
     "0x0C0aB132F5a8d0988e88997cb2604F494052BDEF": {
-      "unclaimedContributorRewards": "53102304027430560",
-      "unissuedContributorRewards": "551397695903641440",
+      "unclaimedContributorRewards": "53171080853906736",
+      "unissuedContributorRewards": "551328919077165264",
       "isContract": false
     },
     "0xd5f20543784F105F93ec06e918ae2D5e195B4438": {
-      "unclaimedContributorRewards": "53102304027430560",
-      "unissuedContributorRewards": "551397695903641440",
+      "unclaimedContributorRewards": "53171080853906736",
+      "unissuedContributorRewards": "551328919077165264",
       "isContract": false
     },
     "0x8f3093416640d0e4Ef12cD9e9be9115D6dFf6C6E": {
-      "unclaimedContributorRewards": "49812085272256560",
-      "unissuedContributorRewards": "517233094690015440",
+      "unclaimedContributorRewards": "49876600686567336",
+      "unissuedContributorRewards": "517168579275704664",
       "isContract": false
     },
     "0x5340359a59b9793F92C63d32bac6a97C2bAef4f0": {
-      "unclaimedContributorRewards": "35704927180136040",
-      "unissuedContributorRewards": "370748782752711960",
+      "unclaimedContributorRewards": "35751171342719724",
+      "unissuedContributorRewards": "370702538590128276",
       "isContract": false
     },
     "0x9B228B4F71B3Bc7e4b478251f218060D7B70Dc25": {
-      "unclaimedContributorRewards": "33293020535160120",
-      "unissuedContributorRewards": "345704299445783880",
+      "unclaimedContributorRewards": "33336140854290372",
+      "unissuedContributorRewards": "345661179126653628",
       "isContract": false
     },
     "0x307E2701D27032E0663a704B3396163331DD6F72": {
-      "unclaimedContributorRewards": "23313504532437960",
-      "unissuedContributorRewards": "242080130383514040",
+      "unclaimedContributorRewards": "23343699622559676",
+      "unissuedContributorRewards": "242049935293392324",
       "isContract": false
     },
     "0xA83212A83D6d2Bec3FFAD40Aeb2bd0860824906f": {
-      "unclaimedContributorRewards": "23156321715248040",
-      "unissuedContributorRewards": "240447993231999960",
+      "unclaimedContributorRewards": "23186313225966924",
+      "unissuedContributorRewards": "240418001721281076",
       "isContract": false
     },
     "0xa9c2902484f382b6989926093d94199BF53F0172": {
-      "unclaimedContributorRewards": "22720351803501480",
-      "unissuedContributorRewards": "235921018193474520",
+      "unclaimedContributorRewards": "22749778656480588",
+      "unissuedContributorRewards": "235891591340495412",
       "isContract": false
     },
     "0x947489282699D1A097d3a485F69a58914241f865": {
-      "unclaimedContributorRewards": "18710596818684720",
-      "unissuedContributorRewards": "194284978095779280",
+      "unclaimedContributorRewards": "18734830333486632",
+      "unissuedContributorRewards": "194260744580977368",
       "isContract": false
     },
     "0xA0Ab8713b5832C63AF478F4051eeD12FBff6230c": {
-      "unclaimedContributorRewards": "16608276601370760",
-      "unissuedContributorRewards": "172455143305941240",
+      "unclaimedContributorRewards": "16629787241611356",
+      "unissuedContributorRewards": "172433632665700644",
       "isContract": false
     },
     "0xB1fE8d7274EFCaD6571F11465709a7dF0521B2A9": {
-      "unclaimedContributorRewards": "15125129256002400",
-      "unissuedContributorRewards": "157054605722877600",
+      "unclaimedContributorRewards": "15144718959487440",
+      "unissuedContributorRewards": "157035016019392560",
       "isContract": false
     },
     "0x1BF83156AcF506b667E59b6d1335570453ea00f9": {
-      "unclaimedContributorRewards": "12707381353754160",
-      "unissuedContributorRewards": "131949468629637840",
+      "unclaimedContributorRewards": "12723839648329896",
+      "unissuedContributorRewards": "131933010335062104",
       "isContract": false
     },
     "0x00007ae72F868Ac963813f7DFa974a7e51E00000": {
-      "unclaimedContributorRewards": "10763306004184560",
-      "unissuedContributorRewards": "111762798991687440",
+      "unclaimedContributorRewards": "10777246379144136",
+      "unissuedContributorRewards": "111748858616727864",
       "isContract": false
     },
     "0xc276564BcB6515d3eFDAAAF57563435B37656200": {
-      "unclaimedContributorRewards": "10198297486122720",
-      "unissuedContributorRewards": "105895927473941280",
+      "unclaimedContributorRewards": "10211506075644432",
+      "unissuedContributorRewards": "105882718884419568",
       "isContract": false
     },
     "0xE0F76f608E9f060d3782d79a4dab4D49ef02E6F8": {
-      "unclaimedContributorRewards": "9761796544943520",
-      "unissuedContributorRewards": "101363438392080480",
+      "unclaimedContributorRewards": "9774439788948912",
+      "unissuedContributorRewards": "101350795148075088",
       "isContract": false
     },
     "0xd643cB0B2A1e5a0207A86FB98e00424a9a8FEfb0": {
-      "unclaimedContributorRewards": "8551064015737680",
-      "unissuedContributorRewards": "88791570952678320",
+      "unclaimedContributorRewards": "8562139148102808",
+      "unissuedContributorRewards": "88780495820313192",
       "isContract": false
     },
     "0x38B8F3BAae2C65C0D4937B2D4156B8b4ab8fc21f": {
-      "unclaimedContributorRewards": "8253691115431320",
-      "unissuedContributorRewards": "85703743878952680",
+      "unclaimedContributorRewards": "8264381097571092",
+      "unissuedContributorRewards": "85693053896812908",
       "isContract": false
     },
     "0xb9839FD6E4110575d01d47866dd4d1c3946bf29f": {
-      "unclaimedContributorRewards": "7227754601479080",
-      "unissuedContributorRewards": "75050740392616920",
+      "unclaimedContributorRewards": "7237115815331148",
+      "unissuedContributorRewards": "75041379178764852",
       "isContract": false
     },
     "0xeaE9870e408327733aACBa4BdC33FC14822a48Da": {
-      "unclaimedContributorRewards": "7070571775978320",
-      "unissuedContributorRewards": "73418603154805680",
+      "unclaimedContributorRewards": "7079729410416792",
+      "unissuedContributorRewards": "73409445520367208",
       "isContract": false
     },
     "0xe80a6A7B4FdADF0AA59F3f669a8d394D1d4dA86b": {
-      "unclaimedContributorRewards": "6909671794314120",
-      "unissuedContributorRewards": "71747868131429880",
+      "unclaimedContributorRewards": "6918621034967772",
+      "unissuedContributorRewards": "71738918890776228",
       "isContract": false
     },
     "0x2c6b15f9b2dADef3198ccd476Cf525AAe9DA5752": {
-      "unclaimedContributorRewards": "6730186006900200",
-      "unissuedContributorRewards": "69884143921339800",
+      "unclaimedContributorRewards": "6738902781880620",
+      "unissuedContributorRewards": "69875427146359380",
       "isContract": true
     },
     "0x646b14A3a0a24038b24b4b13b66d8DFea04E801F": {
-      "unclaimedContributorRewards": "6149777826441120",
-      "unissuedContributorRewards": "63857367131702880",
+      "unclaimedContributorRewards": "6157742870711472",
+      "unissuedContributorRewards": "63849402087432528",
       "isContract": false
     },
     "0x1f9a329Cd0549a51Ef2E8b191B3D00b58Bc808A7": {
-      "unclaimedContributorRewards": "6146591691399480",
-      "unissuedContributorRewards": "63824283303176520",
+      "unclaimedContributorRewards": "6154552609064388",
+      "unissuedContributorRewards": "63816322385511612",
       "isContract": false
     },
     "0xb5e45aa93378a761367174d91ae7e0877Cc9f965": {
-      "unclaimedContributorRewards": "5627251156029240",
-      "unissuedContributorRewards": "58431613816658760",
+      "unclaimedContributorRewards": "5634539436328644",
+      "unissuedContributorRewards": "58424325536359356",
       "isContract": false
     },
     "0xA466fc6a5D6954fB467E49880406ca2ff67d4e8A": {
-      "unclaimedContributorRewards": "5541756447918360",
-      "unissuedContributorRewards": "57543863540513640",
+      "unclaimedContributorRewards": "5548933997528916",
+      "unissuedContributorRewards": "57536685990903084",
       "isContract": false
     },
     "0x50fa50Fa2032d85EB2Dda303929bF56886aA9AFB": {
-      "unclaimedContributorRewards": "5205087835003680",
-      "unissuedContributorRewards": "54048002092612320",
+      "unclaimedContributorRewards": "5211829339527408",
+      "unissuedContributorRewards": "54041260588088592",
       "isContract": false
     },
     "0xb3eABFdD364b27036039B2a6122b381a0cA9f84a": {
-      "unclaimedContributorRewards": "4614059190554400",
-      "unissuedContributorRewards": "47910945730725600",
+      "unclaimedContributorRewards": "4620035208998640",
+      "unissuedContributorRewards": "47904969712281360",
       "isContract": false
     },
     "0x7713Cd42De4b8b75F34f7BE31140F40bd7Ee943a": {
-      "unclaimedContributorRewards": "4576356557933160",
-      "unissuedContributorRewards": "47519453400258840",
+      "unclaimedContributorRewards": "4582283744834796",
+      "unissuedContributorRewards": "47513526213357204",
       "isContract": false
     },
     "0x6914cFE3Ab1f793dbe2d0f0BbD7CCafb532e1784": {
-      "unclaimedContributorRewards": "4141448688430200",
-      "unissuedContributorRewards": "43003506275809800",
+      "unclaimedContributorRewards": "4146812593123620",
+      "unissuedContributorRewards": "42998142371116380",
       "isContract": false
     },
     "0x536188955c70cF4629f5F85035486B2210e4aDce": {
-      "unclaimedContributorRewards": "3658217722315800",
-      "unissuedContributorRewards": "37985787248644200",
+      "unclaimedContributorRewards": "3662955757888980",
+      "unissuedContributorRewards": "37981049213071020",
       "isContract": false
     },
     "0x88c3ea42B1C4AC4A5B9D97FBE7549B76a1320116": {
-      "unclaimedContributorRewards": "3181890055717320",
-      "unissuedContributorRewards": "33039749921866680",
+      "unclaimedContributorRewards": "3186011163157692",
+      "unissuedContributorRewards": "33035628814426308",
       "isContract": false
     },
     "0x5dcd71212Bc3170e818DD46A7e74C27C53c53e5B": {
-      "unclaimedContributorRewards": "3097988410971840",
-      "unissuedContributorRewards": "32168541516836160",
+      "unclaimedContributorRewards": "3102000851020704",
+      "unissuedContributorRewards": "32164529076787296",
       "isContract": false
     },
     "0xCc7301e07e8eC215a46Bec050423F6c3d1E9b715": {
-      "unclaimedContributorRewards": "2719368988150680",
-      "unissuedContributorRewards": "28237075995865320",
+      "unclaimedContributorRewards": "2722891049433108",
+      "unissuedContributorRewards": "28233553934582892",
       "isContract": false
     },
     "0x99C7DF0Ee3670A4CbcC4C643e151E0586cD1a4c3": {
-      "unclaimedContributorRewards": "2650867014113280",
-      "unissuedContributorRewards": "27525772949022720",
+      "unclaimedContributorRewards": "2654300353287168",
+      "unissuedContributorRewards": "27522339609848832",
       "isContract": false
     },
     "0x20b7f4abC059502aA58a8C37A2Bb832be0f02906": {
-      "unclaimedContributorRewards": "2593516525187880",
-      "unissuedContributorRewards": "26930263431468120",
+      "unclaimedContributorRewards": "2596875585388428",
+      "unissuedContributorRewards": "26926904371267572",
       "isContract": false
     },
     "0xcaa62fD8AF809dD1D54c15459f49d98206477ac9": {
-      "unclaimedContributorRewards": "2565903327124200",
-      "unissuedContributorRewards": "26643536629915800",
+      "unclaimedContributorRewards": "2569226623375020",
+      "unissuedContributorRewards": "26640213333664980",
       "isContract": false
     },
     "0xec7C7696c11B5b9e7afCCb636ef9A6Cb10229307": {
-      "unclaimedContributorRewards": "2537228078506080",
-      "unissuedContributorRewards": "26345781827989920",
+      "unclaimedContributorRewards": "2540514235264848",
+      "unissuedContributorRewards": "26342495671231152",
       "isContract": false
     },
     "0xa32EbddC24fe89e8f38b3dC13DaEb9e550580A54": {
-      "unclaimedContributorRewards": "1968502404280800",
-      "unissuedContributorRewards": "20440312524679200",
+      "unclaimedContributorRewards": "1971051961230480",
+      "unissuedContributorRewards": "20437762967729520",
       "isContract": false
     },
     "0xE0E8680484cA664d1b8379158842a848e2FcD1d3": {
-      "unclaimedContributorRewards": "1822471072202880",
-      "unissuedContributorRewards": "18923968902453120",
+      "unclaimedContributorRewards": "1824831492884928",
+      "unissuedContributorRewards": "18921608481771072",
       "isContract": false
     },
     "0x83A3548D204889b17Aa229Cb281a39584Eb232E7": {
-      "unclaimedContributorRewards": "1596786280975560",
-      "unissuedContributorRewards": "16580528704096440",
+      "unclaimedContributorRewards": "1598854400146236",
+      "unissuedContributorRewards": "16578460584925764",
       "isContract": false
     },
     "0xB55B1E64E2a796eA4F8b75111975C33fcFCfFA73": {
-      "unclaimedContributorRewards": "1213387643125680",
-      "unissuedContributorRewards": "12599437310890320",
+      "unclaimedContributorRewards": "1214959193605608",
+      "unissuedContributorRewards": "12597865760410392",
       "isContract": false
     },
     "0x49a47bd22881c6E1173cdEA2697725c959FCE28d": {
-      "unclaimedContributorRewards": "1192146723456120",
-      "unissuedContributorRewards": "12378878252687880",
+      "unclaimedContributorRewards": "1193690763207972",
+      "unissuedContributorRewards": "12377334212936028",
       "isContract": false
     },
     "0x1EbC950f4a30BA83f88a9dd66Dd6C1D66E6F7d90": {
-      "unclaimedContributorRewards": "1077976766727120",
-      "unissuedContributorRewards": "11193373174616880",
+      "unclaimedContributorRewards": "1079372936298072",
+      "unissuedContributorRewards": "11191977005045928",
       "isContract": false
     },
     "0x4cA44890BC9FD3BD36D322530B38AD95D52C9E4F": {
-      "unclaimedContributorRewards": "577222037106600",
-      "unissuedContributorRewards": "5993692874813400",
+      "unclaimedContributorRewards": "577969641200460",
+      "unissuedContributorRewards": "5992945270719540",
       "isContract": false
     },
     "0x4b6eC27Abf6Ee0e5190E016De4C16Ea855D4d9eD": {
-      "unclaimedContributorRewards": "458803903092360",
-      "unissuedContributorRewards": "4764076054139640",
+      "unclaimedContributorRewards": "459398134868316",
+      "unissuedContributorRewards": "4763481822363684",
       "isContract": false
     },
     "0x27E610eEC3844418daA01BD2b195230817E348bC": {
-      "unclaimedContributorRewards": "380743515619200",
-      "unissuedContributorRewards": "3953521435420800",
+      "unclaimedContributorRewards": "381236645459520",
+      "unissuedContributorRewards": "3953028305580480",
       "isContract": false
     },
     "0x88D6fE258655122a0b3AC9FdD59f45f58709B4F6": {
-      "unclaimedContributorRewards": "332420419007760",
-      "unissuedContributorRewards": "3451749532704240",
+      "unclaimedContributorRewards": "332850961936056",
+      "unissuedContributorRewards": "3451318989775944",
       "isContract": false
     },
     "0x5A0332cDd80FAf0FDF1401c4Ed389A808E892607": {
-      "unclaimedContributorRewards": "310648478216400",
-      "unissuedContributorRewards": "3225676517463600",
+      "unclaimedContributorRewards": "311050822650840",
+      "unissuedContributorRewards": "3225274173029160",
       "isContract": false
     },
     "0xF60e37998A7CbcFD75B16C8142eE523f45d76d7A": {
-      "unclaimedContributorRewards": "283035280152720",
-      "unissuedContributorRewards": "2938949715911280",
+      "unclaimedContributorRewards": "283401860637432",
+      "unissuedContributorRewards": "2938583135426568",
       "isContract": false
     },
     "0x2bB2958d226BD1A548e3Cfcf95b1A7a8Bc0D4FcF": {
-      "unclaimedContributorRewards": "281442208476480",
-      "unissuedContributorRewards": "2922407758499520",
+      "unclaimedContributorRewards": "281806725653088",
+      "unissuedContributorRewards": "2922043241322912",
       "isContract": false
     },
     "0xb8159ba378904F803639D274cEc79F788931c9C8": {
-      "unclaimedContributorRewards": "258077196008880",
-      "unissuedContributorRewards": "2679792785847120",
+      "unclaimedContributorRewards": "258411451383528",
+      "unissuedContributorRewards": "2679458530472472",
       "isContract": false
     },
     "0xb62d5feBB274cC9a8142f7814A7Ea9839e4588Dc": {
-      "unclaimedContributorRewards": "214002284993520",
-      "unissuedContributorRewards": "2222132712030480",
+      "unclaimedContributorRewards": "214279455603912",
+      "unissuedContributorRewards": "2221855541420088",
       "isContract": false
     },
     "0xa917AeA42950190e7DAE9AE9762db2A1CbfBDE88": {
-      "unclaimedContributorRewards": "136472918642160",
-      "unissuedContributorRewards": "1417092050349840",
+      "unclaimedContributorRewards": "136649675082696",
+      "unissuedContributorRewards": "1416915293909304",
       "isContract": false
     },
     "0x5952f402Be4cE58F74b5Db383B5719874b8ACEE2": {
-      "unclaimedContributorRewards": "116825062338000",
-      "unissuedContributorRewards": "1213074863262000",
+      "unclaimedContributorRewards": "116976371347800",
+      "unissuedContributorRewards": "1212923554252200",
       "isContract": false
     },
     "0xE18fF9d58B4dEb8C17Ccba79A87FBed548Ab06B3": {
-      "unclaimedContributorRewards": "97177214344680",
-      "unissuedContributorRewards": "1009057762471320",
+      "unclaimedContributorRewards": "97303075934508",
+      "unissuedContributorRewards": "1008931900881492",
       "isContract": false
     },
     "0xB235Ba58e93BA482b19e81d66eB001CD6fFD601b": {
-      "unclaimedContributorRewards": "94522100424840",
-      "unissuedContributorRewards": "981487890983160",
+      "unclaimedContributorRewards": "94644523175004",
+      "unissuedContributorRewards": "981365468232996",
       "isContract": false
     },
     "0x7AfA9D836d2fCCf172b66622625e56404E465dBD": {
-      "unclaimedContributorRewards": "70626058524600",
-      "unissuedContributorRewards": "733358874995400",
+      "unclaimedContributorRewards": "70717531696260",
+      "unissuedContributorRewards": "733267401823740",
       "isContract": false
     },
     "0x1E6a4109A5936845d2a4795AA1342aF8Ad232ADB": {
-      "unclaimedContributorRewards": "46199003813400",
-      "unissuedContributorRewards": "479715988266600",
+      "unclaimedContributorRewards": "46258839651540",
+      "unissuedContributorRewards": "479656152428460",
       "isContract": false
     },
     "0x6DD894c4a549e9bB9a7F0e35A0E26cCE7935Ef97": {
-      "unclaimedContributorRewards": "43543881582720",
-      "unissuedContributorRewards": "452146030481280",
+      "unclaimedContributorRewards": "43600278570432",
+      "unissuedContributorRewards": "452089633493568",
       "isContract": false
     },
     "0x8504a563Be3C2218fB20F8090f473a8CDE22B906": {
-      "unclaimedContributorRewards": "27613198063680",
-      "unissuedContributorRewards": "286726801552320",
+      "unclaimedContributorRewards": "27648962013408",
+      "unissuedContributorRewards": "286691037602592",
       "isContract": true
     }
   },
   "summary": {
     "totalSIRSupply": "376784767859596470615",
     "totalStakedSIR": "119590069992370822580",
-    "totalVaultEquity": "50161424153848966595",
-    "totalUnclaimedRewards": "89807882990500445647",
-    "totalContributorUnissued": "2423473796893085721000",
-    "totalUniswapV3Equity": "38645920808096653611",
+    "totalVaultEquity": "50228520916624091303",
+    "totalUnclaimedRewards": "90135800444992379394",
+    "totalContributorUnissued": "2423171512647002105100",
+    "totalUniswapV3Equity": "38734356017854919794",
     "totalUniswapV3UnclaimedFees": "358093263826238369",
-    "totalUniswapV3StakingRewards": "2322143337272088408"
+    "totalUniswapV3StakingRewards": "2362277605594236060"
   }
 }

@@ -9,12 +9,7 @@ library SystemConstants {
      */
     uint72 internal constant ISSUANCE = uint72(2015e6 * 10 ** SIR_DECIMALS - 1) / 365 days + 1; // [sir/s]
 
-    /** During the first 3 years, 30%-to-33% of the emissions are diverged to contributors.
-        - 10% to pre-mainnet contributors
-        - 10%-13% to fundraising contributors
-        - 10% to a treasury for post-mainnet stuff
-     */
-    uint72 internal constant LP_ISSUANCE_FIRST_3_YEARS = uint72((uint256(78024266200000000) * ISSUANCE) / 1e17);
+    uint72 internal constant LP_ISSUANCE_FIRST_3_YEARS = uint72((uint256(70000000000000000) * ISSUANCE) / 1e17);
 
     uint128 internal constant TEA_MAX_SUPPLY = (uint128(LP_ISSUANCE_FIRST_3_YEARS) << 96) / type(uint16).max; // Must fit in uint128
 
