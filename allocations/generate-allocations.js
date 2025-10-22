@@ -4,7 +4,7 @@ const path = require("path");
 
 // Configuration
 const OLD_TREASURY = "0x686748764c5C7Aa06FEc784E60D14b650bF79129";
-const NEW_TREASURY = "0x1230000000000000000000000000000000000000"; // TODO: Set new treasury address
+const NEW_TREASURY = "0x5f84c79389a4d44A38a3bF81f9B8c1179e615cc8";
 
 // Allocation percentages (out of 100%)
 const LP_ALLOCATION = 70; // 70% to LPers (not in this contract)
@@ -18,7 +18,7 @@ const ethereumSnapshot = require("./ethereum-snapshot.json");
 const hypurrSnapshot = require("./hyperevm-hypurr-snapshot.json");
 const hyperevmContributors = require("./hyperevm-contributors.json");
 
-class ContributorsGenerator {
+class AllocationsGenerator {
     constructor() {
         this.allocations = new Map(); // address -> uint56 allocation
         this.totalSIR = 0n;
@@ -222,9 +222,11 @@ class ContributorsGenerator {
         console.log(`Treasury allocation (uint56): ${treasuryAllocation.toString()}`);
     }
 
-    // Generate Contributors.sol file
-    generateSolidity() {
-        console.log("\nGenerating Contributors.sol...");
+    // Generate allocations JSON file
+    generateJSON() {
+        console.log("\nGenerating allocations JSON...");
+
+        const MAX_UINT56 = (1n << 56n) - 1n;
 
         // Sort by allocation descending
         const sortedAllocations = Array.from(this.allocations.entries()).sort((a, b) => {
@@ -233,47 +235,30 @@ class ContributorsGenerator {
             return 0;
         });
 
-        // Calculate total HyperEVM contributor basis points
-        let totalBasisPoints = 0;
-        for (const basisPoints of Object.values(hyperevmContributors)) {
-            totalBasisPoints += basisPoints;
-        }
-        const hyperevmContributorPercent = totalBasisPoints / 100;
-
-        // Generate Solidity code
-        let solidity = `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-contract Contributors {
-    /** @dev Total contributor allocation: 30%
-     *  LP allocation: ${LP_ALLOCATION}%
-     *
-     *  Breakdown:
-     *  - ${SIR_HOLDER_ALLOCATION}% to SIR holders (proportional to total SIR including unissued)
-     *  - ${HYPURR_HOLDER_ALLOCATION}% to Hypurr NFT holders (proportional to NFT count)
-     *  - ${hyperevmContributorPercent}% to HyperEVM contributors (basis point allocations)
-     *  - Remainder to treasury
-     *
-     *  Sum of all allocations must be equal to type(uint56).max.
-     */
-    mapping(address => uint56) public allocations;
-
-    constructor() {
-`;
-
-        // Add allocation lines
+        // Create object with address -> {allocation, allocationString} mapping
+        const allocationsObj = {};
         for (const [address, allocation] of sortedAllocations) {
             // Calculate % of total issuance (contributors are 30% of total, so multiply by 0.3)
-            const percentOfContributorPool = (Number(allocation) / Number((1n << 56n) - 1n)) * 100;
+            const percentOfContributorPool = (Number(allocation) / Number(MAX_UINT56)) * 100;
             const percentOfTotalIssuance = percentOfContributorPool * 0.3; // Contributors are 30% of total
-            solidity += `        allocations[${address}] = ${allocation}; // ${percentOfTotalIssuance.toFixed(4)}%\n`;
+
+            // Format percentage string
+            let allocationString;
+            if (percentOfTotalIssuance >= 0.01) {
+                // For percentages >= 0.01%, show 2 decimal places
+                allocationString = `${percentOfTotalIssuance.toFixed(2)}%`;
+            } else {
+                // For very small percentages, show 6 decimal places
+                allocationString = `${percentOfTotalIssuance.toFixed(6)}%`;
+            }
+
+            allocationsObj[address] = {
+                allocation: allocation.toString(),
+                allocationString: allocationString
+            };
         }
 
-        solidity += `    }
-}
-`;
-
-        return solidity;
+        return allocationsObj;
     }
 
     // Main execution
@@ -285,7 +270,7 @@ contract Contributors {
         }
         const hyperevmContributorPercent = totalBasisPoints / 100;
 
-        console.log("=== Contributors.sol Generator ===\n");
+        console.log("=== Allocations Generator ===\n");
         console.log(`Old Treasury: ${OLD_TREASURY}`);
         console.log(`New Treasury: ${NEW_TREASURY}`);
         console.log(`\nAllocation Distribution:`);
@@ -302,12 +287,12 @@ contract Contributors {
         this.processHyperEvmContributors();
         this.addTreasuryAllocation();
 
-        // Generate Solidity
-        const solidityCode = this.generateSolidity();
+        // Generate JSON
+        const allocationsJSON = this.generateJSON();
 
         // Save to file
-        const outputPath = path.join(__dirname, "..", "src", "Contributors-new.sol");
-        fs.writeFileSync(outputPath, solidityCode);
+        const outputPath = path.join(__dirname, "allocations.json");
+        fs.writeFileSync(outputPath, JSON.stringify(allocationsJSON, null, 2));
         console.log(`\nGenerated file: ${outputPath}`);
 
         // Print summary
@@ -342,7 +327,7 @@ async function main() {
         process.exit(1);
     }
 
-    const generator = new ContributorsGenerator();
+    const generator = new AllocationsGenerator();
     await generator.execute();
 }
 
