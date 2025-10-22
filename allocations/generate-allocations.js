@@ -21,6 +21,8 @@ const hyperevmContributors = require("./hyperevm-contributors.json");
 class AllocationsGenerator {
     constructor() {
         this.allocations = new Map(); // address -> uint56 allocation
+        this.allocationBreakdowns = new Map(); // address -> {fromEthereum, fromHypurr, fromHyperEVMContributor, fromTreasury}
+        this.sources = new Map(); // address -> {ethereum, hypurr, hyperevmContributor}
         this.totalSIR = 0n;
         this.totalNFTs = 0;
     }
@@ -119,6 +121,23 @@ class AllocationsGenerator {
         for (const [address, sirAmount] of userSIR.entries()) {
             const allocation = (sirAllocationPool * sirAmount) / totalSIR;
             this.allocations.set(address, allocation);
+
+            // Store breakdown
+            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
+            breakdown.fromEthereum = allocation;
+            this.allocationBreakdowns.set(address, breakdown);
+
+            // Store source data
+            const originalAddress = address === NEW_TREASURY ? OLD_TREASURY : address;
+            const balanceData = balances[originalAddress] || balances[address];
+            if (balanceData) {
+                const sources = this.sources.get(address) || {};
+                sources.ethereum = {
+                    ...balanceData,
+                    totalSIR: sirAmount.toString()
+                };
+                this.sources.set(address, sources);
+            }
         }
 
         console.log(`SIR holder allocations calculated (${SIR_HOLDER_ALLOCATION}% of pool)`);
@@ -153,6 +172,18 @@ class AllocationsGenerator {
             } else {
                 this.allocations.set(address, allocation);
             }
+
+            // Store breakdown
+            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
+            breakdown.fromHypurr = allocation;
+            this.allocationBreakdowns.set(address, breakdown);
+
+            // Store source data
+            const sources = this.sources.get(address) || {};
+            sources.hypurr = {
+                nftCount: nftCount
+            };
+            this.sources.set(address, sources);
         }
 
         console.log(`Hypurr holder allocations calculated (${HYPURR_HOLDER_ALLOCATION}% of pool)`);
@@ -188,6 +219,18 @@ class AllocationsGenerator {
                 this.allocations.set(address, allocation);
             }
 
+            // Store breakdown
+            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
+            breakdown.fromHyperEVMContributor = allocation;
+            this.allocationBreakdowns.set(address, breakdown);
+
+            // Store source data
+            const sources = this.sources.get(address) || {};
+            sources.hyperevmContributor = {
+                basisPoints: basisPoints
+            };
+            this.sources.set(address, sources);
+
             const percent = basisPoints / 100;
             console.log(`  ${address}: ${basisPoints} bp (${percent}% of total)`);
         }
@@ -217,6 +260,11 @@ class AllocationsGenerator {
             this.allocations.set(NEW_TREASURY, treasuryAllocation);
         }
 
+        // Store treasury remainder in breakdown
+        const breakdown = this.allocationBreakdowns.get(NEW_TREASURY) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
+        breakdown.fromTreasury = treasuryAllocation;
+        this.allocationBreakdowns.set(NEW_TREASURY, breakdown);
+
         const treasuryPercent = (Number(treasuryAllocation) / Number(MAX_UINT56)) * 100;
         console.log(`Treasury allocation: ${treasuryPercent.toFixed(2)}% of pool`);
         console.log(`Treasury allocation (uint56): ${treasuryAllocation.toString()}`);
@@ -235,7 +283,37 @@ class AllocationsGenerator {
             return 0;
         });
 
-        // Create object with address -> {allocation, allocationString} mapping
+        // Calculate total basis points for metadata
+        let totalBasisPoints = 0;
+        for (const basisPoints of Object.values(hyperevmContributors)) {
+            totalBasisPoints += basisPoints;
+        }
+
+        // Create metadata object
+        const metadata = {
+            generatedAt: new Date().toISOString(),
+            totalSIR: ethers.formatUnits(this.totalSIR, 12),
+            totalSIRRaw: this.totalSIR.toString(),
+            totalNFTs: this.totalNFTs,
+            totalAddresses: this.allocations.size,
+            maxUint56: MAX_UINT56.toString(),
+            allocationDistribution: {
+                lpAllocation: `${LP_ALLOCATION}%`,
+                sirHolders: `${SIR_HOLDER_ALLOCATION}%`,
+                hypurrHolders: `${HYPURR_HOLDER_ALLOCATION}%`,
+                hyperevmContributors: `${totalBasisPoints / 100}%`,
+                treasury: "Remainder"
+            },
+            sources: {
+                ethereumSnapshot: "ethereum-snapshot.json",
+                hypurrSnapshot: "hyperevm-hypurr-snapshot.json",
+                hyperevmContributors: "hyperevm-contributors.json"
+            },
+            oldTreasury: OLD_TREASURY,
+            newTreasury: NEW_TREASURY
+        };
+
+        // Create object with address -> detailed allocation info
         const allocationsObj = {};
         for (const [address, allocation] of sortedAllocations) {
             // Calculate % of total issuance (contributors are 30% of total, so multiply by 0.3)
@@ -243,22 +321,38 @@ class AllocationsGenerator {
             const percentOfTotalIssuance = percentOfContributorPool * 0.3; // Contributors are 30% of total
 
             // Format percentage string
-            let allocationString;
+            let allocationPerc;
             if (percentOfTotalIssuance >= 0.01) {
                 // For percentages >= 0.01%, show 2 decimal places
-                allocationString = `${percentOfTotalIssuance.toFixed(2)}%`;
+                allocationPerc = `${percentOfTotalIssuance.toFixed(2)}%`;
             } else {
                 // For very small percentages, show 6 decimal places
-                allocationString = `${percentOfTotalIssuance.toFixed(6)}%`;
+                allocationPerc = `${percentOfTotalIssuance.toFixed(6)}%`;
             }
 
+            // Get breakdown
+            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
+
+            // Get sources
+            const sources = this.sources.get(address) || {};
+
             allocationsObj[address] = {
-                allocation: allocation.toString(),
-                allocationString: allocationString
+                allocation: Number(allocation),
+                allocationPerc: allocationPerc,
+                sources: sources,
+                allocationBreakdown: {
+                    fromEthereum: Number(breakdown.fromEthereum),
+                    fromHypurr: Number(breakdown.fromHypurr),
+                    fromHyperEVMContributor: Number(breakdown.fromHyperEVMContributor),
+                    fromTreasury: Number(breakdown.fromTreasury)
+                }
             };
         }
 
-        return allocationsObj;
+        return {
+            metadata: metadata,
+            allocations: allocationsObj
+        };
     }
 
     // Main execution

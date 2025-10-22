@@ -8,27 +8,58 @@ contract Contributors {
      *  Breakdown:
      *  - 25% to SIR holders (proportional to total SIR including unissued)
      *  - 1% to Hypurr NFT holders (proportional to NFT count)
-     *  - 1.05% to HyperEVM contributors (basis point allocations)
-     *  - Remainder to treasury
-     *
+     *  - Between 1% and 5% to HyperEVM contributors and treasury
      *  Sum of all allocations must be equal to type(uint56).max.
      */
+
+    error NotOwner();
+    error ArrayLengthMismatch();
+    error AddressAlreadyAllocated(address addr);
+    error InsufficientRemainingAllocation(uint56 requested, uint56 available);
+    error EmptyArray();
+    error ZeroAddress();
+
     mapping(address => uint56) public allocations;
 
-    uint256 public numAllocations;
-    uint256 private _remainingInitializeCalls;
+    address public owner;
+    uint56 public remainingAllocation = type(uint56).max;
 
-    constructor(uint256 numAllocations_) {
-        numAllocations = numAllocations_;
-        _remainingInitializeCalls = (numAllocations_ + 999) / 1000;
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
     }
 
-    /** @dev This function sets 1,000 allocations on every call.
-     *  One ⌈numAllocations/1000⌉ calls have been performed, the function is disabled.
+    constructor() {
+        owner = msg.sender;
+    }
+
+    /** @dev Owner can allocate until all type(uint56).max is spent.
      */
-    function initialize(address[] calldata addr, ) external {
+    function allocate(address[] calldata addr_, uint56[] calldata allocations_) external onlyOwner {
+        uint256 length = addr_.length;
 
+        if (length != allocations_.length) revert ArrayLengthMismatch();
+        if (length == 0) revert EmptyArray();
 
-        _remainingInitializeCalls--;
+        uint56 remainingAllocation_ = remainingAllocation;
+        for (uint256 i = 0; i < length; i++) {
+            address recipient = addr_[i];
+            uint56 amount = allocations_[i];
+
+            // Validate inputs
+            if (recipient == address(0)) revert ZeroAddress();
+            if (allocations[recipient] > 0) revert AddressAlreadyAllocated(recipient);
+
+            // Check for underflow before subtracting
+            if (remainingAllocation_ < amount) {
+                revert InsufficientRemainingAllocation(amount, remainingAllocation_);
+            }
+
+            allocations[recipient] = allocations_[i];
+
+            remainingAllocation_ -= allocations_[i];
+        }
+
+        remainingAllocation = remainingAllocation_;
     }
 }
