@@ -470,7 +470,7 @@ class SIRBalanceSnapshot {
         const vaultIdsArray = Array.from(vaultIds);
         console.log(`Fetching parameters for ${vaultIdsArray.length} vaults...`);
 
-        // Batch 1: Get all vault parameters and filter to SIR vaults only
+        // Batch 1: Get all vault parameters
         const paramsCallsget = vaultIdsArray.map((vaultId) => ({
             target: ADDRESSES.VAULT,
             callData: this.contracts.vault.interface.encodeFunctionData("paramsById", [vaultId])
@@ -478,18 +478,23 @@ class SIRBalanceSnapshot {
 
         const paramsResults = await this.batchCall(paramsCallsget);
 
-        // Filter to SIR vaults and get their parameters
+        // Separate SIR vaults (for equity calculation) and all vaults (for unclaimed rewards)
         const sirVaults = [];
+        const allVaults = [];
         for (let i = 0; i < vaultIdsArray.length; i++) {
             const result = paramsResults[i];
             if (!result.success) continue;
 
             const vaultParams = this.contracts.vault.interface.decodeFunctionResult("paramsById", result.returnData);
+            const vaultData = {
+                vaultId: vaultIdsArray[i],
+                params: vaultParams
+            };
+
+            allVaults.push(vaultData);
+
             if (vaultParams.collateralToken.toLowerCase() === ADDRESSES.SIR.toLowerCase()) {
-                sirVaults.push({
-                    vaultId: vaultIdsArray[i],
-                    params: vaultParams
-                });
+                sirVaults.push(vaultData);
             }
         }
 
@@ -605,6 +610,16 @@ class SIRBalanceSnapshot {
             // Batch get balances - TEA users get TEA balance, APE users get APE balance
             const teaUsersArray = Array.from(teaUsers);
             const apeUsersArray = Array.from(apeUsers);
+
+            // Track ALL TEA users for unclaimed rewards, even if balance is 0
+            // (They may have closed positions but still have unclaimed rewards)
+            if (!this.vaultTeaHolders.has(vaultId)) {
+                this.vaultTeaHolders.set(vaultId, new Set());
+            }
+            teaUsersArray.forEach(user => {
+                this.vaultTeaHolders.get(vaultId).add(user);
+            });
+
             const balanceCalls = [];
             const userBalanceMap = []; // Track which call corresponds to which user and type
 
@@ -657,13 +672,6 @@ class SIRBalanceSnapshot {
                 const apeBalance = balances.apeBalance;
 
                 if (teaBalance > 0n || apeBalance > 0n) {
-                    // Track TEA holders for unclaimed rewards calculation
-                    if (teaBalance > 0n) {
-                        if (!this.vaultTeaHolders.has(vaultId)) {
-                            this.vaultTeaHolders.set(vaultId, new Set());
-                        }
-                        this.vaultTeaHolders.get(vaultId).add(user);
-                    }
                     // Calculate SIR equity as proportional share of reserves
                     // TEA equity = (TEA balance / TEA total supply) * LP reserves
                     // APE equity = (APE balance / APE total supply) * Apes reserves
@@ -723,11 +731,79 @@ class SIRBalanceSnapshot {
         console.log(
             `Total vault equity: ${this.formatToSigFigs(ethers.formatUnits(totalVaultEquity, SIR_DECIMALS))} SIR`
         );
+
+        // Now track TEA holders for ALL non-SIR vaults (for unclaimed rewards)
+        // We only need to track who held TEA, not calculate equity
+        const nonSirVaults = allVaults.filter(
+            v => v.params.collateralToken.toLowerCase() !== ADDRESSES.SIR.toLowerCase()
+        );
+
+        if (nonSirVaults.length > 0) {
+            console.log(`Tracking TEA holders for ${nonSirVaults.length} non-SIR vaults...`);
+
+            // Query transfer events ONCE (reuse from cache if possible)
+            const transferSingleFilter = this.contracts.vault.filters.TransferSingle();
+            const transferBatchFilter = this.contracts.vault.filters.TransferBatch();
+
+            const transferSingleEvents = await this.contracts.vault.queryFilter(
+                transferSingleFilter,
+                START_BLOCK,
+                this.blockNumber
+            );
+            const transferBatchEvents = await this.contracts.vault.queryFilter(
+                transferBatchFilter,
+                START_BLOCK,
+                this.blockNumber
+            );
+
+            // Process each non-SIR vault
+            for (const vault of nonSirVaults) {
+                const vaultId = vault.vaultId;
+                const teaUsers = new Set();
+
+                // Filter TransferSingle events for this vaultId
+                transferSingleEvents.forEach((event) => {
+                    if (event.args.id === vaultId) {
+                        const from = event.args.from;
+                        const to = event.args.to;
+
+                        if (from !== ethers.ZeroAddress) teaUsers.add(from);
+                        if (to !== ethers.ZeroAddress) teaUsers.add(to);
+                    }
+                });
+
+                // Filter TransferBatch events for this vaultId
+                transferBatchEvents.forEach((event) => {
+                    const from = event.args.from;
+                    const to = event.args.to;
+                    const ids = event.args.ids;
+
+                    // Check if this batch includes our vaultId
+                    if (ids.some((id) => id === vaultId)) {
+                        if (from !== ethers.ZeroAddress) teaUsers.add(from);
+                        if (to !== ethers.ZeroAddress) teaUsers.add(to);
+                    }
+                });
+
+                // Track ALL TEA users for unclaimed rewards, even if balance is 0
+                if (teaUsers.size > 0) {
+                    if (!this.vaultTeaHolders.has(vaultId)) {
+                        this.vaultTeaHolders.set(vaultId, new Set());
+                    }
+                    teaUsers.forEach(user => {
+                        this.vaultTeaHolders.get(vaultId).add(user);
+                    });
+                }
+            }
+
+            console.log(`Tracked TEA holders for ${nonSirVaults.length} additional vaults`);
+        }
     }
 
     // 4. Get unclaimed SIR rewards
     async getUnclaimedRewards() {
         console.log("Fetching unclaimed rewards...");
+        console.log(`  Checking ${this.vaultTeaHolders.size} vaults: ${Array.from(this.vaultTeaHolders.keys()).sort((a,b) => Number(a) - Number(b)).join(', ')}`);
 
         let totalUnclaimedLPer = BigInt(0);
         let totalUnclaimedContributor = BigInt(0);
@@ -736,7 +812,7 @@ class SIRBalanceSnapshot {
         const calls = [];
         const callMap = []; // Track which call corresponds to which user/vault
 
-        // 1. Check LP rewards - only for TEA holders in each vault
+        // 1. Check LP rewards - for TEA holders in all vaults
         for (const [vaultId, teaHolders] of this.vaultTeaHolders.entries()) {
             for (const user of teaHolders) {
                 calls.push({
@@ -1621,65 +1697,8 @@ class SIRBalanceSnapshot {
 
     // Display contracts with balances for user review
     displayContractsWithBalances() {
-        if (this.contractsWithBalances.length === 0) {
-            console.log("\nNo contracts with SIR balances found (excluding system contracts)");
-            return;
-        }
-
-        console.log("\n=== CONTRACTS WITH SIR BALANCES (for review) ===");
-        console.log("These contracts are included in the snapshot but you may want to exclude them.");
-        console.log("Review each one and add to MANUALLY_IGNORED_CONTRACTS if needed.\n");
-
-        for (const contract of this.contractsWithBalances) {
-            console.log(`Address: ${contract.address}`);
-            console.log(`Type: ${contract.type}`);
-
-            // Display relevant balances
-            if (contract.sirBalance) {
-                console.log(`  SIR Balance: ${ethers.formatUnits(contract.sirBalance, SIR_DECIMALS)} SIR`);
-            }
-            if (contract.stakedSIR) {
-                console.log(`  Staked SIR: ${ethers.formatUnits(contract.stakedSIR, SIR_DECIMALS)} SIR`);
-            }
-            if (contract.vaultEquity) {
-                console.log(`  Vault Equity: ${ethers.formatUnits(contract.vaultEquity, SIR_DECIMALS)} SIR`);
-            }
-            if (contract.unclaimedLperRewards) {
-                console.log(
-                    `  Unclaimed LPer Rewards: ${ethers.formatUnits(contract.unclaimedLperRewards, SIR_DECIMALS)} SIR`
-                );
-            }
-            if (contract.unclaimedContributorRewards) {
-                console.log(
-                    `  Unclaimed Contributor Rewards: ${ethers.formatUnits(
-                        contract.unclaimedContributorRewards,
-                        SIR_DECIMALS
-                    )} SIR`
-                );
-            }
-            if (contract.unissuedContributorRewards) {
-                console.log(
-                    `  Unissued Contributor Rewards: ${ethers.formatUnits(
-                        contract.unissuedContributorRewards,
-                        SIR_DECIMALS
-                    )} SIR`
-                );
-            }
-            if (contract.uniswapV3Equity) {
-                console.log(`  Uniswap V3 Equity: ${ethers.formatUnits(contract.uniswapV3Equity, SIR_DECIMALS)} SIR`);
-            }
-            if (contract.uniswapV3UnclaimedFees) {
-                console.log(
-                    `  Uniswap V3 Unclaimed Fees: ${ethers.formatUnits(
-                        contract.uniswapV3UnclaimedFees,
-                        SIR_DECIMALS
-                    )} SIR`
-                );
-            }
-            console.log();
-        }
-
-        console.log(`Total: ${this.contractsWithBalances.length} contract(s) with balances\n`);
+        // Silently track contracts but don't display them
+        // Users can review the JSON output file if needed
     }
 
     // Add contract flags to all addresses (using existing cache)

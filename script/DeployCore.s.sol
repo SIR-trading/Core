@@ -109,9 +109,6 @@ contract DeployCore is Script {
         string memory path = string.concat(root, "/allocations/allocations.json");
         string memory json = vm.readFile(path);
 
-        // Parse the allocations object
-        bytes memory allocationsData = vm.parseJson(json, ".allocations");
-
         // The JSON structure has addresses as keys, so we need to parse it differently
         // We'll extract all keys (addresses) from the allocations object
         string[] memory allocationKeys = vm.parseJsonKeys(json, ".allocations");
@@ -138,15 +135,17 @@ contract DeployCore is Script {
                 addresses[i] = vm.parseAddress(addrKey);
 
                 // Get the allocation amount for this address
-                string memory allocationPath = string.concat(".allocations.", addrKey, ".allocation");
-                bytes memory allocationBytes = vm.parseJson(json, allocationPath);
-                uint256 allocationAmount = abi.decode(allocationBytes, (uint256));
-                /[i] = uint56(allocationAmount);
+                amounts[i] = uint56(
+                    abi.decode(
+                        vm.parseJson(json, string.concat(".allocations.", addrKey, ".allocation")),
+                        (uint256)
+                    )
+                );
             }
 
             // Call allocate for this batch
             Contributors(contributorsContract).allocate(addresses, amounts);
-            console.log("Batch", batchIndex + 1, "of", batchCount, "allocated");
+            console.log("Allocated batch", batchIndex + 1, "of", batchCount);
         }
     }
 }

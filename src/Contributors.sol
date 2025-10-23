@@ -42,6 +42,7 @@ contract Contributors {
         if (length == 0) revert EmptyArray();
 
         uint56 remainingAllocation_ = remainingAllocation;
+        require(remainingAllocation_ > 0);
         for (uint256 i = 0; i < length; i++) {
             address recipient = addr_[i];
             uint56 amount = allocations_[i];
