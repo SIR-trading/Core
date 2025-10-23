@@ -337,14 +337,14 @@ class AllocationsGenerator {
             const sources = this.sources.get(address) || {};
 
             allocationsObj[address] = {
-                allocation: Number(allocation),
+                allocation: allocation.toString(),
                 allocationPerc: allocationPerc,
                 sources: sources,
                 allocationBreakdown: {
-                    fromEthereum: Number(breakdown.fromEthereum),
-                    fromHypurr: Number(breakdown.fromHypurr),
-                    fromHyperEVMContributor: Number(breakdown.fromHyperEVMContributor),
-                    fromTreasury: Number(breakdown.fromTreasury)
+                    fromEthereum: breakdown.fromEthereum.toString(),
+                    fromHypurr: breakdown.fromHypurr.toString(),
+                    fromHyperEVMContributor: breakdown.fromHyperEVMContributor.toString(),
+                    fromTreasury: breakdown.fromTreasury.toString()
                 }
             };
         }

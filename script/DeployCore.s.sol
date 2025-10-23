@@ -30,7 +30,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
         8. Verify remainingAllocation is 0
 */
 contract DeployCore is Script {
-    uint256 constant BATCH_SIZE = 100;
+    uint256 constant BATCH_SIZE = 1000;
 
     struct AllocationEntry {
         address addr;
@@ -135,12 +135,8 @@ contract DeployCore is Script {
                 addresses[i] = vm.parseAddress(addrKey);
 
                 // Get the allocation amount for this address
-                amounts[i] = uint56(
-                    abi.decode(
-                        vm.parseJson(json, string.concat(".allocations.", addrKey, ".allocation")),
-                        (uint256)
-                    )
-                );
+                string memory allocationPath = string.concat(".allocations.", addrKey, ".allocation");
+                amounts[i] = uint56(vm.parseJsonUint(json, allocationPath));
             }
 
             // Call allocate for this batch
