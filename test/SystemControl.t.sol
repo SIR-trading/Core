@@ -96,7 +96,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
     mapping(uint48 => bool) private _seen;
 
-    address oneContributor;
+    address oneContributor = address(7);
 
     function setUp() public {
         vm.createSelectFork("hyperevm", 12523857);
@@ -110,6 +110,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Deploy Contributors
         address contributors = address(new Contributors());
+
+        // Allocate all issuance to one contributor
+        address[] memory addr = new address[](1);
+        addr[0] = oneContributor;
+        uint56[] memory alloc = new uint56[](1);
+        alloc[0] = uint56(type(uint56).max);
+        Contributors(contributors).allocate(addr, alloc);
 
         // Deploy SIR
         sir = payable(address(new SIR(contributors, AddressesHyperEVM.ADDR_WHYPE, address(systemControl))));
@@ -125,9 +132,6 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
 
         // Initialize SystemControl
         systemControl.initialize(address(vault), sir);
-
-        // Use a test contributor address
-        oneContributor = address(0x193AD6d624678b11Bec0C5cFD5723A34725A8433);
     }
 
     function test_haultMinting() public {

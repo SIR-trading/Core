@@ -316,18 +316,42 @@ class AllocationsGenerator {
         // Create object with address -> detailed allocation info
         const allocationsObj = {};
         for (const [address, allocation] of sortedAllocations) {
-            // Calculate % of total issuance (contributors are 30% of total, so multiply by 0.3)
-            const percentOfContributorPool = (Number(allocation) / Number(MAX_UINT56)) * 100;
-            const percentOfTotalIssuance = percentOfContributorPool * 0.3; // Contributors are 30% of total
+            // Calculate % of total issuance with high precision
+            // Formula: (allocation / MAX_UINT56) * 30
+            // To maintain precision, we use: (allocation * 30 * 10^15) / MAX_UINT56 / 10^15
+            // This gives us parts per quadrillion before converting to Number
+            const PRECISION = 1000000000000000n; // 10^15 for high precision
+            const partsPerQuadrillion = (allocation * 30n * PRECISION) / MAX_UINT56;
+            const percentOfTotalIssuance = Number(partsPerQuadrillion) / Number(PRECISION);
 
-            // Format percentage string
+            // Format percentage string to 2 significant digits
             let allocationPerc;
-            if (percentOfTotalIssuance >= 0.01) {
-                // For percentages >= 0.01%, show 2 decimal places
-                allocationPerc = `${percentOfTotalIssuance.toFixed(2)}%`;
+            if (percentOfTotalIssuance === 0) {
+                allocationPerc = "0.0%";
             } else {
-                // For very small percentages, show 6 decimal places
-                allocationPerc = `${percentOfTotalIssuance.toFixed(6)}%`;
+                // Calculate 2 significant digits without scientific notation
+                const sigFigs = Number(percentOfTotalIssuance.toPrecision(2));
+
+                // Format based on magnitude to avoid scientific notation
+                if (sigFigs >= 1) {
+                    // >= 1%: show 1 decimal place (e.g., 7.4%)
+                    allocationPerc = `${sigFigs.toFixed(1)}%`;
+                } else if (sigFigs >= 0.1) {
+                    // 0.1% to 1%: show 2 decimal places (e.g., 0.98%)
+                    allocationPerc = `${sigFigs.toFixed(2)}%`;
+                } else if (sigFigs >= 0.01) {
+                    // 0.01% to 0.1%: show 3 decimal places (e.g., 0.010%)
+                    allocationPerc = `${sigFigs.toFixed(3)}%`;
+                } else if (sigFigs >= 0.001) {
+                    // 0.001% to 0.01%: show 4 decimal places (e.g., 0.0012%)
+                    allocationPerc = `${sigFigs.toFixed(4)}%`;
+                } else if (sigFigs >= 0.0001) {
+                    // 0.0001% to 0.001%: show 5 decimal places (e.g., 0.00012%)
+                    allocationPerc = `${sigFigs.toFixed(5)}%`;
+                } else {
+                    // Very small: show 6 decimal places
+                    allocationPerc = `${sigFigs.toFixed(6)}%`;
+                }
             }
 
             // Get breakdown

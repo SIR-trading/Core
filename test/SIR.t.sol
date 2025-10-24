@@ -12,9 +12,10 @@ import {Contributors} from "src/Contributors.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
+import {AllocationsHelper} from "../script/AllocationsHelper.sol";
 import "forge-std/Test.sol";
 
-contract BasicSIRTest is Test {
+contract BasicSIRTest is AllocationsHelper, Test {
     uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
 
     SIR public sir;
@@ -40,7 +41,7 @@ contract BasicSIRTest is Test {
         sir.initialize(vault);
     }
 
-    function test_sirInitialization() public {
+    function test_sirInitialization() public view {
         assertEq(address(sir.vault()), vault);
         assertEq(sir.SYSTEM_CONTROL(), vm.addr(10));
         assertEq(sir.decimals(), 12);
@@ -63,91 +64,139 @@ contract BasicSIRTest is Test {
         sir.contributorMint();
     }
 
-    function test_allocationsSum() public {
-        // Use Node.js to extract addresses from Contributors.sol
-        string[] memory inputs = new string[](3);
-        inputs[0] = "node";
-        inputs[1] = "-e";
-        inputs[2] = string.concat(
-            "const fs = require('fs'); ",
-            "const content = fs.readFileSync('src/Contributors.sol', 'utf8'); ",
-            "const addresses = content.match(/0x[0-9a-fA-F]{40}/g); ",
-            "console.log(addresses.join('\\n'));"
-        );
+    function test_allocations() public {
+        // Use the AllocationsHelper to read and allocate from JSON
+        (uint256 totalAddresses, uint256 totalAllocations) = readAndAllocate(address(contributors));
 
-        bytes memory result = vm.ffi(inputs);
-
-        // Parse the result - addresses are separated by newlines
-        address[] memory addresses = new address[](200);
-        uint256 addressCount = 0;
-
-        uint256 pos = 0;
-        while (pos < result.length) {
-            // Find the end of the current line
-            uint256 endPos = pos;
-            while (endPos < result.length && result[endPos] != 0x0a) {
-                endPos++;
-            }
-
-            // Extract address if we have exactly 42 characters (0x + 40 hex chars)
-            if (endPos - pos == 42) {
-                // Parse the address
-                address addr = parseAddress(result, pos);
-
-                // Check if this address has an allocation
-                uint56 allocation = contributors.allocations(addr);
-                if (allocation > 0) {
-                    addresses[addressCount] = addr;
-                    addressCount++;
-                }
-            }
-
-            pos = endPos + 1;
-        }
-
-        // Sum all allocations
-        uint256 totalAllocations = 0;
-        for (uint256 i = 0; i < addressCount; i++) {
-            totalAllocations += contributors.allocations(addresses[i]);
-        }
-
-        console.log("Total unique addresses found:", addressCount);
+        // Verify the statistics
+        console.log("Total addresses allocated:", totalAddresses);
         console.log("Total allocations sum:", totalAllocations);
         console.log("Expected (type(uint56).max):", type(uint56).max);
-
-        // Also verify we found the expected number of addresses
-        require(addressCount > 100, "Should find more than 100 addresses with allocations");
 
         // Verify the sum equals type(uint56).max
         assertEq(totalAllocations, type(uint56).max, "Allocations do not sum to type(uint56).max");
 
-        // Additional check to ensure we found all contributor addresses
-        assertEq(addressCount, 137, "Should find exactly 137 contributor addresses");
+        // Verify remaining allocation is 0
+        uint56 remaining = contributors.remainingAllocation();
+        assertEq(remaining, 0, "Remaining allocation should be 0");
+
+        // Verify we have the expected number of addresses from JSON metadata
+        assertEq(totalAddresses, 4096, "Should have 4096 addresses from allocations.json");
+
+        // Verify allocation percentages match the JSON
+        _verifyAllocationPercentages();
     }
 
-    function parseAddress(bytes memory data, uint256 offset) private pure returns (address) {
-        require(data.length >= offset + 42, "Invalid data length");
-        require(data[offset] == 0x30 && data[offset + 1] == 0x78, "Invalid address prefix");
+    function _verifyAllocationPercentages() internal {
+        // Read the JSON file
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/allocations/allocations.json");
+        string memory json = vm.readFile(path);
 
-        uint160 addr = 0;
-        for (uint256 i = 2; i < 42; i++) {
-            uint8 b = uint8(data[offset + i]);
-            uint8 nibble;
+        // Extract all addresses
+        string[] memory allocationKeys = vm.parseJsonKeys(json, ".allocations");
 
-            if (b >= 0x30 && b <= 0x39) {
-                nibble = b - 0x30; // 0-9
-            } else if (b >= 0x61 && b <= 0x66) {
-                nibble = b - 0x57; // a-f
-            } else if (b >= 0x41 && b <= 0x46) {
-                nibble = b - 0x37; // A-F
-            } else {
-                revert("Invalid hex character");
-            }
+        console.log("\n=== Verifying Allocation Percentages ===");
 
-            addr = addr * 16 + nibble;
+        // Non-LP issuance per second
+        uint256 nonLPIssuance = SystemConstants.ISSUANCE - SystemConstants.LP_ISSUANCE_FIRST_3_YEARS;
+
+        console.log("Total ISSUANCE per second:", SystemConstants.ISSUANCE);
+        console.log("LP_ISSUANCE_FIRST_3_YEARS per second:", SystemConstants.LP_ISSUANCE_FIRST_3_YEARS);
+        console.log("Non-LP issuance per second:", nonLPIssuance);
+
+        for (uint256 i = 0; i < allocationKeys.length; i++) {
+            string memory addrKey = allocationKeys[i];
+
+            // Get allocation from contract
+            uint56 allocation = contributors.allocations(vm.parseAddress(addrKey));
+
+            // Calculate issuance per second using the formula:
+            // issuance = (allocation * nonLPIssuance) / type(uint56).max
+            uint256 issuance = (uint256(allocation) * nonLPIssuance) / type(uint56).max;
+
+            // Calculate percentage in parts per million (1,000,000 ppm = 100%)
+            uint256 calculatedPercPPM = (issuance * 1000000) / SystemConstants.ISSUANCE;
+
+            if (calculatedPercPPM <= 1) break;
+
+            // Parse expected percentage from JSON
+            string memory expectedPercStr = vm.parseJsonString(
+                json,
+                string.concat(".allocations.", addrKey, ".allocationPerc")
+            );
+            uint256 jsonPercPPM = _parsePercentageStringToPPM(expectedPercStr);
+
+            // Verify values match within tolerance
+            assertApproxEqRel(
+                calculatedPercPPM,
+                jsonPercPPM,
+                10e16, // 10% relative tolerance
+                string.concat("Percentage mismatch for ", addrKey)
+            );
         }
 
-        return address(addr);
+        console.log("Total addresses checked:", allocationKeys.length);
+        console.log("All percentages match!");
+    }
+
+    function _parsePercentageStringToPPM(string memory percStr) internal pure returns (uint256) {
+        bytes memory percBytes = bytes(percStr);
+        uint256 result = 0;
+        uint256 decimals = 0;
+        bool foundDot = false;
+        bool foundPercent = false;
+
+        for (uint256 i = 0; i < percBytes.length; i++) {
+            bytes1 char = percBytes[i];
+
+            if (char == 0x25) {
+                // '%' character
+                foundPercent = true;
+                break;
+            } else if (char == 0x2e) {
+                // '.' character
+                foundDot = true;
+            } else if (char >= 0x30 && char <= 0x39) {
+                // '0'-'9'
+                uint8 digit = uint8(char) - 0x30;
+                result = result * 10 + digit;
+                if (foundDot) {
+                    decimals++;
+                }
+            }
+        }
+
+        require(foundPercent, "Invalid percentage string");
+
+        // Convert to parts per million (ppm)
+        // 1% = 10,000 ppm, 0.01% = 100 ppm, 0.001% = 10 ppm
+        // If we have "7.42%", result = 742, decimals = 2 -> 74,200 ppm
+        // If we have "0.010000%", result = 10000, decimals = 6 -> 100 ppm
+
+        if (decimals == 0) {
+            // e.g., "7%" -> 70,000 ppm
+            return result * 10000;
+        } else if (decimals == 1) {
+            // e.g., "7.4%" -> 74,000 ppm
+            return result * 1000;
+        } else if (decimals == 2) {
+            // e.g., "7.42%" -> 74,200 ppm
+            return result * 100;
+        } else if (decimals == 3) {
+            // e.g., "7.421%" -> 74,210 ppm
+            return result * 10;
+        } else if (decimals == 4) {
+            // e.g., "7.4210%" -> 74,210 ppm
+            return result;
+        } else if (decimals > 4) {
+            // e.g., "0.010000%" with decimals=6 -> result=10000, want 100 ppm
+            // Divide by 10^(decimals-4)
+            uint256 divisor = 10 ** (decimals - 4);
+            return result / divisor;
+        }
+
+        return 0;
     }
 }
 

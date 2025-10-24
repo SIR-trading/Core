@@ -12,6 +12,7 @@ import {SIR} from "src/SIR.sol";
 import {Vault} from "src/Vault.sol";
 import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
+import {AllocationsHelper} from "./AllocationsHelper.sol";
 
 /** @dev cli for HyperEVM testnet with big blocks:
         BB_GAS=$(cast rpc --rpc-url hypertest eth_bigBlockGasPrice | tr -d '"' | cast to-dec)
@@ -29,14 +30,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
         7. Allocate all contributors from allocations.json
         8. Verify remainingAllocation is 0
 */
-contract DeployCore is Script {
-    uint256 constant BATCH_SIZE = 1000;
-
-    struct AllocationEntry {
-        address addr;
-        uint56 allocation;
-    }
-
+contract DeployCore is AllocationsHelper {
     function setUp() public view {
         if (block.chainid != 998 && block.chainid != 999) {
             revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
@@ -92,56 +86,17 @@ contract DeployCore is Script {
 
         // Allocate contributors from JSON file
         console.log("Starting contributor allocations...");
-        allocateContributors(contributors);
+        (uint256 totalAddresses, uint256 totalAllocations) = readAndAllocate(contributors);
 
         // Verify all allocations are done
+        console.log("Total addresses allocated:", totalAddresses);
+        console.log("Total allocations sum:", totalAllocations);
         uint56 remaining = Contributors(contributors).remainingAllocation();
         console.log("Remaining allocation:", remaining);
         require(remaining == 0, "Remaining allocation must be 0");
+        require(totalAllocations == uint256(type(uint56).max), "Total allocations must equal type(uint56).max");
         console.log("All allocations completed successfully!");
 
         vm.stopBroadcast();
-    }
-
-    function allocateContributors(address contributorsContract) internal {
-        // Read the JSON file
-        string memory root = vm.projectRoot();
-        string memory path = string.concat(root, "/allocations/allocations.json");
-        string memory json = vm.readFile(path);
-
-        // The JSON structure has addresses as keys, so we need to parse it differently
-        // We'll extract all keys (addresses) from the allocations object
-        string[] memory allocationKeys = vm.parseJsonKeys(json, ".allocations");
-
-        console.log("Total addresses to allocate:", allocationKeys.length);
-
-        // Process in batches
-        uint256 totalAddresses = allocationKeys.length;
-        uint256 batchCount = (totalAddresses + BATCH_SIZE - 1) / BATCH_SIZE;
-
-        for (uint256 batchIndex = 0; batchIndex < batchCount; batchIndex++) {
-            uint256 startIdx = batchIndex * BATCH_SIZE;
-            uint256 endIdx = startIdx + BATCH_SIZE;
-            if (endIdx > totalAddresses) {
-                endIdx = totalAddresses;
-            }
-            uint256 batchLength = endIdx - startIdx;
-
-            address[] memory addresses = new address[](batchLength);
-            uint56[] memory amounts = new uint56[](batchLength);
-
-            for (uint256 i = 0; i < batchLength; i++) {
-                string memory addrKey = allocationKeys[startIdx + i];
-                addresses[i] = vm.parseAddress(addrKey);
-
-                // Get the allocation amount for this address
-                string memory allocationPath = string.concat(".allocations.", addrKey, ".allocation");
-                amounts[i] = uint56(vm.parseJsonUint(json, allocationPath));
-            }
-
-            // Call allocate for this batch
-            Contributors(contributorsContract).allocate(addresses, amounts);
-            console.log("Allocated batch", batchIndex + 1, "of", batchCount);
-        }
     }
 }
