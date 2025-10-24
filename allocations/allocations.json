@@ -1,16 +1,16 @@
 {
   "metadata": {
-    "generatedAt": "2025-10-23T12:56:11.621Z",
+    "generatedAt": "2025-10-24T18:57:25.431Z",
     "totalSIR": "3075724482.794694632251",
     "totalSIRRaw": "3075724482794694632251",
     "totalNFTs": 4600,
-    "totalAddresses": 4095,
+    "totalAddresses": 4096,
     "maxUint56": "72057594037927935",
     "allocationDistribution": {
       "lpAllocation": "70%",
       "sirHolders": "25%",
       "hypurrHolders": "1%",
-      "hyperevmContributors": "1.13%",
+      "hyperevmContributors": "1.14%",
       "treasury": "Remainder"
     },
     "sources": {
@@ -23,8 +23,8 @@
   },
   "allocations": {
     "0x5f84c79389a4d44A38a3bF81f9B8c1179e615cc8": {
-      "allocation": "17840170040114737",
-      "allocationPerc": "7.43%",
+      "allocation": "17816150842102095",
+      "allocationPerc": "7.42%",
       "sources": {
         "ethereum": {
           "sirBalance": "8766810882795967296",
@@ -38,7 +38,7 @@
         "fromEthereum": "10946660210483498",
         "fromHypurr": "0",
         "fromHyperEVMContributor": "0",
-        "fromTreasury": "6893509829631239"
+        "fromTreasury": "6869490631618597"
       }
     },
     "0x193AD6d624678b11Bec0C5cFD5723A34725A8433": {
@@ -2021,6 +2021,21 @@
       }
     },
     "0x95deE61Be3F9Ae2b2Fa93a16033AD730639c5713": {
+      "allocation": "24019198012642",
+      "allocationPerc": "0.010000%",
+      "sources": {
+        "hyperevmContributor": {
+          "basisPoints": 1
+        }
+      },
+      "allocationBreakdown": {
+        "fromEthereum": "0",
+        "fromHypurr": "0",
+        "fromHyperEVMContributor": "24019198012642",
+        "fromTreasury": "0"
+      }
+    },
+    "0xf3e9bf5aeB81C5CbE2a3508b90E4aC7E325F84a8": {
       "allocation": "24019198012642",
       "allocationPerc": "0.010000%",
       "sources": {
