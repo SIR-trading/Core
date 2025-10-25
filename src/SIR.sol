@@ -15,7 +15,7 @@ import {SystemControlAccess} from "./SystemControlAccess.sol";
 contract SIR is Staker, SystemControlAccess {
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
 
-    Contributors private immutable _CONTRIBUTORS;
+    Contributors public immutable CONTRIBUTORS;
 
     mapping(address => uint40) internal timestampLastMint;
 
@@ -26,7 +26,7 @@ contract SIR is Staker, SystemControlAccess {
         address whype,
         address systemControl
     ) Staker(whype) SystemControlAccess(systemControl) {
-        _CONTRIBUTORS = Contributors(contributors);
+        CONTRIBUTORS = Contributors(contributors);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -41,7 +41,7 @@ contract SIR is Staker, SystemControlAccess {
     function contributorUnclaimedSIR(address contributor) public view returns (uint80) {
         unchecked {
             // Get the contributor's allocation
-            uint256 allocation = _CONTRIBUTORS.allocations(contributor);
+            uint256 allocation = CONTRIBUTORS.allocations(contributor);
 
             // No allocation, no rewards
             if (allocation == 0) return 0;
