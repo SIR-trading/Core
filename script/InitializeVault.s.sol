@@ -13,6 +13,8 @@ import {Vault} from "src/Vault.sol";
 */
 contract InitializeVault is Script {
     Vault vault;
+    address collateralToken = 0x47bb061C0204Af921F43DC73C7D7768d2672DdEE;
+    address debtToken = 0x5555555555555555555555555555555555555555;
 
     function setUp() public {
         if (block.chainid != 998 && block.chainid != 999) {
@@ -30,20 +32,7 @@ contract InitializeVault is Script {
             vm.startBroadcast();
         }
 
-        address usdc;
-        address whype;
-        
-        if (block.chainid == 998) {
-            usdc = AddressesHyperEVMTest.ADDR_USDC;
-            whype = AddressesHyperEVMTest.ADDR_WHYPE;
-        } else {
-            usdc = AddressesHyperEVM.ADDR_USDT0;
-            whype = AddressesHyperEVM.ADDR_WHYPE;
-        }
-
-        vault.initialize(
-            SirStructs.VaultParameters(usdc, whype, 2)
-        );
+        vault.initialize(SirStructs.VaultParameters(debtToken, collateralToken, -1));
 
         vm.stopBroadcast();
     }
