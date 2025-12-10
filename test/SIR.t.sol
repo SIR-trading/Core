@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
@@ -13,6 +13,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
 import {ErrorComputation} from "./ErrorComputation.sol";
 import {AllocationsHelper} from "../script/AllocationsHelper.sol";
+import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import "forge-std/Test.sol";
 
 contract BasicSIRTest is AllocationsHelper, Test {
@@ -29,13 +30,13 @@ contract BasicSIRTest is AllocationsHelper, Test {
         contributors = (new Contributors());
 
         // Deploy SIR
-        sir = new SIR(address(contributors), AddressesHyperEVM.ADDR_WHYPE, vm.addr(10));
+        sir = new SIR(address(contributors), AddressesMegaETHTest.ADDR_WETH, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape, AddressesHyperEVM.ADDR_WHYPE));
+        vault = address(new Vault(vm.addr(10), address(sir), vm.addr(11), ape, AddressesMegaETHTest.ADDR_WETH));
 
         // Initialize SIR
         sir.initialize(vault);
@@ -46,7 +47,7 @@ contract BasicSIRTest is AllocationsHelper, Test {
         assertEq(sir.SYSTEM_CONTROL(), vm.addr(10));
         assertEq(sir.decimals(), 12);
         assertEq(sir.name(), "Synthetics Implemented Right");
-        assertEq(sir.symbol(), "HyperSIR");
+        assertEq(sir.symbol(), "MegaSIR");
     }
 
     function test_sirContributorMintReverts() public {
@@ -200,41 +201,44 @@ contract BasicSIRTest is AllocationsHelper, Test {
     }
 }
 
-contract GentlemenTest is Test {
+contract GentlemenTest is Test, ERC1155TokenReceiver {
     uint256 constant THREE_YEARS = 3 * 365 * 24 * 60 * 60;
 
-    IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    IWETH9 private constant WETH = IWETH9(AddressesMegaETHTest.ADDR_WETH);
 
     SIR public sir;
     Vault public vault;
 
-    address alice = vm.addr(1);
+    address alice; // Will be set to address(this) to receive ERC1155
     uint256 teaBalanceOfAlice;
 
     SirStructs.VaultParameters vaultParameters =
         SirStructs.VaultParameters({
-            debtToken: AddressesHyperEVM.ADDR_USDT0,
-            collateralToken: AddressesHyperEVM.ADDR_WHYPE,
+            debtToken: AddressesMegaETHTest.ADDR_USDC,
+            collateralToken: AddressesMegaETHTest.ADDR_WETH,
             leverageTier: -1
         });
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
+
+        // Set alice to this contract so it can receive ERC1155 tokens (TEA)
+        alice = address(this);
 
         // Deploy oracle
-        address oracle = address(new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY));
 
         // Deploy Contributors
         address contributors = address(new Contributors());
 
         // Deploy SIR
-        sir = new SIR(contributors, AddressesHyperEVM.ADDR_WHYPE, vm.addr(10));
+        sir = new SIR(contributors, AddressesMegaETHTest.ADDR_WETH, vm.addr(10));
 
         // Deploy APE implementation
         address ape = address(new APE());
 
         // Deploy Vault
-        vault = new Vault(vm.addr(10), address(sir), oracle, ape, AddressesHyperEVM.ADDR_WHYPE);
+        vault = new Vault(vm.addr(10), address(sir), oracle, ape, AddressesMegaETHTest.ADDR_WETH);
 
         // Initialize SIR
         sir.initialize(address(vault));
@@ -251,10 +255,10 @@ contract GentlemenTest is Test {
         vm.prank(vm.addr(10));
         vault.updateVaults(oldVaults, newVaults, newTaxes, 1);
 
-        // First gentleman deposits 1 WHYPE
+        // First gentleman deposits 1 WETH
         _dealWETH(alice, 1 ether);
         vm.prank(alice);
-        WHYPE.approve(address(vault), 1 ether);
+        WETH.approve(address(vault), 1 ether);
 
         // Alice mints TEA
         vm.prank(alice);
@@ -364,8 +368,8 @@ contract GentlemenTest is Test {
     function _dealWETH(address to, uint256 amount) internal {
         vm.deal(vm.addr(101), amount);
         vm.prank(vm.addr(101));
-        WHYPE.deposit{value: amount}();
+        WETH.deposit{value: amount}();
         vm.prank(vm.addr(101));
-        WHYPE.transfer(address(to), amount);
+        WETH.transfer(address(to), amount);
     }
 }

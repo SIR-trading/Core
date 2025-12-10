@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {Staker} from "src/Staker.sol";
@@ -29,8 +29,8 @@ contract Auxiliary is Test {
     }
 
     struct Donations {
-        uint96 stakerDonationsHYPE;
-        uint96 stakerDonationsWHYPE;
+        uint96 stakerDonationsETH;
+        uint96 stakerDonationsWETH;
     }
 
     uint256 constant SLOT_SUPPLY = 2;
@@ -38,9 +38,9 @@ contract Auxiliary is Test {
     uint256 constant SLOT_INITIALIZED = 3;
     uint256 constant SLOT_TOTAL_RESERVES = 10;
 
-    uint96 constant HYPE_SUPPLY = 1e9 * 10 ** 18;
+    uint96 constant ETH_SUPPLY = 1e9 * 10 ** 18;
 
-    IWETH9 internal constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    IWETH9 internal constant WETH = IWETH9(AddressesMegaETHTest.ADDR_WETH);
 
     Staker public staker;
     address public vault;
@@ -51,11 +51,11 @@ contract Auxiliary is Test {
         uint256 slot = uint256(vm.load(address(staker), bytes32(uint256(SLOT_SUPPLY))));
         uint80 balanceOfSIR = uint80(slot) + amount;
         slot >>= 80;
-        uint96 unclaimedHYPE = uint96(slot);
+        uint96 unclaimedETH = uint96(slot);
         vm.store(
             address(staker),
             bytes32(uint256(SLOT_SUPPLY)),
-            bytes32(abi.encodePacked(uint80(0), unclaimedHYPE, balanceOfSIR))
+            bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
         );
         assertEq(staker.supply(), balanceOfSIR, "Wrong supply slot used by vm.store");
 
@@ -63,31 +63,32 @@ contract Auxiliary is Test {
         slot = uint256(vm.load(address(staker), keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES))))));
         balanceOfSIR = uint80(slot) + amount;
         slot >>= 80;
-        unclaimedHYPE = uint96(slot);
+        unclaimedETH = uint96(slot);
         vm.store(
             address(staker),
             keccak256(abi.encode(account, bytes32(uint256(SLOT_BALANCES)))),
-            bytes32(abi.encodePacked(uint80(0), unclaimedHYPE, balanceOfSIR))
+            bytes32(abi.encodePacked(uint80(0), unclaimedETH, balanceOfSIR))
         );
         assertEq(staker.balanceOf(account), balanceOfSIR, "Wrong balance slot used by vm.store");
     }
 
     function _idToAddress(uint256 id) internal pure returns (address) {
-        id = _bound(id, 1, 3);
+        // Use higher private key indices (100-102) to avoid collision with deployed contracts on forked networks
+        id = _bound(id, 100, 102);
         return payable(vm.addr(id));
     }
 
     function _setFees(address token, TokenBalances memory tokenBalances) internal {
         // Bound total reserves and fees
-        if (token == AddressesHyperEVM.ADDR_WHYPE) {
-            tokenBalances.vaultTotalFees = _bound(tokenBalances.vaultTotalFees, 0, HYPE_SUPPLY);
-            if (IERC20(AddressesHyperEVM.ADDR_WHYPE).balanceOf(vault) > HYPE_SUPPLY) {
-                tokenBalances.vaultTotalReserves = IERC20(AddressesHyperEVM.ADDR_WHYPE).balanceOf(vault);
+        if (token == AddressesMegaETHTest.ADDR_WETH) {
+            tokenBalances.vaultTotalFees = _bound(tokenBalances.vaultTotalFees, 0, ETH_SUPPLY);
+            if (IERC20(AddressesMegaETHTest.ADDR_WETH).balanceOf(vault) > ETH_SUPPLY) {
+                tokenBalances.vaultTotalReserves = IERC20(AddressesMegaETHTest.ADDR_WETH).balanceOf(vault);
             } else {
                 tokenBalances.vaultTotalReserves = _bound(
                     tokenBalances.vaultTotalReserves,
-                    IERC20(AddressesHyperEVM.ADDR_WHYPE).balanceOf(vault),
-                    HYPE_SUPPLY
+                    IERC20(AddressesMegaETHTest.ADDR_WETH).balanceOf(vault),
+                    ETH_SUPPLY
                 );
             }
         } else {
@@ -119,12 +120,12 @@ contract Auxiliary is Test {
         );
 
         // Transfer necessary reserves and fees to Vault
-        if (token == AddressesHyperEVM.ADDR_WHYPE) {
-            _dealWHYPE(
+        if (token == AddressesMegaETHTest.ADDR_WETH) {
+            _dealWETH(
                 vault,
                 tokenBalances.vaultTotalReserves +
                     tokenBalances.vaultTotalFees -
-                    IERC20(AddressesHyperEVM.ADDR_WHYPE).balanceOf(vault)
+                    IERC20(AddressesMegaETHTest.ADDR_WETH).balanceOf(vault)
             );
         } else {
             _dealToken(
@@ -146,17 +147,17 @@ contract Auxiliary is Test {
             0,
             type(uint256).max - IERC20(token).totalSupply()
         );
-        if (token == AddressesHyperEVM.ADDR_WHYPE) _dealWHYPE(address(staker), tokenBalances.stakerDonations);
+        if (token == AddressesMegaETHTest.ADDR_WETH) _dealWETH(address(staker), tokenBalances.stakerDonations);
         else _dealToken(token, address(staker), tokenBalances.stakerDonations);
     }
 
     function _setDonations(Donations memory donations) internal {
-        donations.stakerDonationsWHYPE = uint96(_bound(donations.stakerDonationsWHYPE, 0, HYPE_SUPPLY));
-        donations.stakerDonationsHYPE = uint96(_bound(donations.stakerDonationsHYPE, 0, HYPE_SUPPLY));
+        donations.stakerDonationsWETH = uint96(_bound(donations.stakerDonationsWETH, 0, ETH_SUPPLY));
+        donations.stakerDonationsETH = uint96(_bound(donations.stakerDonationsETH, 0, ETH_SUPPLY));
 
-        // Donated (W)HYPE to Staker contract
-        _dealWHYPE(address(staker), donations.stakerDonationsWHYPE);
-        _dealHYPE(address(staker), donations.stakerDonationsHYPE);
+        // Donated (W)ETH to Staker contract
+        _dealWETH(address(staker), donations.stakerDonationsWETH);
+        _dealETH(address(staker), donations.stakerDonationsETH);
     }
 
     function _setFeesInVault(address token, TokenBalances memory tokenBalances) internal {
@@ -173,12 +174,12 @@ contract Auxiliary is Test {
         );
 
         // Transfer necessary reserves and fees to Vault
-        if (token == AddressesHyperEVM.ADDR_WHYPE) {
-            _dealWHYPE(
+        if (token == AddressesMegaETHTest.ADDR_WETH) {
+            _dealWETH(
                 vault,
                 tokenBalances.vaultTotalReserves +
                     tokenBalances.vaultTotalFees -
-                    IERC20(AddressesHyperEVM.ADDR_WHYPE).balanceOf(vault)
+                    IERC20(AddressesMegaETHTest.ADDR_WETH).balanceOf(vault)
             );
         } else {
             _dealToken(
@@ -195,15 +196,15 @@ contract Auxiliary is Test {
         assertEq(tokenBalances.vaultTotalFees, vaultTotalFees_, "Wrong total fees to stakers");
     }
 
-    /// @dev The Foundry deal function is not good for WHYPE because it doesn't update total supply correctly
-    function _dealWHYPE(address to, uint256 amount) internal {
+    /// @dev The Foundry deal function is not good for WETH because it doesn't update total supply correctly
+    function _dealWETH(address to, uint256 amount) internal {
         hoax(address(1), amount);
-        WHYPE.deposit{value: amount}();
+        WETH.deposit{value: amount}();
         vm.prank(address(1));
-        WHYPE.transfer(address(to), amount);
+        WETH.transfer(address(to), amount);
     }
 
-    function _dealHYPE(address to, uint256 amount) internal {
+    function _dealETH(address to, uint256 amount) internal {
         vm.deal(address(1), amount);
         vm.prank(address(1));
         payable(address(to)).transfer(amount);
@@ -217,7 +218,7 @@ contract Auxiliary is Test {
     }
 
     function _assertAuction(Bidder memory bidder_, uint256 timeStamp) internal view {
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertEq(auction.bidder, bidder_.amount == 0 ? address(0) : _idToAddress(bidder_.id), "Wrong bidder");
         assertEq(auction.bid, bidder_.amount, "Wrong bid");
         assertEq(auction.startTime, timeStamp, "Wrong start time");
@@ -242,7 +243,7 @@ contract StakerTest is Auxiliary {
     error NotTheAuctionWinner();
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
-    event DividendsPaid(uint96 amountHYPE, uint80 amountStakedSIR);
+    event DividendsPaid(uint96 amountETH, uint80 amountStakedSIR);
     event AuctionStarted(address indexed token, uint256 feesToBeAuctioned);
     event BidReceived(address indexed bidder, address indexed token, uint96 previousBid, uint96 newBid);
     event AuctionedTokensSentToWinner(
@@ -257,14 +258,14 @@ contract StakerTest is Auxiliary {
     address charlie;
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
-        staker = new Staker(AddressesHyperEVM.ADDR_WHYPE);
+        staker = new Staker(AddressesMegaETHTest.ADDR_WETH);
 
         APE ape = new APE();
 
         vault = address(
-            new Vault(vm.addr(10), address(staker), vm.addr(12), address(ape), AddressesHyperEVM.ADDR_WHYPE)
+            new Vault(vm.addr(10), address(staker), vm.addr(12), address(ape), AddressesMegaETHTest.ADDR_WETH)
         );
         staker.initialize(vault);
 
@@ -309,7 +310,7 @@ contract StakerTest is Auxiliary {
         assertEq(lockedStake, 0);
 
         assertEq(staker.name(), "Synthetics Implemented Right");
-        assertEq(staker.symbol(), "HyperSIR");
+        assertEq(staker.symbol(), "MegaSIR");
         assertEq(staker.decimals(), SystemConstants.SIR_DECIMALS);
     }
 
@@ -623,22 +624,22 @@ contract StakerTest is Auxiliary {
 
         // This triggers a payment of dividends
         if (
-            donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE > 0 &&
+            donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 &&
             user1.stakeAmount + user2.stakeAmount > 0
         ) {
             vm.expectEmit();
             emit DividendsPaid(
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 user1.stakeAmount + user2.stakeAmount
             );
         } else {
             vm.expectRevert(NoFeesCollected.selector);
         }
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
 
         // Donations
         if (
-            donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE == 0 ||
+            donations.stakerDonationsWETH + donations.stakerDonationsETH == 0 ||
             user1.stakeAmount + user2.stakeAmount == 0
         ) {
             assertEq(staker.unclaimedDividends(account1), 0, "Donations of account1 should be 0");
@@ -647,12 +648,12 @@ contract StakerTest is Auxiliary {
             uint256 maxError = ErrorComputation.maxErrorBalance(80, user1.stakeAmount + user2.stakeAmount, 1);
             assertLe(
                 staker.unclaimedDividends(account1),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 "Donations too high"
             );
             assertApproxEqAbs(
                 staker.unclaimedDividends(account1),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Donations too low"
             );
@@ -667,21 +668,21 @@ contract StakerTest is Auxiliary {
             }
             assertApproxEqAbs(
                 dividends_,
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Claimed unclaimedDividends are incorrect"
             );
             assertEq(staker.unclaimedDividends(account1), 0, "Donations should be 0 after claim");
             assertApproxEqAbs(
                 account1.balance,
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Balance is incorrect"
             );
             assertApproxEqAbs(address(staker).balance, 0, maxError, "Balance staker is incorrect");
         } else {
             // Verify balances of account1
-            uint256 dividends = (uint256(donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE) *
+            uint256 dividends = (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) *
                 user1.stakeAmount) / (user1.stakeAmount + user2.stakeAmount);
             uint256 maxError1 = ErrorComputation.maxErrorBalance(80, user1.stakeAmount, 1);
             uint256 unclaimedDivs1 = staker.unclaimedDividends(account1);
@@ -706,7 +707,7 @@ contract StakerTest is Auxiliary {
 
             // Verify balances of account2
             dividends =
-                (uint256(donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE) * user2.stakeAmount) /
+                (uint256(donations.stakerDonationsWETH + donations.stakerDonationsETH) * user2.stakeAmount) /
                 (user1.stakeAmount + user2.stakeAmount);
             uint256 maxError2 = ErrorComputation.maxErrorBalance(80, user2.stakeAmount, 1);
             uint256 unclaimedDivs2 = staker.unclaimedDividends(account2);
@@ -756,7 +757,7 @@ contract StakerTest is Auxiliary {
 
     function test_collectNoFeesAndStartAuction() public {
         vm.expectRevert(NoFeesCollected.selector);
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_PENDLE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
     }
 
     function testFuzz_unstake(
@@ -776,13 +777,13 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Trigger a payment of dividends
-        if (donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE > 0 && user.stakeAmount > 0) {
+        if (donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0) {
             vm.expectEmit();
-            emit DividendsPaid(donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE, user.stakeAmount);
+            emit DividendsPaid(donations.stakerDonationsWETH + donations.stakerDonationsETH, user.stakeAmount);
         } else {
             vm.expectRevert(NoFeesCollected.selector);
         }
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
 
         // Check dividends
         if (user.stakeAmount == 0) {
@@ -790,11 +791,11 @@ contract StakerTest is Auxiliary {
         } else {
             assertLe(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE
+                donations.stakerDonationsWETH + donations.stakerDonationsETH
             );
             assertApproxEqAbs(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
                 "Donations before unstaking too low"
             );
@@ -817,10 +818,10 @@ contract StakerTest is Auxiliary {
 
         if (user.stakeAmount > 0) {
             uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
-            assertLe(unclaimedDivs, donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE);
+            assertLe(unclaimedDivs, donations.stakerDonationsWETH + donations.stakerDonationsETH);
             assertApproxEqAbs(
                 unclaimedDivs,
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Donations after unstaking too low"
             );
@@ -835,7 +836,7 @@ contract StakerTest is Auxiliary {
             uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
             assertApproxEqAbs(
                 staker.claim(),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Claimed dividends are incorrect"
             );
@@ -846,7 +847,7 @@ contract StakerTest is Auxiliary {
             uint256 maxError = ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1);
             assertApproxEqAbs(
                 account.balance,
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Balance is incorrect"
             );
@@ -872,14 +873,14 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Trigger a payment of dividends
-        uint96 dividends = donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE;
+        uint96 dividends = donations.stakerDonationsWETH + donations.stakerDonationsETH;
         if (dividends > 0 && user.stakeAmount > 0) {
             vm.expectEmit();
             emit DividendsPaid(dividends, user.stakeAmount);
         } else {
             vm.expectRevert(NoFeesCollected.selector);
         }
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
 
         // Check dividends
         if (user.stakeAmount == 0) {
@@ -887,11 +888,11 @@ contract StakerTest is Auxiliary {
         } else {
             assertLe(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE
+                donations.stakerDonationsWETH + donations.stakerDonationsETH
             );
             assertApproxEqAbs(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
                 "Donations before unstaking too low"
             );
@@ -941,7 +942,7 @@ contract StakerTest is Auxiliary {
             assertLe(dividends_, dividends);
             assertApproxEqAbs(
                 dividends_,
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 maxError,
                 "Donations after unstaking too low"
             );
@@ -966,8 +967,8 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Trigger a payment of dividends
-        vm.assume(donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE > 0 && user.stakeAmount > 0);
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        vm.assume(donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
 
         // Check dividends
         if (user.stakeAmount == 0) {
@@ -975,11 +976,11 @@ contract StakerTest is Auxiliary {
         } else {
             assertLe(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE
+                donations.stakerDonationsWETH + donations.stakerDonationsETH
             );
             assertApproxEqAbs(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
                 "Donations before unstaking too low"
             );
@@ -1009,8 +1010,8 @@ contract StakerTest is Auxiliary {
         _setDonations(donations);
 
         // Trigger a payment of dividends
-        vm.assume(donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE > 0 && user.stakeAmount > 0);
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        vm.assume(donations.stakerDonationsWETH + donations.stakerDonationsETH > 0 && user.stakeAmount > 0);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
 
         // Check dividends
         if (user.stakeAmount == 0) {
@@ -1018,11 +1019,11 @@ contract StakerTest is Auxiliary {
         } else {
             assertLe(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE
+                donations.stakerDonationsWETH + donations.stakerDonationsETH
             );
             assertApproxEqAbs(
                 staker.unclaimedDividends(account),
-                donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 ErrorComputation.maxErrorBalance(80, user.stakeAmount, 1),
                 "Donations before unstaking too low"
             );
@@ -1044,15 +1045,15 @@ contract StakerTest is Auxiliary {
         staker.getAuctionLot(token, beneficiary);
     }
 
-    function testFuzz_nonAuctionOfWHYPE(
+    function testFuzz_nonAuctionOfWETH(
         TokenBalances memory tokenBalances,
         Donations memory donations,
         User memory user,
         uint80 totalSupplyOfSIR
     ) public {
         // Set up fees
-        tokenBalances.stakerDonations = 0; // Since token is WHYPE, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWHYPE
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenBalances);
+        tokenBalances.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenBalances);
 
         // Set up donations
         _setDonations(donations);
@@ -1061,32 +1062,32 @@ contract StakerTest is Auxiliary {
         testFuzz_stake(user, totalSupplyOfSIR, 0);
 
         bool noFees = uint256(tokenBalances.vaultTotalFees) +
-            donations.stakerDonationsWHYPE +
-            donations.stakerDonationsHYPE ==
+            donations.stakerDonationsWETH +
+            donations.stakerDonationsETH ==
             0 ||
             user.stakeAmount == 0;
         if (noFees) {
             vm.expectRevert(NoFeesCollected.selector);
         } else {
             if (tokenBalances.vaultTotalFees > 0) {
-                // Transfer event if there are WHYPE fees
+                // Transfer event if there are WETH fees
                 vm.expectEmit();
                 emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
             }
-            // DividendsPaid event if there are any WHYPE fees or (W)HYPE donations
+            // DividendsPaid event if there are any WETH fees or (W)ETH donations
             vm.expectEmit();
             emit DividendsPaid(
-                uint96(tokenBalances.vaultTotalFees) + donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE,
+                uint96(tokenBalances.vaultTotalFees) + donations.stakerDonationsWETH + donations.stakerDonationsETH,
                 user.stakeAmount
             );
         }
 
-        // Pay WHYPE fees and donations
-        uint256 fees = staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        // Pay WETH fees and donations
+        uint256 fees = staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
         if (!noFees) assertEq(fees, tokenBalances.vaultTotalFees);
     }
 
-    function testFuzz_nonAuctionOfWHYPE2ndTime(
+    function testFuzz_nonAuctionOfWETH2ndTime(
         TokenBalances memory tokenBalances,
         Donations memory donations,
         User memory user,
@@ -1095,11 +1096,11 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances2,
         Donations memory donations2
     ) public {
-        testFuzz_nonAuctionOfWHYPE(tokenBalances, donations, user, totalSupplyOfSIR);
+        testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
 
         // Set up fees
-        tokenBalances2.stakerDonations = 0; // Since token is WHYPE, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWHYPE
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenBalances2);
+        tokenBalances2.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenBalances2);
 
         // Set up donations
         _setDonations(donations2);
@@ -1107,28 +1108,28 @@ contract StakerTest is Auxiliary {
         // 2nd auction
         skip(timeSkip);
         bool noFees = uint256(tokenBalances2.vaultTotalFees) +
-            donations2.stakerDonationsWHYPE +
-            donations2.stakerDonationsHYPE ==
+            donations2.stakerDonationsWETH +
+            donations2.stakerDonationsETH ==
             0 ||
             user.stakeAmount == 0;
         if (noFees) {
             vm.expectRevert(NoFeesCollected.selector);
         } else {
             if (tokenBalances2.vaultTotalFees > 0) {
-                // Transfer event if there are WHYPE fees
+                // Transfer event if there are WETH fees
                 vm.expectEmit();
                 emit Transfer(vault, address(staker), tokenBalances2.vaultTotalFees);
             }
-            // DividendsPaid event if there are any WHYPE fees or (W)HYPE donations
+            // DividendsPaid event if there are any WETH fees or (W)ETH donations
             vm.expectEmit();
             emit DividendsPaid(
                 uint96(tokenBalances2.vaultTotalFees) +
-                    donations2.stakerDonationsWHYPE +
-                    donations2.stakerDonationsHYPE,
+                    donations2.stakerDonationsWETH +
+                    donations2.stakerDonationsETH,
                 user.stakeAmount
             );
         }
-        uint256 fees = staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        uint256 fees = staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
         if (!noFees) assertEq(fees, tokenBalances2.vaultTotalFees);
     }
 
@@ -1139,19 +1140,19 @@ contract StakerTest is Auxiliary {
         uint80 totalSupplyOfSIR,
         address beneficiary
     ) public {
-        testFuzz_nonAuctionOfWHYPE(tokenBalances, donations, user, totalSupplyOfSIR);
+        testFuzz_nonAuctionOfWETH(tokenBalances, donations, user, totalSupplyOfSIR);
         vm.assume(tokenBalances.vaultTotalFees > 0);
 
         // Reverts because prize has already been paid
-        vm.prank(address(0)); // WHYPE does not do auctions
+        vm.prank(address(0)); // WETH does not do auctions
         vm.expectRevert(NoAuctionLot.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_WHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_WETH, beneficiary);
 
         vm.expectRevert(NoFeesCollected.selector);
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
     }
 
-    function testFuzz_startAuctionOfkHYPE(
+    function testFuzz_startAuctionOfUSDC(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1161,28 +1162,28 @@ contract StakerTest is Auxiliary {
         testFuzz_stake(user, totalSupplyOfSIR, 0);
 
         // Set up fees
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
         vm.assume(tokenBalances.vaultTotalFees + tokenBalances.stakerDonations > 0);
 
         // Set up donations
         _setDonations(donations);
 
         // Start auction
-        if (user.stakeAmount > 0 && donations.stakerDonationsHYPE + donations.stakerDonationsWHYPE > 0) {
+        if (user.stakeAmount > 0 && donations.stakerDonationsETH + donations.stakerDonationsWETH > 0) {
             vm.expectEmit();
-            emit DividendsPaid(donations.stakerDonationsHYPE + donations.stakerDonationsWHYPE, user.stakeAmount);
+            emit DividendsPaid(donations.stakerDonationsETH + donations.stakerDonationsWETH, user.stakeAmount);
         }
         vm.expectEmit();
         emit Transfer(vault, address(staker), tokenBalances.vaultTotalFees);
         vm.expectEmit();
-        emit AuctionStarted(AddressesHyperEVM.ADDR_kHYPE, tokenBalances.vaultTotalFees + tokenBalances.stakerDonations);
+        emit AuctionStarted(AddressesMegaETHTest.ADDR_USDC, tokenBalances.vaultTotalFees + tokenBalances.stakerDonations);
         assertEq(
-            staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE),
+            staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC),
             tokenBalances.vaultTotalFees + tokenBalances.stakerDonations
         );
     }
 
-    function testFuzz_auctionOfWHYPEFails(
+    function testFuzz_auctionOfWETHFails(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1194,32 +1195,32 @@ contract StakerTest is Auxiliary {
         vm.assume(user.stakeAmount > 0);
 
         // Set up fees
-        tokenBalances.stakerDonations = 0; // Since token is WHYPE, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWHYPE
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenBalances);
-        vm.assume(tokenBalances.vaultTotalFees + donations.stakerDonationsWHYPE + donations.stakerDonationsHYPE > 0);
+        tokenBalances.stakerDonations = 0; // Since token is WETH, tokenBalances.stakerDonations is redundant with donations.stakerDonationsWETH
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenBalances);
+        vm.assume(tokenBalances.vaultTotalFees + donations.stakerDonationsWETH + donations.stakerDonationsETH > 0);
 
         // Set up donations
         _setDonations(donations);
 
         // Start auction?
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_WHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_WETH);
 
         // No auction
-        WHYPE.approve(address(staker), amount);
+        WETH.approve(address(staker), amount);
         vm.expectRevert(NoAuction.selector);
-        staker.bid(AddressesHyperEVM.ADDR_WHYPE, amount);
+        staker.bid(AddressesMegaETHTest.ADDR_WETH, amount);
 
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_WHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_WETH);
         assertEq(auction.bidder, address(0), "Bidder should be 0");
         assertEq(auction.bid, 0, "Bid should be 0");
         assertEq(auction.startTime, 0, "Start time should be 0");
 
-        WHYPE.approve(address(staker), amount);
+        WETH.approve(address(staker), amount);
         vm.expectRevert(NoAuction.selector);
-        staker.bid(AddressesHyperEVM.ADDR_WHYPE, amount);
+        staker.bid(AddressesMegaETHTest.ADDR_WETH, amount);
     }
 
-    function testFuzz_startAuctionOfkHYPENoFees(
+    function testFuzz_startAuctionOfUSDCNoFees(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1231,14 +1232,14 @@ contract StakerTest is Auxiliary {
         // Set up fees - ensure no fees from vault AND no donations to staker
         tokenBalances.vaultTotalFees = 0;
         tokenBalances.stakerDonations = 0;  // This must also be 0 for no auction
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         // Set up donations
         _setDonations(donations);
 
         // Start auction - should revert when no fees at all
         vm.expectRevert(NoFeesCollected.selector);
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
     }
 
     function testFuzz_payAuctionWinnerTooSoon(
@@ -1251,22 +1252,22 @@ contract StakerTest is Auxiliary {
         address beneficiary,
         uint256 delay
     ) public {
-        testFuzz_startAuctionOfkHYPE(user, totalSupplyOfSIR, tokenBalances, donations);
+        testFuzz_startAuctionOfUSDC(user, totalSupplyOfSIR, tokenBalances, donations);
         vm.assume(tokenBalances.vaultTotalFees + tokenBalances.stakerDonations > 0);
 
         // Bid
-        amount = uint96(_bound(amount, 1, HYPE_SUPPLY));
-        _dealWHYPE(bidder, amount);
+        amount = uint96(_bound(amount, 1, ETH_SUPPLY));
+        _dealWETH(bidder, amount);
         vm.prank(bidder);
-        WHYPE.approve(address(staker), amount);
+        WETH.approve(address(staker), amount);
         vm.prank(bidder);
-        staker.bid(AddressesHyperEVM.ADDR_kHYPE, amount);
+        staker.bid(AddressesMegaETHTest.ADDR_USDC, amount);
 
         // Attempt to get auction lot
         delay = _bound(delay, 0, SystemConstants.AUCTION_DURATION - 1);
         skip(delay);
         vm.expectRevert(AuctionIsNotOver.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_kHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_USDC, beneficiary);
     }
 
     function testFuzz_payAuctionWinnerNoBids(
@@ -1277,7 +1278,7 @@ contract StakerTest is Auxiliary {
         address beneficiary,
         uint256 delay
     ) public {
-        testFuzz_startAuctionOfkHYPE(user, totalSupplyOfSIR, tokenBalances, donations);
+        testFuzz_startAuctionOfUSDC(user, totalSupplyOfSIR, tokenBalances, donations);
         vm.assume(tokenBalances.vaultTotalFees + tokenBalances.stakerDonations > 0);
 
         // Attempt to get auction lot
@@ -1285,10 +1286,10 @@ contract StakerTest is Auxiliary {
         skip(SystemConstants.AUCTION_DURATION);
         vm.prank(address(0));
         vm.expectRevert(NoAuctionLot.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_kHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_USDC, beneficiary);
     }
 
-    function testFuzz_auctionOfkHYPE(
+    function testFuzz_auctionOfUSDC(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1299,24 +1300,24 @@ contract StakerTest is Auxiliary {
     ) public returns (uint256 start) {
         start = block.timestamp;
 
-        testFuzz_startAuctionOfkHYPE(user, totalSupplyOfSIR, tokenBalances, donations);
+        testFuzz_startAuctionOfUSDC(user, totalSupplyOfSIR, tokenBalances, donations);
 
-        bidder1.amount = uint96(_bound(bidder1.amount, 0, HYPE_SUPPLY));
-        bidder2.amount = uint96(_bound(bidder1.amount, 0, HYPE_SUPPLY));
-        bidder3.amount = uint96(_bound(bidder1.amount, 0, HYPE_SUPPLY));
+        bidder1.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
+        bidder2.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
+        bidder3.amount = uint96(_bound(bidder1.amount, 0, ETH_SUPPLY));
 
         // Bidder 1
-        _dealWHYPE(_idToAddress(bidder1.id), bidder1.amount);
+        _dealWETH(_idToAddress(bidder1.id), bidder1.amount);
         vm.prank(_idToAddress(bidder1.id));
-        WHYPE.approve(address(staker), bidder1.amount);
+        WETH.approve(address(staker), bidder1.amount);
         if (bidder1.amount > 0) {
             vm.expectEmit();
-            emit BidReceived(_idToAddress(bidder1.id), AddressesHyperEVM.ADDR_kHYPE, 0, bidder1.amount);
+            emit BidReceived(_idToAddress(bidder1.id), AddressesMegaETHTest.ADDR_USDC, 0, bidder1.amount);
         } else {
             vm.expectRevert(BidTooLow.selector);
         }
         vm.prank(_idToAddress(bidder1.id));
-        staker.bid(AddressesHyperEVM.ADDR_kHYPE, bidder1.amount);
+        staker.bid(AddressesMegaETHTest.ADDR_USDC, bidder1.amount);
 
         // Assert auction parameters
         if (bidder1.amount > 0) _assertAuction(bidder1, start);
@@ -1324,16 +1325,16 @@ contract StakerTest is Auxiliary {
 
         // Bidder 2
         skip(SystemConstants.AUCTION_DURATION - 1);
-        _dealWHYPE(_idToAddress(bidder2.id), bidder2.amount);
+        _dealWETH(_idToAddress(bidder2.id), bidder2.amount);
         vm.prank(_idToAddress(bidder2.id));
-        WHYPE.approve(address(staker), bidder2.amount);
+        WETH.approve(address(staker), bidder2.amount);
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
             if (bidder2.amount > 0) {
                 // Bidder increases its own bid
                 vm.expectEmit();
                 emit BidReceived(
                     _idToAddress(bidder2.id),
-                    AddressesHyperEVM.ADDR_kHYPE,
+                    AddressesMegaETHTest.ADDR_USDC,
                     bidder1.amount,
                     bidder1.amount + bidder2.amount
                 );
@@ -1344,13 +1345,13 @@ contract StakerTest is Auxiliary {
         } else if (bidder2.amount > (uint256(bidder1.amount) * 105) / 100) {
             // Bidder2 outbids bidder1 (must be more than 5% higher)
             vm.expectEmit();
-            emit BidReceived(_idToAddress(bidder2.id), AddressesHyperEVM.ADDR_kHYPE, bidder1.amount, bidder2.amount);
+            emit BidReceived(_idToAddress(bidder2.id), AddressesMegaETHTest.ADDR_USDC, bidder1.amount, bidder2.amount);
         } else {
             // Bidder2 fails to outbid bidder1 (5% minimum increase not met)
             vm.expectRevert(BidTooLow.selector);
         }
         vm.prank(_idToAddress(bidder2.id));
-        staker.bid(AddressesHyperEVM.ADDR_kHYPE, bidder2.amount);
+        staker.bid(AddressesMegaETHTest.ADDR_USDC, bidder2.amount);
 
         // Assert auction parameters
         if (_idToAddress(bidder1.id) == _idToAddress(bidder2.id)) {
@@ -1369,15 +1370,15 @@ contract StakerTest is Auxiliary {
 
         // Bidder 3 tries to bid after auction is over. It doesn't revert its transfer so it becomes a donation.
         skip(1);
-        _dealWHYPE(address(staker), bidder3.amount);
+        _dealWETH(address(staker), bidder3.amount);
         vm.prank(_idToAddress(bidder3.id));
-        WHYPE.approve(address(staker), bidder3.amount);
+        WETH.approve(address(staker), bidder3.amount);
         vm.prank(_idToAddress(bidder3.id));
         vm.expectRevert(NoAuction.selector);
-        staker.bid(AddressesHyperEVM.ADDR_kHYPE, bidder3.amount);
+        staker.bid(AddressesMegaETHTest.ADDR_USDC, bidder3.amount);
     }
 
-    function testFuzz_payAuctionWinnerkHYPE(
+    function testFuzz_payAuctionWinnerUSDC(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1388,7 +1389,7 @@ contract StakerTest is Auxiliary {
         address fakeBidder,
         address beneficiary
     ) public {
-        testFuzz_auctionOfkHYPE(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
+        testFuzz_auctionOfUSDC(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
 
         // Find the winner
         address winner = bidder1.amount + bidder2.amount == 0
@@ -1399,7 +1400,7 @@ contract StakerTest is Auxiliary {
         vm.assume(fakeBidder != winner);
         vm.prank(fakeBidder);
         vm.expectRevert(NotTheAuctionWinner.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_kHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_USDC, beneficiary);
 
         if (bidder1.amount + bidder2.amount == 0) {
             vm.expectRevert(NoAuctionLot.selector);
@@ -1420,22 +1421,22 @@ contract StakerTest is Auxiliary {
             emit AuctionedTokensSentToWinner(
                 winner,
                 beneficiary == address(0) ? winner : beneficiary,
-                AddressesHyperEVM.ADDR_kHYPE,
+                AddressesMegaETHTest.ADDR_USDC,
                 tokenBalances.vaultTotalFees + tokenBalances.stakerDonations
             );
         }
 
         // Pay auction winner
         vm.prank(winner);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_kHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_USDC, beneficiary);
 
         // Attempt to pay auction winner again
         vm.prank(winner);
         vm.expectRevert(NoAuctionLot.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_kHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_USDC, beneficiary);
     }
 
-    function testFuzz_cannotPayAuctionOfWHYPE(
+    function testFuzz_cannotPayAuctionOfWETH(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1443,20 +1444,20 @@ contract StakerTest is Auxiliary {
         uint96 amount,
         address beneficiary
     ) public {
-        testFuzz_auctionOfWHYPEFails(user, totalSupplyOfSIR, tokenBalances, donations, amount);
+        testFuzz_auctionOfWETHFails(user, totalSupplyOfSIR, tokenBalances, donations, amount);
 
         skip(SystemConstants.AUCTION_DURATION + 1);
 
         vm.prank(address(0));
         vm.expectRevert(NoAuctionLot.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_WHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_WETH, beneficiary);
 
         vm.prank(address(0));
         vm.expectRevert(NoAuctionLot.selector);
-        staker.getAuctionLot(AddressesHyperEVM.ADDR_kHYPE, beneficiary);
+        staker.getAuctionLot(AddressesMegaETHTest.ADDR_USDC, beneficiary);
     }
 
-    function testFuzz_start2ndAuctionOfkHYPETooEarly(
+    function testFuzz_start2ndAuctionOfUSDCTooEarly(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1466,7 +1467,7 @@ contract StakerTest is Auxiliary {
         Bidder memory bidder3,
         uint256 timeStamp
     ) public {
-        uint256 start = testFuzz_auctionOfkHYPE(
+        uint256 start = testFuzz_auctionOfUSDC(
             user,
             totalSupplyOfSIR,
             tokenBalances,
@@ -1487,10 +1488,10 @@ contract StakerTest is Auxiliary {
         } else {
             vm.expectRevert(NewAuctionCannotStartYet.selector);
         }
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
     }
 
-    function testFuzz_2ndAuctionOfkHYPE(
+    function testFuzz_2ndAuctionOfUSDC(
         User memory user,
         uint80 totalSupplyOfSIR,
         TokenBalances memory tokenBalances,
@@ -1505,7 +1506,7 @@ contract StakerTest is Auxiliary {
         tokenBalances.vaultTotalFees = _bound(tokenBalances.vaultTotalFees, 1000, 1e20);
         tokenBalances.stakerDonations = _bound(tokenBalances.stakerDonations, 1000, 1e20);
 
-        testFuzz_auctionOfkHYPE(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
+        testFuzz_auctionOfUSDC(user, totalSupplyOfSIR, tokenBalances, donations, bidder1, bidder2, bidder3);
         vm.assume(bidder1.amount + bidder2.amount > 0);
 
         // Bound the second auction values to reasonable amounts
@@ -1513,31 +1514,31 @@ contract StakerTest is Auxiliary {
         tokenBalances2.stakerDonations = _bound(tokenBalances2.stakerDonations, 1000, 1e18);
 
         // Set up fees for 2nd auction
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances2);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances2);
 
         // Skip time
         skip(SystemConstants.AUCTION_COOLDOWN);
 
         // Start 2nd auction - this will collect fees from vault and start the auction
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
         // Verify there's a balance for the auction and the auction started
         assertGt(
-            IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(address(staker)),
+            IERC20(AddressesMegaETHTest.ADDR_USDC).balanceOf(address(staker)),
             0,
-            "Should have kHYPE for auction"
+            "Should have USDC for auction"
         );
 
         // Verify auction is active
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertGt(auction.startTime, 0, "Auction should have started");
     }
 
     // /////////////////////////////////////////////////////////
-    // ///////////// NATIVE HYPE BIDDING TESTS ///////////////
+    // ///////////// NATIVE ETH BIDDING TESTS ///////////////
     // ///////////////////////////////////////////////////////
 
-    function test_nativeHYPEBidding() public {
+    function test_nativeETHBidding() public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1545,31 +1546,31 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
-        // Test native HYPE bidding
+        // Test native ETH bidding
         uint96 bidAmount = 10e18;
         vm.deal(alice, bidAmount);
 
         vm.expectEmit();
-        emit BidReceived(alice, AddressesHyperEVM.ADDR_kHYPE, 0, bidAmount);
+        emit BidReceived(alice, AddressesMegaETHTest.ADDR_USDC, 0, bidAmount);
 
         vm.prank(alice);
-        staker.bid{value: bidAmount}(AddressesHyperEVM.ADDR_kHYPE, 0); // amount param ignored
+        staker.bid{value: bidAmount}(AddressesMegaETHTest.ADDR_USDC, 0); // amount param ignored
 
         // Verify bid was recorded correctly
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertEq(auction.bidder, alice, "Wrong bidder");
         assertEq(auction.bid, bidAmount, "Wrong bid amount");
 
-        // Verify WHYPE was wrapped
-        assertEq(WHYPE.balanceOf(address(staker)), bidAmount, "WHYPE not wrapped correctly");
+        // Verify WETH was wrapped
+        assertEq(WETH.balanceOf(address(staker)), bidAmount, "WETH not wrapped correctly");
     }
 
-    function testFuzz_nativeHYPEBiddingIgnoresAmountParam(uint96 amountParam, uint96 msgValue) public {
+    function testFuzz_nativeETHBiddingIgnoresAmountParam(uint96 amountParam, uint96 msgValue) public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1577,26 +1578,26 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
         // Bound msg.value to reasonable amount
-        msgValue = uint96(_bound(msgValue, 1e15, HYPE_SUPPLY));
+        msgValue = uint96(_bound(msgValue, 1e15, ETH_SUPPLY));
         vm.deal(alice, msgValue);
 
-        // Bid with native HYPE - amount param should be ignored
+        // Bid with native ETH - amount param should be ignored
         vm.prank(alice);
-        staker.bid{value: msgValue}(AddressesHyperEVM.ADDR_kHYPE, amountParam);
+        staker.bid{value: msgValue}(AddressesMegaETHTest.ADDR_USDC, amountParam);
 
         // Verify only msg.value was used, not amountParam
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertEq(auction.bid, msgValue, "Should use msg.value, not amount param");
-        assertEq(WHYPE.balanceOf(address(staker)), msgValue, "Wrong WHYPE balance");
+        assertEq(WETH.balanceOf(address(staker)), msgValue, "Wrong WETH balance");
     }
 
-    function test_mixedNativeAndWHYPEBidding() public {
+    function test_mixedNativeAndWETHBidding() public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1604,52 +1605,52 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
-        // First bid with native HYPE
+        // First bid with native ETH
         uint96 nativeBid = 10e18;
         vm.deal(alice, nativeBid);
         vm.prank(alice);
-        staker.bid{value: nativeBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: nativeBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
-        // Second bid with WHYPE (must be 5% higher)
-        uint96 whypeBid = 11e18; // More than 5% higher
-        _dealWHYPE(bob, whypeBid);
+        // Second bid with WETH (must be 5% higher)
+        uint96 wethBid = 11e18; // More than 5% higher
+        _dealWETH(bob, wethBid);
         vm.prank(bob);
-        WHYPE.approve(address(staker), whypeBid);
+        WETH.approve(address(staker), wethBid);
 
         vm.expectEmit();
-        emit BidReceived(bob, AddressesHyperEVM.ADDR_kHYPE, nativeBid, whypeBid);
+        emit BidReceived(bob, AddressesMegaETHTest.ADDR_USDC, nativeBid, wethBid);
 
         vm.prank(bob);
-        staker.bid(AddressesHyperEVM.ADDR_kHYPE, whypeBid);
+        staker.bid(AddressesMegaETHTest.ADDR_USDC, wethBid);
 
-        // Verify alice got refunded in WHYPE
-        assertEq(WHYPE.balanceOf(alice), nativeBid, "Alice should receive WHYPE refund");
+        // Verify alice got refunded in WETH
+        assertEq(WETH.balanceOf(alice), nativeBid, "Alice should receive WETH refund");
 
-        // Third bid with native HYPE again (must be 5% higher than bob's bid)
+        // Third bid with native ETH again (must be 5% higher than bob's bid)
         uint96 secondNativeBid = 12e18; // More than 5% higher than 11e18
         vm.deal(charlie, secondNativeBid);
 
         vm.expectEmit();
-        emit BidReceived(charlie, AddressesHyperEVM.ADDR_kHYPE, whypeBid, secondNativeBid);
+        emit BidReceived(charlie, AddressesMegaETHTest.ADDR_USDC, wethBid, secondNativeBid);
 
         vm.prank(charlie);
-        staker.bid{value: secondNativeBid}(AddressesHyperEVM.ADDR_kHYPE, 999e18); // amount ignored
+        staker.bid{value: secondNativeBid}(AddressesMegaETHTest.ADDR_USDC, 999e18); // amount ignored
 
-        // Verify bob got refunded in WHYPE
-        assertEq(WHYPE.balanceOf(bob), whypeBid, "Bob should receive WHYPE refund");
+        // Verify bob got refunded in WETH
+        assertEq(WETH.balanceOf(bob), wethBid, "Bob should receive WETH refund");
 
         // Verify final auction state
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertEq(auction.bidder, charlie, "Charlie should be the winner");
         assertEq(auction.bid, secondNativeBid, "Wrong final bid amount");
     }
 
-    function test_nativeHYPEBidIncrease() public {
+    function test_nativeETHBidIncrease() public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1657,35 +1658,35 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
-        // First bid with native HYPE
+        // First bid with native ETH
         uint96 firstBid = 10e18;
         vm.deal(alice, firstBid);
         vm.prank(alice);
-        staker.bid{value: firstBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: firstBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
-        // Same bidder increases bid with more native HYPE
+        // Same bidder increases bid with more native ETH
         uint96 increaseBid = 5e18;
         vm.deal(alice, increaseBid);
 
         vm.expectEmit();
-        emit BidReceived(alice, AddressesHyperEVM.ADDR_kHYPE, firstBid, firstBid + increaseBid);
+        emit BidReceived(alice, AddressesMegaETHTest.ADDR_USDC, firstBid, firstBid + increaseBid);
 
         vm.prank(alice);
-        staker.bid{value: increaseBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: increaseBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
         // Verify bid was increased correctly
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertEq(auction.bidder, alice, "Wrong bidder");
         assertEq(auction.bid, firstBid + increaseBid, "Wrong bid amount");
-        assertEq(WHYPE.balanceOf(address(staker)), firstBid + increaseBid, "Wrong WHYPE balance");
+        assertEq(WETH.balanceOf(address(staker)), firstBid + increaseBid, "Wrong WETH balance");
     }
 
-    function testFuzz_nativeHYPEBidTooLow(uint96 firstBid, uint96 secondBid) public {
+    function testFuzz_nativeETHBidTooLow(uint96 firstBid, uint96 secondBid) public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1693,16 +1694,16 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
         // First bid
         firstBid = uint96(_bound(firstBid, 1e15, 1000e18));
         vm.deal(alice, firstBid);
         vm.prank(alice);
-        staker.bid{value: firstBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: firstBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
         // Second bid that's too low (not 5% higher)
         secondBid = uint96(_bound(secondBid, 1, (firstBid * 105) / 100 - 1));
@@ -1710,15 +1711,15 @@ contract StakerTest is Auxiliary {
 
         vm.prank(bob);
         vm.expectRevert(BidTooLow.selector);
-        staker.bid{value: secondBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: secondBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
         // Verify first bidder is still the winner
-        SirStructs.Auction memory auction = staker.auctions(AddressesHyperEVM.ADDR_kHYPE);
+        SirStructs.Auction memory auction = staker.auctions(AddressesMegaETHTest.ADDR_USDC);
         assertEq(auction.bidder, alice, "Alice should still be the winner");
         assertEq(auction.bid, firstBid, "Bid should not have changed");
     }
 
-    function test_nativeHYPEBidZeroValue() public {
+    function test_nativeETHBidZeroValue() public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1726,19 +1727,19 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
-        // Try to bid with 0 msg.value - should fall back to WHYPE transfer
-        // Since alice has no WHYPE and no approval, this should revert with transfer error
+        // Try to bid with 0 msg.value - should fall back to WETH transfer
+        // Since alice has no WETH and no approval, this should revert with transfer error
         vm.prank(alice);
         vm.expectRevert();
-        staker.bid{value: 0}(AddressesHyperEVM.ADDR_kHYPE, 10e18);
+        staker.bid{value: 0}(AddressesMegaETHTest.ADDR_USDC, 10e18);
     }
 
-    function test_nativeHYPEAndWHYPERefunds() public {
+    function test_nativeETHAndWETHRefunds() public {
         // Start an auction
         User memory user = User(1, 1000e18, 500e18);
         testFuzz_stake(user, 1000e18, 0);
@@ -1746,47 +1747,47 @@ contract StakerTest is Auxiliary {
         TokenBalances memory tokenBalances;
         tokenBalances.vaultTotalFees = 100e18;
         tokenBalances.stakerDonations = 50e18;
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenBalances);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenBalances);
 
         Donations memory donations;
-        staker.collectFeesAndStartAuction(AddressesHyperEVM.ADDR_kHYPE);
+        staker.collectFeesAndStartAuction(AddressesMegaETHTest.ADDR_USDC);
 
-        // Alice bids with native HYPE
+        // Alice bids with native ETH
         uint96 aliceBid = 10e18;
         vm.deal(alice, aliceBid);
         vm.prank(alice);
-        staker.bid{value: aliceBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: aliceBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
-        // Bob outbids with WHYPE
+        // Bob outbids with WETH
         uint96 bobBid = 11e18;
-        _dealWHYPE(bob, bobBid);
+        _dealWETH(bob, bobBid);
         vm.prank(bob);
-        WHYPE.approve(address(staker), bobBid);
+        WETH.approve(address(staker), bobBid);
         vm.prank(bob);
-        staker.bid(AddressesHyperEVM.ADDR_kHYPE, bobBid);
+        staker.bid(AddressesMegaETHTest.ADDR_USDC, bobBid);
 
-        // Alice should receive WHYPE refund (not native HYPE)
+        // Alice should receive WETH refund (not native ETH)
         assertEq(alice.balance, 0, "Alice should not receive ETH refund");
-        assertEq(WHYPE.balanceOf(alice), aliceBid, "Alice should receive WHYPE refund");
+        assertEq(WETH.balanceOf(alice), aliceBid, "Alice should receive WETH refund");
 
-        // Charlie outbids with native HYPE
+        // Charlie outbids with native ETH
         uint96 charlieBid = 12e18;
         vm.deal(charlie, charlieBid);
         vm.prank(charlie);
-        staker.bid{value: charlieBid}(AddressesHyperEVM.ADDR_kHYPE, 0);
+        staker.bid{value: charlieBid}(AddressesMegaETHTest.ADDR_USDC, 0);
 
-        // Bob should receive WHYPE refund (bob gets back the same amount he bid)
-        assertEq(WHYPE.balanceOf(bob), bobBid, "Bob should receive full WHYPE refund");
+        // Bob should receive WETH refund (bob gets back the same amount he bid)
+        assertEq(WETH.balanceOf(bob), bobBid, "Bob should receive full WETH refund");
     }
 }
 
 contract StakerHandler is Auxiliary {
-    address constant COLLATERAL1 = AddressesHyperEVM.ADDR_WHYPE;
-    address constant COLLATERAL2 = AddressesHyperEVM.ADDR_kHYPE;
+    address constant COLLATERAL1 = AddressesMegaETHTest.ADDR_WETH;
+    address constant COLLATERAL2 = AddressesMegaETHTest.ADDR_USDC;
 
-    address public user1 = _idToAddress(1);
-    address public user2 = _idToAddress(2);
-    address public user3 = _idToAddress(3);
+    address public user1 = _idToAddress(100);
+    address public user2 = _idToAddress(101);
+    address public user3 = _idToAddress(102);
 
     uint256 public currentTime;
 
@@ -1794,11 +1795,11 @@ contract StakerHandler is Auxiliary {
         // vm.writeFile("./InvariantStaker.log", "");
         currentTime = 1694616791;
 
-        staker = new Staker(AddressesHyperEVM.ADDR_WHYPE);
+        staker = new Staker(AddressesMegaETHTest.ADDR_WETH);
 
         address ape = address(new APE());
 
-        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), ape, AddressesHyperEVM.ADDR_WHYPE));
+        vault = address(new Vault(vm.addr(10), address(staker), vm.addr(12), ape, AddressesMegaETHTest.ADDR_WETH));
         staker.initialize(vault);
     }
 
@@ -1853,7 +1854,7 @@ contract StakerHandler is Auxiliary {
 
         // vm.writeLine(
         //     "./InvariantStaker.log",
-        //     string.concat("User ", vm.toString(user), " claims ", vm.toString(dividends), " HYPE")
+        //     string.concat("User ", vm.toString(user), " claims ", vm.toString(dividends), " ETH")
         // );
     }
 
@@ -1862,13 +1863,13 @@ contract StakerHandler is Auxiliary {
         uint256 userId,
         bool collateralSelect,
         uint96 amount,
-        bool useNativeHYPE
+        bool useNativeETH
     ) external advanceTime(timeSkip) {
         address user = _idToAddress(userId);
         address collateral = collateralSelect ? COLLATERAL1 : COLLATERAL2;
 
         // Bid
-        amount = uint96(_bound(amount, 0, HYPE_SUPPLY));
+        amount = uint96(_bound(amount, 0, ETH_SUPPLY));
         // vm.writeLine(
         //     "./InvariantStaker.log",
         //     string.concat(
@@ -1878,20 +1879,20 @@ contract StakerHandler is Auxiliary {
         //         vm.toString(collateral),
         //         " collateral with ",
         //         vm.toString(amount),
-        //         useNativeHYPE ? " native HYPE" : " WHYPE"
+        //         useNativeETH ? " native ETH" : " WETH"
         //     )
         // );
 
-        if (useNativeHYPE) {
-            // Bid with native HYPE
+        if (useNativeETH) {
+            // Bid with native ETH
             vm.deal(user, amount);
             vm.prank(user);
             staker.bid{value: amount}(collateral, 0); // amount param ignored when using native
         } else {
-            // Bid with WHYPE
-            _dealWHYPE(user, amount);
+            // Bid with WETH
+            _dealWETH(user, amount);
             vm.prank(user);
-            WHYPE.approve(address(staker), amount);
+            WETH.approve(address(staker), amount);
             vm.prank(user);
             staker.bid(collateral, amount);
         }
@@ -1933,10 +1934,10 @@ contract StakerHandler is Auxiliary {
         //     "./InvariantStaker.log",
         //     string.concat(
         //         "Donations: ",
-        //         vm.toString(donations.stakerDonationsHYPE),
-        //         " HYPE and ",
-        //         vm.toString(donations.stakerDonationsWHYPE),
-        //         " WHYPE"
+        //         vm.toString(donations.stakerDonationsETH),
+        //         " ETH and ",
+        //         vm.toString(donations.stakerDonationsWETH),
+        //         " WETH"
         //     )
         // );
     }
@@ -1947,7 +1948,7 @@ contract StakerInvariantTest is Test {
     Staker staker;
 
     function setUp() external {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
         stakerHandler = new StakerHandler();
         staker = Staker(stakerHandler.staker());

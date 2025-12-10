@@ -71,12 +71,12 @@ library SirStructs {
 
     struct StakingParams {
         uint80 stake; // Amount of staked SIR
-        uint176 cumulativeHYPEPerSIRx80; // Cumulative HYPE per SIR * 2^80
+        uint176 cumulativeETHPerSIRx80; // Cumulative ETH per SIR * 2^80
     }
 
     struct StakerParams {
         uint80 stake; // Total amount of staked SIR by the staker
-        uint176 cumulativeHYPEPerSIRx80; // Cumulative HYPE per SIR * 2^80 last time the user updated his balance of HYPE dividends
+        uint176 cumulativeETHPerSIRx80; // Cumulative ETH per SIR * 2^80 last time the user updated his balance of ETH dividends
         uint80 lockedStake; // Amount of stake that was locked at time 'tsLastUpdate'
         uint40 tsLastUpdate; // Timestamp of the last time the user staked or unstaked
     }

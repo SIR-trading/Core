@@ -4,7 +4,7 @@ pragma solidity >=0.8.0;
 import {Vault} from "src/Vault.sol";
 import {Oracle} from "src/Oracle.sol";
 import {APE} from "src/APE.sol";
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {IWETH9} from "src/interfaces/IWETH9.sol";
@@ -95,8 +95,8 @@ contract VaultTest is Test {
     uint256 constant smallErrorTolerance = 1e16;
     uint256 constant largeErrorTolerance = 1e4;
 
-    address public systemControl = vm.addr(1);
-    address public sir = vm.addr(2);
+    address public systemControl = vm.addr(100);
+    address public sir = vm.addr(101);
     address public oracle;
 
     Vault vault;
@@ -112,10 +112,10 @@ contract VaultTest is Test {
         collateral = new MockERC20("Collateral", "COL", 18);
         vaultParams.collateralToken = address(collateral);
 
-        // vm.createSelectFork("hyperevm", 12523857);
+        // vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy oracle
-        oracle = address(new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY));
+        oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY));
 
         // Mock oracle initialization
         vm.mockCall(
@@ -133,7 +133,7 @@ contract VaultTest is Test {
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, oracle, address(apeImplementation), AddressesHyperEVM.ADDR_WHYPE);
+        vault = new Vault(systemControl, sir, oracle, address(apeImplementation), AddressesMegaETHTest.ADDR_WETH);
 
         // Vauld id
         vaultId = 1;
@@ -1731,37 +1731,44 @@ contract VaultTest is Test {
     }
 }
 
-contract VaultTestETH is Test {
-    error NotAWHYPEVault();
+contract VaultTestETH is Test, ERC1155TokenReceiver {
+    error NotAWETHVault();
     error AmountTooLow();
 
     Vault public vault;
-    IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    IWETH9 public weth = IWETH9(AddressesMegaETHTest.ADDR_WETH);
     Oracle public oracle;
     IERC20 public ape;
 
     uint48 vaultId;
-    address public user = vm.addr(3);
+    address public user; // Will be set to address(this) to receive ERC1155
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, 2);
+        SirStructs.VaultParameters(
+            AddressesMegaETHTest.ADDR_USDC, // debtToken (stablecoin)
+            AddressesMegaETHTest.ADDR_WETH, // collateralToken (WETH)
+            2
+        );
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
+
+        // Set user to this contract so it can receive ERC1155 tokens (TEA)
+        user = address(this);
 
         // Deploy oracle
-        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
         vault = new Vault(
-            vm.addr(1),
-            vm.addr(2),
+            vm.addr(100),
+            vm.addr(101),
             address(oracle),
             address(apeImplementation),
-            AddressesHyperEVM.ADDR_WHYPE
+            AddressesMegaETHTest.ADDR_WETH
         );
 
         // _initialize vault
@@ -1774,48 +1781,48 @@ contract VaultTestETH is Test {
         ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function testFuzz_mintWithHYPE(bool isAPE, uint256 amountHYPE, uint144 falseAmountHYPE) public {
-        // Constraint the amount of HYPE
-        amountHYPE = _bound(amountHYPE, 1e6, 2 ** 96);
+    function testFuzz_mintWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+        // Constraint the amount of ETH
+        amountETH = _bound(amountETH, 1e6, 2 ** 96);
 
         // Alice mints
-        deal(user, amountHYPE);
+        deal(user, amountETH);
         vm.prank(user);
-        uint256 amount = vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, 0, 0);
+        uint256 amount = vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0, 0);
 
         // Checks
-        assertEq(whype.balanceOf(address(vault)), amountHYPE, "Wrong total reserve");
+        assertEq(weth.balanceOf(address(vault)), amountETH, "Wrong total reserve");
         assertEq(isAPE ? ape.balanceOf(user) : vault.balanceOf(user, 1), amount, "Wrong amount minted");
     }
 
-    function testFuzz_mintWithTooLittleETH(bool isAPE, uint256 amountHYPE, uint144 falseAmountHYPE) public {
-        // Constraint the amount of HYPE
-        amountHYPE = _bound(amountHYPE, 0, 1e6 - 1);
+    function testFuzz_mintWithTooLittleETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+        // Constraint the amount of ETH
+        amountETH = _bound(amountETH, 0, 1e6 - 1);
 
         // User mints
-        deal(user, amountHYPE);
+        deal(user, amountETH);
         vm.prank(user);
         vm.expectRevert();
-        vault.mint{value: amountHYPE}(isAPE, vaultParams, falseAmountHYPE, 0, 0);
+        vault.mint{value: amountETH}(isAPE, vaultParams, falseAmountETH, 0, 0);
     }
 
-    function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountHYPE, uint144 falseAmountHYPE) public {
-        // _initialize a non-WHYPE vault
+    function testFuzz_mintWrongVaultWithETH(bool isAPE, uint256 amountETH, uint144 falseAmountETH) public {
+        // _initialize a non-WETH vault (WETH as debt token, USDC as collateral)
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
-            AddressesHyperEVM.ADDR_WHYPE,
-            AddressesHyperEVM.ADDR_USDT0,
+            AddressesMegaETHTest.ADDR_WETH, // debtToken (WETH)
+            AddressesMegaETHTest.ADDR_USDC, // collateralToken (stablecoin)
             -1
         );
         vault.initialize(vaultParams2);
 
-        // Constraint the amount of HYPE
-        amountHYPE = _bound(amountHYPE, 2, 2 ** 96);
+        // Constraint the amount of ETH
+        amountETH = _bound(amountETH, 2, 2 ** 96);
 
         // User mints
-        deal(user, amountHYPE);
+        deal(user, amountETH);
         vm.prank(user);
-        vm.expectRevert(NotAWHYPEVault.selector);
-        vault.mint{value: amountHYPE}(isAPE, vaultParams2, falseAmountHYPE, 0, 0);
+        vm.expectRevert(NotAWETHVault.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, 0, 0);
     }
 }
 
@@ -1824,7 +1831,7 @@ contract VaultTestDebtToken is Test {
     error InsufficientCollateralReceivedFromUniswap();
 
     Vault public vault;
-    IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    IWETH9 public weth = IWETH9(AddressesMegaETHTest.ADDR_WETH);
     Oracle public oracle;
     IERC20 public ape;
 
@@ -1832,24 +1839,28 @@ contract VaultTestDebtToken is Test {
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE, 2);
+        SirStructs.VaultParameters(
+            AddressesMegaETHTest.ADDR_USDC, // debtToken (stablecoin)
+            AddressesMegaETHTest.ADDR_WETH, // collateralToken (WETH)
+            2
+        );
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy oracle
-        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
         vault = new Vault(
-            vm.addr(1),
-            vm.addr(2),
+            vm.addr(100),
+            vm.addr(101),
             address(oracle),
             address(apeImplementation),
-            AddressesHyperEVM.ADDR_WHYPE
+            AddressesMegaETHTest.ADDR_WETH
         );
 
         // _initialize vault
@@ -1867,11 +1878,11 @@ contract VaultTestDebtToken is Test {
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
 
         // Deal USDC to user
-        deal(AddressesHyperEVM.ADDR_USDT0, user, amountDebtToken);
+        deal(AddressesMegaETHTest.ADDR_USDC, user, amountDebtToken);
 
         // Approve vault
         vm.startPrank(user);
-        IERC20(AddressesHyperEVM.ADDR_USDT0).approve(address(vault), amountDebtToken);
+        IERC20(AddressesMegaETHTest.ADDR_USDC).approve(address(vault), amountDebtToken);
 
         // User mints
         vm.expectRevert();
@@ -1894,12 +1905,12 @@ contract VaultTestDebtToken is Test {
 }
 
 contract VaultTestETHDebtToken is Test {
-    error NotAWHYPEVault();
+    error NotAWETHVault();
     error AmountTooLow();
     error InsufficientCollateralReceivedFromUniswap();
 
     Vault public vault;
-    IWETH9 public whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    IWETH9 public weth = IWETH9(AddressesMegaETHTest.ADDR_WETH);
     Oracle public oracle;
     IERC20 public ape;
 
@@ -1907,24 +1918,28 @@ contract VaultTestETHDebtToken is Test {
     address public user = vm.addr(3);
 
     SirStructs.VaultParameters public vaultParams =
-        SirStructs.VaultParameters(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0, 2);
+        SirStructs.VaultParameters(
+            AddressesMegaETHTest.ADDR_WETH, // debtToken (WETH)
+            AddressesMegaETHTest.ADDR_USDC, // collateralToken (stablecoin)
+            2
+        );
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy oracle
-        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
         vault = new Vault(
-            vm.addr(1),
-            vm.addr(2),
+            vm.addr(100),
+            vm.addr(101),
             address(oracle),
             address(apeImplementation),
-            AddressesHyperEVM.ADDR_WHYPE
+            AddressesMegaETHTest.ADDR_WETH
         );
 
         // _initialize vault
@@ -1937,18 +1952,18 @@ contract VaultTestETHDebtToken is Test {
         ape = IERC20(AddressClone.getAddress(address(vault), vaultId));
     }
 
-    function testFuzz_mintWrongVaultWithHypeAsDebtToken(
+    function testFuzz_mintWrongVaultWithWethAsDebtToken(
         bool isAPE,
-        uint256 amountHYPE,
-        uint256 falseAmountHYPE,
+        uint256 amountETH,
+        uint256 falseAmountETH,
         uint144 collateralTokenMin
     ) public {
-        amountHYPE = _bound(amountHYPE, 1e15, 2 ** 96);
+        amountETH = _bound(amountETH, 1e15, 2 ** 96);
 
-        // _initialize a non-WHYPE vault
+        // _initialize a non-WETH vault (USDC as debt token, WETH as collateral)
         SirStructs.VaultParameters memory vaultParams2 = SirStructs.VaultParameters(
-            AddressesHyperEVM.ADDR_USDT0,
-            AddressesHyperEVM.ADDR_WHYPE,
+            AddressesMegaETHTest.ADDR_USDC, // debtToken (stablecoin)
+            AddressesMegaETHTest.ADDR_WETH, // collateralToken (WETH)
             -1
         );
         vault.initialize(vaultParams2);
@@ -1956,26 +1971,26 @@ contract VaultTestETHDebtToken is Test {
         // Upperbound minimum collateral required
         collateralTokenMin = uint144(_bound(collateralTokenMin, 1, type(uint144).max));
 
-        // Deal HYPE to user
-        deal(user, amountHYPE);
+        // Deal ETH to user
+        deal(user, amountETH);
 
         // User mints
         vm.prank(user);
-        vm.expectRevert(NotAWHYPEVault.selector);
-        vault.mint{value: amountHYPE}(isAPE, vaultParams2, falseAmountHYPE, collateralTokenMin, 0);
+        vm.expectRevert(NotAWETHVault.selector);
+        vault.mint{value: amountETH}(isAPE, vaultParams2, falseAmountETH, collateralTokenMin, 0);
     }
 }
 
 contract VaultControlTest is Test {
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
-    IWETH9 private constant WHYPE = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    IWETH9 private constant WETH = IWETH9(AddressesMegaETHTest.ADDR_WETH);
 
     uint256 constant SLOT_TOTAL_RESERVES = 10;
-    uint96 constant HYPE_SUPPLY = 1e9 * 10 ** 18;
+    uint96 constant ETH_SUPPLY = 1e9 * 10 ** 18;
 
-    address public systemControl = vm.addr(1);
-    address public sir = vm.addr(2);
+    address public systemControl = vm.addr(100);
+    address public sir = vm.addr(101);
 
     Vault public vault;
 
@@ -1992,54 +2007,54 @@ contract VaultControlTest is Test {
     }
 
     struct Balances4Tokens {
-        uint256 balanceOfHYPE;
-        uint256 balanceOfBNB;
-        uint256 balanceOfUSDT;
+        uint256 balanceOfETH;
+        uint256 balanceOfUSDC;
+        uint256 balanceOfPBTC;
     }
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
 
         // Deploy vault
-        vault = new Vault(systemControl, sir, vm.addr(3), address(apeImplementation), AddressesHyperEVM.ADDR_WHYPE);
+        vault = new Vault(systemControl, sir, vm.addr(102), address(apeImplementation), AddressesMegaETHTest.ADDR_WETH);
     }
 
     function testFuzz_withdrawFeesFailsCuzNotSIR(address user, TokenFees memory tokenFees) public {
         vm.assume(user != sir);
 
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFees);
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenFees);
 
-        // Withdraw WHYPE
+        // Withdraw WETH
         vm.expectRevert();
         vm.prank(user);
-        vault.withdrawFees(AddressesHyperEVM.ADDR_WHYPE);
+        vault.withdrawFees(AddressesMegaETHTest.ADDR_WETH);
     }
 
     function testFuzz_withdrawWETH(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFees);
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenFees);
 
-        // Withdraw WHYPE
+        // Withdraw WETH
         if (tokenFees.fees != 0) {
             vm.expectEmit();
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_WHYPE);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesMegaETHTest.ADDR_WETH);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(WHYPE.balanceOf(sir), tokenFees.fees);
-        assertEq(WHYPE.balanceOf(address(vault)), tokenFees.total);
+        assertEq(WETH.balanceOf(sir), tokenFees.fees);
+        assertEq(WETH.balanceOf(address(vault)), tokenFees.total);
     }
 
     function testFuzz_withdrawBNB(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFees);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenFees);
 
         // Withdraw BNB
         vm.assume(tokenFees.fees > 0);
@@ -2047,25 +2062,25 @@ contract VaultControlTest is Test {
         emit Transfer(address(vault), sir, tokenFees.fees);
 
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_kHYPE);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesMegaETHTest.ADDR_USDC);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees, "Wrong total fees to stakers");
         assertEq(
-            IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(sir),
+            IERC20(AddressesMegaETHTest.ADDR_USDC).balanceOf(sir),
             tokenFees.fees,
-            "Wrong kHYPE balance of SIR contract"
+            "Wrong USDC balance of SIR contract"
         );
         assertEq(
-            IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(address(vault)),
+            IERC20(AddressesMegaETHTest.ADDR_USDC).balanceOf(address(vault)),
             tokenFees.total,
-            "Wrong kHYPE balance of vault"
+            "Wrong USDC balance of vault"
         );
     }
 
     function testFuzz_withdrawUSDT(TokenFees memory tokenFees) public {
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFees);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenFees);
 
         // Withdraw USDT
         if (tokenFees.fees != 0) {
@@ -2073,33 +2088,36 @@ contract VaultControlTest is Test {
             emit Transfer(address(vault), sir, tokenFees.fees);
         }
         vm.prank(sir);
-        uint256 totalFeesToStakers = vault.withdrawFees(AddressesHyperEVM.ADDR_USDT0);
+        uint256 totalFeesToStakers = vault.withdrawFees(AddressesMegaETHTest.ADDR_USDC);
 
         // Assert balances
         assertEq(totalFeesToStakers, tokenFees.fees);
-        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(sir), tokenFees.fees);
-        assertEq(IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(address(vault)), tokenFees.total);
+        assertEq(IERC20(AddressesMegaETHTest.ADDR_USDC).balanceOf(sir), tokenFees.fees);
+        assertEq(
+            IERC20(AddressesMegaETHTest.ADDR_USDC).balanceOf(address(vault)),
+            tokenFees.total
+        );
     }
 
     function testFuzz_withdrawToSaveSystemFailsCuzNotSystemControl(
         address user,
-        TokenFees memory tokenFeesHYPE,
-        TokenFees memory tokenFeesBNB,
-        TokenFees memory tokenFeesUSDT
+        TokenFees memory tokenFeesETH,
+        TokenFees memory tokenFeesUSDC,
+        TokenFees memory tokenFeesPBTC
     ) public {
         vm.assume(user != systemControl);
         vm.assume(user.code.length == 0);
 
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenFeesETH);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenFeesUSDC);
+        _setFees(AddressesMegaETHTest.ADDR_PBTC, tokenFeesPBTC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
         address[] memory tokens = new address[](3);
-        tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
-        tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
-        tokens[2] = AddressesHyperEVM.ADDR_USDT0;
+        tokens[0] = AddressesMegaETHTest.ADDR_WETH;
+        tokens[1] = AddressesMegaETHTest.ADDR_USDC;
+        tokens[2] = AddressesMegaETHTest.ADDR_PBTC;
 
         // Fails to save system
         vm.prank(user);
@@ -2109,9 +2127,9 @@ contract VaultControlTest is Test {
 
     function testFuzz_withdrawToSaveSystem(
         address to,
-        TokenFees memory tokenFeesHYPE,
-        TokenFees memory tokenFeesBNB,
-        TokenFees memory tokenFeesUSDT
+        TokenFees memory tokenFeesETH,
+        TokenFees memory tokenFeesUSDC,
+        TokenFees memory tokenFeesPBTC
     ) public {
         to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
         vm.assume(to.code.length == 0);
@@ -2119,61 +2137,61 @@ contract VaultControlTest is Test {
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenFeesETH);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenFeesUSDC);
+        _setFees(AddressesMegaETHTest.ADDR_PBTC, tokenFeesPBTC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
         address[] memory tokens = new address[](3);
-        tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
-        tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
-        tokens[2] = AddressesHyperEVM.ADDR_USDT0;
-        if (tokenFeesHYPE.total + tokenFeesHYPE.fees > 0) {
+        tokens[0] = AddressesMegaETHTest.ADDR_WETH;
+        tokens[1] = AddressesMegaETHTest.ADDR_USDC;
+        tokens[2] = AddressesMegaETHTest.ADDR_PBTC;
+        if (tokenFeesETH.total + tokenFeesETH.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesHYPE.total + tokenFeesHYPE.fees);
+            emit Transfer(address(vault), to, tokenFeesETH.total + tokenFeesETH.fees);
         }
-        if (tokenFeesBNB.total + tokenFeesBNB.fees > 0) {
+        if (tokenFeesUSDC.total + tokenFeesUSDC.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesBNB.total + tokenFeesBNB.fees);
+            emit Transfer(address(vault), to, tokenFeesUSDC.total + tokenFeesUSDC.fees);
         }
-        if (tokenFeesUSDT.total + tokenFeesUSDT.fees > 0) {
+        if (tokenFeesPBTC.total + tokenFeesPBTC.fees > 0) {
             vm.expectEmit();
-            emit Transfer(address(vault), to, tokenFeesUSDT.total + tokenFeesUSDT.fees);
+            emit Transfer(address(vault), to, tokenFeesPBTC.total + tokenFeesPBTC.fees);
         }
         vm.prank(systemControl);
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Assert balances
-        assertEq(amounts[0], tokenFeesHYPE.total + tokenFeesHYPE.fees, "Wrong amounts[0]");
-        assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
-        assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
+        assertEq(amounts[0], tokenFeesETH.total + tokenFeesETH.fees, "Wrong amounts[0]");
+        assertEq(amounts[1], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[1]");
+        assertEq(amounts[2], tokenFeesPBTC.total + tokenFeesPBTC.fees, "Wrong amounts[2]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
-            balances4Tokens.balanceOfHYPE - preBalances4Tokens.balanceOfHYPE,
-            tokenFeesHYPE.total + tokenFeesHYPE.fees,
-            "Wrong WHYPE balance"
+            balances4Tokens.balanceOfETH - preBalances4Tokens.balanceOfETH,
+            tokenFeesETH.total + tokenFeesETH.fees,
+            "Wrong WETH balance"
         );
         assertEq(
-            balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
-            tokenFeesBNB.total + tokenFeesBNB.fees,
-            "Wrong kHYPE balance"
+            balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
+            tokenFeesUSDC.total + tokenFeesUSDC.fees,
+            "Wrong USDC balance"
         );
         assertEq(
-            balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
-            tokenFeesUSDT.total + tokenFeesUSDT.fees,
-            "Wrong USDT balance"
+            balances4Tokens.balanceOfPBTC - preBalances4Tokens.balanceOfPBTC,
+            tokenFeesPBTC.total + tokenFeesPBTC.fees,
+            "Wrong PBTC balance"
         );
     }
 
     function testFuzz_withdrawToSaveSystemBuggyERC20(
         address to,
-        TokenFees memory tokenFeesHYPE,
-        BuggyERC20 calldata buggyWHYPE,
-        TokenFees memory tokenFeesBNB,
-        BuggyERC20 calldata buggyBNB,
-        TokenFees memory tokenFeesUSDT,
-        BuggyERC20 calldata buggyUSDT
+        TokenFees memory tokenFeesETH,
+        BuggyERC20 calldata buggyWETH_,
+        TokenFees memory tokenFeesUSDC,
+        BuggyERC20 calldata buggyUSDC,
+        TokenFees memory tokenFeesPBTC,
+        BuggyERC20 calldata buggyPBTC
     ) public {
         to = address(uint160(_bound(uint160(to), 1, type(uint160).max)));
         vm.assume(to.code.length == 0);
@@ -2181,73 +2199,73 @@ contract VaultControlTest is Test {
         Balances4Tokens memory preBalances4Tokens = _computeBalances(to);
 
         // Add fees to vault
-        _setFees(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE);
-        _setFees(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB);
-        _setFees(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT);
+        _setFees(AddressesMegaETHTest.ADDR_WETH, tokenFeesETH);
+        _setFees(AddressesMegaETHTest.ADDR_USDC, tokenFeesUSDC);
+        _setFees(AddressesMegaETHTest.ADDR_PBTC, tokenFeesPBTC);
 
         // Modify ERC20 behavior
-        _modifyERC20(AddressesHyperEVM.ADDR_WHYPE, tokenFeesHYPE, buggyWHYPE);
-        _modifyERC20(AddressesHyperEVM.ADDR_kHYPE, tokenFeesBNB, buggyBNB);
-        _modifyERC20(AddressesHyperEVM.ADDR_USDT0, tokenFeesUSDT, buggyUSDT);
+        _modifyERC20(AddressesMegaETHTest.ADDR_WETH, tokenFeesETH, buggyWETH_);
+        _modifyERC20(AddressesMegaETHTest.ADDR_USDC, tokenFeesUSDC, buggyUSDC);
+        _modifyERC20(AddressesMegaETHTest.ADDR_PBTC, tokenFeesPBTC, buggyPBTC);
 
         // Use the encoded calldata in a low-level call or another contract interaction
         address[] memory tokens = new address[](3);
-        tokens[0] = AddressesHyperEVM.ADDR_WHYPE;
-        tokens[1] = AddressesHyperEVM.ADDR_kHYPE;
-        tokens[2] = AddressesHyperEVM.ADDR_USDT0;
+        tokens[0] = AddressesMegaETHTest.ADDR_WETH;
+        tokens[1] = AddressesMegaETHTest.ADDR_USDC;
+        tokens[2] = AddressesMegaETHTest.ADDR_PBTC;
         vm.prank(systemControl);
         uint256[] memory amounts = vault.withdrawToSaveSystem(tokens, to);
 
         // Set amounts to 0 if buggy ERC20
         if (
-            buggyWHYPE.balanceOfReverts ||
-            buggyWHYPE.balanceOfReturnsWrongLength ||
-            buggyWHYPE.transferReverts ||
-            buggyWHYPE.transferReturnsFalse
+            buggyWETH_.balanceOfReverts ||
+            buggyWETH_.balanceOfReturnsWrongLength ||
+            buggyWETH_.transferReverts ||
+            buggyWETH_.transferReturnsFalse
         ) {
-            tokenFeesHYPE.total = 0;
-            tokenFeesHYPE.fees = 0;
+            tokenFeesETH.total = 0;
+            tokenFeesETH.fees = 0;
         }
         if (
-            buggyBNB.balanceOfReverts ||
-            buggyBNB.balanceOfReturnsWrongLength ||
-            buggyBNB.transferReverts ||
-            buggyBNB.transferReturnsFalse
+            buggyUSDC.balanceOfReverts ||
+            buggyUSDC.balanceOfReturnsWrongLength ||
+            buggyUSDC.transferReverts ||
+            buggyUSDC.transferReturnsFalse
         ) {
-            tokenFeesBNB.total = 0;
-            tokenFeesBNB.fees = 0;
+            tokenFeesUSDC.total = 0;
+            tokenFeesUSDC.fees = 0;
         }
         if (
-            buggyUSDT.balanceOfReverts ||
-            buggyUSDT.balanceOfReturnsWrongLength ||
-            buggyUSDT.transferReverts ||
-            buggyUSDT.transferReturnsFalse
+            buggyPBTC.balanceOfReverts ||
+            buggyPBTC.balanceOfReturnsWrongLength ||
+            buggyPBTC.transferReverts ||
+            buggyPBTC.transferReturnsFalse
         ) {
-            tokenFeesUSDT.total = 0;
-            tokenFeesUSDT.fees = 0;
+            tokenFeesPBTC.total = 0;
+            tokenFeesPBTC.fees = 0;
         }
 
         // Assert balances
         vm.clearMockedCalls();
-        assertEq(amounts[0], tokenFeesHYPE.total + tokenFeesHYPE.fees, "Wrong amounts[0]");
-        assertEq(amounts[1], tokenFeesBNB.total + tokenFeesBNB.fees, "Wrong amounts[1]");
-        assertEq(amounts[2], tokenFeesUSDT.total + tokenFeesUSDT.fees, "Wrong amounts[2]");
+        assertEq(amounts[0], tokenFeesETH.total + tokenFeesETH.fees, "Wrong amounts[0]");
+        assertEq(amounts[1], tokenFeesUSDC.total + tokenFeesUSDC.fees, "Wrong amounts[1]");
+        assertEq(amounts[2], tokenFeesPBTC.total + tokenFeesPBTC.fees, "Wrong amounts[2]");
 
         Balances4Tokens memory balances4Tokens = _computeBalances(to);
         assertEq(
-            balances4Tokens.balanceOfHYPE - preBalances4Tokens.balanceOfHYPE,
-            tokenFeesHYPE.total + tokenFeesHYPE.fees,
-            "Wrong WHYPE balance"
+            balances4Tokens.balanceOfETH - preBalances4Tokens.balanceOfETH,
+            tokenFeesETH.total + tokenFeesETH.fees,
+            "Wrong WETH balance"
         );
         assertEq(
-            balances4Tokens.balanceOfBNB - preBalances4Tokens.balanceOfBNB,
-            tokenFeesBNB.total + tokenFeesBNB.fees,
-            "Wrong kHYPE balance"
+            balances4Tokens.balanceOfUSDC - preBalances4Tokens.balanceOfUSDC,
+            tokenFeesUSDC.total + tokenFeesUSDC.fees,
+            "Wrong USDC balance"
         );
         assertEq(
-            balances4Tokens.balanceOfUSDT - preBalances4Tokens.balanceOfUSDT,
-            tokenFeesUSDT.total + tokenFeesUSDT.fees,
-            "Wrong USDT balance"
+            balances4Tokens.balanceOfPBTC - preBalances4Tokens.balanceOfPBTC,
+            tokenFeesPBTC.total + tokenFeesPBTC.fees,
+            "Wrong PBTC balance"
         );
     }
 
@@ -2259,7 +2277,7 @@ contract VaultControlTest is Test {
     ) public {
         vm.prank(caller);
         vm.expectRevert();
-        vault.hyperswapV3SwapCallback(amount0Delta, amount1Delta, data);
+        vault.uniswapV3SwapCallback(amount0Delta, amount1Delta, data);
     }
 
     //////////////////////////////////////////////////////////////////
@@ -2267,9 +2285,9 @@ contract VaultControlTest is Test {
     function _computeBalances(address to) private view returns (Balances4Tokens memory) {
         return
             Balances4Tokens({
-                balanceOfHYPE: WHYPE.balanceOf(to),
-                balanceOfBNB: IERC20(AddressesHyperEVM.ADDR_kHYPE).balanceOf(to),
-                balanceOfUSDT: IERC20(AddressesHyperEVM.ADDR_USDT0).balanceOf(to)
+                balanceOfETH: WETH.balanceOf(to),
+                balanceOfUSDC: IERC20(AddressesMegaETHTest.ADDR_USDC).balanceOf(to),
+                balanceOfPBTC: IERC20(AddressesMegaETHTest.ADDR_PBTC).balanceOf(to)
             });
     }
 
@@ -2295,15 +2313,15 @@ contract VaultControlTest is Test {
         // Bound variables
         tokenFees.fees = _bound(tokenFees.fees, 0, type(uint256).max - IERC20(token).totalSupply());
         tokenFees.total = _bound(tokenFees.total, 0, type(uint256).max - IERC20(token).totalSupply() - tokenFees.fees);
-        if (token == AddressesHyperEVM.ADDR_WHYPE) {
-            tokenFees.total = _bound(tokenFees.total, 0, HYPE_SUPPLY);
+        if (token == AddressesMegaETHTest.ADDR_WETH) {
+            tokenFees.total = _bound(tokenFees.total, 0, ETH_SUPPLY);
         } else {
             // Each vault can have at most 2^144 tokens and there are at most 2^48 vaults
             tokenFees.total = _bound(tokenFees.total, 0, 2 ** (144 + 48));
         }
 
         // Send tokens to Vault
-        if (token == AddressesHyperEVM.ADDR_WHYPE) _dealWHYPE(address(vault), tokenFees.total + tokenFees.fees);
+        if (token == AddressesMegaETHTest.ADDR_WETH) _dealWETH(address(vault), tokenFees.total + tokenFees.fees);
         else _dealToken(token, address(vault), tokenFees.total + tokenFees.fees);
 
         // Set total reserves
@@ -2318,18 +2336,18 @@ contract VaultControlTest is Test {
         );
     }
 
-    function _dealWHYPE(address to, uint256 amount) internal {
-        vm.deal(vm.addr(2), amount);
-        vm.prank(vm.addr(2));
-        WHYPE.deposit{value: amount}();
-        vm.prank(vm.addr(2));
-        WHYPE.transfer(address(to), amount);
+    function _dealWETH(address to, uint256 amount) internal {
+        vm.deal(vm.addr(200), amount);
+        vm.prank(vm.addr(200));
+        WETH.deposit{value: amount}();
+        vm.prank(vm.addr(200));
+        WETH.transfer(address(to), amount);
     }
 
     function _dealToken(address token, address to, uint256 amount) internal {
         if (amount == 0) return;
-        deal(token, vm.addr(2), amount, true);
-        vm.prank(vm.addr(2));
+        deal(token, vm.addr(200), amount, true);
+        vm.prank(vm.addr(200));
         TransferHelper.safeTransfer(token, to, amount);
     }
 }

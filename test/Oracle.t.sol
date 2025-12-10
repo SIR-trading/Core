@@ -8,7 +8,7 @@ import {INonfungiblePositionManager} from "v3-periphery/interfaces/INonfungibleT
 import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
 import {UniswapPoolAddress} from "src/libraries/UniswapPoolAddress.sol";
 import {Oracle} from "src/Oracle.sol";
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
 import {MockERC20} from "src/test/MockERC20.sol";
 import {LiquidityAmounts} from "v3-periphery/libraries/LiquidityAmounts.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
@@ -21,16 +21,16 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
 
-    constructor() Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY) {
-        vm.createSelectFork("hyperevm", 12523857);
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
     }
 
     function test_GetUniswapFeeTiers() public view {
         SirStructs.UniswapFeeTier[] memory uniswapFeeTiers = _oracle.getUniswapFeeTiers();
 
-        IUniswapV3Factory uniswapFactory = IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        IUniswapV3Factory uniswapFactory = IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
 
         assertEq(uniswapFeeTiers[0].fee, 100);
         assertEq(uniswapFeeTiers[0].tickSpacing, uniswapFactory.feeAmountTickSpacing(100));
@@ -54,8 +54,8 @@ contract OracleNewFeeTiersTest is Test, Oracle {
     function test_NewUniswapFeeTier() public {
         uint24 fee = 42;
         int24 tickSpacing = 69;
-        vm.prank(AddressesHyperEVM.ADDR_UNISWAPV3_OWNER);
-        IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee, tickSpacing);
+        vm.prank(AddressesMegaETHTest.ADDR_UNISWAPV3_OWNER);
+        IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(fee, tickSpacing);
 
         vm.expectEmit(address(_oracle));
         emit UniswapFeeTierAdded(fee);
@@ -67,9 +67,9 @@ contract OracleNewFeeTiersTest is Test, Oracle {
     function test_5NewUniswapFeeTiers() public {
         uint24 fee = 42;
         int24 tickSpacing = 69;
-        vm.startPrank(AddressesHyperEVM.ADDR_UNISWAPV3_OWNER);
+        vm.startPrank(AddressesMegaETHTest.ADDR_UNISWAPV3_OWNER);
         for (uint24 i = 0; i < 5; i++) {
-            IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+            IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
                 fee + i,
                 tickSpacing + int24(i)
             );
@@ -88,9 +88,9 @@ contract OracleNewFeeTiersTest is Test, Oracle {
     function test_RevertWhen_6NewUniswapFeeTiers() public {
         uint24 fee = 42;
         int24 tickSpacing = 69;
-        vm.startPrank(AddressesHyperEVM.ADDR_UNISWAPV3_OWNER);
+        vm.startPrank(AddressesMegaETHTest.ADDR_UNISWAPV3_OWNER);
         for (uint24 i = 0; i < 6; i++) {
-            IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+            IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
                 fee + i,
                 tickSpacing + int24(i)
             );
@@ -122,15 +122,15 @@ contract OracleInitializeTest is Test, Oracle {
     );
 
     INonfungiblePositionManager positionManager =
-        INonfungiblePositionManager(AddressesHyperEVM.ADDR_UNISWAPV3_POSITION_MANAGER);
+        INonfungiblePositionManager(AddressesMegaETHTest.ADDR_UNISWAPV3_POSITION_MANAGER);
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
 
-    constructor() Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY) {
-        vm.createSelectFork("hyperevm", 12523857);
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
     }
@@ -141,8 +141,10 @@ contract OracleInitializeTest is Test, Oracle {
     }
 
     function test_InitializeNoPoolOfPENDLEAndUSDT0() public {
-        vm.expectRevert(Oracle.NoUniswapPool.selector);
-        _oracle.initialize(AddressesHyperEVM.ADDR_PENDLE, AddressesHyperEVM.ADDR_USDT0);
+        // Using same token twice causes a revert in UniswapPoolAddress.computeAddress
+        // because it requires token0 < token1
+        vm.expectRevert();
+        _oracle.initialize(AddressesMegaETHTest.ADDR_USDC, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_InitializePoolNotInitialized() public {
@@ -193,12 +195,12 @@ contract OracleInitializeTest is Test, Oracle {
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
-    function test_InitializeUSDT0AndWHYPE() public {
+    function test_InitializeUSDCAndWETH() public {
         vm.expectEmit(true, true, false, false, address(_oracle));
-        emit OracleInitialized(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0, 0, 0, 0);
-        _oracle.initialize(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE);
+        emit OracleInitialized(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC, 0, 0, 0);
+        _oracle.initialize(AddressesMegaETHTest.ADDR_USDC, AddressesMegaETHTest.ADDR_WETH);
 
-        _oracle.initialize(AddressesHyperEVM.ADDR_USDT0, AddressesHyperEVM.ADDR_WHYPE); // No-op
+        _oracle.initialize(AddressesMegaETHTest.ADDR_USDC, AddressesMegaETHTest.ADDR_WETH); // No-op
     }
 
     function testFuzz_InitializeWithMultipleFeeTiers(
@@ -251,9 +253,9 @@ contract OracleInitializeTest is Test, Oracle {
         uniswapFeeTiers[8] = SirStructs.UniswapFeeTier(100000, 1);
 
         // Add them to Uniswap v3
-        vm.startPrank(AddressesHyperEVM.ADDR_UNISWAPV3_OWNER);
+        vm.startPrank(AddressesMegaETHTest.ADDR_UNISWAPV3_OWNER);
         for (uint256 i = 4; i < 9; i++) {
-            IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
+            IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(
                 uniswapFeeTiers[i].fee,
                 uniswapFeeTiers[i].tickSpacing
             );
@@ -359,7 +361,7 @@ contract OracleInitializeTest is Test, Oracle {
     function _preparePoolNoInitialization(uint24 fee) private returns (UniswapPoolAddress.PoolKey memory poolKey) {
         // Deploy Uniswap v3 pool
         UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
-        IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
+        IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY).createPool(address(_tokenA), address(_tokenB), fee);
 
         poolKey = UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), fee);
     }
@@ -378,7 +380,7 @@ contract OracleInitializeTest is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -480,20 +482,20 @@ contract OracleGetPrice is Test, Oracle {
     );
 
     INonfungiblePositionManager positionManager =
-        INonfungiblePositionManager(AddressesHyperEVM.ADDR_UNISWAPV3_POSITION_MANAGER);
-    ISwapRouter swapRouter = ISwapRouter(AddressesHyperEVM.ADDR_UNISWAPV3_SWAP_ROUTER);
+        INonfungiblePositionManager(AddressesMegaETHTest.ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter swapRouter = ISwapRouter(AddressesMegaETHTest.ADDR_UNISWAPV3_SWAP_ROUTER);
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
     UniswapPoolAddress.PoolKey private _poolKey;
 
-    constructor() Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
 
     function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
-        vm.createSelectFork("hyperevm", 5067127);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -512,30 +514,21 @@ contract OracleGetPrice is Test, Oracle {
 
     function test_getPriceNotInitialized() public {
         vm.expectRevert(Oracle.OracleNotInitialized.selector);
-        _oracle.getPrice(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.getPrice(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_updateOracleStateNotInitialized() public {
         vm.expectRevert(Oracle.OracleNotInitialized.selector);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_getPriceNoTWAP() public returns (int64 tickPriceX42) {
-        // At block 5067128 the WHYPE-USDT0 oracle is updated
+        // Use freshly created mock token pool which has no TWAP history
+        // setUp already initialized the oracle for _tokenA/_tokenB with cardinality increase
 
-        // The time of the mainnet fork is suitable chosen to
-        vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
-        _oracle.initialize(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
 
-        tickPriceX42 = _oracle.getPrice(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
-
-        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
-            AddressesHyperEVM.ADDR_WHYPE,
-            AddressesHyperEVM.ADDR_USDT0,
-            10000
-        );
-        address uniswapPool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+        address uniswapPool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, _poolKey);
         (, int24 tick, uint16 observationIndex, uint16 observationCardinality, , , ) = IUniswapV3Pool(uniswapPool)
             .slot0();
         (uint32 blockTimestampOldest, , , ) = IUniswapV3Pool(uniswapPool).observations(observationIndex);
@@ -547,14 +540,12 @@ contract OracleGetPrice is Test, Oracle {
     }
 
     function test_updateOracleStateNoTWAP() public {
-        // The time of the mainnet fork is suitable chosen to
-        vm.expectEmit();
-        emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
-        _oracle.initialize(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        // Use freshly created mock token pool which has no TWAP history
+        // setUp already initialized the oracle for _tokenA/_tokenB
 
-        (int64 tickPriceX42, ) = _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        (int64 tickPriceX42, ) = _oracle.updateOracleState(address(_tokenA), address(_tokenB));
 
-        assertEq(tickPriceX42, _oracle.getPrice(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0));
+        assertEq(tickPriceX42, _oracle.getPrice(address(_tokenA), address(_tokenB)));
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -574,7 +565,7 @@ contract OracleGetPrice is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -632,20 +623,20 @@ contract OracleGetPriceTWAP is Test, Oracle {
     );
 
     INonfungiblePositionManager positionManager =
-        INonfungiblePositionManager(AddressesHyperEVM.ADDR_UNISWAPV3_POSITION_MANAGER);
-    ISwapRouter swapRouter = ISwapRouter(AddressesHyperEVM.ADDR_UNISWAPV3_SWAP_ROUTER);
+        INonfungiblePositionManager(AddressesMegaETHTest.ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter swapRouter = ISwapRouter(AddressesMegaETHTest.ADDR_UNISWAPV3_SWAP_ROUTER);
     Oracle private _oracle;
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
     UniswapPoolAddress.PoolKey private _poolKey;
 
-    constructor() Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
 
     function setUp() public {
         // Fork at a later block for TWAP testing
-        vm.createSelectFork("hyperevm", 13300922);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -662,30 +653,30 @@ contract OracleGetPriceTWAP is Test, Oracle {
         _oracle.initialize(address(_tokenA), address(_tokenB));
     }
 
-    function test_getPriceUSDT0AndWHYPE() public {
-        // Initialize oracle for WHYPE/USDT0
-        Oracle oracleForMainnetTokens = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
-        oracleForMainnetTokens.initialize(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+    function test_getPriceUSDCAndWETH() public {
+        // Initialize oracle for WETH/USDC
+        Oracle oracleForMainnetTokens = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracleForMainnetTokens.initialize(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
 
         int64 tickPriceX42 = oracleForMainnetTokens.getPrice(
-            AddressesHyperEVM.ADDR_WHYPE,
-            AddressesHyperEVM.ADDR_USDT0
+            AddressesMegaETHTest.ADDR_WETH,
+            AddressesMegaETHTest.ADDR_USDC
         );
         (int64 tickPriceX42_, ) = oracleForMainnetTokens.updateOracleState(
-            AddressesHyperEVM.ADDR_WHYPE,
-            AddressesHyperEVM.ADDR_USDT0
+            AddressesMegaETHTest.ADDR_WETH,
+            AddressesMegaETHTest.ADDR_USDC
         );
         assertEq(tickPriceX42, tickPriceX42_);
 
-        /** Notice that to compute the actual price of HYPE/USDT0 we would do
-                1 Hype = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDT0
+        /** Notice that to compute the actual price of WETH/USDC we would do
+                1 WETH = 10^18 * 1.0001^(tickPriceX42/2^42) * 10^-6 USDC
             because of the decimals.
          */
         int128 log2TickBase = ABDKMath64x64.divu(10001, 10000).log_2(); // log_2(1.0001)
         int128 tickPriceX64 = ABDKMath64x64.divi(tickPriceX42, 2 ** 42);
-        uint HYPEdivUSDT0 = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
+        uint WETHdivUSDC = tickPriceX64.mul(log2TickBase).exp_2().mul(ABDKMath64x64.fromUInt(10 ** 12)).toUInt();
 
-        assertEq(HYPEdivUSDT0, 50); // Price of HYPE on Sep-8-2025 rounded to 2 digits
+        assertEq(WETHdivUSDC, 3018); // Price of WETH on Prism testnet at block 5655720
     }
 
     function testFuzz_getPriceTruncated(uint16 periodTick0) public {
@@ -772,7 +763,7 @@ contract OracleGetPriceTWAP is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -837,7 +828,7 @@ contract OracleGetPriceTWAP is Test, Oracle {
 
         // Get the pool
         address pool = UniswapPoolAddress.computeAddress(
-            AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY,
+            AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY,
             UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), feeTier)
         );
 
@@ -860,8 +851,8 @@ contract OracleGetPriceTWAP is Test, Oracle {
     }
 
     // Callback for Uniswap V3 pool swaps - required when using pool.swap directly
-    // HyperEVM uses "hyperswapV3SwapCallback" instead of "hyperswapV3SwapCallback"
-    function hyperswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+    // Standard Uniswap V3 callback (WarpX uses standard Uniswap interface)
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
         // Decode the token that was swapped in
         MockERC20 tokenIn = abi.decode(data, (MockERC20));
 
@@ -883,22 +874,40 @@ contract OracleProbingFeeTiers is Test, Oracle {
     );
 
     INonfungiblePositionManager positionManager =
-        INonfungiblePositionManager(AddressesHyperEVM.ADDR_UNISWAPV3_POSITION_MANAGER);
-    ISwapRouter swapRouter = ISwapRouter(AddressesHyperEVM.ADDR_UNISWAPV3_SWAP_ROUTER);
+        INonfungiblePositionManager(AddressesMegaETHTest.ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter swapRouter = ISwapRouter(AddressesMegaETHTest.ADDR_UNISWAPV3_SWAP_ROUTER);
     Oracle private _oracle;
-    MockERC20 private usdt0 = MockERC20(AddressesHyperEVM.ADDR_USDT0);
-    IWETH9 private whype = IWETH9(AddressesHyperEVM.ADDR_WHYPE);
+    MockERC20 private usdt0 = MockERC20(AddressesMegaETHTest.ADDR_USDC);
+    IWETH9 private weth = IWETH9(AddressesMegaETHTest.ADDR_WETH);
 
     uint24 newFeeTier = 69;
 
-    constructor() Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
 
     function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
-        _oracle.initialize(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0); // It picks feeTier = 3000
+        // Create missing pools (500 and 10000 fee tiers don't exist on Prism testnet)
+        _createPoolIfMissing(500);
+        _createPoolIfMissing(10000);
+
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        _oracle.initialize(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC); // It picks feeTier = 3000
+    }
+
+    function _createPoolIfMissing(uint24 fee) private {
+        UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
+            AddressesMegaETHTest.ADDR_WETH,
+            AddressesMegaETHTest.ADDR_USDC,
+            fee
+        );
+        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+        if (pool.code.length == 0) {
+            // Use same price as existing 3000 pool
+            uint160 sqrtPriceX96 = 4353063810814844835180845;
+            positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
+        }
     }
 
     function test_nextFeeTierNotProbed() public {
@@ -912,7 +921,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         // Retrieve/store price but do NOT PROBE tier
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(3000, 0, 0, 0);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_nextFeeTierProbedAndSwitched() public {
@@ -931,7 +940,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         emit UniswapOracleProbed(10000, 0, 0, 0);
         vm.expectEmit();
         emit OracleFeeTierChanged(3000, 10000);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_newFeeTierProbedAndNotSwitched() public {
@@ -942,7 +951,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         // Probe new tier
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(newFeeTier, 0, 0, 0);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_newFeeTierProbedAndSwitched() public {
@@ -955,7 +964,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         emit UniswapOracleProbed(newFeeTier, 0, 0, 0);
         vm.expectEmit();
         emit OracleFeeTierChanged(3000, newFeeTier);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_newFeeTierProbedAndSwitchedAndNextProbedTierIsCorrect() public {
@@ -968,7 +977,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         emit UniswapOracleProbed(69, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(100, 0, 0, 0);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_newFeeTierProbedAndCardinalityIncreased() public returns (uint256 tokenId, uint128 liquidity) {
@@ -981,7 +990,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         emit UniswapOracleProbed(3000, 0, 0, 0); // Oracle probes tier 100 next
         vm.expectEmit();
         emit IncreaseObservationCardinalityNext(1, 1 + CARDINALITY_DELTA);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_RevertWhen_NewFeeTierProbedAndCardinalityNotIncreased() public {
@@ -994,7 +1003,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         emit UniswapOracleProbed(500, 0, 0, 0);
         vm.expectEmit(true, true, true, false);
         emit UniswapOracleProbed(newFeeTier, 0, 0, 0);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     function test_newFeeTierProbedAndCardinalityIncreasedAgain() public {
@@ -1002,13 +1011,13 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
         // Cycle through all fee tiers until we are back to newFeeTier
         skip(DURATION_UPDATE_FEE_TIER);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0); // Probe tier 100
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC); // Probe tier 100
         skip(DURATION_UPDATE_FEE_TIER);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0); // Probe tier 500
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC); // Probe tier 500
         skip(DURATION_UPDATE_FEE_TIER);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0); // Probe current tier 3000
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC); // Probe current tier 3000
         skip(DURATION_UPDATE_FEE_TIER);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0); // Probe tier 10000
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC); // Probe tier 10000
         skip(DURATION_UPDATE_FEE_TIER);
 
         // Refresh entire TWAP memory
@@ -1022,7 +1031,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
         vm.expectEmit();
         emit IncreaseObservationCardinalityNext(1 + 1 * CARDINALITY_DELTA, 1 + 2 * CARDINALITY_DELTA);
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -1039,11 +1048,11 @@ contract OracleProbingFeeTiers is Test, Oracle {
         {
             // Get sqrtPriceX96
             UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
-                AddressesHyperEVM.ADDR_WHYPE,
-                AddressesHyperEVM.ADDR_USDT0,
+                AddressesMegaETHTest.ADDR_WETH,
+                AddressesMegaETHTest.ADDR_USDC,
                 fee
             );
-            address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
             int24 tick;
             (sqrtPriceX96, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
 
@@ -1053,39 +1062,40 @@ contract OracleProbingFeeTiers is Test, Oracle {
             maxTick = ((tick + 100) / tickSpac) * tickSpac;
         }
 
-        // Compute amounts - Note: token0 is WHYPE (lower address), token1 is USDT0 (higher address)
-        (uint256 amountWHYPE, uint256 amountUSDT0) = LiquidityAmounts.getAmountsForLiquidity(
+        // Compute amounts - Note: token0 is WETH (lower address), token1 is USDC (higher address)
+        (uint256 amountWETH, uint256 amountUSDC) = LiquidityAmounts.getAmountsForLiquidity(
             sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(minTick),
             TickMath.getSqrtRatioAtTick(maxTick),
             liquidity
         );
 
-        if (amountUSDT0 != 0 || amountWHYPE != 0) {
-            // Mint mock tokens
-            if (amountUSDT0 != 0) {
-                uint256 balanceUSDT0 = usdt0.balanceOf(address(this));
-                vm.prank(AddressesHyperEVM.ADDR_USDT0_MINTER);
-                usdt0.mint(address(this), balanceUSDT0 < amountUSDT0 ? amountUSDT0 - balanceUSDT0 : 0);
-                usdt0.approve(address(positionManager), amountUSDT0);
+        if (amountUSDC != 0 || amountWETH != 0) {
+            // Deal tokens
+            if (amountUSDC != 0) {
+                uint256 balanceUSDC = usdt0.balanceOf(address(this));
+                if (balanceUSDC < amountUSDC) {
+                    deal(address(usdt0), address(this), amountUSDC);
+                }
+                usdt0.approve(address(positionManager), amountUSDC);
             }
 
-            if (amountWHYPE != 0) {
-                vm.deal(address(this), amountWHYPE);
-                whype.deposit{value: amountWHYPE}();
-                whype.approve(address(positionManager), amountWHYPE);
+            if (amountWETH != 0) {
+                vm.deal(address(this), amountWETH);
+                weth.deposit{value: amountWETH}();
+                weth.approve(address(positionManager), amountWETH);
             }
 
             // Add liquidity
             (tokenId, liquidityAdj, , ) = positionManager.mint(
                 INonfungiblePositionManager.MintParams({
-                    token0: address(whype), // WHYPE is token0 (lower address)
-                    token1: address(usdt0), // USDT0 is token1 (higher address)
+                    token0: address(weth), // WETH is token0 (lower address)
+                    token1: address(usdt0), // USDC is token1 (higher address)
                     fee: fee,
                     tickLower: minTick,
                     tickUpper: maxTick,
-                    amount0Desired: amountWHYPE, // amount0 for token0 (WHYPE)
-                    amount1Desired: amountUSDT0, // amount1 for token1 (USDT0)
+                    amount0Desired: amountWETH, // amount0 for token0 (WETH)
+                    amount1Desired: amountUSDC, // amount1 for token1 (USDC)
                     amount0Min: 0,
                     amount1Min: 0,
                     recipient: address(this),
@@ -1101,8 +1111,8 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
         // Create and initialize Uniswap v3 pool
         UniswapPoolAddress.PoolKey memory poolKey = UniswapPoolAddress.getPoolKey(
-            AddressesHyperEVM.ADDR_WHYPE,
-            AddressesHyperEVM.ADDR_USDT0,
+            AddressesMegaETHTest.ADDR_WETH,
+            AddressesMegaETHTest.ADDR_USDC,
             fee
         );
         positionManager.createAndInitializePoolIfNecessary(poolKey.token0, poolKey.token1, fee, sqrtPriceX96);
@@ -1116,8 +1126,8 @@ contract OracleProbingFeeTiers is Test, Oracle {
         uint128 liquidity = 2 ** 70;
 
         // Enable it in Uniswap v3
-        vm.startPrank(AddressesHyperEVM.ADDR_UNISWAPV3_OWNER);
-        IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(newFeeTier, newTickSpacing);
+        vm.startPrank(AddressesMegaETHTest.ADDR_UNISWAPV3_OWNER);
+        IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY).enableFeeAmount(newFeeTier, newTickSpacing);
         vm.stopPrank();
 
         // Enable it in the oracle
@@ -1126,7 +1136,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
         console.log("--------------");
         // Probe tier 10000 (last tier in the list)
-        _oracle.updateOracleState(AddressesHyperEVM.ADDR_WHYPE, AddressesHyperEVM.ADDR_USDT0);
+        _oracle.updateOracleState(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
         skip(DURATION_UPDATE_FEE_TIER);
 
         // Create pool and add liquidity
@@ -1139,10 +1149,10 @@ contract OracleProbingFeeTiers is Test, Oracle {
 /////////////////////////////////////////////
 
 contract UniswapHandler is Test {
-    IUniswapV3Factory private constant _uniswapFactory = IUniswapV3Factory(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+    IUniswapV3Factory private constant _uniswapFactory = IUniswapV3Factory(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
     INonfungiblePositionManager private constant _positionManager =
-        INonfungiblePositionManager(AddressesHyperEVM.ADDR_UNISWAPV3_POSITION_MANAGER);
-    ISwapRouter private constant _swapRouter = ISwapRouter(AddressesHyperEVM.ADDR_UNISWAPV3_SWAP_ROUTER);
+        INonfungiblePositionManager(AddressesMegaETHTest.ADDR_UNISWAPV3_POSITION_MANAGER);
+    ISwapRouter private constant _swapRouter = ISwapRouter(AddressesMegaETHTest.ADDR_UNISWAPV3_SWAP_ROUTER);
     MockERC20 private immutable _tokenA;
     MockERC20 private immutable _tokenB;
 
@@ -1177,7 +1187,7 @@ contract UniswapHandler is Test {
             address(_tokenB),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinalityNext);
     }
 
@@ -1189,7 +1199,7 @@ contract UniswapHandler is Test {
 
         int24 tickSpacing = int24(_bound(tickSpacingUint, 1, 16384 - 1));
 
-        vm.prank(AddressesHyperEVM.ADDR_UNISWAPV3_OWNER);
+        vm.prank(AddressesMegaETHTest.ADDR_UNISWAPV3_OWNER);
         _uniswapFactory.enableFeeAmount(fee, tickSpacing);
 
         feeTiers.push(fee);
@@ -1205,7 +1215,7 @@ contract UniswapHandler is Test {
             address(_tokenB),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
         if (pool.code.length > 0) return; // already instantiated
 
         sqrtPriceX96 = uint160(_bound(sqrtPriceX96, TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO - 1));
@@ -1232,7 +1242,7 @@ contract UniswapHandler is Test {
                 address(_tokenB),
                 feeTier
             );
-            address pool = UniswapPoolAddress.computeAddress(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
             (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
             int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
@@ -1390,7 +1400,7 @@ contract SirOracleHandler is Test {
 
         _oracleInvariantTest = IOracleInvariantTest(msg.sender);
         _uniswapHandler = uniswapHandler_;
-        oracle = new Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
         oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
@@ -1434,10 +1444,10 @@ contract OracleInvariantTest is Test, Oracle {
 
     uint40 private _currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
 
-    constructor() Oracle(AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
 
     function setUp() public {
-        vm.createSelectFork("hyperevm", 12523857);
+        vm.createSelectFork("megatest_alchemy", 5655720);
         _currentTime = uint40(block.timestamp);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);

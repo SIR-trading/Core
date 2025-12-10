@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import "forge-std/Test.sol";
 import {TEA} from "src/TEA.sol";
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
 import {VaultExternal} from "src/libraries/VaultExternal.sol";
 import {ERC1155TokenReceiver} from "solmate/tokens/ERC1155.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
@@ -33,13 +33,13 @@ contract TEAInstance is TEA, TEATestConstants {
         }
 
         _paramsById[VAULT_ID] = SirStructs.VaultParameters({
-            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            debtToken: AddressesMegaETHTest.ADDR_USDC,
             collateralToken: collateral_,
             leverageTier: LEVERAGE_TIER
         });
 
         _paramsById[MAX_VAULT_ID] = SirStructs.VaultParameters({
-            debtToken: AddressesHyperEVM.ADDR_USDT0,
+            debtToken: AddressesMegaETHTest.ADDR_USDC,
             collateralToken: collateral_,
             leverageTier: LEVERAGE_TIER
         });
@@ -90,7 +90,7 @@ contract TEATest is Test, TEATestConstants {
     address charlie;
 
     function setUp() public {
-        // vm.createSelectFork("hyperevm", 12523857);
+        // vm.createSelectFork("megatest_alchemy", 5655720);
 
         collateral = new MockERC20("Collateral token", "TKN", DECIMALS);
         tea = new TEAInstance(address(collateral));
@@ -112,16 +112,16 @@ contract TEATest is Test, TEATestConstants {
         assertEq(
             tea.uri(VAULT_ID),
             string.concat(
-                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20HyperAPE-",
+                "data:application/json;charset=UTF-8,%7B%22name%22%3A%22LP%20Token%20for%20MegaAPE-",
                 vm.toString(VAULT_ID),
-                "%22%2C%22symbol%22%3A%22HyperTEA",
+                "%22%2C%22symbol%22%3A%22MegaTEA",
                 vm.toString(VAULT_ID),
                 "%22%2C%22decimals%22%3A",
                 vm.toString(DECIMALS),
                 "%2C%22chain_id%22%3A1%2C%22vault_id%22%3A",
                 vm.toString(VAULT_ID),
                 "%2C%22debt_token%22%3A%22",
-                vm.toString(abi.encodePacked(AddressesHyperEVM.ADDR_USDT0)),
+                vm.toString(abi.encodePacked(AddressesMegaETHTest.ADDR_USDC)),
                 "%22%2C%22collateral_token%22%3A%22",
                 vm.toString(abi.encodePacked(address(collateral))),
                 "%22%2C%22leverage_tier%22%3A",

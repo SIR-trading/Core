@@ -3,8 +3,8 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
+import {AddressesMegaETH} from "src/libraries/AddressesMegaETH.sol";
 import {Oracle} from "src/Oracle.sol";
 import {SystemControl} from "src/SystemControl.sol";
 import {Contributors} from "src/Contributors.sol";
@@ -14,11 +14,11 @@ import {APE} from "src/APE.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {AllocationsHelper} from "./AllocationsHelper.sol";
 
-/** @dev cli for HyperEVM testnet with big blocks:
-        forge script script/DeployCore.s.sol --rpc-url hypertest --chain 998 --broadcast --ledger --hd-paths $HD_PATH
-    @dev cli for HyperEVM mainnet with big blocks:
-        forge script script/DeployCore.s.sol --rpc-url hyperevm --chain 999 --broadcast --ledger --hd-paths $HD_PATH  \
-        --with-gas-price 0.8gwei --priority-gas-price 0.1gwei --slow --verify --etherscan-api-key $API_KEY
+/** @dev cli for MegaETH testnet:
+        forge script script/DeployCore.s.sol --rpc-url megatest --chain 6343 --broadcast --ledger --hd-paths $HD_PATH
+    @dev cli for MegaETH mainnet:
+        forge script script/DeployCore.s.sol --rpc-url megaeth --broadcast --ledger --hd-paths $HD_PATH  \
+        --slow --verify --etherscan-api-key $API_KEY
     @dev Steps:
         1. Deploy Oracle.sol
         2. Deploy SystemControl.sol
@@ -31,8 +31,8 @@ import {AllocationsHelper} from "./AllocationsHelper.sol";
 */
 contract DeployCore is AllocationsHelper {
     function setUp() public view {
-        if (block.chainid != 998 && block.chainid != 999) {
-            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
+        if (block.chainid != 6343) {
+            revert("Only MegaETH testnet (chain 6343) is currently supported");
         }
     }
 
@@ -41,14 +41,14 @@ contract DeployCore is AllocationsHelper {
 
         // Get the correct addresses based on chain
         address uniswapFactory;
-        address whype;
+        address weth;
 
-        if (block.chainid == 998) {
-            uniswapFactory = AddressesHyperEVMTest.ADDR_UNISWAPV3_FACTORY;
-            whype = AddressesHyperEVMTest.ADDR_WHYPE;
+        if (block.chainid == 6343) {
+            uniswapFactory = AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY;
+            weth = AddressesMegaETHTest.ADDR_WETH;
         } else {
-            uniswapFactory = AddressesHyperEVM.ADDR_UNISWAPV3_FACTORY;
-            whype = AddressesHyperEVM.ADDR_WHYPE;
+            uniswapFactory = AddressesMegaETH.ADDR_UNISWAPV3_FACTORY;
+            weth = AddressesMegaETH.ADDR_WETH;
         }
 
         // Deploy oracle
@@ -64,7 +64,7 @@ contract DeployCore is AllocationsHelper {
         console.log("Contributors deployed at: ", contributors);
 
         // Deploy SIR
-        address payable sir = payable(address(new SIR(contributors, whype, systemControl)));
+        address payable sir = payable(address(new SIR(contributors, weth, systemControl)));
         console.log("SIR deployed at: ", sir);
 
         // Deploy APE implementation
@@ -72,7 +72,7 @@ contract DeployCore is AllocationsHelper {
         console.log("APE implementation deployed at: ", apeImplementation);
 
         // Deploy Vault
-        address vault = address(new Vault(systemControl, sir, oracle, apeImplementation, whype));
+        address vault = address(new Vault(systemControl, sir, oracle, apeImplementation, weth));
         console.log("Vault deployed at: ", vault);
 
         // Initialize SIR

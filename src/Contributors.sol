@@ -6,9 +6,8 @@ contract Contributors {
      *  LP allocation: 70%
      *
      *  Breakdown:
-     *  - 25% to SIR holders (proportional to total SIR including unissued)
-     *  - 1% to Hypurr NFT holders (proportional to NFT count)
-     *  - Between 1% and 5% to HyperEVM contributors and treasury
+     *  - 30% to SIR holders on Ethereum and HyperEVM
+     *  - 70% to Lpers
      *  Sum of all allocations must be equal to type(uint56).max.
      */
 

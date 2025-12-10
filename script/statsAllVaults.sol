@@ -4,33 +4,33 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 // import "forge-std/console.sol";
 
-import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
-import {AddressesHyperEVM} from "src/libraries/AddressesHyperEVM.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
+import {AddressesMegaETH} from "src/libraries/AddressesMegaETH.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemConstants} from "src/libraries/SystemConstants.sol";
 import {Vault} from "src/Vault.sol";
 import {IERC20} from "v2-core/interfaces/IERC20.sol";
 import {AddressClone} from "src/libraries/AddressClone.sol";
 
-/** @dev cli for HyperEVM testnet: forge script script/statsAllVaults.sol --rpc-url hypertest --chain 998 --broadcast
-    @dev cli for HyperEVM mainnet: forge script script/statsAllVaults.sol --rpc-url hyperevm --chain 999 --broadcast --ledger
+/** @dev cli for MegaETH testnet: forge script script/statsAllVaults.sol --rpc-url megatest --chain 6343 --broadcast
+    @dev cli for MegaETH mainnet: forge script script/statsAllVaults.sol --rpc-url megaeth --broadcast --ledger
 */
 contract statsAllVaults is Script {
     Vault vault;
 
     function setUp() public {
-        if (block.chainid != 998 && block.chainid != 999) {
-            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
+        if (block.chainid != 6343) {
+            revert("Only MegaETH testnet (chain 6343) is currently supported");
         }
 
         vault = Vault(vm.envAddress("VAULT"));
     }
 
     function run() public {
-        if (block.chainid == 998) {
+        if (block.chainid == 6343) {
             vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
         } else {
-            // Chain 999 - use ledger
+            // MegaETH mainnet - use ledger
             vm.startBroadcast();
         }
 
@@ -41,14 +41,14 @@ contract statsAllVaults is Script {
 
         console.log("");
         console.log("");
-        console.log("------ WHYPE Total Reserves ------");
+        console.log("------ WETH Total Reserves ------");
         console.log("");
-        address whype = block.chainid == 998 ? AddressesHyperEVMTest.ADDR_WHYPE : AddressesHyperEVM.ADDR_WHYPE;
-        uint256 whypeReserves = vault.totalReserves(whype);
-        console.log("WHYPE reserves:", whypeReserves);
+        address weth = block.chainid == 6343 ? AddressesMegaETHTest.ADDR_WETH : AddressesMegaETH.ADDR_WETH;
+        uint256 wethReserves = vault.totalReserves(weth);
+        console.log("WETH reserves:", wethReserves);
         console.log(
-            "WHYPE fees:",
-            IERC20(whype).balanceOf(address(vault)) - whypeReserves
+            "WETH fees:",
+            IERC20(weth).balanceOf(address(vault)) - wethReserves
         );
 
         // Check vaults

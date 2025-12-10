@@ -3,29 +3,29 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 
-import {AddressesHyperEVMTest} from "src/libraries/AddressesHyperEVMTest.sol";
+import {AddressesMegaETHTest} from "src/libraries/AddressesMegaETHTest.sol";
 import {SirStructs} from "src/libraries/SirStructs.sol";
 import {SystemControl} from "src/SystemControl.sol";
 
-/** @dev cli for HyperEVM testnet: forge script script/ChangeLiquidityMining.s.sol --rpc-url hypertest --chain 998 --broadcast
-    @dev cli for HyperEVM mainnet: forge script script/ChangeLiquidityMining.s.sol --rpc-url hyperevm --chain 999 --broadcast --ledger
+/** @dev cli for MegaETH testnet: forge script script/ChangeLiquidityMining.s.sol --rpc-url megatest --chain 6343 --broadcast
+    @dev cli for MegaETH mainnet: forge script script/ChangeLiquidityMining.s.sol --rpc-url megaeth --broadcast --ledger
 */
 contract ChangeLiquidityMining is Script {
     SystemControl systemControl;
 
     function setUp() public {
-        if (block.chainid != 998 && block.chainid != 999) {
-            revert("Only HyperEVM testnet (chain 998) and mainnet (chain 999) are supported");
+        if (block.chainid != 6343) {
+            revert("Only MegaETH testnet (chain 6343) is currently supported");
         }
 
         systemControl = SystemControl(vm.envAddress("SYSTEM_CONTROL"));
     }
 
     function run() public {
-        if (block.chainid == 998) {
+        if (block.chainid == 6343) {
             vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
         } else {
-            // Chain 999 - use ledger
+            // MegaETH mainnet - use ledger
             vm.startBroadcast();
         }
 
