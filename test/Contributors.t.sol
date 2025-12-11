@@ -17,7 +17,7 @@ contract ContributorsTest is Test {
         vm.assume(caller != owner);
 
         address[] memory addr = new address[](1);
-        uint56[] memory alloc = new uint56[](1);
+        uint24[] memory alloc = new uint24[](1);
         addr[0] = vm.addr(1);
         alloc[0] = 1000;
 
@@ -27,11 +27,11 @@ contract ContributorsTest is Test {
     }
 
     function test_allocateRevertsWhenExhausted() public {
-        // First allocate uint56.max to one user
+        // First allocate uint24.max to one user
         address[] memory addr1 = new address[](1);
-        uint56[] memory alloc1 = new uint56[](1);
+        uint24[] memory alloc1 = new uint24[](1);
         addr1[0] = vm.addr(1);
-        alloc1[0] = type(uint56).max;
+        alloc1[0] = type(uint24).max;
 
         contributors.allocate(addr1, alloc1);
 
@@ -41,7 +41,7 @@ contract ContributorsTest is Test {
         // Try to allocate to another user - should revert
         // Note: The contract has a require(remainingAllocation_ > 0) check that reverts without data
         address[] memory addr2 = new address[](1);
-        uint56[] memory alloc2 = new uint56[](1);
+        uint24[] memory alloc2 = new uint24[](1);
         addr2[0] = vm.addr(2);
         alloc2[0] = 1;
 
@@ -50,19 +50,19 @@ contract ContributorsTest is Test {
     }
 
     function test_allocateRevertsWhenExceedingMax() public {
-        // Try to allocate more than uint56.max in a single allocation
+        // Try to allocate more than uint24.max in a single allocation
         address[] memory addr = new address[](2);
-        uint56[] memory alloc = new uint56[](2);
+        uint24[] memory alloc = new uint24[](2);
         addr[0] = vm.addr(1);
         addr[1] = vm.addr(2);
-        alloc[0] = type(uint56).max;
+        alloc[0] = type(uint24).max;
         alloc[1] = 1; // This will cause overflow
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 Contributors.InsufficientRemainingAllocation.selector,
-                uint56(1),
-                uint56(0)
+                uint24(1),
+                uint24(0)
             )
         );
         contributors.allocate(addr, alloc);
@@ -70,7 +70,7 @@ contract ContributorsTest is Test {
 
     function test_allocateRevertsOnArrayMismatch() public {
         address[] memory addr = new address[](2);
-        uint56[] memory alloc = new uint56[](1);
+        uint24[] memory alloc = new uint24[](1);
         addr[0] = vm.addr(1);
         addr[1] = vm.addr(2);
         alloc[0] = 1000;
@@ -81,7 +81,7 @@ contract ContributorsTest is Test {
 
     function test_allocateRevertsOnZeroAddress() public {
         address[] memory addr = new address[](1);
-        uint56[] memory alloc = new uint56[](1);
+        uint24[] memory alloc = new uint24[](1);
         addr[0] = address(0);
         alloc[0] = 1000;
 
@@ -92,7 +92,7 @@ contract ContributorsTest is Test {
     function test_allocateRevertsOnDuplicateAllocation() public {
         // First allocation succeeds
         address[] memory addr1 = new address[](1);
-        uint56[] memory alloc1 = new uint56[](1);
+        uint24[] memory alloc1 = new uint24[](1);
         addr1[0] = vm.addr(1);
         alloc1[0] = 1000;
 
@@ -100,7 +100,7 @@ contract ContributorsTest is Test {
 
         // Second allocation to same address should revert
         address[] memory addr2 = new address[](1);
-        uint56[] memory alloc2 = new uint56[](1);
+        uint24[] memory alloc2 = new uint24[](1);
         addr2[0] = vm.addr(1);
         alloc2[0] = 500;
 
@@ -115,7 +115,7 @@ contract ContributorsTest is Test {
 
     function test_allocateRevertsOnEmptyArray() public {
         address[] memory addr = new address[](0);
-        uint56[] memory alloc = new uint56[](0);
+        uint24[] memory alloc = new uint24[](0);
 
         vm.expectRevert(Contributors.EmptyArray.selector);
         contributors.allocate(addr, alloc);
@@ -123,18 +123,86 @@ contract ContributorsTest is Test {
 
     function test_allocateSucceeds() public {
         address[] memory addr = new address[](2);
-        uint56[] memory alloc = new uint56[](2);
+        uint24[] memory alloc = new uint24[](2);
         addr[0] = vm.addr(1);
         addr[1] = vm.addr(2);
         alloc[0] = 1000;
         alloc[1] = 2000;
 
-        uint56 initialRemaining = contributors.remainingAllocation();
+        uint24 initialRemaining = contributors.remainingAllocation();
 
         contributors.allocate(addr, alloc);
 
         assertEq(contributors.allocations(vm.addr(1)), 1000);
         assertEq(contributors.allocations(vm.addr(2)), 2000);
         assertEq(contributors.remainingAllocation(), initialRemaining - 3000);
+    }
+
+    function test_packedStorageMultipleSlots() public {
+        // Test that allocations span multiple storage slots correctly
+        // Each slot holds 10 uint24 allocations
+        address[] memory addr = new address[](12);
+        uint24[] memory alloc = new uint24[](12);
+
+        for (uint256 i = 0; i < 12; i++) {
+            addr[i] = vm.addr(i + 1);
+            alloc[i] = uint24(100 * (i + 1));
+        }
+
+        contributors.allocate(addr, alloc);
+
+        // Verify all allocations
+        for (uint256 i = 0; i < 12; i++) {
+            assertEq(contributors.allocations(vm.addr(i + 1)), uint24(100 * (i + 1)));
+        }
+
+        // Verify contributor count
+        assertEq(contributors.contributorCount(), 12);
+
+        // Verify allocationAt function
+        for (uint256 i = 0; i < 12; i++) {
+            assertEq(contributors.allocationAt(i), uint24(100 * (i + 1)));
+        }
+    }
+
+    function test_packedStorageBoundary() public {
+        // Test allocations exactly at slot boundaries (10 allocations per slot)
+        address[] memory addr = new address[](20);
+        uint24[] memory alloc = new uint24[](20);
+
+        for (uint256 i = 0; i < 20; i++) {
+            addr[i] = vm.addr(i + 1);
+            alloc[i] = uint24(i + 1);
+        }
+
+        contributors.allocate(addr, alloc);
+
+        // Verify all allocations
+        for (uint256 i = 0; i < 20; i++) {
+            assertEq(contributors.allocations(vm.addr(i + 1)), uint24(i + 1));
+            assertEq(contributors.allocationAt(i), uint24(i + 1));
+        }
+
+        // Verify contributor count
+        assertEq(contributors.contributorCount(), 20);
+    }
+
+    function test_allocationAtOutOfBounds() public {
+        address[] memory addr = new address[](2);
+        uint24[] memory alloc = new uint24[](2);
+        addr[0] = vm.addr(1);
+        addr[1] = vm.addr(2);
+        alloc[0] = 1000;
+        alloc[1] = 2000;
+
+        contributors.allocate(addr, alloc);
+
+        // Out of bounds should return 0
+        assertEq(contributors.allocationAt(2), 0);
+        assertEq(contributors.allocationAt(100), 0);
+    }
+
+    function test_unallocatedAddressReturnsZero() public {
+        assertEq(contributors.allocations(vm.addr(999)), 0);
     }
 }

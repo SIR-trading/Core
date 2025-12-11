@@ -15,7 +15,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 import {AllocationsHelper} from "./AllocationsHelper.sol";
 
 /** @dev cli for MegaETH testnet:
-        forge script script/DeployCore.s.sol --rpc-url megatest --chain 6343 --broadcast --ledger --hd-paths $HD_PATH
+        forge script script/DeployCore.s.sol --rpc-url megatest --broadcast --private-key $PRIVATE_KEY --skip-simulation --gas-price 1000000 --gas-limit 100000000
     @dev cli for MegaETH mainnet:
         forge script script/DeployCore.s.sol --rpc-url megaeth --broadcast --ledger --hd-paths $HD_PATH  \
         --slow --verify --etherscan-api-key $API_KEY
@@ -83,18 +83,18 @@ contract DeployCore is AllocationsHelper {
         SystemControl(systemControl).initialize(vault, sir);
         console.log("SystemControl initialized.");
 
-        // Allocate contributors from JSON file
-        console.log("Starting contributor allocations...");
-        (uint256 totalAddresses, uint256 totalAllocations) = readAndAllocate(contributors);
+        // // Allocate contributors from JSON file
+        // console.log("Starting contributor allocations...");
+        // (uint256 totalAddresses, uint256 totalAllocations) = readAndAllocate(contributors);
 
-        // Verify all allocations are done
-        console.log("Total addresses allocated:", totalAddresses);
-        console.log("Total allocations sum:", totalAllocations);
-        uint56 remaining = Contributors(contributors).remainingAllocation();
-        console.log("Remaining allocation:", remaining);
-        require(remaining == 0, "Remaining allocation must be 0");
-        require(totalAllocations == uint256(type(uint56).max), "Total allocations must equal type(uint56).max");
-        console.log("All allocations completed successfully!");
+        // // Verify all allocations are done
+        // console.log("Total addresses allocated:", totalAddresses);
+        // console.log("Total allocations sum:", totalAllocations);
+        // uint24 remaining = Contributors(contributors).remainingAllocation();
+        // console.log("Remaining allocation:", remaining);
+        // require(remaining == 0, "Remaining allocation must be 0");
+        // require(totalAllocations == uint256(type(uint24).max), "Total allocations must equal type(uint24).max");
+        // console.log("All allocations completed successfully!");
 
         vm.stopBroadcast();
     }

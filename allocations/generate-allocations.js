@@ -2,32 +2,69 @@ const ethers = require("ethers");
 const fs = require("fs");
 const path = require("path");
 
-// Configuration
-const OLD_TREASURY = "0x686748764c5C7Aa06FEc784E60D14b650bF79129";
-const NEW_TREASURY = "0x5f84c79389a4d44A38a3bF81f9B8c1179e615cc8";
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
 
-// Allocation percentages (out of 100%)
-const LP_ALLOCATION = 70; // 70% to LPers (not in this contract)
-const SIR_HOLDER_ALLOCATION = 25; // 25% to SIR holders
-const HYPURR_HOLDER_ALLOCATION = 1; // 1% to Hypurr holders
-// Additional allocations from hyperevm-contributors.json (in basis points)
-// Remainder goes to treasury
+// Treasury addresses per chain (same owner, different addresses)
+const TREASURY = {
+    ethereum: "0x686748764c5C7Aa06FEc784E60D14b650bF79129",
+    hyperevm: "0x5f84c79389a4d44A38a3bF81f9B8c1179e615cc8",
+    megaeth: "0xbFb4D49C01dc40C53372D68d5F979a89811d8d6C"
+};
 
-// Load snapshot files
+// TVL weights for computing allocations (in USD)
+// These determine how much weight each chain's holdings get
+const TVL_WEIGHTS = {
+    sir: 80100, // $80.1k TVL for SIR on Ethereum
+    hyperSir: 18200 // $18.2k TVL for HyperSIR on HyperEVM
+};
+
+// Allocation percentages (out of 100% total issuance)
+const LP_ALLOCATION = 70; // 70% to LPers (not in this contract, handled separately)
+// Remaining 30% goes to contributors based on their SIR/HyperSIR holdings
+
+// =============================================================================
+// LOAD DATA FILES
+// =============================================================================
+
 const ethereumSnapshot = require("./ethereum-snapshot.json");
-const hypurrSnapshot = require("./hyperevm-hypurr-snapshot.json");
-const hyperevmContributors = require("./hyperevm-contributors.json");
+
+// Load HyperEVM snapshot if it exists
+let hyperevmSnapshot = null;
+try {
+    hyperevmSnapshot = require("./hyperevm-snapshot.json");
+} catch (e) {
+    // File doesn't exist yet - will be skipped in processing
+}
+
+// =============================================================================
+// ALLOCATIONS GENERATOR
+// =============================================================================
+
+const MAX_UINT24 = (1n << 24n) - 1n; // 16,777,215
 
 class AllocationsGenerator {
     constructor() {
-        this.allocations = new Map(); // address -> uint56 allocation
-        this.allocationBreakdowns = new Map(); // address -> {fromEthereum, fromHypurr, fromHyperEVMContributor, fromTreasury}
-        this.sources = new Map(); // address -> {ethereum, hypurr, hyperevmContributor}
-        this.totalSIR = 0n;
-        this.totalNFTs = 0;
+        // Maps MegaETH address -> allocation amount (BigInt)
+        this.allocations = new Map();
+
+        // Maps MegaETH address -> breakdown of sources
+        this.allocationBreakdowns = new Map();
+
+        // Maps MegaETH address -> source data for debugging/auditing
+        this.sources = new Map();
+
+        // Totals for weighting
+        this.totalWeightedValue = 0n;
+
+        // Track user weighted values before final allocation calculation
+        this.userWeightedValues = new Map();
     }
 
-    // Calculate total SIR for a user across all balance types
+    /**
+     * Calculate total SIR value for a user from Ethereum snapshot
+     */
     calculateUserTotalSIR(balanceData) {
         let total = 0n;
 
@@ -84,280 +121,242 @@ class AllocationsGenerator {
         return total;
     }
 
-    // Process ethereum snapshot to calculate SIR allocations
+    /**
+     * Process Ethereum snapshot - SIR holders
+     * Treasury on Ethereum gets treated as a regular user
+     */
     processEthereumSnapshot() {
-        console.log("Processing Ethereum snapshot...");
+        console.log("Processing Ethereum snapshot (SIR holders)...");
 
         const balances = ethereumSnapshot.balances;
         let totalSIR = 0n;
-        const userSIR = new Map(); // address -> total SIR
 
-        // Calculate total SIR for each user
         for (const [address, balanceData] of Object.entries(balances)) {
-            const userTotal = this.calculateUserTotalSIR(balanceData);
+            const userSIR = this.calculateUserTotalSIR(balanceData);
 
-            // Replace old treasury with new treasury
-            const finalAddress = address.toLowerCase() === OLD_TREASURY.toLowerCase() ? NEW_TREASURY : address;
+            if (userSIR > 0n) {
+                // Apply TVL weight
+                const weightedValue = (userSIR * BigInt(Math.floor(TVL_WEIGHTS.sir * 1e18))) / BigInt(1e18);
 
-            if (userTotal > 0n) {
-                // If new treasury already exists and we're adding old treasury, combine them
-                if (finalAddress.toLowerCase() === NEW_TREASURY.toLowerCase() && userSIR.has(NEW_TREASURY)) {
-                    userSIR.set(NEW_TREASURY, userSIR.get(NEW_TREASURY) + userTotal);
-                } else {
-                    userSIR.set(finalAddress, userTotal);
+                // Determine MegaETH address:
+                // - If this is the Ethereum treasury, map to MegaETH treasury
+                // - Otherwise, use same address (assumes same keys across chains)
+                let megaethAddress = address;
+                if (address.toLowerCase() === TREASURY.ethereum.toLowerCase()) {
+                    megaethAddress = TREASURY.megaeth;
                 }
-                totalSIR += userTotal;
+
+                // Add to user's weighted value
+                const existing = this.userWeightedValues.get(megaethAddress) || 0n;
+                this.userWeightedValues.set(megaethAddress, existing + weightedValue);
+
+                // Store source data
+                const sources = this.sources.get(megaethAddress) || {};
+                sources.ethereum = {
+                    originalAddress: address,
+                    sirBalance: userSIR.toString(),
+                    weightedValue: weightedValue.toString()
+                };
+                this.sources.set(megaethAddress, sources);
+
+                // Store breakdown
+                const breakdown = this.allocationBreakdowns.get(megaethAddress) || {
+                    fromEthereumSIR: 0n,
+                    fromHyperEVMSIR: 0n
+                };
+                breakdown.fromEthereumSIR = weightedValue;
+                this.allocationBreakdowns.set(megaethAddress, breakdown);
+
+                totalSIR += userSIR;
             }
         }
 
         this.totalSIR = totalSIR;
-        console.log(`Total SIR across all holders: ${ethers.formatUnits(totalSIR, 12)} SIR`);
-        console.log(`Number of unique holders: ${userSIR.size}`);
+        console.log(`  Total SIR: ${ethers.formatUnits(totalSIR, 12)} SIR`);
+        console.log(`  Unique holders: ${this.userWeightedValues.size}`);
+    }
 
-        // Calculate allocations (25% of total issuance = 25/30 of contributor pool)
-        const MAX_UINT56 = (1n << 56n) - 1n;
-        const sirAllocationPool = (MAX_UINT56 * BigInt(SIR_HOLDER_ALLOCATION)) / 30n;
+    /**
+     * Process HyperEVM snapshot - HyperSIR holders
+     * Treasury on HyperEVM gets treated as a regular user
+     */
+    processHyperEVMSnapshot() {
+        console.log("\nProcessing HyperEVM snapshot (HyperSIR holders)...");
 
-        for (const [address, sirAmount] of userSIR.entries()) {
-            const allocation = (sirAllocationPool * sirAmount) / totalSIR;
-            this.allocations.set(address, allocation);
+        if (!hyperevmSnapshot) {
+            console.log("  [SKIPPED] hyperevm-snapshot.json not found");
+            console.log("  Run: node hyperevm-balance-snapshot.js to generate it");
+            return;
+        }
 
-            // Store breakdown
-            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
-            breakdown.fromEthereum = allocation;
-            this.allocationBreakdowns.set(address, breakdown);
+        const balances = hyperevmSnapshot.balances;
+        let totalHyperSIR = 0n;
 
-            // Store source data
-            const originalAddress = address === NEW_TREASURY ? OLD_TREASURY : address;
-            const balanceData = balances[originalAddress] || balances[address];
-            if (balanceData) {
-                const sources = this.sources.get(address) || {};
-                sources.ethereum = {
-                    ...balanceData,
-                    totalSIR: sirAmount.toString()
+        for (const [address, balanceData] of Object.entries(balances)) {
+            const userHyperSIR = this.calculateUserTotalSIR(balanceData);
+
+            if (userHyperSIR > 0n) {
+                // Apply TVL weight for HyperSIR
+                const weightedValue = (userHyperSIR * BigInt(Math.floor(TVL_WEIGHTS.hyperSir * 1e18))) / BigInt(1e18);
+
+                // Determine MegaETH address:
+                // - If this is the HyperEVM treasury, map to MegaETH treasury
+                // - Otherwise, use same address (assumes same keys across chains)
+                let megaethAddress = address;
+                if (address.toLowerCase() === TREASURY.hyperevm.toLowerCase()) {
+                    megaethAddress = TREASURY.megaeth;
+                }
+
+                // Add to user's weighted value
+                const existing = this.userWeightedValues.get(megaethAddress) || 0n;
+                this.userWeightedValues.set(megaethAddress, existing + weightedValue);
+
+                // Store source data
+                const sources = this.sources.get(megaethAddress) || {};
+                sources.hyperevm = {
+                    originalAddress: address,
+                    hyperSirBalance: userHyperSIR.toString(),
+                    weightedValue: weightedValue.toString()
                 };
-                this.sources.set(address, sources);
+                this.sources.set(megaethAddress, sources);
+
+                // Store breakdown
+                const breakdown = this.allocationBreakdowns.get(megaethAddress) || {
+                    fromEthereumSIR: 0n,
+                    fromHyperEVMSIR: 0n
+                };
+                breakdown.fromHyperEVMSIR = weightedValue;
+                this.allocationBreakdowns.set(megaethAddress, breakdown);
+
+                totalHyperSIR += userHyperSIR;
             }
         }
 
-        console.log(`SIR holder allocations calculated (${SIR_HOLDER_ALLOCATION}% of pool)`);
+        this.totalHyperSIR = totalHyperSIR;
+        console.log(`  Total HyperSIR: ${ethers.formatUnits(totalHyperSIR, 12)} HyperSIR`);
+        console.log(`  Unique holders: ${Object.keys(balances).length}`);
     }
 
-    // Process Hypurr snapshot to calculate NFT allocations
-    processHypurrSnapshot() {
-        console.log("\nProcessing Hypurr NFT snapshot...");
+    /**
+     * Calculate final allocations based on weighted values
+     * Distributes MAX_UINT24 proportionally to all users based on their weighted value
+     */
+    calculateFinalAllocations() {
+        console.log("\nCalculating final allocations...");
 
-        const balances = hypurrSnapshot.balances;
-        let totalNFTs = 0;
-
-        // Count total NFTs
-        for (const count of Object.values(balances)) {
-            totalNFTs += count;
+        // Calculate total weighted value across all users
+        let totalWeighted = 0n;
+        for (const value of this.userWeightedValues.values()) {
+            totalWeighted += value;
         }
+        this.totalWeightedValue = totalWeighted;
 
-        this.totalNFTs = totalNFTs;
-        console.log(`Total Hypurr NFTs: ${totalNFTs}`);
-        console.log(`Number of unique holders: ${Object.keys(balances).length}`);
+        console.log(`  Total weighted value: ${ethers.formatUnits(totalWeighted, 18)}`);
 
-        // Calculate allocations (1% of total issuance = 1/30 of contributor pool)
-        const MAX_UINT56 = (1n << 56n) - 1n;
-        const nftAllocationPool = (MAX_UINT56 * BigInt(HYPURR_HOLDER_ALLOCATION)) / 30n;
-
-        for (const [address, nftCount] of Object.entries(balances)) {
-            const allocation = (nftAllocationPool * BigInt(nftCount)) / BigInt(totalNFTs);
-
-            // Add to existing allocation if address already has SIR allocation
-            if (this.allocations.has(address)) {
-                this.allocations.set(address, this.allocations.get(address) + allocation);
-            } else {
-                this.allocations.set(address, allocation);
-            }
-
-            // Store breakdown
-            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
-            breakdown.fromHypurr = allocation;
-            this.allocationBreakdowns.set(address, breakdown);
-
-            // Store source data
-            const sources = this.sources.get(address) || {};
-            sources.hypurr = {
-                nftCount: nftCount
-            };
-            this.sources.set(address, sources);
-        }
-
-        console.log(`Hypurr holder allocations calculated (${HYPURR_HOLDER_ALLOCATION}% of pool)`);
-    }
-
-    // Process HyperEVM contributors with basis point allocations
-    processHyperEvmContributors() {
-        console.log("\nProcessing HyperEVM contributors...");
-
-        let totalBasisPoints = 0;
-
-        // Calculate total basis points
-        for (const basisPoints of Object.values(hyperevmContributors)) {
-            totalBasisPoints += basisPoints;
-        }
-
-        console.log(`Total basis points: ${totalBasisPoints} (${totalBasisPoints / 100}%)`);
-        console.log(`Number of contributors: ${Object.keys(hyperevmContributors).length}`);
-
-        // Calculate allocations
-        // Formula: basisPoints/10000 * type(uint56).max * 100/30
-        // This converts basis points (from total issuance) to contributor pool allocation
-        const MAX_UINT56 = (1n << 56n) - 1n;
-
-        for (const [address, basisPoints] of Object.entries(hyperevmContributors)) {
-            // allocation = (basisPoints / 10000) * MAX_UINT56 * (100 / 30)
-            const allocation = (MAX_UINT56 * BigInt(basisPoints) * 100n) / (10000n * 30n);
-
-            // Add to existing allocation if address already has allocation
-            if (this.allocations.has(address)) {
-                this.allocations.set(address, this.allocations.get(address) + allocation);
-            } else {
-                this.allocations.set(address, allocation);
-            }
-
-            // Store breakdown
-            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
-            breakdown.fromHyperEVMContributor = allocation;
-            this.allocationBreakdowns.set(address, breakdown);
-
-            // Store source data
-            const sources = this.sources.get(address) || {};
-            sources.hyperevmContributor = {
-                basisPoints: basisPoints
-            };
-            this.sources.set(address, sources);
-
-            const percent = basisPoints / 100;
-            console.log(`  ${address}: ${basisPoints} bp (${percent}% of total)`);
-        }
-
-        console.log(`HyperEVM contributor allocations calculated`);
-    }
-
-    // Add treasury allocation for remainder
-    addTreasuryAllocation() {
-        console.log("\nCalculating treasury allocation...");
-
-        const MAX_UINT56 = (1n << 56n) - 1n;
+        // Distribute MAX_UINT24 proportionally
         let allocatedSoFar = 0n;
+        const sortedUsers = Array.from(this.userWeightedValues.entries()).sort((a, b) =>
+            b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0
+        );
 
-        // Sum all allocations
-        for (const allocation of this.allocations.values()) {
-            allocatedSoFar += allocation;
+        for (let i = 0; i < sortedUsers.length; i++) {
+            const [address, weightedValue] = sortedUsers[i];
+
+            let allocation;
+            if (i === sortedUsers.length - 1) {
+                // Last user gets remainder to ensure exact sum
+                allocation = MAX_UINT24 - allocatedSoFar;
+            } else {
+                allocation = (weightedValue * MAX_UINT24) / totalWeighted;
+            }
+
+            if (allocation > 0n) {
+                this.allocations.set(address, allocation);
+                allocatedSoFar += allocation;
+            }
         }
 
-        // Treasury gets the remainder
-        const treasuryAllocation = MAX_UINT56 - allocatedSoFar;
-
-        // Add or update treasury allocation
-        if (this.allocations.has(NEW_TREASURY)) {
-            this.allocations.set(NEW_TREASURY, this.allocations.get(NEW_TREASURY) + treasuryAllocation);
-        } else {
-            this.allocations.set(NEW_TREASURY, treasuryAllocation);
-        }
-
-        // Store treasury remainder in breakdown
-        const breakdown = this.allocationBreakdowns.get(NEW_TREASURY) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
-        breakdown.fromTreasury = treasuryAllocation;
-        this.allocationBreakdowns.set(NEW_TREASURY, breakdown);
-
-        const treasuryPercent = (Number(treasuryAllocation) / Number(MAX_UINT56)) * 100;
-        console.log(`Treasury allocation: ${treasuryPercent.toFixed(2)}% of pool`);
-        console.log(`Treasury allocation (uint56): ${treasuryAllocation.toString()}`);
+        console.log(`  Addresses with allocation: ${this.allocations.size}`);
     }
 
-    // Generate allocations JSON file
+    /**
+     * Generate the final JSON output
+     */
     generateJSON() {
         console.log("\nGenerating allocations JSON...");
 
-        const MAX_UINT56 = (1n << 56n) - 1n;
-
-        // Sort by allocation descending
-        const sortedAllocations = Array.from(this.allocations.entries()).sort((a, b) => {
-            if (b[1] > a[1]) return 1;
-            if (b[1] < a[1]) return -1;
-            return 0;
-        });
-
-        // Calculate total basis points for metadata
-        let totalBasisPoints = 0;
-        for (const basisPoints of Object.values(hyperevmContributors)) {
-            totalBasisPoints += basisPoints;
+        // Filter out zero allocations
+        let discardedCount = 0;
+        for (const [address, allocation] of this.allocations.entries()) {
+            if (allocation === 0n) {
+                this.allocations.delete(address);
+                this.allocationBreakdowns.delete(address);
+                this.sources.delete(address);
+                discardedCount++;
+            }
+        }
+        if (discardedCount > 0) {
+            console.log(`  Discarded ${discardedCount} addresses with 0 allocation`);
         }
 
-        // Create metadata object
+        // Sort by allocation descending
+        const sortedAllocations = Array.from(this.allocations.entries()).sort((a, b) =>
+            b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0
+        );
+
+        // Create metadata
         const metadata = {
             generatedAt: new Date().toISOString(),
-            totalSIR: ethers.formatUnits(this.totalSIR, 12),
-            totalSIRRaw: this.totalSIR.toString(),
-            totalNFTs: this.totalNFTs,
+            maxUint24: MAX_UINT24.toString(),
             totalAddresses: this.allocations.size,
-            maxUint56: MAX_UINT56.toString(),
-            allocationDistribution: {
-                lpAllocation: `${LP_ALLOCATION}%`,
-                sirHolders: `${SIR_HOLDER_ALLOCATION}%`,
-                hypurrHolders: `${HYPURR_HOLDER_ALLOCATION}%`,
-                hyperevmContributors: `${totalBasisPoints / 100}%`,
-                treasury: "Remainder"
-            },
+            lpAllocationPercent: LP_ALLOCATION,
+            contributorAllocationPercent: 100 - LP_ALLOCATION,
+            tvlWeights: TVL_WEIGHTS,
+            treasury: TREASURY,
             sources: {
                 ethereumSnapshot: "ethereum-snapshot.json",
-                hypurrSnapshot: "hyperevm-hypurr-snapshot.json",
-                hyperevmContributors: "hyperevm-contributors.json"
+                hyperevmSnapshot: hyperevmSnapshot ? "hyperevm-snapshot.json" : null
             },
-            oldTreasury: OLD_TREASURY,
-            newTreasury: NEW_TREASURY
+            rpcEndpoints: {
+                ethereum: "standard Ethereum RPC",
+                hyperevm: "https://hyperliquid-mainnet.g.alchemy.com/v2/{KEY}"
+            },
+            snapshotBlocks: {
+                hyperevm: 22931060 // START_BLOCK for HyperSIR snapshot
+            }
         };
 
-        // Create object with address -> detailed allocation info
+        // Create allocations object
         const allocationsObj = {};
         for (const [address, allocation] of sortedAllocations) {
-            // Calculate % of total issuance with high precision
-            // Formula: (allocation / MAX_UINT56) * 30
-            // To maintain precision, we use: (allocation * 30 * 10^15) / MAX_UINT56 / 10^15
-            // This gives us parts per quadrillion before converting to Number
-            const PRECISION = 1000000000000000n; // 10^15 for high precision
-            const partsPerQuadrillion = (allocation * 30n * PRECISION) / MAX_UINT56;
+            // Calculate percentage of contributor pool (30% of total)
+            const PRECISION = 1000000000000000n;
+            const partsPerQuadrillion = (allocation * 30n * PRECISION) / MAX_UINT24;
             const percentOfTotalIssuance = Number(partsPerQuadrillion) / Number(PRECISION);
 
-            // Format percentage string to 2 significant digits
+            // Format percentage string
             let allocationPerc;
             if (percentOfTotalIssuance === 0) {
                 allocationPerc = "0.0%";
             } else {
-                // Calculate 2 significant digits without scientific notation
                 const sigFigs = Number(percentOfTotalIssuance.toPrecision(2));
-
-                // Format based on magnitude to avoid scientific notation
                 if (sigFigs >= 1) {
-                    // >= 1%: show 1 decimal place (e.g., 7.4%)
                     allocationPerc = `${sigFigs.toFixed(1)}%`;
                 } else if (sigFigs >= 0.1) {
-                    // 0.1% to 1%: show 2 decimal places (e.g., 0.98%)
                     allocationPerc = `${sigFigs.toFixed(2)}%`;
                 } else if (sigFigs >= 0.01) {
-                    // 0.01% to 0.1%: show 3 decimal places (e.g., 0.010%)
                     allocationPerc = `${sigFigs.toFixed(3)}%`;
                 } else if (sigFigs >= 0.001) {
-                    // 0.001% to 0.01%: show 4 decimal places (e.g., 0.0012%)
                     allocationPerc = `${sigFigs.toFixed(4)}%`;
                 } else if (sigFigs >= 0.0001) {
-                    // 0.0001% to 0.001%: show 5 decimal places (e.g., 0.00012%)
                     allocationPerc = `${sigFigs.toFixed(5)}%`;
                 } else {
-                    // Very small: show 6 decimal places
                     allocationPerc = `${sigFigs.toFixed(6)}%`;
                 }
             }
 
-            // Get breakdown
-            const breakdown = this.allocationBreakdowns.get(address) || { fromEthereum: 0n, fromHypurr: 0n, fromHyperEVMContributor: 0n, fromTreasury: 0n };
-
-            // Get sources
+            // Get breakdown and sources
+            const breakdown = this.allocationBreakdowns.get(address) || {};
             const sources = this.sources.get(address) || {};
 
             allocationsObj[address] = {
@@ -365,10 +364,8 @@ class AllocationsGenerator {
                 allocationPerc: allocationPerc,
                 sources: sources,
                 allocationBreakdown: {
-                    fromEthereum: breakdown.fromEthereum.toString(),
-                    fromHypurr: breakdown.fromHypurr.toString(),
-                    fromHyperEVMContributor: breakdown.fromHyperEVMContributor.toString(),
-                    fromTreasury: breakdown.fromTreasury.toString()
+                    fromEthereumSIR: (breakdown.fromEthereumSIR || 0n).toString(),
+                    fromHyperEVMSIR: (breakdown.fromHyperEVMSIR || 0n).toString()
                 }
             };
         }
@@ -379,72 +376,109 @@ class AllocationsGenerator {
         };
     }
 
-    // Main execution
-    async execute() {
-        // Calculate total basis points for display
-        let totalBasisPoints = 0;
-        for (const basisPoints of Object.values(hyperevmContributors)) {
-            totalBasisPoints += basisPoints;
+    /**
+     * Generate compact JSON for Foundry deployment
+     * Uses parallel arrays for efficient parsing with parseJsonAddressArray/parseJsonUintArray
+     */
+    generateDeploymentJSON() {
+        const sortedAllocations = Array.from(this.allocations.entries()).sort((a, b) =>
+            b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0
+        );
+
+        const addresses = [];
+        const amounts = [];
+
+        for (const [address, allocation] of sortedAllocations) {
+            if (allocation > 0n) {
+                addresses.push(address);
+                amounts.push(Number(allocation));
+            }
         }
-        const hyperevmContributorPercent = totalBasisPoints / 100;
 
-        console.log("=== Allocations Generator ===\n");
-        console.log(`Old Treasury: ${OLD_TREASURY}`);
-        console.log(`New Treasury: ${NEW_TREASURY}`);
-        console.log(`\nAllocation Distribution:`);
-        console.log(`  LP: ${LP_ALLOCATION}%`);
-        console.log(`  SIR Holders: ${SIR_HOLDER_ALLOCATION}%`);
-        console.log(`  Hypurr Holders: ${HYPURR_HOLDER_ALLOCATION}%`);
-        console.log(`  HyperEVM Contributors: ${hyperevmContributorPercent}%`);
-        console.log(`  Treasury: Remainder`);
-        console.log("\n" + "=".repeat(50) + "\n");
+        return {
+            addresses: addresses,
+            amounts: amounts
+        };
+    }
 
-        // Process snapshots
-        this.processEthereumSnapshot();
-        this.processHypurrSnapshot();
-        this.processHyperEvmContributors();
-        this.addTreasuryAllocation();
-
-        // Generate JSON
-        const allocationsJSON = this.generateJSON();
-
-        // Save to file
-        const outputPath = path.join(__dirname, "allocations.json");
-        fs.writeFileSync(outputPath, JSON.stringify(allocationsJSON, null, 2));
-        console.log(`\nGenerated file: ${outputPath}`);
-
-        // Print summary
-        console.log("\n=== Summary ===");
-        console.log(`Total addresses: ${this.allocations.size}`);
-        console.log(`Total SIR processed: ${ethers.formatUnits(this.totalSIR, 12)} SIR`);
-        console.log(`Total Hypurr NFTs: ${this.totalNFTs}`);
-
-        // Verify sum equals type(uint56).max
-        const MAX_UINT56 = (1n << 56n) - 1n;
+    /**
+     * Verify the allocations sum to MAX_UINT24
+     */
+    verify() {
         let sum = 0n;
         for (const allocation of this.allocations.values()) {
             sum += allocation;
         }
-        console.log(`\nVerification:`);
-        console.log(`  Sum of allocations: ${sum}`);
-        console.log(`  type(uint56).max:   ${MAX_UINT56}`);
-        console.log(`  Match: ${sum === MAX_UINT56 ? "✓" : "✗"}`);
 
-        if (sum !== MAX_UINT56) {
-            console.error(`ERROR: Allocations do not sum to type(uint56).max!`);
-            console.error(`Difference: ${MAX_UINT56 - sum}`);
+        console.log("\n=== Verification ===");
+        console.log(`  Sum of allocations: ${sum}`);
+        console.log(`  type(uint24).max:   ${MAX_UINT24}`);
+        console.log(`  Match: ${sum === MAX_UINT24 ? "✓" : "✗"}`);
+
+        if (sum !== MAX_UINT24) {
+            console.error(`ERROR: Allocations do not sum to type(uint24).max!`);
+            console.error(`Difference: ${MAX_UINT24 - sum}`);
+            return false;
         }
+        return true;
+    }
+
+    /**
+     * Main execution
+     */
+    async execute() {
+        console.log("=== MegaETH Allocations Generator ===\n");
+        console.log("Treasury Addresses:");
+        console.log(`  Ethereum: ${TREASURY.ethereum}`);
+        console.log(`  HyperEVM: ${TREASURY.hyperevm}`);
+        console.log(`  MegaETH:  ${TREASURY.megaeth}`);
+        console.log(`\nTVL Weights:`);
+        console.log(`  SIR (Ethereum): ${TVL_WEIGHTS.sir}`);
+        console.log(`  HyperSIR (HyperEVM): ${TVL_WEIGHTS.hyperSir}`);
+        console.log(`\nAllocation Split:`);
+        console.log(`  LP: ${LP_ALLOCATION}%`);
+        console.log(`  Contributors: ${100 - LP_ALLOCATION}%`);
+        console.log("\n" + "=".repeat(50) + "\n");
+
+        // Process all sources
+        this.processEthereumSnapshot();
+        this.processHyperEVMSnapshot();
+
+        // Calculate final allocations
+        this.calculateFinalAllocations();
+
+        // Generate and save detailed JSON (for auditing/debugging)
+        const allocationsJSON = this.generateJSON();
+        const outputPath = path.join(__dirname, "allocations.json");
+        fs.writeFileSync(outputPath, JSON.stringify(allocationsJSON, null, 2));
+        console.log(`\nGenerated: ${outputPath}`);
+
+        // Generate compact deployment JSON (for Foundry)
+        const deploymentJSON = this.generateDeploymentJSON();
+        const deploymentPath = path.join(__dirname, "allocations-deploy.json");
+        fs.writeFileSync(deploymentPath, JSON.stringify(deploymentJSON));
+        console.log(`Generated: ${deploymentPath}`);
+
+        // Print summary
+        console.log("\n=== Summary ===");
+        console.log(`  Total addresses: ${this.allocations.size}`);
+        if (this.totalSIR) {
+            console.log(`  Total SIR processed: ${ethers.formatUnits(this.totalSIR, 12)} SIR`);
+        }
+        if (this.totalHyperSIR) {
+            console.log(`  Total HyperSIR processed: ${ethers.formatUnits(this.totalHyperSIR, 12)} HyperSIR`);
+        }
+
+        // Verify
+        this.verify();
     }
 }
 
-// Main execution
-async function main() {
-    // Validate configuration
-    if (NEW_TREASURY === "0x0000000000000000000000000000000000000000") {
-        console.error("ERROR: NEW_TREASURY must be set to a valid address");
-        process.exit(1);
-    }
+// =============================================================================
+// MAIN
+// =============================================================================
 
+async function main() {
     const generator = new AllocationsGenerator();
     await generator.execute();
 }

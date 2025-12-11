@@ -114,8 +114,8 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Allocate all issuance to one contributor
         address[] memory addr = new address[](1);
         addr[0] = oneContributor;
-        uint56[] memory alloc = new uint56[](1);
-        alloc[0] = uint56(type(uint56).max);
+        uint24[] memory alloc = new uint24[](1);
+        alloc[0] = type(uint24).max;
         Contributors(contributors).allocate(addr, alloc);
 
         // Deploy SIR

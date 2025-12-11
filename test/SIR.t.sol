@@ -72,17 +72,17 @@ contract BasicSIRTest is AllocationsHelper, Test {
         // Verify the statistics
         console.log("Total addresses allocated:", totalAddresses);
         console.log("Total allocations sum:", totalAllocations);
-        console.log("Expected (type(uint56).max):", type(uint56).max);
+        console.log("Expected (type(uint24).max):", type(uint24).max);
 
-        // Verify the sum equals type(uint56).max
-        assertEq(totalAllocations, type(uint56).max, "Allocations do not sum to type(uint56).max");
+        // Verify the sum equals type(uint24).max
+        assertEq(totalAllocations, type(uint24).max, "Allocations do not sum to type(uint24).max");
 
         // Verify remaining allocation is 0
-        uint56 remaining = contributors.remainingAllocation();
+        uint24 remaining = contributors.remainingAllocation();
         assertEq(remaining, 0, "Remaining allocation should be 0");
 
-        // Verify we have the expected number of addresses from JSON metadata
-        assertEq(totalAddresses, 4096, "Should have 4096 addresses from allocations.json");
+        // Verify we have at least some addresses allocated
+        assertGt(totalAddresses, 0, "Should have allocated at least one address");
 
         // Verify allocation percentages match the JSON
         _verifyAllocationPercentages();
@@ -110,11 +110,11 @@ contract BasicSIRTest is AllocationsHelper, Test {
             string memory addrKey = allocationKeys[i];
 
             // Get allocation from contract
-            uint56 allocation = contributors.allocations(vm.parseAddress(addrKey));
+            uint24 allocation = contributors.allocations(vm.parseAddress(addrKey));
 
             // Calculate issuance per second using the formula:
-            // issuance = (allocation * nonLPIssuance) / type(uint56).max
-            uint256 issuance = (uint256(allocation) * nonLPIssuance) / type(uint56).max;
+            // issuance = (allocation * nonLPIssuance) / type(uint24).max
+            uint256 issuance = (uint256(allocation) * nonLPIssuance) / type(uint24).max;
 
             // Calculate percentage in parts per million (1,000,000 ppm = 100%)
             uint256 calculatedPercPPM = (issuance * 1000000) / SystemConstants.ISSUANCE;

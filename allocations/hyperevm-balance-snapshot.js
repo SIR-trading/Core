@@ -5,36 +5,35 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 // Configuration
-const ALCHEMY_URL = "https://eth-mainnet.g.alchemy.com/v2/";
+const ALCHEMY_URL = "https://hyperliquid-mainnet.g.alchemy.com/v2/";
 const ALCHEMY_KEY = process.env.ALCHEMY_KEY || "YOUR_KEY_HERE";
-const SIR_DECIMALS = 12; // SIR token uses 12 decimals
+const SIR_DECIMALS = 12; // HyperSIR token uses 12 decimals
 
 // Block range configuration
-const START_BLOCK = 22931060;
-const SNAPSHOT_BLOCK = "latest"; // Can be overridden with: node ethereum-balance-snapshot.js <blockNumber>
+const START_BLOCK = 17597514;
+const LOG_BLOCK_RANGE = 10000; // HyperEVM limits eth_getLogs to 10k blocks
+const SNAPSHOT_BLOCK = "latest"; // Can be overridden with: node hyperevm-balance-snapshot.js <blockNumber>
 
-// Contract addresses - hardcoded from Ethereum mainnet deployment
+// Contract addresses - hardcoded from HyperEVM mainnet deployment
 const ADDRESSES = {
-    ASSISTANT: "0xff14f91285580AEd3733c0B1F3C8b6d04804c5ec",
-    CONTRIBUTORS: "0xCA5d6c55e249a9Add07a2440eccfe16f56572cb5",
-    UNISWAP_V3_FACTORY: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
-    UNISWAP_V3_NFT_MANAGER: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
-    UNISWAP_V3_STAKING: "0xe34139463bA50bD61336E0c446Bd8C0867c6fE65",
-    WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-    MULTICALL3: "0xcA11bde05977b3631167028862bE2a173976CA11"
-    // VAULT, SIR, and ORACLE will be dynamically retrieved
+    ASSISTANT: "0x7d987b986FbA5e0A4247649A2334Bb2D4029656c",
+    CONTRIBUTORS: "0xDCd0d8bb7F54010b745Aee52eFf95eA246078A94",
+    UNISWAP_V3_FACTORY: "0xB1c0fa0B789320044A6F623cFe5eBda9562602E3", // HyperSwap factory
+    UNISWAP_V3_NFT_MANAGER: "0x6eDA206207c09e5428F281761DdC0D300851fBC8", // HyperSwap position manager
+    UNISWAP_V3_STAKING: "0xA86982641750EF0553E39ADBBAaB18Dd5AB313BE", // HyperSwap V3 staker
+    WETH: "0x5555555555555555555555555555555555555555", // Wrapped HYPE
+    MULTICALL3: "0xcA11bde05977b3631167028862bE2a173976CA11" // Standard Multicall3 address
+    // VAULT, SIR (HyperSIR), and ORACLE will be dynamically retrieved
 };
 
 // Manually ignored contract addresses (add addresses here to exclude them from snapshot)
 // These will be excluded in addition to system contracts (Assistant, Contributors, Vault, SIR, Oracle, etc.)
 const MANUALLY_IGNORED_CONTRACTS = [
-    "0xD632204b44Ddf050019676BE26f23aDFC539DBAa", // Uniswap pool ETH/SIR
-    "0x000000fee13a103A10D593b9AE06b3e05F2E7E1c", // Uniswap fee collector
-    "0xCeFeF7bb8c4E32451f5FcEAF2127B0c26c89975b" // Uniswap pool APE-6/SIR
+    // TODO: Add any DEX pools or other contracts to ignore
 ];
 
-// Contributor addresses from ethereum-contributors.json
-const CONTRIBUTOR_ADDRESSES = require("./ethereum-contributors.json");
+// Contributor addresses from hyperevm-contributors.json
+const CONTRIBUTOR_ADDRESSES = require("./hyperevm-contributors.json");
 
 // ABIs (partial ABIs with only needed functions)
 const ABIS = {
@@ -115,7 +114,7 @@ const ABIS = {
     ]
 };
 
-class SIRBalanceSnapshot {
+class HyperSIRBalanceSnapshot {
     constructor(provider, blockNumber) {
         this.provider = provider;
         this.blockNumber = blockNumber; // Will be resolved to actual number in initialize()
@@ -212,6 +211,17 @@ class SIRBalanceSnapshot {
         return results;
     }
 
+    // Helper to query events in chunks (HyperEVM limits to 10k blocks per request)
+    async queryFilterChunked(contract, filter, fromBlock, toBlock) {
+        const allEvents = [];
+        for (let start = fromBlock; start <= toBlock; start += LOG_BLOCK_RANGE) {
+            const end = Math.min(start + LOG_BLOCK_RANGE - 1, toBlock);
+            const events = await contract.queryFilter(filter, start, end);
+            allEvents.push(...events);
+        }
+        return allEvents;
+    }
+
     async initialize() {
         // Initialize Multicall3 contract
         this.contracts.multicall = new ethers.Contract(ADDRESSES.MULTICALL3, ABIS.MULTICALL3, this.provider);
@@ -242,7 +252,7 @@ class SIRBalanceSnapshot {
             throw new Error(`Failed to retrieve ORACLE address from Vault contract at ${ADDRESSES.VAULT}`);
         }
 
-        console.log(`SIR address: ${ADDRESSES.SIR}`);
+        console.log(`HyperSIR address: ${ADDRESSES.SIR}`);
         console.log(`ORACLE address: ${ADDRESSES.ORACLE}`);
 
         // Initialize remaining contracts
@@ -257,25 +267,35 @@ class SIRBalanceSnapshot {
 
         console.log(`TIMESTAMP_ISSUANCE_START: ${this.timestampIssuanceStart}`);
         console.log(
-            `ISSUANCE_RATE: ${this.formatToSigFigs(ethers.formatUnits(this.issuanceRate, SIR_DECIMALS))} SIR/second`
+            `ISSUANCE_RATE: ${this.formatToSigFigs(
+                ethers.formatUnits(this.issuanceRate, SIR_DECIMALS)
+            )} HyperSIR/second`
         );
         console.log(
             `LP_ISSUANCE_FIRST_3_YEARS: ${this.formatToSigFigs(
                 ethers.formatUnits(this.lpIssuanceFirst3Years, SIR_DECIMALS)
-            )} SIR/second`
+            )} HyperSIR/second`
         );
 
         // Initialize Contributors contract if provided
-        if (ADDRESSES.CONTRIBUTORS) {
+        if (ADDRESSES.CONTRIBUTORS && ADDRESSES.CONTRIBUTORS !== ethers.ZeroAddress) {
             this.contracts.contributors = new ethers.Contract(ADDRESSES.CONTRIBUTORS, ABIS.CONTRIBUTORS, this.provider);
         }
 
         // Populate default ignored contracts (system contracts)
         this.ignoredContracts.add(ADDRESSES.ASSISTANT.toLowerCase());
-        this.ignoredContracts.add(ADDRESSES.CONTRIBUTORS.toLowerCase());
-        this.ignoredContracts.add(ADDRESSES.UNISWAP_V3_FACTORY.toLowerCase());
-        this.ignoredContracts.add(ADDRESSES.UNISWAP_V3_NFT_MANAGER.toLowerCase());
-        this.ignoredContracts.add(ADDRESSES.UNISWAP_V3_STAKING.toLowerCase());
+        if (ADDRESSES.CONTRIBUTORS && ADDRESSES.CONTRIBUTORS !== ethers.ZeroAddress) {
+            this.ignoredContracts.add(ADDRESSES.CONTRIBUTORS.toLowerCase());
+        }
+        if (ADDRESSES.UNISWAP_V3_FACTORY && ADDRESSES.UNISWAP_V3_FACTORY !== ethers.ZeroAddress) {
+            this.ignoredContracts.add(ADDRESSES.UNISWAP_V3_FACTORY.toLowerCase());
+        }
+        if (ADDRESSES.UNISWAP_V3_NFT_MANAGER && ADDRESSES.UNISWAP_V3_NFT_MANAGER !== ethers.ZeroAddress) {
+            this.ignoredContracts.add(ADDRESSES.UNISWAP_V3_NFT_MANAGER.toLowerCase());
+        }
+        if (ADDRESSES.UNISWAP_V3_STAKING && ADDRESSES.UNISWAP_V3_STAKING !== ethers.ZeroAddress) {
+            this.ignoredContracts.add(ADDRESSES.UNISWAP_V3_STAKING.toLowerCase());
+        }
         this.ignoredContracts.add(ADDRESSES.VAULT.toLowerCase());
         this.ignoredContracts.add(ADDRESSES.SIR.toLowerCase());
         this.ignoredContracts.add(ADDRESSES.ORACLE.toLowerCase());
@@ -295,13 +315,13 @@ class SIRBalanceSnapshot {
         console.log(`Initializing snapshot for block ${this.blockNumber} (${this.results.timestampGMT})`);
     }
 
-    // 1. Get SIR token balances
+    // 1. Get HyperSIR token balances
     async getSIRBalances() {
-        console.log("Fetching SIR token balances...");
+        console.log("Fetching HyperSIR token balances...");
 
         // Get Transfer events to find all holders
         const filter = this.contracts.sir.filters.Transfer();
-        const events = await this.contracts.sir.queryFilter(filter, START_BLOCK, this.blockNumber);
+        const events = await this.queryFilterChunked(this.contracts.sir, filter, START_BLOCK, this.blockNumber);
 
         const holders = new Set();
         events.forEach((event) => {
@@ -346,7 +366,7 @@ class SIRBalanceSnapshot {
                     this.contractsWithBalances.push({
                         address: holder,
                         sirBalance: balance.toString(),
-                        type: "SIR Balance"
+                        type: "HyperSIR Balance"
                     });
                 }
 
@@ -362,16 +382,16 @@ class SIRBalanceSnapshot {
         const totalSupply = await this.contracts.sir.totalSupply({ blockTag: this.blockNumber });
         this.results.summary.totalSIRSupply = totalSupply.toString();
 
-        console.log(`Found ${Object.keys(this.results.balances).length} SIR holders (EOAs only)`);
+        console.log(`Found ${Object.keys(this.results.balances).length} HyperSIR holders`);
     }
 
-    // 2. Get staked SIR balances (locked and unlocked)
+    // 2. Get staked HyperSIR balances (locked and unlocked)
     async getStakedSIRBalances() {
-        console.log("Fetching staked SIR balances...");
+        console.log("Fetching staked HyperSIR balances...");
 
         // Get Staked/Unstaked events to find all stakers
         const stakedFilter = this.contracts.sir.filters.Staked();
-        const events = await this.contracts.sir.queryFilter(stakedFilter, START_BLOCK, this.blockNumber);
+        const events = await this.queryFilterChunked(this.contracts.sir, stakedFilter, START_BLOCK, this.blockNumber);
 
         const stakers = new Set();
         events.forEach((event) => {
@@ -420,12 +440,12 @@ class SIRBalanceSnapshot {
                     const existing = this.contractsWithBalances.find((c) => c.address === staker);
                     if (existing) {
                         existing.stakedSIR = totalStake.toString();
-                        existing.type += ", Staked SIR";
+                        existing.type += ", Staked HyperSIR";
                     } else {
                         this.contractsWithBalances.push({
                             address: staker,
                             stakedSIR: totalStake.toString(),
-                            type: "Staked SIR"
+                            type: "Staked HyperSIR"
                         });
                     }
                 }
@@ -448,17 +468,22 @@ class SIRBalanceSnapshot {
         console.log(
             `Found stakers with total staked: ${this.formatToSigFigs(
                 ethers.formatUnits(totalStaked, SIR_DECIMALS)
-            )} SIR (EOAs only)`
+            )} HyperSIR`
         );
     }
 
-    // 3. Get SIR equity in vaults where collateral is SIR
+    // 3. Get HyperSIR equity in vaults where collateral is HyperSIR
     async getVaultEquity() {
         console.log("Fetching vault equity...");
 
         // First, find all vaults through Mint events to identify vault IDs
         const mintFilter = this.contracts.vault.filters.Mint();
-        const mintEvents = await this.contracts.vault.queryFilter(mintFilter, START_BLOCK, this.blockNumber);
+        const mintEvents = await this.queryFilterChunked(
+            this.contracts.vault,
+            mintFilter,
+            START_BLOCK,
+            this.blockNumber
+        );
 
         const vaultIds = new Set();
         mintEvents.forEach((event) => {
@@ -496,10 +521,12 @@ class SIRBalanceSnapshot {
             }
         }
 
-        console.log(`Found ${sirVaults.length} vaults with SIR collateral`);
+        console.log(`Found ${sirVaults.length} vaults with HyperSIR collateral`);
 
         if (sirVaults.length === 0) {
             this.results.summary.totalVaultEquity = "0";
+            // Still track TEA holders for non-SIR vaults (for unclaimed rewards)
+            await this._trackNonSirVaultTeaHolders(allVaults);
             return;
         }
 
@@ -549,12 +576,14 @@ class SIRBalanceSnapshot {
             const transferSingleFilter = this.contracts.vault.filters.TransferSingle();
             const transferBatchFilter = this.contracts.vault.filters.TransferBatch();
 
-            const transferSingleEvents = await this.contracts.vault.queryFilter(
+            const transferSingleEvents = await this.queryFilterChunked(
+                this.contracts.vault,
                 transferSingleFilter,
                 START_BLOCK,
                 this.blockNumber
             );
-            const transferBatchEvents = await this.contracts.vault.queryFilter(
+            const transferBatchEvents = await this.queryFilterChunked(
+                this.contracts.vault,
                 transferBatchFilter,
                 START_BLOCK,
                 this.blockNumber
@@ -592,7 +621,12 @@ class SIRBalanceSnapshot {
             );
 
             const apeTransferFilter = apeContract.filters.Transfer();
-            const apeTransferEvents = await apeContract.queryFilter(apeTransferFilter, START_BLOCK, this.blockNumber);
+            const apeTransferEvents = await this.queryFilterChunked(
+                apeContract,
+                apeTransferFilter,
+                START_BLOCK,
+                this.blockNumber
+            );
 
             apeTransferEvents.forEach((event) => {
                 const from = event.args.from;
@@ -727,7 +761,7 @@ class SIRBalanceSnapshot {
 
         this.results.summary.totalVaultEquity = totalVaultEquity.toString();
         console.log(
-            `Total vault equity: ${this.formatToSigFigs(ethers.formatUnits(totalVaultEquity, SIR_DECIMALS))} SIR`
+            `Total vault equity: ${this.formatToSigFigs(ethers.formatUnits(totalVaultEquity, SIR_DECIMALS))} HyperSIR`
         );
 
         // Now track TEA holders for ALL non-SIR vaults (for unclaimed rewards)
@@ -735,70 +769,75 @@ class SIRBalanceSnapshot {
         const nonSirVaults = allVaults.filter(
             (v) => v.params.collateralToken.toLowerCase() !== ADDRESSES.SIR.toLowerCase()
         );
-
-        if (nonSirVaults.length > 0) {
-            console.log(`Tracking TEA holders for ${nonSirVaults.length} non-SIR vaults...`);
-
-            // Query transfer events ONCE (reuse from cache if possible)
-            const transferSingleFilter = this.contracts.vault.filters.TransferSingle();
-            const transferBatchFilter = this.contracts.vault.filters.TransferBatch();
-
-            const transferSingleEvents = await this.contracts.vault.queryFilter(
-                transferSingleFilter,
-                START_BLOCK,
-                this.blockNumber
-            );
-            const transferBatchEvents = await this.contracts.vault.queryFilter(
-                transferBatchFilter,
-                START_BLOCK,
-                this.blockNumber
-            );
-
-            // Process each non-SIR vault
-            for (const vault of nonSirVaults) {
-                const vaultId = vault.vaultId;
-                const teaUsers = new Set();
-
-                // Filter TransferSingle events for this vaultId
-                transferSingleEvents.forEach((event) => {
-                    if (event.args.id === vaultId) {
-                        const from = event.args.from;
-                        const to = event.args.to;
-
-                        if (from !== ethers.ZeroAddress) teaUsers.add(from);
-                        if (to !== ethers.ZeroAddress) teaUsers.add(to);
-                    }
-                });
-
-                // Filter TransferBatch events for this vaultId
-                transferBatchEvents.forEach((event) => {
-                    const from = event.args.from;
-                    const to = event.args.to;
-                    const ids = event.args.ids;
-
-                    // Check if this batch includes our vaultId
-                    if (ids.some((id) => id === vaultId)) {
-                        if (from !== ethers.ZeroAddress) teaUsers.add(from);
-                        if (to !== ethers.ZeroAddress) teaUsers.add(to);
-                    }
-                });
-
-                // Track ALL TEA users for unclaimed rewards, even if balance is 0
-                if (teaUsers.size > 0) {
-                    if (!this.vaultTeaHolders.has(vaultId)) {
-                        this.vaultTeaHolders.set(vaultId, new Set());
-                    }
-                    teaUsers.forEach((user) => {
-                        this.vaultTeaHolders.get(vaultId).add(user);
-                    });
-                }
-            }
-
-            console.log(`Tracked TEA holders for ${nonSirVaults.length} additional vaults`);
-        }
+        await this._trackNonSirVaultTeaHolders(nonSirVaults);
     }
 
-    // 4. Get unclaimed SIR rewards
+    async _trackNonSirVaultTeaHolders(nonSirVaults) {
+        if (nonSirVaults.length === 0) return;
+
+        console.log(`Tracking TEA holders for ${nonSirVaults.length} non-HyperSIR vaults...`);
+
+        // Query transfer events ONCE (reuse from cache if possible)
+        const transferSingleFilter = this.contracts.vault.filters.TransferSingle();
+        const transferBatchFilter = this.contracts.vault.filters.TransferBatch();
+
+        const transferSingleEvents = await this.queryFilterChunked(
+            this.contracts.vault,
+            transferSingleFilter,
+            START_BLOCK,
+            this.blockNumber
+        );
+        const transferBatchEvents = await this.queryFilterChunked(
+            this.contracts.vault,
+            transferBatchFilter,
+            START_BLOCK,
+            this.blockNumber
+        );
+
+        // Process each non-SIR vault
+        for (const vault of nonSirVaults) {
+            const vaultId = vault.vaultId;
+            const teaUsers = new Set();
+
+            // Filter TransferSingle events for this vaultId
+            transferSingleEvents.forEach((event) => {
+                if (event.args.id === vaultId) {
+                    const from = event.args.from;
+                    const to = event.args.to;
+
+                    if (from !== ethers.ZeroAddress) teaUsers.add(from);
+                    if (to !== ethers.ZeroAddress) teaUsers.add(to);
+                }
+            });
+
+            // Filter TransferBatch events for this vaultId
+            transferBatchEvents.forEach((event) => {
+                const from = event.args.from;
+                const to = event.args.to;
+                const ids = event.args.ids;
+
+                // Check if this batch includes our vaultId
+                if (ids.some((id) => id === vaultId)) {
+                    if (from !== ethers.ZeroAddress) teaUsers.add(from);
+                    if (to !== ethers.ZeroAddress) teaUsers.add(to);
+                }
+            });
+
+            // Track ALL TEA users for unclaimed rewards, even if balance is 0
+            if (teaUsers.size > 0) {
+                if (!this.vaultTeaHolders.has(vaultId)) {
+                    this.vaultTeaHolders.set(vaultId, new Set());
+                }
+                teaUsers.forEach((user) => {
+                    this.vaultTeaHolders.get(vaultId).add(user);
+                });
+            }
+        }
+
+        console.log(`Tracked TEA holders for ${nonSirVaults.length} additional vaults`);
+    }
+
+    // 4. Get unclaimed HyperSIR rewards
     async getUnclaimedRewards() {
         console.log("Fetching unclaimed rewards...");
         console.log(
@@ -924,12 +963,12 @@ class SIRBalanceSnapshot {
         console.log(
             `Total unclaimed LP rewards: ${this.formatToSigFigs(
                 ethers.formatUnits(totalUnclaimedLPer, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total unclaimed contributor rewards: ${this.formatToSigFigs(
                 ethers.formatUnits(totalUnclaimedContributor, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
     }
 
@@ -1021,13 +1060,24 @@ class SIRBalanceSnapshot {
         console.log(
             `Total unissued contributor rewards: ${this.formatToSigFigs(
                 ethers.formatUnits(totalUnissued, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
     }
 
-    // 6. Get SIR equity in Uniswap V3
+    // 6. Get HyperSIR equity in Uniswap V3
     async getUniswapV3Equity() {
         console.log("Fetching Uniswap V3 positions...");
+
+        // Check if Uniswap V3 is configured
+        if (
+            !ADDRESSES.UNISWAP_V3_FACTORY ||
+            ADDRESSES.UNISWAP_V3_FACTORY === ethers.ZeroAddress ||
+            ADDRESSES.UNISWAP_V3_FACTORY === "0x0000000000000000000000000000000000000000"
+        ) {
+            console.log("Uniswap V3 Factory not configured, skipping Uniswap V3 equity calculation");
+            this.results.summary.totalUniswapV3Equity = "0";
+            return;
+        }
 
         // Find all SIR/WETH pools
         const factoryContract = new ethers.Contract(
@@ -1063,7 +1113,7 @@ class SIRBalanceSnapshot {
             }
         }
 
-        console.log(`Found ${sirPools.length} SIR/WETH pools on Uniswap V3`);
+        console.log(`Found ${sirPools.length} HyperSIR/WETH pools on Uniswap V3`);
 
         if (sirPools.length === 0) {
             this.results.summary.totalUniswapV3Equity = "0";
@@ -1071,29 +1121,29 @@ class SIRBalanceSnapshot {
         }
 
         // Step 2: Query Mint events from SIR pools to find blocks where positions were created
-        console.log("Finding blocks where SIR positions were created...");
+        console.log("Finding blocks where HyperSIR positions were created...");
 
         const POOL_ABI = [
             ...ABIS.UNISWAP_V3_POOL,
             "event Mint(address sender, address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)"
         ];
 
-        const BLOCK_BATCH_SIZE = 10000;
         const positionCreationBlocks = new Set();
         let totalMintEvents = 0;
 
         for (const pool of sirPools) {
             const poolContract = new ethers.Contract(pool.address, POOL_ABI, this.provider);
+            const mintEvents = await this.queryFilterChunked(
+                poolContract,
+                poolContract.filters.Mint(),
+                START_BLOCK,
+                this.blockNumber
+            );
 
-            for (let fromBlock = START_BLOCK; fromBlock <= this.blockNumber; fromBlock += BLOCK_BATCH_SIZE) {
-                const toBlock = Math.min(fromBlock + BLOCK_BATCH_SIZE - 1, this.blockNumber);
-                const mintEvents = await poolContract.queryFilter(poolContract.filters.Mint(), fromBlock, toBlock);
-
-                mintEvents.forEach((event) => {
-                    positionCreationBlocks.add(event.blockNumber);
-                });
-                totalMintEvents += mintEvents.length;
-            }
+            mintEvents.forEach((event) => {
+                positionCreationBlocks.add(event.blockNumber);
+            });
+            totalMintEvents += mintEvents.length;
         }
 
         console.log(`  Found ${totalMintEvents} Mint events across ${positionCreationBlocks.size} unique blocks`);
@@ -1132,7 +1182,7 @@ class SIRBalanceSnapshot {
         }
 
         // Step 4: Verify which tokenIds are SIR/WETH positions
-        console.log("Verifying SIR/WETH positions...");
+        console.log("Verifying HyperSIR/WETH positions...");
 
         const tokenIdsArray = Array.from(candidateTokenIds);
         const positionCalls = tokenIdsArray.map((tokenId) => ({
@@ -1161,7 +1211,6 @@ class SIRBalanceSnapshot {
             const { token0, token1, fee } = position;
 
             // Check if this position matches any SIR/WETH pool
-            let matched = false;
             for (const pool of sirPools) {
                 const poolContract = new ethers.Contract(pool.address, POOL_ABI, this.provider);
                 const poolToken0 = await poolContract.token0({ blockTag: this.blockNumber });
@@ -1177,13 +1226,12 @@ class SIRBalanceSnapshot {
                         pool: pool.address,
                         position
                     });
-                    matched = true;
                     break;
                 }
             }
         }
 
-        console.log(`  Verified ${verifiedSIRTokenIds.length} positions belong to SIR/WETH pools`);
+        console.log(`  Verified ${verifiedSIRTokenIds.length} positions belong to HyperSIR/WETH pools`);
 
         if (verifiedSIRTokenIds.length === 0) {
             this.results.summary.totalUniswapV3Equity = "0";
@@ -1195,7 +1243,8 @@ class SIRBalanceSnapshot {
 
         for (const { tokenId, pool, position } of verifiedSIRTokenIds) {
             // Query Transfer events for this tokenId
-            const transferEvents = await nftManager.queryFilter(
+            const transferEvents = await this.queryFilterChunked(
+                nftManager,
                 nftManager.filters.Transfer(null, null, tokenId),
                 START_BLOCK,
                 this.blockNumber
@@ -1209,7 +1258,11 @@ class SIRBalanceSnapshot {
             }
 
             // If owned by staking contract, get the actual depositor
-            if (currentOwner.toLowerCase() === ADDRESSES.UNISWAP_V3_STAKING.toLowerCase()) {
+            if (
+                ADDRESSES.UNISWAP_V3_STAKING &&
+                ADDRESSES.UNISWAP_V3_STAKING !== ethers.ZeroAddress &&
+                currentOwner.toLowerCase() === ADDRESSES.UNISWAP_V3_STAKING.toLowerCase()
+            ) {
                 const stakingContract = new ethers.Contract(
                     ADDRESSES.UNISWAP_V3_STAKING,
                     ABIS.UNISWAP_V3_STAKING,
@@ -1231,7 +1284,7 @@ class SIRBalanceSnapshot {
         console.log(`  Tracked ownership for ${this.uniswapV3Positions.size} positions`);
 
         // Step 6: Calculate SIR holdings for each position
-        console.log("Calculating SIR equity in positions...");
+        console.log("Calculating HyperSIR equity in positions...");
 
         let totalUniswapEquity = BigInt(0);
         let positionsProcessed = 0;
@@ -1347,12 +1400,14 @@ class SIRBalanceSnapshot {
         }
 
         console.log(
-            `\nProcessed ${positionsProcessed} positions with SIR equity out of ${verifiedSIRTokenIds.length} verified positions`
+            `\nProcessed ${positionsProcessed} positions with HyperSIR equity out of ${verifiedSIRTokenIds.length} verified positions`
         );
 
         this.results.summary.totalUniswapV3Equity = totalUniswapEquity.toString();
         console.log(
-            `Total Uniswap V3 equity: ${this.formatToSigFigs(ethers.formatUnits(totalUniswapEquity, SIR_DECIMALS))} SIR`
+            `Total Uniswap V3 equity: ${this.formatToSigFigs(
+                ethers.formatUnits(totalUniswapEquity, SIR_DECIMALS)
+            )} HyperSIR`
         );
     }
 
@@ -1402,6 +1457,17 @@ class SIRBalanceSnapshot {
         // Check if we have any positions tracked
         if (this.uniswapV3Positions.size === 0) {
             console.log("No Uniswap V3 positions tracked, skipping unclaimed fees");
+            this.results.summary.totalUniswapV3UnclaimedFees = "0";
+            return;
+        }
+
+        // Check if NFT manager is configured
+        if (
+            !ADDRESSES.UNISWAP_V3_NFT_MANAGER ||
+            ADDRESSES.UNISWAP_V3_NFT_MANAGER === ethers.ZeroAddress ||
+            ADDRESSES.UNISWAP_V3_NFT_MANAGER === "0x0000000000000000000000000000000000000000"
+        ) {
+            console.log("Uniswap V3 NFT Manager not configured, skipping unclaimed fees");
             this.results.summary.totalUniswapV3UnclaimedFees = "0";
             return;
         }
@@ -1506,17 +1572,28 @@ class SIRBalanceSnapshot {
 
         this.results.summary.totalUniswapV3UnclaimedFees = totalUnclaimedFees.toString();
         console.log(
-            `Total uncollected Uniswap V3 LP fees: ${ethers.formatUnits(totalUnclaimedFees, SIR_DECIMALS)} SIR`
+            `Total uncollected Uniswap V3 LP fees: ${ethers.formatUnits(totalUnclaimedFees, SIR_DECIMALS)} HyperSIR`
         );
     }
 
-    // 8. Get unclaimed SIR rewards from staked Uniswap V3 positions
+    // 8. Get unclaimed HyperSIR rewards from staked Uniswap V3 positions
     async getUniswapV3StakingRewards() {
         console.log("Fetching Uniswap V3 staking rewards...");
 
         // Check if we have any positions tracked
         if (this.uniswapV3Positions.size === 0) {
             console.log("No Uniswap V3 positions tracked, skipping staking rewards");
+            this.results.summary.totalUniswapV3StakingRewards = "0";
+            return;
+        }
+
+        // Check if staking contract is configured
+        if (
+            !ADDRESSES.UNISWAP_V3_STAKING ||
+            ADDRESSES.UNISWAP_V3_STAKING === ethers.ZeroAddress ||
+            ADDRESSES.UNISWAP_V3_STAKING === "0x0000000000000000000000000000000000000000"
+        ) {
+            console.log("Uniswap V3 Staking not configured, skipping staking rewards");
             this.results.summary.totalUniswapV3StakingRewards = "0";
             return;
         }
@@ -1530,13 +1607,14 @@ class SIRBalanceSnapshot {
 
         // Get IncentiveCreated events to find all SIR incentives
         const incentiveCreatedFilter = stakingContract.filters.IncentiveCreated(ADDRESSES.SIR);
-        const incentiveCreatedEvents = await stakingContract.queryFilter(
+        const incentiveCreatedEvents = await this.queryFilterChunked(
+            stakingContract,
             incentiveCreatedFilter,
             START_BLOCK,
             this.blockNumber
         );
 
-        console.log(`Found ${incentiveCreatedEvents.length} SIR incentives created`);
+        console.log(`Found ${incentiveCreatedEvents.length} HyperSIR incentives created`);
 
         if (incentiveCreatedEvents.length === 0) {
             this.results.summary.totalUniswapV3StakingRewards = "0";
@@ -1571,7 +1649,7 @@ class SIRBalanceSnapshot {
         const stakedEvents = [];
         for (const incentiveId of incentiveParams.keys()) {
             const stakedFilter = stakingContract.filters.TokenStaked(null, incentiveId);
-            const events = await stakingContract.queryFilter(stakedFilter, START_BLOCK, this.blockNumber);
+            const events = await this.queryFilterChunked(stakingContract, stakedFilter, START_BLOCK, this.blockNumber);
             stakedEvents.push(...events);
         }
 
@@ -1694,7 +1772,9 @@ class SIRBalanceSnapshot {
         }
 
         this.results.summary.totalUniswapV3StakingRewards = totalStakingRewards.toString();
-        console.log(`Total Uniswap V3 staking rewards: ${ethers.formatUnits(totalStakingRewards, SIR_DECIMALS)} SIR`);
+        console.log(
+            `Total Uniswap V3 staking rewards: ${ethers.formatUnits(totalStakingRewards, SIR_DECIMALS)} HyperSIR`
+        );
     }
 
     // Display contracts with balances for user review
@@ -1747,7 +1827,7 @@ class SIRBalanceSnapshot {
     // Save results to file
     saveResults(filename = null) {
         if (!filename) {
-            filename = `ethereum-snapshot.json`;
+            filename = `hyperevm-snapshot.json`;
         }
 
         const outputPath = path.join(process.cwd(), "allocations", filename);
@@ -1777,13 +1857,13 @@ async function main() {
         process.exit(1);
     }
 
-    console.log(`Starting SIR balance snapshot at block ${blockNumber}...`);
+    console.log(`Starting HyperSIR balance snapshot at block ${blockNumber}...`);
     console.log(`Using Assistant contract at: ${ADDRESSES.ASSISTANT}`);
     console.log(`Loaded ${CONTRIBUTOR_ADDRESSES.length} contributor addresses`);
 
     const provider = new ethers.JsonRpcProvider(ALCHEMY_URL + ALCHEMY_KEY);
 
-    const snapshot = new SIRBalanceSnapshot(provider, blockNumber);
+    const snapshot = new HyperSIRBalanceSnapshot(provider, blockNumber);
 
     try {
         const results = await snapshot.execute();
@@ -1793,44 +1873,44 @@ async function main() {
         console.log(`Block: ${results.blockNumber}`);
         console.log(`Timestamp: ${new Date(results.timestamp * 1000).toISOString()}`);
         console.log(
-            `Total SIR Supply: ${snapshot.formatToSigFigs(
+            `Total HyperSIR Supply: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalSIRSupply, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Staked: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalStakedSIR, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Vault Equity: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalVaultEquity, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Vault Unclaimed Rewards (LP + Contributor): ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalUnclaimedRewards, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Contributor Unissued Rewards: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalContributorUnissued, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Uniswap V3 Equity (in positions): ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalUniswapV3Equity, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Uniswap V3 Unclaimed Fees: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalUniswapV3UnclaimedFees, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(
             `Total Uniswap V3 Staking Rewards: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalUniswapV3StakingRewards, SIR_DECIMALS)
-            )} SIR`
+            )} HyperSIR`
         );
         console.log(`Total Addresses: ${Object.keys(results.balances).length}`);
     } catch (error) {
@@ -1844,4 +1924,4 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-module.exports = { SIRBalanceSnapshot, ADDRESSES, ABIS };
+module.exports = { HyperSIRBalanceSnapshot, ADDRESSES, ABIS };

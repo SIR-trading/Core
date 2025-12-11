@@ -10,6 +10,7 @@ fs_permissions = [{ access = "read-write", path = "./"}, { access = "read-write"
 gas_reports = ["Vault","Oracle"]
 gas_limit = "18446744073709551615"
 evm_version = "cancun"
+code_size_limit = 524288 # 512 KB - MegaETH allows larger contracts than Ethereum's 24 KB
 
 [fuzz]
 runs = 100
