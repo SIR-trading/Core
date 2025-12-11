@@ -103,7 +103,7 @@ contract Vault is TEA {
     );
 
     /// @dev The Oracle contract used for getting the price of collateral vs. debt token.
-    Oracle public immutable ORACLE;
+    Oracle public ORACLE;
 
     /// @dev The address of the APE implementation.
     address public immutable APE_IMPLEMENTATION;
@@ -608,6 +608,16 @@ contract Vault is TEA {
     /*////////////////////////////////////////////////////////////////
                         SYSTEM CONTROL FUNCTIONS
     ////////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Allows SystemControl to change the Oracle contract.
+     * @dev This enables switching to a different Uniswap V3 instance.
+     * All token pairs must be initialized in the new Oracle before switching.
+     * @param newOracle The address of the new Oracle contract.
+     */
+    function setOracle(address newOracle) external onlySystemControl {
+        ORACLE = Oracle(newOracle);
+    }
 
     /**
      * @notice This function is only intended to be called by the SIR contract.

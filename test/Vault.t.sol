@@ -85,8 +85,8 @@ contract VaultTest is Test {
         uint256 amount;
     }
 
-    uint256 constant SLOT_VAULT_STATE = 9;
-    uint256 constant SLOT_TOTAL_RESERVES = 10;
+    uint256 constant SLOT_VAULT_STATE = 10;
+    uint256 constant SLOT_TOTAL_RESERVES = 11;
     uint256 constant SLOT_TOTAL_SUPPLY_APE = 5;
     uint256 constant SLOT_APE_BALANCE_OF = 6;
     uint256 constant SLOT_TOTAL_SUPPLY_TEA = 6;
@@ -1986,7 +1986,7 @@ contract VaultControlTest is Test {
 
     IWETH9 private constant WETH = IWETH9(AddressesMegaETHTest.ADDR_WETH);
 
-    uint256 constant SLOT_TOTAL_RESERVES = 10;
+    uint256 constant SLOT_TOTAL_RESERVES = 11;
     uint96 constant ETH_SUPPLY = 1e9 * 10 ** 18;
 
     address public systemControl = vm.addr(100);
