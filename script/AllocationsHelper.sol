@@ -10,7 +10,7 @@ import {Contributors} from "src/Contributors.sol";
  * @dev Can be used in both scripts and tests to ensure consistent allocation behavior
  */
 abstract contract AllocationsHelper is Script {
-    uint256 constant BATCH_SIZE = 100;
+    uint256 constant BATCH_SIZE = 1000;
 
     /**
      * @notice Read allocations from JSON and allocate them to Contributors contract

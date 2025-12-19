@@ -15,7 +15,8 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 import {AllocationsHelper} from "./AllocationsHelper.sol";
 
 /** @dev cli for MegaETH testnet:
-        forge script script/DeployCore.s.sol --rpc-url megatest --broadcast --private-key $PRIVATE_KEY --skip-simulation --gas-price 1000000 --gas-limit 100000000
+        forge script script/DeployCore.s.sol --rpc-url megatest --broadcast --private-key $PRIVATE_KEY --skip-simulation \
+        --gas-price 10000000 --priority-gas-price 1000000 --gas-limit 1000000000 --code-size-limit 524288 --slow --force
     @dev cli for MegaETH mainnet:
         forge script script/DeployCore.s.sol --rpc-url megaeth --broadcast --ledger --hd-paths $HD_PATH  \
         --slow --verify --etherscan-api-key $API_KEY

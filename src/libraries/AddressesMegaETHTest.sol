@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 library AddressesMegaETHTest {
     // MegaETH Testnet (Chain ID 6343) addresses
+
     // Prism V3 deployment
     address internal constant ADDR_UNISWAPV3_FACTORY = 0x94996d371622304F2eB85df1eb7f328F7B317C3E;
     address internal constant ADDR_UNISWAPV3_OWNER = 0x1279f3CbF01AD4f0Cfa93f233464581f4051033A;
@@ -21,4 +22,16 @@ library AddressesMegaETHTest {
     address internal constant ADDR_TEST05 = 0xb457e819420a6f4CE37361C7C530e09b103f8845; // TEST05
     address internal constant ADDR_TEST06 = 0xcAA464F9e4ADCA4f14937c8E2B9F27D5DCAdFc79; // TEST06
     address internal constant ADDR_TEST07 = 0x45D3bC1Abb194e5871752d1A24C577A93638f792; // TEST07
+
+    // Kumbaya V3 deployment
+    address internal constant ADDR_UNISWAPV3_FACTORY_KUMBAYA = 0x619fb6C12c36b57a8bAb05e98F42C43745DCf69f;
+    address internal constant ADDR_UNISWAPV3_POSITION_MANAGER_KUMBAYA = 0xa204A97EF8Bd2E3198f19EB5a804680467BD85f5;
+    address internal constant ADDR_UNISWAPV3_SWAP_ROUTER_KUMBAYA = 0xE060C6412Cb9E3C85dDdED44AAd1DC9fAFfb5cD9;
+    address internal constant ADDR_UNISWAP_QUOTER_V2_KUMBAYA = 0x49D39c2Ca480F8C1e2a623E457756b237EB07a4b;
+
+    // WarpX V3 deployment
+    address internal constant ADDR_UNISWAPV3_FACTORY_WARPX = 0x125631B6B58deFD302c3314D50712E3962D817c7;
+    // address internal constant ADDR_UNISWAPV3_POSITION_MANAGER_WARPX = ;
+    address internal constant ADDR_UNISWAPV3_SWAP_ROUTER_WARPX = 0x38BD52Fb12E7237b6E5bD7FC990a7cA197cff761;
+    address internal constant ADDR_UNISWAP_QUOTER_V2_WARPX = 0x1A71FBc3376E188804329Fdd79b259c11cf3C6A6;
 }
