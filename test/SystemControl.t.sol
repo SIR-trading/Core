@@ -103,7 +103,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // vm.writeFile("./numNewVaults.log", "");
 
         // Deploy Oracle
-        address oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH));
 
         // Deploy SystemControl
         systemControl = new SystemControl();

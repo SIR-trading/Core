@@ -48,7 +48,7 @@ contract VaultExternalTest is Test {
         }
 
         // Deploy oracle
-        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
 
         // Deploy APE implementation
         apeImplementation = address(new APE());
@@ -103,6 +103,28 @@ contract VaultExternalTest is Test {
 
     function testFuzz_deployWrongTokens(address debtToken, address collateralToken, int8 leverageTier) public {
         leverageTier = int8(_bound(leverageTier, SystemConstants.MIN_LEVERAGE_TIER, SystemConstants.MAX_LEVERAGE_TIER)); // Only accepted values in the system
+
+        // Exclude known tokens that have Uniswap pools on MegaETH testnet
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_WETH);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_USDC);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_PBTC);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST01);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST02);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST03);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST04);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST05);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST06);
+        vm.assume(debtToken != AddressesMegaETHTest.ADDR_TEST07);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_WETH);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_USDC);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_PBTC);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST01);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST02);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST03);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST04);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST05);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST06);
+        vm.assume(collateralToken != AddressesMegaETHTest.ADDR_TEST07);
 
         vm.expectRevert();
         VaultExternal.deploy(
@@ -267,7 +289,7 @@ contract VaultExternalGetReserves is Test {
         vaultParams = SirStructs.VaultParameters(AddressesMegaETHTest.ADDR_USDC, address(_collateralToken), 0);
 
         alice = vm.addr(1);
-        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
     }
 
     function _preprocess(

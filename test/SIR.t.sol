@@ -226,7 +226,7 @@ contract GentlemenTest is Test, ERC1155TokenReceiver {
         alice = address(this);
 
         // Deploy oracle
-        address oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY));
+        address oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH));
 
         // Deploy Contributors
         address contributors = address(new Contributors());

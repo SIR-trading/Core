@@ -4,7 +4,8 @@ pragma solidity >=0.5.0;
 /// @title Provides functions for deriving a pool address from the factory, tokens, and the fee
 /// @notice Modified from https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/PoolAddress.sol
 library UniswapPoolAddress {
-    bytes32 internal constant POOL_INIT_CODE_HASH = 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
+    /// @dev Canonical Uniswap V3 POOL_INIT_CODE_HASH for reference (mainnet)
+    /// bytes32 internal constant POOL_INIT_CODE_HASH = 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
 
     /// @notice The identifying key of the pool
     struct PoolKey {
@@ -26,8 +27,13 @@ library UniswapPoolAddress {
     /// @notice Deterministically computes the pool address given the factory and PoolKey
     /// @param factory The Uniswap V3 factory contract address
     /// @param key The PoolKey
+    /// @param poolInitCodeHash The init code hash of the Uniswap V3 pool (varies by deployment)
     /// @return pool The contract address of the V3 pool
-    function computeAddress(address factory, PoolKey memory key) internal pure returns (address pool) {
+    function computeAddress(
+        address factory,
+        PoolKey memory key,
+        bytes32 poolInitCodeHash
+    ) internal pure returns (address pool) {
         require(key.token0 < key.token1);
         pool = address(
             uint160(
@@ -37,7 +43,7 @@ library UniswapPoolAddress {
                             hex"ff",
                             factory,
                             keccak256(abi.encode(key.token0, key.token1, key.fee)),
-                            POOL_INIT_CODE_HASH
+                            poolInitCodeHash
                         )
                     )
                 )

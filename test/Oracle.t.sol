@@ -21,10 +21,10 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
 contract OracleNewFeeTiersTest is Test, Oracle {
     Oracle private _oracle;
 
-    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH) {
         vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
     }
 
     function test_GetUniswapFeeTiers() public view {
@@ -127,10 +127,10 @@ contract OracleInitializeTest is Test, Oracle {
     MockERC20 private _tokenA;
     MockERC20 private _tokenB;
 
-    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH) {
         vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
     }
@@ -380,7 +380,7 @@ contract OracleInitializeTest is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -489,13 +489,13 @@ contract OracleGetPrice is Test, Oracle {
     MockERC20 private _tokenB;
     UniswapPoolAddress.PoolKey private _poolKey;
 
-    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH) {}
 
     function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
         vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -528,7 +528,7 @@ contract OracleGetPrice is Test, Oracle {
 
         tickPriceX42 = _oracle.getPrice(address(_tokenA), address(_tokenB));
 
-        address uniswapPool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, _poolKey);
+        address uniswapPool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, _poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         (, int24 tick, uint16 observationIndex, uint16 observationCardinality, , , ) = IUniswapV3Pool(uniswapPool)
             .slot0();
         (uint32 blockTimestampOldest, , , ) = IUniswapV3Pool(uniswapPool).observations(observationIndex);
@@ -565,7 +565,7 @@ contract OracleGetPrice is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -630,13 +630,13 @@ contract OracleGetPriceTWAP is Test, Oracle {
     MockERC20 private _tokenB;
     UniswapPoolAddress.PoolKey private _poolKey;
 
-    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH) {}
 
     function setUp() public {
         // Fork at a later block for TWAP testing
         vm.createSelectFork("megatest_alchemy", 5655720);
 
-        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
 
         _tokenA = new MockERC20("Mock Token A", "MTA", 18);
         _tokenB = new MockERC20("Mock Token B", "MTA", 6);
@@ -655,7 +655,7 @@ contract OracleGetPriceTWAP is Test, Oracle {
 
     function test_getPriceUSDCAndWETH() public {
         // Initialize oracle for WETH/USDC
-        Oracle oracleForMainnetTokens = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        Oracle oracleForMainnetTokens = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         oracleForMainnetTokens.initialize(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC);
 
         int64 tickPriceX42 = oracleForMainnetTokens.getPrice(
@@ -763,7 +763,7 @@ contract OracleGetPriceTWAP is Test, Oracle {
 
         if (liquidity > 0) {
             // Compute min and max tick
-            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
             int24 tickSpac = IUniswapV3Pool(pool).tickSpacing();
             int24 minTick = (TickMath.MIN_TICK / tickSpac) * tickSpac;
             int24 maxTick = (TickMath.MAX_TICK / tickSpac) * tickSpac;
@@ -829,7 +829,8 @@ contract OracleGetPriceTWAP is Test, Oracle {
         // Get the pool
         address pool = UniswapPoolAddress.computeAddress(
             AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY,
-            UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), feeTier)
+            UniswapPoolAddress.getPoolKey(address(_tokenA), address(_tokenB), feeTier),
+            AddressesMegaETHTest.POOL_INIT_CODE_HASH
         );
 
         // Determine swap direction (zeroForOne)
@@ -882,7 +883,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
 
     uint24 newFeeTier = 69;
 
-    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH) {}
 
     function setUp() public {
         // We fork after this tx because it allows us to test a 0-TWAP.
@@ -892,7 +893,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
         _createPoolIfMissing(500);
         _createPoolIfMissing(10000);
 
-        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        _oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         _oracle.initialize(AddressesMegaETHTest.ADDR_WETH, AddressesMegaETHTest.ADDR_USDC); // It picks feeTier = 3000
     }
 
@@ -902,7 +903,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
             AddressesMegaETHTest.ADDR_USDC,
             fee
         );
-        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         if (pool.code.length == 0) {
             // Use same price as existing 3000 pool
             uint160 sqrtPriceX96 = 4353063810814844835180845;
@@ -1052,7 +1053,7 @@ contract OracleProbingFeeTiers is Test, Oracle {
                 AddressesMegaETHTest.ADDR_USDC,
                 fee
             );
-            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
             int24 tick;
             (sqrtPriceX96, tick, , , , , ) = IUniswapV3Pool(pool).slot0();
 
@@ -1187,7 +1188,7 @@ contract UniswapHandler is Test {
             address(_tokenB),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         IUniswapV3Pool(pool).increaseObservationCardinalityNext(observationCardinalityNext);
     }
 
@@ -1215,7 +1216,7 @@ contract UniswapHandler is Test {
             address(_tokenB),
             feeTier
         );
-        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+        address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         if (pool.code.length > 0) return; // already instantiated
 
         sqrtPriceX96 = uint160(_bound(sqrtPriceX96, TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO - 1));
@@ -1242,7 +1243,7 @@ contract UniswapHandler is Test {
                 address(_tokenB),
                 feeTier
             );
-            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey);
+            address pool = UniswapPoolAddress.computeAddress(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, poolKey, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
             (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
             int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
@@ -1400,7 +1401,7 @@ contract SirOracleHandler is Test {
 
         _oracleInvariantTest = IOracleInvariantTest(msg.sender);
         _uniswapHandler = uniswapHandler_;
-        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
         oracle.initialize(address(tokenA_), address(tokenB_));
     }
 
@@ -1444,7 +1445,7 @@ contract OracleInvariantTest is Test, Oracle {
 
     uint40 private _currentTime; // Necessary because Forge invariant testing does not keep track block.timestamp
 
-    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY) {}
+    constructor() Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH) {}
 
     function setUp() public {
         vm.createSelectFork("megatest_alchemy", 5655720);

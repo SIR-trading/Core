@@ -45,6 +45,7 @@ contract Oracle {
 
     // Constants
     address private immutable UNISWAPV3_FACTORY;
+    bytes32 private immutable POOL_INIT_CODE_HASH;
     uint256 internal constant DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
@@ -57,8 +58,9 @@ contract Oracle {
     // Least significant 8 bits represent the length of this tightly packed array, 48 bits for each extra fee tier, which implies a maximum of 5 extra fee tiers.
     uint private _uniswapExtraFeeTiers;
 
-    constructor(address uniswapV3Factory) {
+    constructor(address uniswapV3Factory, bytes32 poolInitCodeHash) {
         UNISWAPV3_FACTORY = uniswapV3Factory;
+        POOL_INIT_CODE_HASH = poolInitCodeHash;
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -92,7 +94,8 @@ contract Oracle {
         return
             UniswapPoolAddress.computeAddress(
                 UNISWAPV3_FACTORY,
-                UniswapPoolAddress.getPoolKey(tokenA, tokenB, _state[tokenA][tokenB].uniswapFeeTier.fee)
+                UniswapPoolAddress.getPoolKey(tokenA, tokenB, _state[tokenA][tokenB].uniswapFeeTier.fee),
+                POOL_INIT_CODE_HASH
             );
     }
 
@@ -587,7 +590,11 @@ contract Oracle {
     function _getUniswapPool(address tokenA, address tokenB, uint24 fee) private view returns (IUniswapV3Pool) {
         return
             IUniswapV3Pool(
-                UniswapPoolAddress.computeAddress(UNISWAPV3_FACTORY, UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee))
+                UniswapPoolAddress.computeAddress(
+                    UNISWAPV3_FACTORY,
+                    UniswapPoolAddress.getPoolKey(tokenA, tokenB, fee),
+                    POOL_INIT_CODE_HASH
+                )
             );
     }
 

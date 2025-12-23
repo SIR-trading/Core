@@ -42,18 +42,21 @@ contract DeployCore is AllocationsHelper {
 
         // Get the correct addresses based on chain
         address uniswapFactory;
+        bytes32 poolInitCodeHash;
         address weth;
 
         if (block.chainid == 6343) {
             uniswapFactory = AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY;
+            poolInitCodeHash = AddressesMegaETHTest.POOL_INIT_CODE_HASH;
             weth = AddressesMegaETHTest.ADDR_WETH;
         } else {
             uniswapFactory = AddressesMegaETH.ADDR_UNISWAPV3_FACTORY;
+            poolInitCodeHash = AddressesMegaETH.POOL_INIT_CODE_HASH;
             weth = AddressesMegaETH.ADDR_WETH;
         }
 
         // Deploy oracle
-        address oracle = address(new Oracle(uniswapFactory));
+        address oracle = address(new Oracle(uniswapFactory, poolInitCodeHash));
         console.log("Oracle deployed at: ", oracle);
 
         // Deploy SystemControl

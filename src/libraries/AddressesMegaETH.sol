@@ -5,6 +5,7 @@ library AddressesMegaETH {
     // MegaETH Mainnet addresses (TBD - mainnet not launched yet)
     // Native token on MegaETH mainnet will be ETH
     address internal constant ADDR_UNISWAPV3_FACTORY = address(0); // TBD
+    bytes32 internal constant POOL_INIT_CODE_HASH = bytes32(0); // TBD
     address internal constant ADDR_UNISWAPV3_OWNER = address(0); // TBD
     address internal constant ADDR_UNISWAPV3_POSITION_MANAGER = address(0); // TBD
     address internal constant ADDR_UNISWAPV3_SWAP_ROUTER = address(0); // TBD

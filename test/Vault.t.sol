@@ -115,7 +115,7 @@ contract VaultTest is Test {
         // vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy oracle
-        oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY));
+        oracle = address(new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH));
 
         // Mock oracle initialization
         vm.mockCall(
@@ -1757,7 +1757,7 @@ contract VaultTestETH is Test, ERC1155TokenReceiver {
         user = address(this);
 
         // Deploy oracle
-        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
@@ -1849,7 +1849,7 @@ contract VaultTestDebtToken is Test {
         vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy oracle
-        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();
@@ -1928,7 +1928,7 @@ contract VaultTestETHDebtToken is Test {
         vm.createSelectFork("megatest_alchemy", 5655720);
 
         // Deploy oracle
-        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY);
+        oracle = new Oracle(AddressesMegaETHTest.ADDR_UNISWAPV3_FACTORY, AddressesMegaETHTest.POOL_INIT_CODE_HASH);
 
         // Deploy APE implementation
         APE apeImplementation = new APE();

@@ -25,6 +25,7 @@ import {SirStructs} from "src/libraries/SirStructs.sol";
  *      Set environment variables:
  *          export SYSTEM_CONTROL=<address>
  *          export NEW_UNISWAP_FACTORY=<address>
+ *          export NEW_POOL_INIT_CODE_HASH=<bytes32>
  *
  *      For MegaETH testnet:
  *          forge script script/MigrateOracle.s.sol:MigrateOracle --rpc-url megatest --broadcast --ledger --hd-paths $HD_PATH
@@ -37,6 +38,7 @@ contract MigrateOracle is Script {
         // Read addresses from environment
         address systemControlAddr = vm.envAddress("SYSTEM_CONTROL");
         address newUniswapFactory = vm.envAddress("NEW_UNISWAP_FACTORY");
+        bytes32 newPoolInitCodeHash = vm.envBytes32("NEW_POOL_INIT_CODE_HASH");
 
         SystemControl systemControl = SystemControl(systemControlAddr);
         Vault vault = systemControl.vault();
@@ -66,7 +68,7 @@ contract MigrateOracle is Script {
 
         // Step 1: Deploy new Oracle
         console.log("\n--- Step 1: Deploying new Oracle ---");
-        Oracle newOracle = new Oracle(newUniswapFactory);
+        Oracle newOracle = new Oracle(newUniswapFactory, newPoolInitCodeHash);
         console.log("New Oracle deployed at:", address(newOracle));
 
         // Step 2: Initialize all token pairs in the new Oracle
@@ -130,6 +132,7 @@ contract MigrateOracle is Script {
  *      Set environment variables:
  *          export SYSTEM_CONTROL=<address>
  *          export NEW_UNISWAP_FACTORY=<address>
+ *          export NEW_POOL_INIT_CODE_HASH=<bytes32>
  *
  *      For MegaETH testnet:
  *          forge script script/MigrateOracle.s.sol:MigrateOracleWithEmergency --rpc-url megatest --broadcast --ledger --hd-paths $HD_PATH
@@ -139,6 +142,7 @@ contract MigrateOracleWithEmergency is Script {
         // Read addresses from environment
         address systemControlAddr = vm.envAddress("SYSTEM_CONTROL");
         address newUniswapFactory = vm.envAddress("NEW_UNISWAP_FACTORY");
+        bytes32 newPoolInitCodeHash = vm.envBytes32("NEW_POOL_INIT_CODE_HASH");
 
         SystemControl systemControl = SystemControl(systemControlAddr);
         Vault vault = systemControl.vault();
@@ -173,7 +177,7 @@ contract MigrateOracleWithEmergency is Script {
 
         // Step 2: Deploy new Oracle
         console.log("\n--- Step 2: Deploying new Oracle ---");
-        Oracle newOracle = new Oracle(newUniswapFactory);
+        Oracle newOracle = new Oracle(newUniswapFactory, newPoolInitCodeHash);
         console.log("New Oracle deployed at:", address(newOracle));
 
         // Step 3: Initialize all token pairs in the new Oracle
@@ -244,6 +248,7 @@ contract MigrateOracleWithEmergency is Script {
  *      Set environment variables:
  *          export VAULT=<address>
  *          export NEW_UNISWAP_FACTORY=<address>
+ *          export NEW_POOL_INIT_CODE_HASH=<bytes32>
  *
  *      For MegaETH testnet:
  *          forge script script/MigrateOracle.s.sol:ValidateOracleMigration --rpc-url megatest
@@ -253,6 +258,7 @@ contract ValidateOracleMigration is Script {
         // Read addresses from environment
         address vaultAddr = vm.envAddress("VAULT");
         address newUniswapFactory = vm.envAddress("NEW_UNISWAP_FACTORY");
+        bytes32 newPoolInitCodeHash = vm.envBytes32("NEW_POOL_INIT_CODE_HASH");
 
         Vault vault = Vault(vaultAddr);
 
@@ -270,7 +276,7 @@ contract ValidateOracleMigration is Script {
 
         // Deploy new Oracle in simulation
         vm.startBroadcast();
-        Oracle newOracle = new Oracle(newUniswapFactory);
+        Oracle newOracle = new Oracle(newUniswapFactory, newPoolInitCodeHash);
         console.log("Test Oracle deployed at:", address(newOracle));
         vm.stopBroadcast();
 
