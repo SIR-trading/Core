@@ -20,6 +20,8 @@ interface IOracle {
     event UniswapFeeTierAdded(uint24 fee);
     event UniswapOracleProbed(uint24 fee, uint136 avLiquidity, uint40 period, uint16 cardinalityToIncrease);
 
+    function UNISWAPV3_FACTORY() external view returns (address);
+    function POOL_INIT_CODE_HASH() external view returns (bytes32);
     function TWAP_DURATION() external view returns (uint40);
     function getPrice(address collateralToken, address debtToken) external view returns (int64);
     function getUniswapFeeTiers() external view returns (SirStructs.UniswapFeeTier[] memory uniswapFeeTiers);
