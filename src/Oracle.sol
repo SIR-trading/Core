@@ -44,8 +44,8 @@ contract Oracle {
     }
 
     // Constants
-    address private immutable UNISWAPV3_FACTORY;
-    bytes32 private immutable POOL_INIT_CODE_HASH;
+    address public immutable UNISWAPV3_FACTORY;
+    bytes32 public immutable POOL_INIT_CODE_HASH;
     uint256 internal constant DURATION_UPDATE_FEE_TIER = 1 hours; // No need to test if there is a better fee tier more often than this
     int64 internal constant MAX_TICK_INC_PER_SEC = 1 << 42;
     uint40 internal constant TWAP_DELTA = 1 minutes; // When a new fee tier has larger liquidity, the TWAP array is increased in intervals of TWAP_DELTA.
