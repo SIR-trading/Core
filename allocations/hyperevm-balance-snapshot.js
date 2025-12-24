@@ -29,7 +29,11 @@ const ADDRESSES = {
 // Manually ignored contract addresses (add addresses here to exclude them from snapshot)
 // These will be excluded in addition to system contracts (Assistant, Contributors, Vault, SIR, Oracle, etc.)
 const MANUALLY_IGNORED_CONTRACTS = [
-    // TODO: Add any DEX pools or other contracts to ignore
+    "0x3ed63996007333187B5EF24f4383D3DCb8397261",
+    "0x63242A4Ea82847b20E506b63B0e2e2eFF0CC6cB0",
+    "0x97D9E9bF20D025E622de1A300B8F98203173740f",
+    "0x6Ad675624EC8320E5806858Cd5dB101a0b927FD9",
+    "0x744C89B7b7F8Cb1E955B1Dcd842A5378d75c96Dc"
 ];
 
 // Contributor addresses from hyperevm-contributors.json
@@ -1802,6 +1806,102 @@ class HyperSIRBalanceSnapshot {
         console.log(`Contract flags added for ${addresses.length} addresses`);
     }
 
+    // Calculate total SIR for each address and percentages
+    calculateTotalSIRAndPercentages() {
+        console.log("Calculating total HyperSIR and percentages...");
+
+        let grandTotal = BigInt(0);
+
+        // First pass: calculate total SIR for each address
+        for (const [address, data] of Object.entries(this.results.balances)) {
+            let addressTotal = BigInt(0);
+
+            // Add sirBalance
+            if (data.sirBalance) {
+                addressTotal += BigInt(data.sirBalance);
+            }
+
+            // Add staked SIR (unlocked + locked)
+            if (data.stakedSIR) {
+                if (data.stakedSIR.unlockedStake) {
+                    addressTotal += BigInt(data.stakedSIR.unlockedStake);
+                }
+                if (data.stakedSIR.lockedStake) {
+                    addressTotal += BigInt(data.stakedSIR.lockedStake);
+                }
+            }
+
+            // Add vault equity (sum all vaults' teaEquitySIR + apeEquitySIR)
+            if (data.vaultEquity) {
+                for (const vaultData of Object.values(data.vaultEquity)) {
+                    if (vaultData.teaEquitySIR) {
+                        addressTotal += BigInt(vaultData.teaEquitySIR);
+                    }
+                    if (vaultData.apeEquitySIR) {
+                        addressTotal += BigInt(vaultData.apeEquitySIR);
+                    }
+                }
+            }
+
+            // Add unclaimed LP rewards
+            if (data.unclaimedLperRewards) {
+                addressTotal += BigInt(data.unclaimedLperRewards);
+            }
+
+            // Add unclaimed contributor rewards
+            if (data.unclaimedContributorRewards) {
+                addressTotal += BigInt(data.unclaimedContributorRewards);
+            }
+
+            // Add unissued contributor rewards
+            if (data.unissuedContributorRewards) {
+                addressTotal += BigInt(data.unissuedContributorRewards);
+            }
+
+            // Add Uniswap V3 equity
+            if (data.uniswapV3Equity) {
+                addressTotal += BigInt(data.uniswapV3Equity);
+            }
+
+            // Add Uniswap V3 unclaimed fees
+            if (data.uniswapV3UnclaimedFees) {
+                addressTotal += BigInt(data.uniswapV3UnclaimedFees);
+            }
+
+            // Add Uniswap V3 staking rewards
+            if (data.uniswapV3StakingRewards) {
+                addressTotal += BigInt(data.uniswapV3StakingRewards);
+            }
+
+            data.totalSIR = addressTotal.toString();
+            grandTotal += addressTotal;
+        }
+
+        // Store grand total in summary
+        this.results.summary.grandTotalSIR = grandTotal.toString();
+
+        // Second pass: calculate percentages
+        // Use high precision: multiply by 10^18 first, then format as percentage string
+        const PRECISION = BigInt(10) ** BigInt(18);
+
+        for (const [address, data] of Object.entries(this.results.balances)) {
+            const addressTotal = BigInt(data.totalSIR);
+            if (grandTotal > 0n) {
+                // Calculate percentage with 18 decimal precision, then convert to percentage string
+                const percentageScaled = (addressTotal * PRECISION * 100n) / grandTotal;
+                // Convert to decimal string (divide by 10^18)
+                const percentageStr = ethers.formatUnits(percentageScaled, 18);
+                data.percentage = percentageStr;
+            } else {
+                data.percentage = "0";
+            }
+        }
+
+        console.log(
+            `Grand total HyperSIR: ${this.formatToSigFigs(ethers.formatUnits(grandTotal, SIR_DECIMALS))} HyperSIR`
+        );
+    }
+
     // Main execution function
     async execute() {
         await this.initialize();
@@ -1817,6 +1917,9 @@ class HyperSIRBalanceSnapshot {
 
         // Add contract flags to all addresses
         await this.addContractFlags();
+
+        // Calculate total SIR and percentages for each address
+        this.calculateTotalSIRAndPercentages();
 
         // Display contracts with balances for user review
         this.displayContractsWithBalances();
@@ -1910,6 +2013,11 @@ async function main() {
         console.log(
             `Total Uniswap V3 Staking Rewards: ${snapshot.formatToSigFigs(
                 ethers.formatUnits(results.summary.totalUniswapV3StakingRewards, SIR_DECIMALS)
+            )} HyperSIR`
+        );
+        console.log(
+            `Grand Total HyperSIR (all addresses): ${snapshot.formatToSigFigs(
+                ethers.formatUnits(results.summary.grandTotalSIR, SIR_DECIMALS)
             )} HyperSIR`
         );
         console.log(`Total Addresses: ${Object.keys(results.balances).length}`);

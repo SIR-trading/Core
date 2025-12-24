@@ -20,23 +20,23 @@ const TVL_WEIGHTS = {
     hyperSir: 18200 // $18.2k TVL for HyperSIR on HyperEVM
 };
 
+// Total TVL for weighted average calculation
+const TOTAL_TVL = TVL_WEIGHTS.sir + TVL_WEIGHTS.hyperSir;
+
 // Allocation percentages (out of 100% total issuance)
 const LP_ALLOCATION = 70; // 70% to LPers (not in this contract, handled separately)
 // Remaining 30% goes to contributors based on their SIR/HyperSIR holdings
+
+// High precision for percentage calculations (18 decimals)
+const PRECISION = BigInt(10) ** BigInt(18);
 
 // =============================================================================
 // LOAD DATA FILES
 // =============================================================================
 
 const ethereumSnapshot = require("./ethereum-snapshot.json");
-
-// Load HyperEVM snapshot if it exists
-let hyperevmSnapshot = null;
-try {
-    hyperevmSnapshot = require("./hyperevm-snapshot.json");
-} catch (e) {
-    // File doesn't exist yet - will be skipped in processing
-}
+const hyperevmSnapshot = require("./hyperevm-snapshot.json");
+const megaethContributors = require("./megaeth-contributors.json");
 
 // =============================================================================
 // ALLOCATIONS GENERATOR
@@ -55,130 +55,95 @@ class AllocationsGenerator {
         // Maps MegaETH address -> source data for debugging/auditing
         this.sources = new Map();
 
-        // Totals for weighting
-        this.totalWeightedValue = 0n;
+        // Track user percentages from each chain (as BigInt with 18 decimals precision)
+        // percentage * PRECISION (e.g., 2.5% = 2.5 * 10^18)
+        this.userEthereumPercentages = new Map();
+        this.userHyperEVMPercentages = new Map();
 
-        // Track user weighted values before final allocation calculation
-        this.userWeightedValues = new Map();
+        // Track final weighted percentages
+        this.userWeightedPercentages = new Map();
+
+        // Fixed contributors from megaeth-contributors.json
+        // These get fixed allocations in basis points of total issuance (not contributor pool)
+        // Map: address (lowercase) -> { allocationInBasisPoints, ... }
+        this.fixedContributors = new Map();
+        for (const contributor of megaethContributors) {
+            this.fixedContributors.set(contributor.address.toLowerCase(), contributor);
+        }
     }
 
     /**
-     * Calculate total SIR value for a user from Ethereum snapshot
+     * Parse percentage string to BigInt with 18 decimals precision
+     * Input: "2.5" (meaning 2.5%)
+     * Output: 2500000000000000000n (2.5 * 10^18)
      */
-    calculateUserTotalSIR(balanceData) {
-        let total = 0n;
-
-        // 1. SIR balance
-        if (balanceData.sirBalance) {
-            total += BigInt(balanceData.sirBalance);
-        }
-
-        // 2. Staked SIR
-        if (balanceData.stakedSIR) {
-            total += BigInt(balanceData.stakedSIR.unlockedStake || 0);
-            total += BigInt(balanceData.stakedSIR.lockedStake || 0);
-        }
-
-        // 3. Vault equity (sum across all vaults)
-        if (balanceData.vaultEquity) {
-            for (const vaultId in balanceData.vaultEquity) {
-                const vault = balanceData.vaultEquity[vaultId];
-                total += BigInt(vault.teaEquitySIR || 0);
-                total += BigInt(vault.apeEquitySIR || 0);
-            }
-        }
-
-        // 4. Unclaimed LP rewards
-        if (balanceData.unclaimedLperRewards) {
-            total += BigInt(balanceData.unclaimedLperRewards);
-        }
-
-        // 5. Unclaimed contributor rewards
-        if (balanceData.unclaimedContributorRewards) {
-            total += BigInt(balanceData.unclaimedContributorRewards);
-        }
-
-        // 6. Unissued contributor rewards
-        if (balanceData.unissuedContributorRewards) {
-            total += BigInt(balanceData.unissuedContributorRewards);
-        }
-
-        // 7. Uniswap V3 equity
-        if (balanceData.uniswapV3Equity) {
-            total += BigInt(balanceData.uniswapV3Equity);
-        }
-
-        // 8. Uniswap V3 unclaimed fees
-        if (balanceData.uniswapV3UnclaimedFees) {
-            total += BigInt(balanceData.uniswapV3UnclaimedFees);
-        }
-
-        // 9. Uniswap V3 staking rewards
-        if (balanceData.uniswapV3StakingRewards) {
-            total += BigInt(balanceData.uniswapV3StakingRewards);
-        }
-
-        return total;
+    parsePercentageToBigInt(percentageStr) {
+        if (!percentageStr || percentageStr === "0") return 0n;
+        // Parse the percentage string to BigInt with 18 decimals
+        return ethers.parseUnits(percentageStr, 18);
     }
 
     /**
      * Process Ethereum snapshot - SIR holders
+     * Uses the pre-calculated percentage field from the snapshot
      * Treasury on Ethereum gets treated as a regular user
+     * Skips fixed contributors (they get fixed allocations instead)
      */
     processEthereumSnapshot() {
         console.log("Processing Ethereum snapshot (SIR holders)...");
 
         const balances = ethereumSnapshot.balances;
-        let totalSIR = 0n;
+        let holderCount = 0;
+        let skippedFixedContributors = 0;
 
         for (const [address, balanceData] of Object.entries(balances)) {
-            const userSIR = this.calculateUserTotalSIR(balanceData);
+            // Use the percentage field from the snapshot
+            const percentageStr = balanceData.percentage;
+            if (!percentageStr || percentageStr === "0") continue;
 
-            if (userSIR > 0n) {
-                // Apply TVL weight
-                const weightedValue = (userSIR * BigInt(Math.floor(TVL_WEIGHTS.sir * 1e18))) / BigInt(1e18);
+            const percentage = this.parsePercentageToBigInt(percentageStr);
+            if (percentage === 0n) continue;
 
-                // Determine MegaETH address:
-                // - If this is the Ethereum treasury, map to MegaETH treasury
-                // - Otherwise, use same address (assumes same keys across chains)
-                let megaethAddress = address;
-                if (address.toLowerCase() === TREASURY.ethereum.toLowerCase()) {
-                    megaethAddress = TREASURY.megaeth;
-                }
-
-                // Add to user's weighted value
-                const existing = this.userWeightedValues.get(megaethAddress) || 0n;
-                this.userWeightedValues.set(megaethAddress, existing + weightedValue);
-
-                // Store source data
-                const sources = this.sources.get(megaethAddress) || {};
-                sources.ethereum = {
-                    originalAddress: address,
-                    sirBalance: userSIR.toString(),
-                    weightedValue: weightedValue.toString()
-                };
-                this.sources.set(megaethAddress, sources);
-
-                // Store breakdown
-                const breakdown = this.allocationBreakdowns.get(megaethAddress) || {
-                    fromEthereumSIR: 0n,
-                    fromHyperEVMSIR: 0n
-                };
-                breakdown.fromEthereumSIR = weightedValue;
-                this.allocationBreakdowns.set(megaethAddress, breakdown);
-
-                totalSIR += userSIR;
+            // Determine MegaETH address:
+            // - If this is the Ethereum treasury, map to MegaETH treasury
+            // - Otherwise, use same address (assumes same keys across chains)
+            let megaethAddress = address;
+            if (address.toLowerCase() === TREASURY.ethereum.toLowerCase()) {
+                megaethAddress = TREASURY.megaeth;
             }
+
+            // Skip fixed contributors - they get fixed allocations
+            if (this.fixedContributors.has(megaethAddress.toLowerCase())) {
+                skippedFixedContributors++;
+                continue;
+            }
+
+            // Store the Ethereum percentage for this address
+            const existing = this.userEthereumPercentages.get(megaethAddress) || 0n;
+            this.userEthereumPercentages.set(megaethAddress, existing + percentage);
+
+            // Store source data
+            const sources = this.sources.get(megaethAddress) || {};
+            sources.ethereum = {
+                originalAddress: address,
+                percentage: percentageStr,
+                totalSIR: balanceData.totalSIR
+            };
+            this.sources.set(megaethAddress, sources);
+
+            holderCount++;
         }
 
-        this.totalSIR = totalSIR;
-        console.log(`  Total SIR: ${ethers.formatUnits(totalSIR, 12)} SIR`);
-        console.log(`  Unique holders: ${this.userWeightedValues.size}`);
+        console.log(`  Holders with percentage: ${holderCount}`);
+        console.log(`  Skipped fixed contributors: ${skippedFixedContributors}`);
+        console.log(`  Unique MegaETH addresses: ${this.userEthereumPercentages.size}`);
     }
 
     /**
      * Process HyperEVM snapshot - HyperSIR holders
+     * Uses the pre-calculated percentage field from the snapshot
      * Treasury on HyperEVM gets treated as a regular user
+     * Skips fixed contributors (they get fixed allocations instead)
      */
     processHyperEVMSnapshot() {
         console.log("\nProcessing HyperEVM snapshot (HyperSIR holders)...");
@@ -190,84 +155,153 @@ class AllocationsGenerator {
         }
 
         const balances = hyperevmSnapshot.balances;
-        let totalHyperSIR = 0n;
+        let holderCount = 0;
+        let skippedFixedContributors = 0;
 
         for (const [address, balanceData] of Object.entries(balances)) {
-            const userHyperSIR = this.calculateUserTotalSIR(balanceData);
+            // Use the percentage field from the snapshot
+            const percentageStr = balanceData.percentage;
+            if (!percentageStr || percentageStr === "0") continue;
 
-            if (userHyperSIR > 0n) {
-                // Apply TVL weight for HyperSIR
-                const weightedValue = (userHyperSIR * BigInt(Math.floor(TVL_WEIGHTS.hyperSir * 1e18))) / BigInt(1e18);
+            const percentage = this.parsePercentageToBigInt(percentageStr);
+            if (percentage === 0n) continue;
 
-                // Determine MegaETH address:
-                // - If this is the HyperEVM treasury, map to MegaETH treasury
-                // - Otherwise, use same address (assumes same keys across chains)
-                let megaethAddress = address;
-                if (address.toLowerCase() === TREASURY.hyperevm.toLowerCase()) {
-                    megaethAddress = TREASURY.megaeth;
-                }
-
-                // Add to user's weighted value
-                const existing = this.userWeightedValues.get(megaethAddress) || 0n;
-                this.userWeightedValues.set(megaethAddress, existing + weightedValue);
-
-                // Store source data
-                const sources = this.sources.get(megaethAddress) || {};
-                sources.hyperevm = {
-                    originalAddress: address,
-                    hyperSirBalance: userHyperSIR.toString(),
-                    weightedValue: weightedValue.toString()
-                };
-                this.sources.set(megaethAddress, sources);
-
-                // Store breakdown
-                const breakdown = this.allocationBreakdowns.get(megaethAddress) || {
-                    fromEthereumSIR: 0n,
-                    fromHyperEVMSIR: 0n
-                };
-                breakdown.fromHyperEVMSIR = weightedValue;
-                this.allocationBreakdowns.set(megaethAddress, breakdown);
-
-                totalHyperSIR += userHyperSIR;
+            // Determine MegaETH address:
+            // - If this is the HyperEVM treasury, map to MegaETH treasury
+            // - Otherwise, use same address (assumes same keys across chains)
+            let megaethAddress = address;
+            if (address.toLowerCase() === TREASURY.hyperevm.toLowerCase()) {
+                megaethAddress = TREASURY.megaeth;
             }
+
+            // Skip fixed contributors - they get fixed allocations
+            if (this.fixedContributors.has(megaethAddress.toLowerCase())) {
+                skippedFixedContributors++;
+                continue;
+            }
+
+            // Store the HyperEVM percentage for this address
+            const existing = this.userHyperEVMPercentages.get(megaethAddress) || 0n;
+            this.userHyperEVMPercentages.set(megaethAddress, existing + percentage);
+
+            // Store source data
+            const sources = this.sources.get(megaethAddress) || {};
+            sources.hyperevm = {
+                originalAddress: address,
+                percentage: percentageStr,
+                totalSIR: balanceData.totalSIR
+            };
+            this.sources.set(megaethAddress, sources);
+
+            holderCount++;
         }
 
-        this.totalHyperSIR = totalHyperSIR;
-        console.log(`  Total HyperSIR: ${ethers.formatUnits(totalHyperSIR, 12)} HyperSIR`);
-        console.log(`  Unique holders: ${Object.keys(balances).length}`);
+        console.log(`  Holders with percentage: ${holderCount}`);
+        console.log(`  Skipped fixed contributors: ${skippedFixedContributors}`);
+        console.log(`  Unique MegaETH addresses: ${this.userHyperEVMPercentages.size}`);
     }
 
     /**
-     * Calculate final allocations based on weighted values
-     * Distributes MAX_UINT24 proportionally to all users based on their weighted value
+     * Calculate final allocations based on TVL-weighted percentages
+     * Formula: megaeth_percentage = (eth_percentage * TVL_SIR + hyper_percentage * TVL_HYPERSIR) / TOTAL_TVL
+     *
+     * Fixed contributors get their allocation in basis points of TOTAL issuance (not contributor pool).
+     * Since MAX_UINT24 represents 100% of contributor pool (30% of total issuance):
+     * - 1 basis point of total = 0.01% of total = (0.01/30)% of contributor pool
+     * - Fixed allocation = basisPoints * MAX_UINT24 / 3000
+     *
+     * Remaining allocation goes to weighted holders.
      */
     calculateFinalAllocations() {
         console.log("\nCalculating final allocations...");
+        console.log(`  TVL weights: SIR=${TVL_WEIGHTS.sir}, HyperSIR=${TVL_WEIGHTS.hyperSir}, Total=${TOTAL_TVL}`);
 
-        // Calculate total weighted value across all users
-        let totalWeighted = 0n;
-        for (const value of this.userWeightedValues.values()) {
-            totalWeighted += value;
+        // Step 1: Allocate fixed contributors first
+        console.log("\n  Fixed contributors (basis points of total issuance):");
+        let fixedAllocationTotal = 0n;
+
+        for (const [addressLower, contributor] of this.fixedContributors) {
+            // basis points of total -> allocation in MAX_UINT24
+            // MAX_UINT24 = 30% of total, so basisPoints/10000 of total = basisPoints/10000 * (MAX_UINT24/0.3)
+            // = basisPoints * MAX_UINT24 / 3000
+            const basisPoints = BigInt(contributor.allocationInBasisPoints);
+            const allocation = (basisPoints * MAX_UINT24) / 3000n;
+
+            // Use the original address casing from the JSON
+            const address = contributor.address;
+            this.allocations.set(address, allocation);
+            fixedAllocationTotal += allocation;
+
+            // Store breakdown for fixed contributors
+            const percentOfTotal = Number(basisPoints) / 100;
+            const percentOfContributorPool = Number(basisPoints) / 30;
+            this.allocationBreakdowns.set(address, {
+                type: "fixed",
+                basisPointsOfTotal: contributor.allocationInBasisPoints,
+                percentOfTotalIssuance: `${percentOfTotal}%`,
+                percentOfContributorPool: `${percentOfContributorPool.toFixed(2)}%`
+            });
+
+            console.log(`    ${address}: ${contributor.allocationInBasisPoints} bp (${percentOfTotal}% of total) -> ${allocation}`);
         }
-        this.totalWeightedValue = totalWeighted;
 
-        console.log(`  Total weighted value: ${ethers.formatUnits(totalWeighted, 18)}`);
+        const remainingAllocation = MAX_UINT24 - fixedAllocationTotal;
+        console.log(`\n  Fixed contributors total: ${fixedAllocationTotal}`);
+        console.log(`  Remaining for weighted holders: ${remainingAllocation}`);
 
-        // Distribute MAX_UINT24 proportionally
-        let allocatedSoFar = 0n;
-        const sortedUsers = Array.from(this.userWeightedValues.entries()).sort((a, b) =>
+        // Step 2: Get all unique addresses from both chains (excluding fixed contributors)
+        const allAddresses = new Set([
+            ...this.userEthereumPercentages.keys(),
+            ...this.userHyperEVMPercentages.keys()
+        ]);
+
+        console.log(`  Total unique weighted addresses: ${allAddresses.size}`);
+
+        // Step 3: Calculate TVL-weighted percentage for each address
+        let totalWeightedPercentage = 0n;
+
+        for (const address of allAddresses) {
+            const ethPercentage = this.userEthereumPercentages.get(address) || 0n;
+            const hyperPercentage = this.userHyperEVMPercentages.get(address) || 0n;
+
+            // Calculate weighted percentage: (eth% * tvl_sir + hyper% * tvl_hypersir) / total_tvl
+            // All percentages are already scaled by PRECISION (10^18)
+            const weightedPercentage =
+                (ethPercentage * BigInt(TVL_WEIGHTS.sir) + hyperPercentage * BigInt(TVL_WEIGHTS.hyperSir)) /
+                BigInt(TOTAL_TVL);
+
+            if (weightedPercentage > 0n) {
+                this.userWeightedPercentages.set(address, weightedPercentage);
+                totalWeightedPercentage += weightedPercentage;
+
+                // Store breakdown
+                this.allocationBreakdowns.set(address, {
+                    type: "weighted",
+                    ethereumPercentage: ethers.formatUnits(ethPercentage, 18),
+                    hyperEVMPercentage: ethers.formatUnits(hyperPercentage, 18),
+                    weightedPercentage: ethers.formatUnits(weightedPercentage, 18)
+                });
+            }
+        }
+
+        console.log(`  Total weighted percentage: ${ethers.formatUnits(totalWeightedPercentage, 18)}%`);
+
+        // Step 4: Distribute remaining allocation proportionally based on weighted percentages
+        let allocatedSoFar = fixedAllocationTotal;
+        const sortedUsers = Array.from(this.userWeightedPercentages.entries()).sort((a, b) =>
             b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0
         );
 
         for (let i = 0; i < sortedUsers.length; i++) {
-            const [address, weightedValue] = sortedUsers[i];
+            const [address, weightedPercentage] = sortedUsers[i];
 
             let allocation;
             if (i === sortedUsers.length - 1) {
                 // Last user gets remainder to ensure exact sum
                 allocation = MAX_UINT24 - allocatedSoFar;
             } else {
-                allocation = (weightedValue * MAX_UINT24) / totalWeighted;
+                // Proportional share of the remaining allocation
+                allocation = (weightedPercentage * remainingAllocation) / totalWeightedPercentage;
             }
 
             if (allocation > 0n) {
@@ -276,7 +310,9 @@ class AllocationsGenerator {
             }
         }
 
-        console.log(`  Addresses with allocation: ${this.allocations.size}`);
+        console.log(`  Total addresses with allocation: ${this.allocations.size}`);
+        console.log(`    - Fixed contributors: ${this.fixedContributors.size}`);
+        console.log(`    - Weighted holders: ${this.userWeightedPercentages.size}`);
     }
 
     /**
@@ -304,6 +340,12 @@ class AllocationsGenerator {
             b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0
         );
 
+        // Calculate fixed contributors total basis points
+        let fixedBasisPointsTotal = 0;
+        for (const contributor of megaethContributors) {
+            fixedBasisPointsTotal += contributor.allocationInBasisPoints;
+        }
+
         // Create metadata
         const metadata = {
             generatedAt: new Date().toISOString(),
@@ -311,28 +353,34 @@ class AllocationsGenerator {
             totalAddresses: this.allocations.size,
             lpAllocationPercent: LP_ALLOCATION,
             contributorAllocationPercent: 100 - LP_ALLOCATION,
+            fixedContributors: {
+                count: megaethContributors.length,
+                totalBasisPoints: fixedBasisPointsTotal,
+                percentOfTotalIssuance: `${fixedBasisPointsTotal / 100}%`,
+                source: "megaeth-contributors.json"
+            },
+            weightedHolders: {
+                count: this.userWeightedPercentages.size,
+                remainingPercent: `${(100 - LP_ALLOCATION) - (fixedBasisPointsTotal / 100)}%`
+            },
             tvlWeights: TVL_WEIGHTS,
+            totalTVL: TOTAL_TVL,
             treasury: TREASURY,
             sources: {
                 ethereumSnapshot: "ethereum-snapshot.json",
-                hyperevmSnapshot: hyperevmSnapshot ? "hyperevm-snapshot.json" : null
+                hyperevmSnapshot: hyperevmSnapshot ? "hyperevm-snapshot.json" : null,
+                megaethContributors: "megaeth-contributors.json"
             },
-            rpcEndpoints: {
-                ethereum: "standard Ethereum RPC",
-                hyperevm: "https://hyperliquid-mainnet.g.alchemy.com/v2/{KEY}"
-            },
-            snapshotBlocks: {
-                hyperevm: 22931060 // START_BLOCK for HyperSIR snapshot
-            }
+            formula: "(eth_percentage * TVL_SIR + hyper_percentage * TVL_HYPERSIR) / TOTAL_TVL"
         };
 
         // Create allocations object
         const allocationsObj = {};
         for (const [address, allocation] of sortedAllocations) {
             // Calculate percentage of contributor pool (30% of total)
-            const PRECISION = 1000000000000000n;
-            const partsPerQuadrillion = (allocation * 30n * PRECISION) / MAX_UINT24;
-            const percentOfTotalIssuance = Number(partsPerQuadrillion) / Number(PRECISION);
+            const CALC_PRECISION = 1000000000000000n;
+            const partsPerQuadrillion = (allocation * 30n * CALC_PRECISION) / MAX_UINT24;
+            const percentOfTotalIssuance = Number(partsPerQuadrillion) / Number(CALC_PRECISION);
 
             // Format percentage string
             let allocationPerc;
@@ -359,15 +407,29 @@ class AllocationsGenerator {
             const breakdown = this.allocationBreakdowns.get(address) || {};
             const sources = this.sources.get(address) || {};
 
-            allocationsObj[address] = {
-                allocation: allocation.toString(),
-                allocationPerc: allocationPerc,
-                sources: sources,
-                allocationBreakdown: {
-                    fromEthereumSIR: (breakdown.fromEthereumSIR || 0n).toString(),
-                    fromHyperEVMSIR: (breakdown.fromHyperEVMSIR || 0n).toString()
-                }
-            };
+            // Build allocation entry based on type
+            if (breakdown.type === "fixed") {
+                allocationsObj[address] = {
+                    allocation: allocation.toString(),
+                    allocationPerc: allocationPerc,
+                    type: "fixed",
+                    basisPointsOfTotal: breakdown.basisPointsOfTotal,
+                    percentOfTotalIssuance: breakdown.percentOfTotalIssuance,
+                    percentOfContributorPool: breakdown.percentOfContributorPool
+                };
+            } else {
+                allocationsObj[address] = {
+                    allocation: allocation.toString(),
+                    allocationPerc: allocationPerc,
+                    type: "weighted",
+                    sources: sources,
+                    percentageBreakdown: {
+                        ethereumPercentage: breakdown.ethereumPercentage || "0",
+                        hyperEVMPercentage: breakdown.hyperEVMPercentage || "0",
+                        weightedPercentage: breakdown.weightedPercentage || "0"
+                    }
+                };
+            }
         }
 
         return {
@@ -438,6 +500,16 @@ class AllocationsGenerator {
         console.log(`\nAllocation Split:`);
         console.log(`  LP: ${LP_ALLOCATION}%`);
         console.log(`  Contributors: ${100 - LP_ALLOCATION}%`);
+
+        // Calculate fixed contributors total
+        let fixedBasisPointsTotal = 0;
+        for (const contributor of megaethContributors) {
+            fixedBasisPointsTotal += contributor.allocationInBasisPoints;
+        }
+        console.log(`\nFixed Contributors (from megaeth-contributors.json):`);
+        console.log(`  Count: ${megaethContributors.length}`);
+        console.log(`  Total: ${fixedBasisPointsTotal} basis points (${fixedBasisPointsTotal / 100}% of total issuance)`);
+        console.log(`  Remaining for weighted holders: ${(100 - LP_ALLOCATION) - (fixedBasisPointsTotal / 100)}% of total issuance`);
         console.log("\n" + "=".repeat(50) + "\n");
 
         // Process all sources
@@ -462,12 +534,9 @@ class AllocationsGenerator {
         // Print summary
         console.log("\n=== Summary ===");
         console.log(`  Total addresses: ${this.allocations.size}`);
-        if (this.totalSIR) {
-            console.log(`  Total SIR processed: ${ethers.formatUnits(this.totalSIR, 12)} SIR`);
-        }
-        if (this.totalHyperSIR) {
-            console.log(`  Total HyperSIR processed: ${ethers.formatUnits(this.totalHyperSIR, 12)} HyperSIR`);
-        }
+        console.log(`  Ethereum holders: ${this.userEthereumPercentages.size}`);
+        console.log(`  HyperEVM holders: ${this.userHyperEVMPercentages.size}`);
+        console.log(`  Combined unique addresses: ${this.userWeightedPercentages.size}`);
 
         // Verify
         this.verify();
