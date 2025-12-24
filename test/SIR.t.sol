@@ -72,13 +72,13 @@ contract BasicSIRTest is AllocationsHelper, Test {
         // Verify the statistics
         console.log("Total addresses allocated:", totalAddresses);
         console.log("Total allocations sum:", totalAllocations);
-        console.log("Expected (type(uint24).max):", type(uint24).max);
+        console.log("Expected (type(uint16).max):", type(uint16).max);
 
-        // Verify the sum equals type(uint24).max
-        assertEq(totalAllocations, type(uint24).max, "Allocations do not sum to type(uint24).max");
+        // Verify the sum equals type(uint16).max
+        assertEq(totalAllocations, type(uint16).max, "Allocations do not sum to type(uint16).max");
 
         // Verify remaining allocation is 0
-        uint24 remaining = contributors.remainingAllocation();
+        uint16 remaining = contributors.remainingAllocation();
         assertEq(remaining, 0, "Remaining allocation should be 0");
 
         // Verify we have at least some addresses allocated
@@ -110,11 +110,11 @@ contract BasicSIRTest is AllocationsHelper, Test {
             string memory addrKey = allocationKeys[i];
 
             // Get allocation from contract
-            uint24 allocation = contributors.allocations(vm.parseAddress(addrKey));
+            uint16 allocation = contributors.allocations(vm.parseAddress(addrKey));
 
             // Calculate issuance per second using the formula:
-            // issuance = (allocation * nonLPIssuance) / type(uint24).max
-            uint256 issuance = (uint256(allocation) * nonLPIssuance) / type(uint24).max;
+            // issuance = (allocation * nonLPIssuance) / type(uint16).max
+            uint256 issuance = (uint256(allocation) * nonLPIssuance) / type(uint16).max;
 
             // Calculate percentage in parts per million (1,000,000 ppm = 100%)
             uint256 calculatedPercPPM = (issuance * 1000000) / SystemConstants.ISSUANCE;

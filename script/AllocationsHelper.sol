@@ -30,7 +30,7 @@ abstract contract AllocationsHelper is Script {
 
         // Process in batches
         for (uint256 batchIndex = 0; batchIndex < (totalAddresses + BATCH_SIZE - 1) / BATCH_SIZE; batchIndex++) {
-            (address[] memory addresses, uint24[] memory amounts, uint256 batchAlloc) = _prepareBatch(
+            (address[] memory addresses, uint16[] memory amounts, uint256 batchAlloc) = _prepareBatch(
                 json,
                 allocationKeys,
                 batchIndex,
@@ -51,7 +51,7 @@ abstract contract AllocationsHelper is Script {
         string[] memory allocationKeys,
         uint256 batchIndex,
         uint256 totalAddresses
-    ) private pure returns (address[] memory addresses, uint24[] memory amounts, uint256 batchAlloc) {
+    ) private pure returns (address[] memory addresses, uint16[] memory amounts, uint256 batchAlloc) {
         uint256 startIdx = batchIndex * BATCH_SIZE;
         uint256 endIdx = startIdx + BATCH_SIZE;
         if (endIdx > totalAddresses) {
@@ -60,14 +60,14 @@ abstract contract AllocationsHelper is Script {
         uint256 batchLength = endIdx - startIdx;
 
         addresses = new address[](batchLength);
-        amounts = new uint24[](batchLength);
+        amounts = new uint16[](batchLength);
 
         for (uint256 i = 0; i < batchLength; i++) {
             string memory addrKey = allocationKeys[startIdx + i];
             addresses[i] = vm.parseAddress(addrKey);
 
             // Get the allocation amount for this address
-            amounts[i] = uint24(vm.parseJsonUint(json, string.concat(".allocations.", addrKey, ".allocation")));
+            amounts[i] = uint16(vm.parseJsonUint(json, string.concat(".allocations.", addrKey, ".allocation")));
             batchAlloc += amounts[i];
         }
 

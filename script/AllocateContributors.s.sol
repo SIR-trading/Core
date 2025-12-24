@@ -48,12 +48,12 @@ contract AllocateContributors is Script {
 
             // Create batch arrays
             address[] memory batchAddresses = new address[](batchLength);
-            uint24[] memory batchAmounts = new uint24[](batchLength);
+            uint16[] memory batchAmounts = new uint16[](batchLength);
             uint256 batchAlloc = 0;
 
             for (uint256 i = 0; i < batchLength; i++) {
                 batchAddresses[i] = addresses[startIdx + i];
-                batchAmounts[i] = uint24(amounts[startIdx + i]);
+                batchAmounts[i] = uint16(amounts[startIdx + i]);
                 batchAlloc += batchAmounts[i];
             }
 
@@ -68,11 +68,11 @@ contract AllocateContributors is Script {
         // Verify
         console.log("Total addresses allocated:", totalAddresses);
         console.log("Total allocations sum:", totalAllocations);
-        uint24 remaining = Contributors(CONTRIBUTORS).remainingAllocation();
+        uint16 remaining = Contributors(CONTRIBUTORS).remainingAllocation();
         console.log("Remaining allocation:", remaining);
 
         require(remaining == 0, "Remaining allocation must be 0");
-        require(totalAllocations == uint256(type(uint24).max), "Total allocations must equal type(uint24).max");
+        require(totalAllocations == uint256(type(uint16).max), "Total allocations must equal type(uint16).max");
         console.log("All allocations completed successfully!");
     }
 }

@@ -16,8 +16,8 @@ const TREASURY = {
 // TVL weights for computing allocations (in USD)
 // These determine how much weight each chain's holdings get
 const TVL_WEIGHTS = {
-    sir: 80100, // $80.1k TVL for SIR on Ethereum
-    hyperSir: 18200 // $18.2k TVL for HyperSIR on HyperEVM
+    sir: 66000, // $66k TVL for SIR on Ethereum
+    hyperSir: 10000 // $10k TVL for HyperSIR on HyperEVM
 };
 
 // Total TVL for weighted average calculation
@@ -42,7 +42,7 @@ const megaethContributors = require("./megaeth-contributors.json");
 // ALLOCATIONS GENERATOR
 // =============================================================================
 
-const MAX_UINT24 = (1n << 24n) - 1n; // 16,777,215
+const MAX_UINT16 = (1n << 16n) - 1n; // 65,535
 
 class AllocationsGenerator {
     constructor() {
@@ -206,9 +206,9 @@ class AllocationsGenerator {
      * Formula: megaeth_percentage = (eth_percentage * TVL_SIR + hyper_percentage * TVL_HYPERSIR) / TOTAL_TVL
      *
      * Fixed contributors get their allocation in basis points of TOTAL issuance (not contributor pool).
-     * Since MAX_UINT24 represents 100% of contributor pool (30% of total issuance):
+     * Since MAX_UINT16 represents 100% of contributor pool (30% of total issuance):
      * - 1 basis point of total = 0.01% of total = (0.01/30)% of contributor pool
-     * - Fixed allocation = basisPoints * MAX_UINT24 / 3000
+     * - Fixed allocation = basisPoints * MAX_UINT16 / 3000
      *
      * Remaining allocation goes to weighted holders.
      */
@@ -221,11 +221,11 @@ class AllocationsGenerator {
         let fixedAllocationTotal = 0n;
 
         for (const [addressLower, contributor] of this.fixedContributors) {
-            // basis points of total -> allocation in MAX_UINT24
-            // MAX_UINT24 = 30% of total, so basisPoints/10000 of total = basisPoints/10000 * (MAX_UINT24/0.3)
-            // = basisPoints * MAX_UINT24 / 3000
+            // basis points of total -> allocation in MAX_UINT16
+            // MAX_UINT16 = 30% of total, so basisPoints/10000 of total = basisPoints/10000 * (MAX_UINT16/0.3)
+            // = basisPoints * MAX_UINT16 / 3000
             const basisPoints = BigInt(contributor.allocationInBasisPoints);
-            const allocation = (basisPoints * MAX_UINT24) / 3000n;
+            const allocation = (basisPoints * MAX_UINT16) / 3000n;
 
             // Use the original address casing from the JSON
             const address = contributor.address;
@@ -242,18 +242,17 @@ class AllocationsGenerator {
                 percentOfContributorPool: `${percentOfContributorPool.toFixed(2)}%`
             });
 
-            console.log(`    ${address}: ${contributor.allocationInBasisPoints} bp (${percentOfTotal}% of total) -> ${allocation}`);
+            console.log(
+                `    ${address}: ${contributor.allocationInBasisPoints} bp (${percentOfTotal}% of total) -> ${allocation}`
+            );
         }
 
-        const remainingAllocation = MAX_UINT24 - fixedAllocationTotal;
+        const remainingAllocation = MAX_UINT16 - fixedAllocationTotal;
         console.log(`\n  Fixed contributors total: ${fixedAllocationTotal}`);
         console.log(`  Remaining for weighted holders: ${remainingAllocation}`);
 
         // Step 2: Get all unique addresses from both chains (excluding fixed contributors)
-        const allAddresses = new Set([
-            ...this.userEthereumPercentages.keys(),
-            ...this.userHyperEVMPercentages.keys()
-        ]);
+        const allAddresses = new Set([...this.userEthereumPercentages.keys(), ...this.userHyperEVMPercentages.keys()]);
 
         console.log(`  Total unique weighted addresses: ${allAddresses.size}`);
 
@@ -298,7 +297,7 @@ class AllocationsGenerator {
             let allocation;
             if (i === sortedUsers.length - 1) {
                 // Last user gets remainder to ensure exact sum
-                allocation = MAX_UINT24 - allocatedSoFar;
+                allocation = MAX_UINT16 - allocatedSoFar;
             } else {
                 // Proportional share of the remaining allocation
                 allocation = (weightedPercentage * remainingAllocation) / totalWeightedPercentage;
@@ -349,7 +348,7 @@ class AllocationsGenerator {
         // Create metadata
         const metadata = {
             generatedAt: new Date().toISOString(),
-            maxUint24: MAX_UINT24.toString(),
+            maxUint16: MAX_UINT16.toString(),
             totalAddresses: this.allocations.size,
             lpAllocationPercent: LP_ALLOCATION,
             contributorAllocationPercent: 100 - LP_ALLOCATION,
@@ -361,7 +360,7 @@ class AllocationsGenerator {
             },
             weightedHolders: {
                 count: this.userWeightedPercentages.size,
-                remainingPercent: `${(100 - LP_ALLOCATION) - (fixedBasisPointsTotal / 100)}%`
+                remainingPercent: `${100 - LP_ALLOCATION - fixedBasisPointsTotal / 100}%`
             },
             tvlWeights: TVL_WEIGHTS,
             totalTVL: TOTAL_TVL,
@@ -379,7 +378,7 @@ class AllocationsGenerator {
         for (const [address, allocation] of sortedAllocations) {
             // Calculate percentage of contributor pool (30% of total)
             const CALC_PRECISION = 1000000000000000n;
-            const partsPerQuadrillion = (allocation * 30n * CALC_PRECISION) / MAX_UINT24;
+            const partsPerQuadrillion = (allocation * 30n * CALC_PRECISION) / MAX_UINT16;
             const percentOfTotalIssuance = Number(partsPerQuadrillion) / Number(CALC_PRECISION);
 
             // Format percentage string
@@ -464,7 +463,7 @@ class AllocationsGenerator {
     }
 
     /**
-     * Verify the allocations sum to MAX_UINT24
+     * Verify the allocations sum to MAX_UINT16
      */
     verify() {
         let sum = 0n;
@@ -474,12 +473,12 @@ class AllocationsGenerator {
 
         console.log("\n=== Verification ===");
         console.log(`  Sum of allocations: ${sum}`);
-        console.log(`  type(uint24).max:   ${MAX_UINT24}`);
-        console.log(`  Match: ${sum === MAX_UINT24 ? "✓" : "✗"}`);
+        console.log(`  type(uint16).max:   ${MAX_UINT16}`);
+        console.log(`  Match: ${sum === MAX_UINT16 ? "✓" : "✗"}`);
 
-        if (sum !== MAX_UINT24) {
-            console.error(`ERROR: Allocations do not sum to type(uint24).max!`);
-            console.error(`Difference: ${MAX_UINT24 - sum}`);
+        if (sum !== MAX_UINT16) {
+            console.error(`ERROR: Allocations do not sum to type(uint16).max!`);
+            console.error(`Difference: ${MAX_UINT16 - sum}`);
             return false;
         }
         return true;
@@ -508,8 +507,12 @@ class AllocationsGenerator {
         }
         console.log(`\nFixed Contributors (from megaeth-contributors.json):`);
         console.log(`  Count: ${megaethContributors.length}`);
-        console.log(`  Total: ${fixedBasisPointsTotal} basis points (${fixedBasisPointsTotal / 100}% of total issuance)`);
-        console.log(`  Remaining for weighted holders: ${(100 - LP_ALLOCATION) - (fixedBasisPointsTotal / 100)}% of total issuance`);
+        console.log(
+            `  Total: ${fixedBasisPointsTotal} basis points (${fixedBasisPointsTotal / 100}% of total issuance)`
+        );
+        console.log(
+            `  Remaining for weighted holders: ${100 - LP_ALLOCATION - fixedBasisPointsTotal / 100}% of total issuance`
+        );
         console.log("\n" + "=".repeat(50) + "\n");
 
         // Process all sources

@@ -30,7 +30,8 @@ const ADDRESSES = {
 const MANUALLY_IGNORED_CONTRACTS = [
     "0xD632204b44Ddf050019676BE26f23aDFC539DBAa", // Uniswap pool ETH/SIR
     "0x000000fee13a103A10D593b9AE06b3e05F2E7E1c", // Uniswap fee collector
-    "0xCeFeF7bb8c4E32451f5FcEAF2127B0c26c89975b" // Uniswap pool APE-6/SIR
+    "0xCeFeF7bb8c4E32451f5FcEAF2127B0c26c89975b", // Uniswap pool APE-6/SIR
+    "0x000000000051200beef00Add2e55000000000000"
 ];
 
 // Contributor addresses from ethereum-contributors.json
@@ -1813,9 +1814,7 @@ class SIRBalanceSnapshot {
             }
         }
 
-        console.log(
-            `Grand total SIR: ${this.formatToSigFigs(ethers.formatUnits(grandTotal, SIR_DECIMALS))} SIR`
-        );
+        console.log(`Grand total SIR: ${this.formatToSigFigs(ethers.formatUnits(grandTotal, SIR_DECIMALS))} SIR`);
     }
 
     // Main execution function
