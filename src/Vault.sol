@@ -54,6 +54,7 @@ import {VaultExternal} from "./libraries/VaultExternal.sol";
 import {TransferHelper} from "v3-periphery/libraries/TransferHelper.sol";
 import {TickMathPrecision} from "./libraries/TickMathPrecision.sol";
 import {SirStructs} from "./libraries/SirStructs.sol";
+import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 
 // Contracts
@@ -79,6 +80,12 @@ contract Vault is TEA {
     error NotAWETHVault();
     error DeadlineExceeded();
 
+    struct OracleChange {
+        Oracle oracle; // 20 bytes - Current oracle
+        Oracle oracleNew; // 20 bytes - New oracle to replace current after delay (packed with timestampUpdate)
+        uint40 timestampUpdate; // 5 bytes - Timestamp change was made. If 0, oracleNew is not used.
+    }
+
     /// @dev This event is meant to make it easier to retrieve the prices of APE and TEA.
     event ReservesChanged(uint48 indexed vaultId, uint144 reserveLPers, uint144 reserveApes);
 
@@ -102,8 +109,8 @@ contract Vault is TEA {
         uint144 collateralFeeToLPers
     );
 
-    /// @dev The Oracle contract used for getting the price of collateral vs. debt token.
-    Oracle public ORACLE;
+    /// @dev The Oracle contract used for getting the price of collateral vs. debt token (with time delay mechanism).
+    OracleChange private _oracleChange;
 
     /// @dev The address of the APE implementation.
     address public immutable APE_IMPLEMENTATION;
@@ -126,8 +133,8 @@ contract Vault is TEA {
         address apeImplementation,
         address weth
     ) TEA(systemControl, sir) {
-        // Price ORACLE
-        ORACLE = Oracle(oracle);
+        // Price ORACLE (no delay for initial oracle)
+        _oracleChange.oracle = Oracle(oracle);
 
         // Save the address of the APE implementation
         APE_IMPLEMENTATION = apeImplementation;
@@ -146,7 +153,7 @@ contract Vault is TEA {
      */
     function initialize(SirStructs.VaultParameters memory vaultParams) external {
         VaultExternal.deploy(
-            ORACLE,
+            ORACLE(),
             _vaultStates[vaultParams.debtToken][vaultParams.collateralToken][vaultParams.leverageTier],
             _paramsById,
             vaultParams,
@@ -225,7 +232,7 @@ contract Vault is TEA {
             SirStructs.Reserves memory reserves,
             address ape,
             address uniswapPool
-        ) = VaultExternal.getReserves(isAPE, _vaultStates, ORACLE, vaultParams);
+        ) = VaultExternal.getReserves(isAPE, _vaultStates, ORACLE(), vaultParams);
 
         if (collateralToDepositMin == 0) {
             // Minter deposited collateral
@@ -437,7 +444,7 @@ contract Vault is TEA {
 
         // Get reserves
         (SirStructs.VaultState memory vaultState, SirStructs.Reserves memory reserves, address ape, ) = VaultExternal
-            .getReserves(isAPE, _vaultStates, ORACLE, vaultParams);
+            .getReserves(isAPE, _vaultStates, ORACLE(), vaultParams);
 
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_ = vaultIssuanceParams[vaultState.vaultId];
         SirStructs.Fees memory fees;
@@ -489,6 +496,23 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /**
+     * @notice Returns the current Oracle contract, applying the time delay if a change is pending.
+     * @return oracle_ The current Oracle contract.
+     */
+    function ORACLE() public view returns (Oracle oracle_) {
+        OracleChange memory oracleChange_ = _oracleChange;
+        oracle_ = oracleChange_.oracle;
+
+        // Check if oracle needs to be updated
+        if (
+            oracleChange_.timestampUpdate != 0 &&
+            block.timestamp >= oracleChange_.timestampUpdate + SystemConstants.CHANGE_DELAY
+        ) {
+            oracle_ = oracleChange_.oracleNew;
+        }
+    }
+
+    /**
      *  @notice Function for getting the reserves of a specific vault.
      *  @param vaultParams A 3-tuple of parameters identifying a vault: (1) collateral token, (2) debt token, and (3) leverage tier.
      *  @return The vault's reserves, meaning a 3-tuple of (1) the amount of collateral in the vault belonging to apes,
@@ -497,7 +521,7 @@ contract Vault is TEA {
     function getReserves(
         SirStructs.VaultParameters calldata vaultParams
     ) external view returns (SirStructs.Reserves memory) {
-        return VaultExternal.getReservesReadOnly(_vaultStates, ORACLE, vaultParams);
+        return VaultExternal.getReservesReadOnly(_vaultStates, ORACLE(), vaultParams);
     }
 
     /*////////////////////////////////////////////////////////////////
@@ -610,13 +634,22 @@ contract Vault is TEA {
     ////////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Allows SystemControl to change the Oracle contract.
-     * @dev This enables switching to a different Uniswap V3 instance.
+     * @notice Allows SystemControl to initiate a change to the Oracle contract.
+     * @dev The change takes effect after CHANGE_DELAY has passed.
+     * This enables switching to a different Uniswap V3 instance.
      * All token pairs must be initialized in the new Oracle before switching.
      * @param newOracle The address of the new Oracle contract.
      */
     function setOracle(address newOracle) external onlySystemControl {
-        ORACLE = Oracle(newOracle);
+        OracleChange memory oracleChange_;
+
+        // Get current oracle (with delay applied) and set as base
+        oracleChange_.oracle = ORACLE();
+
+        oracleChange_.oracleNew = Oracle(newOracle);
+        oracleChange_.timestampUpdate = uint40(block.timestamp);
+
+        _oracleChange = oracleChange_;
     }
 
     /**

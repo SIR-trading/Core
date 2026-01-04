@@ -16,7 +16,7 @@ library SirStructs {
 
     struct FeeStructure {
         uint16 fee; // Fee in basis points.
-        uint16 feeNew; // New fee to replace fee if current time exceeds FEE_CHANGE_DELAY since timestampUpdate
+        uint16 feeNew; // New fee to replace fee if current time exceeds CHANGE_DELAY since timestampUpdate
         uint40 timestampUpdate; // Timestamp fee change was made. If 0, feeNew is not used.
     }
 

@@ -157,7 +157,7 @@ abstract contract SystemState is SystemControlAccess {
         // Check if baseFee needs to be updated
         if (
             systemParams_.baseFee.timestampUpdate != 0 &&
-            block.timestamp >= systemParams_.baseFee.timestampUpdate + SystemConstants.FEE_CHANGE_DELAY
+            block.timestamp >= systemParams_.baseFee.timestampUpdate + SystemConstants.CHANGE_DELAY
         ) {
             systemParams_.baseFee.fee = systemParams_.baseFee.feeNew;
             systemParams_.baseFee.timestampUpdate = 0;
@@ -166,7 +166,7 @@ abstract contract SystemState is SystemControlAccess {
         // Check if lpFee needs to be updated
         if (
             systemParams_.lpFee.timestampUpdate != 0 &&
-            block.timestamp >= systemParams_.lpFee.timestampUpdate + SystemConstants.FEE_CHANGE_DELAY
+            block.timestamp >= systemParams_.lpFee.timestampUpdate + SystemConstants.CHANGE_DELAY
         ) {
             systemParams_.lpFee.fee = systemParams_.lpFee.feeNew;
             systemParams_.lpFee.timestampUpdate = 0;

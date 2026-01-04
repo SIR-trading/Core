@@ -209,7 +209,7 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         emit SystemStatusChanged(SystemStatus.Emergency, SystemStatus.TrainingWheels);
         systemControl.resumeMinting();
 
-        skip(SystemConstants.FEE_CHANGE_DELAY);
+        skip(SystemConstants.CHANGE_DELAY);
 
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
@@ -732,7 +732,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
     }
 
     function testFuzz_setBaseFeeAndCheckTooEarly(uint16 baseFee, uint40 delay) public {
-        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+        delay = uint40(_bound(delay, 0, SystemConstants.CHANGE_DELAY - 1));
 
         baseFee = uint16(_bound(baseFee, 1, type(uint16).max));
 
@@ -763,7 +763,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         emit NewBaseFee(baseFee);
         systemControl.setBaseFee(baseFee);
 
-        skip(SystemConstants.FEE_CHANGE_DELAY);
+        skip(SystemConstants.CHANGE_DELAY);
 
         // Check if base fee is set correctly
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
@@ -813,7 +813,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
     }
 
     function testFuzz_setLpFeeAndCheckTooEarly(uint16 lpFee, uint40 delay) public {
-        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+        delay = uint40(_bound(delay, 0, SystemConstants.CHANGE_DELAY - 1));
 
         lpFee = uint16(_bound(lpFee, 1, type(uint16).max));
 
@@ -844,7 +844,7 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         emit NewLPFee(lpFee);
         systemControl.setLPFee(lpFee);
 
-        skip(SystemConstants.FEE_CHANGE_DELAY);
+        skip(SystemConstants.CHANGE_DELAY);
 
         // Check if lp fee is set correctly
         SirStructs.SystemParameters memory systemParams_ = vault.systemParams();
@@ -1194,6 +1194,106 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         // Update vaults issuances
         vm.expectRevert();
         systemControl.updateVaultsIssuances(new uint48[](0), newVaults, newTaxes);
+    }
+
+    /////////////////////////////////////////////////////////////////
+    ///////////////////  ORACLE DELAY TESTS  ///////////////////////
+    ///////////////////////////////////////////////////////////////
+
+    event OracleChanged(address indexed newOracle);
+
+    function testFuzz_setOracleWrongCaller(address caller, address newOracle) public {
+        vm.assume(caller != address(this));
+        vm.assume(newOracle != address(0));
+
+        // Set oracle with wrong caller
+        vm.prank(caller);
+        vm.expectRevert();
+        systemControl.setOracle(newOracle);
+    }
+
+    function test_setOracleWrongState() public {
+        address newOracle = vm.addr(100);
+
+        // Set state to Unstoppable
+        _setState(SystemStatus.Unstoppable);
+
+        // Attempt to set oracle
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setOracle(newOracle);
+    }
+
+    function test_setOracleZeroAddress() public {
+        // Attempt to set oracle to zero address
+        vm.expectRevert();
+        systemControl.setOracle(address(0));
+    }
+
+    function testFuzz_setOracleAndCheckTooEarly(address newOracle, uint40 delay) public {
+        vm.assume(newOracle != address(0));
+        delay = uint40(_bound(delay, 0, SystemConstants.CHANGE_DELAY - 1));
+
+        // Get current oracle
+        Oracle currentOracle = vault.ORACLE();
+
+        // Set oracle
+        vm.expectEmit();
+        emit OracleChanged(newOracle);
+        systemControl.setOracle(newOracle);
+
+        // Skip time (but not enough)
+        skip(delay);
+
+        // Check oracle has NOT changed yet
+        assertEq(address(vault.ORACLE()), address(currentOracle), "Oracle should not have changed yet");
+    }
+
+    function testFuzz_setOracle(address newOracle, uint40 delay) public {
+        vm.assume(newOracle != address(0));
+        delay = uint40(_bound(delay, SystemConstants.CHANGE_DELAY, type(uint40).max - block.timestamp));
+
+        // Set oracle
+        vm.expectEmit();
+        emit OracleChanged(newOracle);
+        systemControl.setOracle(newOracle);
+
+        // Skip time (enough for delay to pass)
+        skip(delay);
+
+        // Check oracle has changed
+        assertEq(address(vault.ORACLE()), newOracle, "Oracle should have changed");
+    }
+
+    function test_setOracleMultipleTimes() public {
+        address oracle1 = vm.addr(101);
+        address oracle2 = vm.addr(102);
+
+        // Get initial oracle
+        Oracle initialOracle = vault.ORACLE();
+
+        // Set first oracle
+        systemControl.setOracle(oracle1);
+
+        // Skip half the delay
+        skip(SystemConstants.CHANGE_DELAY / 2);
+
+        // Oracle should still be the initial one
+        assertEq(address(vault.ORACLE()), address(initialOracle), "Oracle should still be initial");
+
+        // Set second oracle (overrides first pending change)
+        systemControl.setOracle(oracle2);
+
+        // Skip another half delay (total = full delay from first setOracle)
+        skip(SystemConstants.CHANGE_DELAY / 2);
+
+        // Oracle should still be initial because timer reset with second setOracle
+        assertEq(address(vault.ORACLE()), address(initialOracle), "Oracle should still be initial after timer reset");
+
+        // Skip remaining time for second oracle to take effect
+        skip(SystemConstants.CHANGE_DELAY / 2);
+
+        // Now oracle should be oracle2
+        assertEq(address(vault.ORACLE()), oracle2, "Oracle should be oracle2");
     }
 
     /////////////////////////////////////////////////////////////////

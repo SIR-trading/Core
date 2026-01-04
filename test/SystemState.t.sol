@@ -855,7 +855,7 @@ contract SystemStateTest is Test {
 
     function testFuzz_updateBaseFee(uint16 baseFee, uint16 lpFee, bool mintingStopped, uint40 delay) public {
         vm.assume(baseFee != 0);
-        delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+        delay = uint40(_bound(delay, SystemConstants.CHANGE_DELAY, type(uint40).max - timestampStart));
 
         systemParams_ = systemState.systemParams();
 
@@ -884,7 +884,7 @@ contract SystemStateTest is Test {
         uint40 delay
     ) public {
         vm.assume(baseFee != 0);
-        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+        delay = uint40(_bound(delay, 0, SystemConstants.CHANGE_DELAY - 1));
 
         // Update system vaultState
         vm.prank(systemControl);
@@ -918,7 +918,7 @@ contract SystemStateTest is Test {
         delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
         delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
 
-        if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
+        if (delay1 < SystemConstants.CHANGE_DELAY)
             testFuzz_updateBaseFeeCheckTooEarly(baseFee1, lpFee1, mintingStopped1, delay1);
         else testFuzz_updateBaseFee(baseFee1, lpFee1, mintingStopped1, delay1);
 
@@ -934,8 +934,8 @@ contract SystemStateTest is Test {
 
         assertEq(
             systemParams_.baseFee.fee,
-            delay2 < SystemConstants.FEE_CHANGE_DELAY
-                ? (delay1 < SystemConstants.FEE_CHANGE_DELAY ? systemParams0.baseFee.fee : baseFee1)
+            delay2 < SystemConstants.CHANGE_DELAY
+                ? (delay1 < SystemConstants.CHANGE_DELAY ? systemParams0.baseFee.fee : baseFee1)
                 : baseFee2
         ); // Only base fee is updated
         assertEq(systemParams_.lpFee.fee, systemParams0.lpFee.fee);
@@ -945,7 +945,7 @@ contract SystemStateTest is Test {
 
     function testFuzz_updateLpFee(uint16 lpFee, bool mintingStopped, uint40 delay) public {
         vm.assume(lpFee != 0);
-        delay = uint40(_bound(delay, SystemConstants.FEE_CHANGE_DELAY, type(uint40).max - timestampStart));
+        delay = uint40(_bound(delay, SystemConstants.CHANGE_DELAY, type(uint40).max - timestampStart));
 
         // Update system vaultState
         vm.prank(systemControl);
@@ -965,7 +965,7 @@ contract SystemStateTest is Test {
 
     function testFuzz_updateLpFeeCheckTooEarly(uint16 lpFee, bool mintingStopped, uint40 delay) public {
         vm.assume(lpFee != 0);
-        delay = uint40(_bound(delay, 0, SystemConstants.FEE_CHANGE_DELAY - 1));
+        delay = uint40(_bound(delay, 0, SystemConstants.CHANGE_DELAY - 1));
 
         // Update system vaultState
         vm.prank(systemControl);
@@ -997,7 +997,7 @@ contract SystemStateTest is Test {
         delay1 = uint40(_bound(delay1, 0, type(uint40).max - timestampStart));
         delay2 = uint40(_bound(delay2, 0, type(uint40).max - timestampStart - delay1));
 
-        if (delay1 < SystemConstants.FEE_CHANGE_DELAY)
+        if (delay1 < SystemConstants.CHANGE_DELAY)
             testFuzz_updateLpFeeCheckTooEarly(lpFee1, mintingStopped1, delay1);
         else testFuzz_updateLpFee(lpFee1, mintingStopped1, delay1);
 
@@ -1014,8 +1014,8 @@ contract SystemStateTest is Test {
         assertEq(systemParams_.baseFee.fee, systemParams0.baseFee.fee);
         assertEq(
             systemParams_.lpFee.fee,
-            delay2 < SystemConstants.FEE_CHANGE_DELAY
-                ? (delay1 < SystemConstants.FEE_CHANGE_DELAY ? systemParams0.lpFee.fee : lpFee1)
+            delay2 < SystemConstants.CHANGE_DELAY
+                ? (delay1 < SystemConstants.CHANGE_DELAY ? systemParams0.lpFee.fee : lpFee1)
                 : lpFee2
         ); // Only LP fee is updated
         assertEq(systemParams_.mintingStopped, systemParams0.mintingStopped);
@@ -1054,7 +1054,7 @@ contract SystemStateTest is Test {
         vm.stopPrank();
 
         // Skip delay to apply the new fees
-        skip(SystemConstants.FEE_CHANGE_DELAY);
+        skip(SystemConstants.CHANGE_DELAY);
 
         // Update vaults with the minimum tax (1)
         uint48[] memory oldVaults = new uint48[](0);

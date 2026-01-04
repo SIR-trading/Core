@@ -198,8 +198,9 @@ contract SystemControl is Ownable2Step {
     }
 
     /**
-     * @notice Changes the Oracle contract used by the Vault.
-     * @dev This enables switching to a different Uniswap V3 instance on MegaETH.
+     * @notice Initiates a change to the Oracle contract used by the Vault.
+     * @dev The change takes effect after CHANGE_DELAY has passed.
+     * This enables switching to a different Uniswap V3 instance on MegaETH.
      * IMPORTANT: All token pairs for existing vaults must be initialized in the new Oracle before calling this.
      * Can only be called when the system is NOT in Unstoppable mode.
      * @param newOracle The address of the new Oracle contract.
