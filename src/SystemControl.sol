@@ -202,11 +202,11 @@ contract SystemControl is Ownable2Step {
      * @dev The change takes effect after CHANGE_DELAY has passed.
      * This enables switching to a different Uniswap V3 instance on MegaETH.
      * IMPORTANT: All token pairs for existing vaults must be initialized in the new Oracle before calling this.
-     * Can only be called when the system is NOT in Unstoppable mode.
+     * Can only be called when the system is in Training Wheels mode.
      * @param newOracle The address of the new Oracle contract.
      */
     function setOracle(address newOracle) external onlyOwner {
-        if (systemStatus == SystemStatus.Unstoppable) revert WrongStatus();
+        if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         require(newOracle != address(0));
 
         vault.setOracle(newOracle);

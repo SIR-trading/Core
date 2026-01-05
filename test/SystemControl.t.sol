@@ -1212,11 +1212,33 @@ contract SystemControlWithoutOracleTest is ERC1155TokenReceiver, Test {
         systemControl.setOracle(newOracle);
     }
 
-    function test_setOracleWrongState() public {
+    function test_setOracleWrongStateUnstoppable() public {
         address newOracle = vm.addr(100);
 
         // Set state to Unstoppable
         _setState(SystemStatus.Unstoppable);
+
+        // Attempt to set oracle
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setOracle(newOracle);
+    }
+
+    function test_setOracleWrongStateEmergency() public {
+        address newOracle = vm.addr(100);
+
+        // Set state to Emergency
+        _setState(SystemStatus.Emergency);
+
+        // Attempt to set oracle
+        vm.expectRevert(WrongStatus.selector);
+        systemControl.setOracle(newOracle);
+    }
+
+    function test_setOracleWrongStateShutdown() public {
+        address newOracle = vm.addr(100);
+
+        // Set state to Shutdown
+        _setState(SystemStatus.Shutdown);
 
         // Attempt to set oracle
         vm.expectRevert(WrongStatus.selector);

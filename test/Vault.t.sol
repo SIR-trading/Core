@@ -85,8 +85,8 @@ contract VaultTest is Test {
         uint256 amount;
     }
 
-    uint256 constant SLOT_VAULT_STATE = 11; // +1 due to OracleChange struct replacing single Oracle slot
-    uint256 constant SLOT_TOTAL_RESERVES = 12; // +1 due to OracleChange struct replacing single Oracle slot
+    uint256 constant SLOT_VAULT_STATE = 12; // +1 due to OracleChange struct, +1 due to _lockEnd mapping in TEA
+    uint256 constant SLOT_TOTAL_RESERVES = 13; // +1 due to OracleChange struct, +1 due to _lockEnd mapping in TEA
     uint256 constant SLOT_TOTAL_SUPPLY_APE = 5;
     uint256 constant SLOT_APE_BALANCE_OF = 6;
     uint256 constant SLOT_TOTAL_SUPPLY_TEA = 6;
@@ -688,7 +688,8 @@ contract VaultTest is Test {
                 vaultParams,
                 inputsOutputs.collateral,
                 uint144(0),
-                uint40(0)
+                uint40(0),
+                uint8(0) // portionLockTime
             )
         );
 
@@ -1986,7 +1987,7 @@ contract VaultControlTest is Test {
 
     IWETH9 private constant WETH = IWETH9(AddressesMegaETHTest.ADDR_WETH);
 
-    uint256 constant SLOT_TOTAL_RESERVES = 12; // +1 due to OracleChange struct replacing single Oracle slot
+    uint256 constant SLOT_TOTAL_RESERVES = 13; // +1 due to OracleChange struct, +1 due to _lockEnd mapping in TEA
     uint96 constant ETH_SUPPLY = 1e9 * 10 ** 18;
 
     address public systemControl = vm.addr(100);
