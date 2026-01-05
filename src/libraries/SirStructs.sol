@@ -34,6 +34,7 @@ library SirStructs {
                 Nvaults = type(uint8).max^2 < type(uint16).max
          */
         uint16 cumulativeTax;
+        uint40 lpLockTime; // Max lock duration for LP fee reduction
     }
 
     /** Collateral owned by the apes and LPers in a vault

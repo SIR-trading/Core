@@ -145,12 +145,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether, 0, 0);
+        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether, 0, 0, 0);
 
         // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether, 0, 0);
+        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether, 0, 0, 0);
 
         // Successfully mint SIR
         skip(1 days);
@@ -179,13 +179,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(true, vaultParameters, 1 ether, 0, 0);
+        vault.mint(true, vaultParameters, 1 ether, 0, 0, 0);
 
         // Failure to mint TEA
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(false, vaultParameters, 1 ether, 0, 0);
+        vault.mint(false, vaultParameters, 1 ether, 0, 0, 0);
 
         // Failure to mint SIR
         vm.prank(oneContributor);
@@ -214,12 +214,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        vault.mint(true, vaultParameters, 1 ether, 0, 0);
+        vault.mint(true, vaultParameters, 1 ether, 0, 0, 0);
 
         // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        vault.mint(false, vaultParameters, 1 ether, 0, 0);
+        vault.mint(false, vaultParameters, 1 ether, 0, 0, 0);
 
         // Successfully mint SIR
         skip(1 days);
@@ -256,12 +256,12 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         // Successfully mint APE
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether, 0, 0);
+        uint256 apeAmount = vault.mint(true, vaultParameters, 1 ether, 0, 0, 0);
 
         // Successfully mint TEA
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
-        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether, 0, 0);
+        uint256 teaAmount = vault.mint(false, vaultParameters, 1 ether, 0, 0, 0);
 
         // Hault minting
         systemControl.haultMinting();
@@ -281,13 +281,13 @@ contract SystemControlTest is ERC1155TokenReceiver, Test {
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(true, vaultParameters, 1 ether, 0, 0);
+        vault.mint(true, vaultParameters, 1 ether, 0, 0, 0);
 
         // Failure to mint TEA
         _dealWETH(address(this), 1 ether);
         WETH.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.mint(false, vaultParameters, 1 ether, 0, 0);
+        vault.mint(false, vaultParameters, 1 ether, 0, 0, 0);
 
         // Burn APE
         vault.burn(true, vaultParameters, apeAmount, 0);

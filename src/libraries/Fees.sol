@@ -49,17 +49,39 @@ library Fees {
     /**
      *  @notice LPers pay a fee to the protocol when they mint TEA
      *  @notice collateralFeeToLPers is the fee paid to the protocol (not all LPers)
+     *  @notice LPers can reduce their fee by locking their TEA for a period of time
      *  @param collateralDeposited Amount of collateral deposited by the LPers
      *  @param lpFee Fee in basis points charged to LPers and sent to the protocol
+     *  @param portionLockTime 0 = full fee (no lock), 255 = no fee (full lock)
+     *  @param lpLockTime Max lock duration from system params
+     *  @return fees The fee breakdown
+     *  @return lockEndTimestamp The timestamp when the lock expires
      */
-    function feeMintTEA(uint144 collateralDeposited, uint16 lpFee) internal pure returns (SirStructs.Fees memory fees) {
+    function feeMintTEA(
+        uint144 collateralDeposited,
+        uint16 lpFee,
+        uint8 portionLockTime,
+        uint40 lpLockTime
+    ) internal view returns (SirStructs.Fees memory fees, uint40 lockEndTimestamp) {
         unchecked {
+            // Effective fee: ceil(lpFee * (255 - portionLockTime) / 255)
+            // Round UP to charge slightly more fee when rounding
+            uint256 effectiveFee = (
+                uint256(lpFee) * (type(uint8).max - portionLockTime) + type(uint8).max - 1
+            ) / type(uint8).max;
+
             uint256 feeNum = 10000;
-            uint256 feeDen = 10000 + uint256(lpFee);
+            uint256 feeDen = 10000 + effectiveFee;
 
             // collateralDeposited = collateralIn + collateralFeeToLPers
             fees.collateralInOrWithdrawn = uint144((uint256(collateralDeposited) * feeNum) / feeDen);
             fees.collateralFeeToLPers = collateralDeposited - fees.collateralInOrWithdrawn;
+
+            // Lock duration: ceil(lpLockTime * portionLockTime / 255)
+            // Round UP to lock slightly longer when rounding
+            lockEndTimestamp = uint40(block.timestamp) + uint40(
+                (uint256(lpLockTime) * portionLockTime + type(uint8).max - 1) / type(uint8).max
+            );
         }
     }
 }

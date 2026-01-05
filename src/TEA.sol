@@ -24,6 +24,8 @@ contract TEA is SystemState {
     error LengthMismatch();
     error UnsafeRecipient();
     error TransferToZeroAddress();
+    error TransferToLowerLockEnd();
+    error TEALocked();
 
     event TransferSingle(
         address indexed operator,
@@ -59,6 +61,9 @@ contract TEA is SystemState {
     mapping(uint256 vaultId => TotalSupplyAndBalanceVault) internal totalSupplyAndBalanceVault;
 
     SirStructs.VaultParameters[] internal _paramsById; // Never used in Vault.sol. Just for users to access vault parameters by vault ID.
+
+    /// @dev Lock end timestamp per user per vault. 0 means unlocked.
+    mapping(address => mapping(uint256 vaultId => uint40)) internal _lockEnd;
 
     /**
      *  @notice Checks if an operator is approved to transfer on behalf of an account.
@@ -105,6 +110,11 @@ contract TEA is SystemState {
     /// @notice Returns the balance of an account for a specific vault
     function balanceOf(address account, uint256 vaultId) public view override returns (uint256) {
         return account == address(this) ? totalSupplyAndBalanceVault[vaultId].balanceVault : balances[account][vaultId];
+    }
+
+    /// @notice Returns the lock end timestamp for a user's TEA balance in a vault
+    function lockEnd(address account, uint256 vaultId) external view returns (uint40) {
+        return _lockEnd[account][vaultId];
     }
 
     /** @notice Returns the balances of multiple accounts for specific vaults.
@@ -160,6 +170,19 @@ contract TEA is SystemState {
         if (to == address(0)) revert TransferToZeroAddress();
         if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
+        // Lock time check and lock end update (skip if recipient is POL)
+        uint256 recipientBalance = balanceOf(to, vaultId);
+        if (to != address(this)) {
+            if (recipientBalance == 0) {
+                // Only unlocked users can transfer to fresh addresses
+                if (block.timestamp < _lockEnd[from][vaultId]) revert TEALocked();
+            } else {
+                // Can only transfer to addresses with lockEnd >= sender's lockEnd
+                if (_lockEnd[from][vaultId] > _lockEnd[to][vaultId]) revert TransferToLowerLockEnd();
+            }
+            _updateLockEnd(to, vaultId, recipientBalance, amount, _lockEnd[from][vaultId]);
+        }
+
         // Update balances
         _updateBalances(from, to, vaultId, amount);
 
@@ -195,6 +218,20 @@ contract TEA is SystemState {
             if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
             for (uint256 i = 0; i < vaultIds.length; ++i) {
+                // Lock time check and lock end update (skip if recipient is POL)
+                uint256 recipientBalance = balanceOf(to, vaultIds[i]);
+                if (to != address(this)) {
+                    uint40 senderLockEnd = _lockEnd[from][vaultIds[i]];
+                    if (recipientBalance == 0) {
+                        // Only unlocked users can transfer to fresh addresses
+                        if (block.timestamp < senderLockEnd) revert TEALocked();
+                    } else {
+                        // Can only transfer to addresses with lockEnd >= sender's lockEnd
+                        if (senderLockEnd > _lockEnd[to][vaultIds[i]]) revert TransferToLowerLockEnd();
+                    }
+                    _updateLockEnd(to, vaultIds[i], recipientBalance, amounts[i], senderLockEnd);
+                }
+
                 // Update balances
                 _updateBalances(from, to, vaultIds[i], amounts[i]);
             }
@@ -223,7 +260,8 @@ contract TEA is SystemState {
         SirStructs.SystemParameters memory systemParams_,
         SirStructs.VaultIssuanceParams memory vaultIssuanceParams_,
         SirStructs.Reserves memory reserves,
-        uint144 collateralDeposited
+        uint144 collateralDeposited,
+        uint8 portionLockTime
     ) internal returns (SirStructs.Fees memory fees, uint256 amount) {
         uint256 amountToPOL;
         unchecked {
@@ -232,15 +270,17 @@ contract TEA is SystemState {
             uint256 balanceOfTo = balances[minter][vaultId];
 
             // Update SIR issuance of gentlemen
-            LPersBalances memory lpersBalances = LPersBalances(minter, balanceOfTo, address(this), 0);
-            updateLPerIssuanceParams(
-                false,
-                vaultId,
-                systemParams_.cumulativeTax,
-                vaultIssuanceParams_,
-                totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
-                lpersBalances
-            );
+            {
+                LPersBalances memory lpersBalances = LPersBalances(minter, balanceOfTo, address(this), 0);
+                updateLPerIssuanceParams(
+                    false,
+                    vaultId,
+                    systemParams_.cumulativeTax,
+                    vaultIssuanceParams_,
+                    totalSupplyAndBalanceVault_.totalSupply - totalSupplyAndBalanceVault_.balanceVault,
+                    lpersBalances
+                );
+            }
 
             // Total amount of TEA to mint (to split between minter and POL)
             // We use variable amountToPOL for efficiency, not because it is just for POL
@@ -253,17 +293,28 @@ contract TEA is SystemState {
                 revert TEAMaxSupplyExceeded();
             }
 
-            // Split collateralDeposited between minter and POL
-            fees = Fees.feeMintTEA(collateralDeposited, systemParams_.lpFee.fee);
+            // Split collateralDeposited between minter and POL (with lock time fee reduction)
+            {
+                uint40 incomingLockEnd;
+                (fees, incomingLockEnd) = Fees.feeMintTEA(
+                    collateralDeposited,
+                    systemParams_.lpFee.fee,
+                    portionLockTime,
+                    systemParams_.lpLockTime
+                );
 
-            // Minter's share of TEA
-            amount = FullMath.mulDiv(
-                amountToPOL,
-                fees.collateralInOrWithdrawn,
-                totalSupplyAndBalanceVault_.totalSupply == 0
-                    ? collateralDeposited + reserves.reserveLPers // In the first mint, reserveLPers contains orphaned fees from apes
-                    : collateralDeposited
-            );
+                // Minter's share of TEA
+                amount = FullMath.mulDiv(
+                    amountToPOL,
+                    fees.collateralInOrWithdrawn,
+                    totalSupplyAndBalanceVault_.totalSupply == 0
+                        ? collateralDeposited + reserves.reserveLPers // In the first mint, reserveLPers contains orphaned fees from apes
+                        : collateralDeposited
+                );
+
+                // Update lock end with weighted average
+                _updateLockEnd(minter, vaultId, balanceOfTo, amount, incomingLockEnd);
+            }
 
             // POL's share of TEA
             amountToPOL -= amount;
@@ -296,6 +347,9 @@ contract TEA is SystemState {
         SirStructs.Reserves memory reserves,
         uint256 amount
     ) internal returns (SirStructs.Fees memory fees) {
+        // Check if user's TEA is locked
+        if (block.timestamp < _lockEnd[msg.sender][vaultId]) revert TEALocked();
+
         unchecked {
             // Loads supply and balance of TEA
             TotalSupplyAndBalanceVault memory totalSupplyAndBalanceVault_ = totalSupplyAndBalanceVault[vaultId];
@@ -383,6 +437,31 @@ contract TEA is SystemState {
             unchecked {
                 _setBalance(to, vaultId, lpersBalances.balance1 + amount);
             }
+        }
+    }
+
+    /**
+     * @dev Helper function for updating lock end timestamp when receiving TEA (mint or transfer).
+     */
+    function _updateLockEnd(
+        address account,
+        uint256 vaultId,
+        uint256 oldBalance,
+        uint256 amount,
+        uint40 incomingLockEnd
+    ) private {
+        if (oldBalance == 0) {
+            _lockEnd[account][vaultId] = incomingLockEnd;
+        } else {
+            // Weighted average (rounded UP): ceil((B1 * L1 + A * L2) / (B1 + A))
+            uint256 newBalance = oldBalance + amount;
+            uint256 newLockEnd = (uint256(oldBalance) *
+                uint256(_lockEnd[account][vaultId]) +
+                uint256(amount) *
+                uint256(incomingLockEnd) +
+                newBalance -
+                1) / newBalance;
+            _lockEnd[account][vaultId] = uint40(newLockEnd);
         }
     }
 

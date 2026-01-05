@@ -31,6 +31,7 @@ interface ISystemControl {
     function saveFunds(address[] memory tokens, address to) external;
     function setBaseFee(uint16 baseFee_) external;
     function setLPFee(uint16 lpFee_) external;
+    function setOracle(address newOracle) external;
     function shutdownSystem() external;
     function sir() external view returns (address);
     function systemStatus() external view returns (uint8);

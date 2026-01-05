@@ -728,7 +728,7 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         TestMintParams memory testMintParams,
         uint256 collateralTotalSupply0
     ) private view returns (SirStructs.Fees memory fees, uint256 senderAmount) {
-        fees = Fees.feeMintTEA(testMintParams.collateralDeposited, _systemParams.lpFee.fee);
+        (fees, ) = Fees.feeMintTEA(testMintParams.collateralDeposited, _systemParams.lpFee.fee, 0, _systemParams.lpLockTime);
 
         senderAmount =
             senderTeaBalance[tsBalance.length - 1] -
@@ -904,7 +904,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
-            testMintParams.collateralDeposited
+            testMintParams.collateralDeposited,
+            0 // portionLockTime = 0 (no lock)
         );
         tsBalance.push(block.timestamp);
         senderTeaBalance.push(balanceOf(msg.sender, VAULT_ID));
@@ -983,7 +984,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
-            testMintParams.collateralDeposited
+            testMintParams.collateralDeposited,
+            0 // portionLockTime = 0 (no lock)
         );
 
         tsBalance.push(block.timestamp);
@@ -1027,7 +1029,8 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
             _systemParams,
             vaultIssuanceParams[VAULT_ID],
             reserves,
-            collateralDeposited
+            collateralDeposited,
+            0 // portionLockTime = 0 (no lock)
         );
     }
 

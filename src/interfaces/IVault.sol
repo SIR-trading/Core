@@ -70,12 +70,14 @@ interface IVault {
     ) external view returns (SirStructs.Reserves memory);
     function initialize(SirStructs.VaultParameters memory vaultParams) external;
     function isApprovedForAll(address, address) external view returns (bool);
+    function lockEnd(address account, uint256 vaultId) external view returns (uint40);
     function mint(
         bool isAPE,
         SirStructs.VaultParameters memory vaultParams,
         uint256 amountToDeposit,
         uint144 collateralToDepositMin,
-        uint40 deadline
+        uint40 deadline,
+        uint8 portionLockTime
     ) external payable returns (uint256 amount);
     function numberOfVaults() external view returns (uint48);
     function paramsById(uint48 vaultId) external view returns (SirStructs.VaultParameters memory);

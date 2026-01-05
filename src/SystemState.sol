@@ -52,7 +52,8 @@ abstract contract SystemState is SystemControlAccess {
             baseFee: SirStructs.FeeStructure({fee: 1000, feeNew: 0, timestampUpdate: 0}), // At 2 leverage, apes would pay 17% of their deposit as upfront fee.
             lpFee: SirStructs.FeeStructure({fee: 515, feeNew: 0, timestampUpdate: 0}), // To mitigate LP sandwich attacks. LPers would pay 4.9% of their deposit as upfront fee.
             mintingStopped: false,
-            cumulativeTax: 0
+            cumulativeTax: 0,
+            lpLockTime: 90 days // Max lock duration for LP fee reduction
         });
     }
 

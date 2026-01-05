@@ -72,8 +72,9 @@ contract FeesTest is Test {
         assertEq(fees.collateralFeeToStakers, (totalFee * 50) / 100, "Max fee to stakers is not 50%");
     }
 
-    function testFuzz_feeMintTEA(uint144 collateralDeposited, uint16 lpFee) public pure {
-        SirStructs.Fees memory fees = Fees.feeMintTEA(collateralDeposited, lpFee);
+    function testFuzz_feeMintTEA(uint144 collateralDeposited, uint16 lpFee) public view {
+        // Test with portionLockTime = 0 (full fee, no lock)
+        (SirStructs.Fees memory fees, uint40 lockEndTimestamp) = Fees.feeMintTEA(collateralDeposited, lpFee, 0, 90 days);
 
         uint256 totalFee = uint256(fees.collateralFeeToStakers) + fees.collateralFeeToLPers;
 
@@ -90,5 +91,6 @@ contract FeesTest is Test {
         assertGe(totalFeeUpperBound, totalFee, "Total fee too high");
         assertEq(fees.collateralFeeToStakers, 0);
         assertEq(fees.collateralFeeToLPers, totalFee);
+        assertEq(lockEndTimestamp, uint40(block.timestamp), "Lock end should be now when portionLockTime is 0");
     }
 }
