@@ -9,7 +9,7 @@ library SystemConstants {
      */
     uint72 internal constant ISSUANCE = uint72(2015e6 * 10 ** SIR_DECIMALS - 1) / 365 days + 1; // [sir/s]
 
-    uint72 internal constant LP_ISSUANCE_FIRST_3_YEARS = uint72((uint256(70000000000000000) * ISSUANCE) / 1e17);
+    uint72 internal constant LP_ISSUANCE_FIRST_3_YEARS = uint72((uint256(69000000000000000) * ISSUANCE) / 1e17);
 
     uint128 internal constant TEA_MAX_SUPPLY = (uint128(LP_ISSUANCE_FIRST_3_YEARS) << 96) / type(uint16).max; // Must fit in uint128
 

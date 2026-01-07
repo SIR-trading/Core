@@ -16,15 +16,15 @@ const TREASURY = {
 // TVL weights for computing allocations (in USD)
 // These determine how much weight each chain's holdings get
 const TVL_WEIGHTS = {
-    sir: 66000, // $66k TVL for SIR on Ethereum
-    hyperSir: 10000 // $10k TVL for HyperSIR on HyperEVM
+    sir: 76000, // $66k TVL for SIR on Ethereum
+    hyperSir: 12000 // $10k TVL for HyperSIR on HyperEVM
 };
 
 // Total TVL for weighted average calculation
 const TOTAL_TVL = TVL_WEIGHTS.sir + TVL_WEIGHTS.hyperSir;
 
 // Allocation percentages (out of 100% total issuance)
-const LP_ALLOCATION = 70; // 70% to LPers (not in this contract, handled separately)
+const LP_ALLOCATION = 69; // % to LPers (not in this contract, handled separately)
 // Remaining 30% goes to contributors based on their SIR/HyperSIR holdings
 
 // High precision for percentage calculations (18 decimals)
@@ -122,12 +122,23 @@ class AllocationsGenerator {
             const existing = this.userEthereumPercentages.get(megaethAddress) || 0n;
             this.userEthereumPercentages.set(megaethAddress, existing + percentage);
 
-            // Store source data
+            // Store source data with full breakdown
             const sources = this.sources.get(megaethAddress) || {};
             sources.ethereum = {
                 originalAddress: address,
                 percentage: percentageStr,
-                totalSIR: balanceData.totalSIR
+                totalSIR: balanceData.totalSIR,
+                breakdown: {
+                    sirBalance: balanceData.sirBalance,
+                    stakedSIR: balanceData.stakedSIR,
+                    vaultEquity: balanceData.vaultEquity,
+                    unclaimedLperRewards: balanceData.unclaimedLperRewards,
+                    unclaimedContributorRewards: balanceData.unclaimedContributorRewards,
+                    unissuedContributorRewards: balanceData.unissuedContributorRewards,
+                    uniswapV3Equity: balanceData.uniswapV3Equity,
+                    uniswapV3UnclaimedFees: balanceData.uniswapV3UnclaimedFees,
+                    uniswapV3StakingRewards: balanceData.uniswapV3StakingRewards
+                }
             };
             this.sources.set(megaethAddress, sources);
 
@@ -184,12 +195,23 @@ class AllocationsGenerator {
             const existing = this.userHyperEVMPercentages.get(megaethAddress) || 0n;
             this.userHyperEVMPercentages.set(megaethAddress, existing + percentage);
 
-            // Store source data
+            // Store source data with full breakdown
             const sources = this.sources.get(megaethAddress) || {};
             sources.hyperevm = {
                 originalAddress: address,
                 percentage: percentageStr,
-                totalSIR: balanceData.totalSIR
+                totalSIR: balanceData.totalSIR,
+                breakdown: {
+                    sirBalance: balanceData.sirBalance,
+                    stakedSIR: balanceData.stakedSIR,
+                    vaultEquity: balanceData.vaultEquity,
+                    unclaimedLperRewards: balanceData.unclaimedLperRewards,
+                    unclaimedContributorRewards: balanceData.unclaimedContributorRewards,
+                    unissuedContributorRewards: balanceData.unissuedContributorRewards,
+                    uniswapV3Equity: balanceData.uniswapV3Equity,
+                    uniswapV3UnclaimedFees: balanceData.uniswapV3UnclaimedFees,
+                    uniswapV3StakingRewards: balanceData.uniswapV3StakingRewards
+                }
             };
             this.sources.set(megaethAddress, sources);
 
