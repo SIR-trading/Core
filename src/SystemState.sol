@@ -250,7 +250,10 @@ abstract contract SystemState is SystemControlAccess {
      * All these parameters are updated in a single function for bytecode efficiency.
      * All checks and balances are done at the SystemControl contract.
      */
-    function updateSystemState(uint16 baseFee, uint16 lpFee, bool mintingStopped) external onlySystemControl {
+    function updateSystemState(uint16 baseFee, uint16 lpFee, uint40 lpLockTime, bool mintingStopped)
+        external
+        onlySystemControl
+    {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
 
         if (baseFee != 0) {
@@ -259,6 +262,8 @@ abstract contract SystemState is SystemControlAccess {
         } else if (lpFee != 0) {
             systemParams_.lpFee.timestampUpdate = uint40(block.timestamp);
             systemParams_.lpFee.feeNew = lpFee;
+        } else if (lpLockTime != 0) {
+            systemParams_.lpLockTime = lpLockTime;
         } else {
             systemParams_.mintingStopped = mintingStopped;
         }

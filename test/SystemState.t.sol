@@ -861,7 +861,7 @@ contract SystemStateTest is Test {
 
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(baseFee, lpFee, mintingStopped);
+        systemState.updateSystemState(baseFee, lpFee, 0, mintingStopped);
 
         systemParams_ = systemState.systemParams();
 
@@ -888,7 +888,7 @@ contract SystemStateTest is Test {
 
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(baseFee, lpFee, mintingStopped);
+        systemState.updateSystemState(baseFee, lpFee, 0, mintingStopped);
 
         // Skip delay
         skip(delay);
@@ -924,7 +924,7 @@ contract SystemStateTest is Test {
 
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(baseFee2, lpFee2, mintingStopped2);
+        systemState.updateSystemState(baseFee2, lpFee2, 0, mintingStopped2);
 
         // Skip delay
         skip(delay2);
@@ -949,7 +949,7 @@ contract SystemStateTest is Test {
 
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(0, lpFee, mintingStopped);
+        systemState.updateSystemState(0, lpFee, 0, mintingStopped);
 
         // Skip delay
         skip(delay);
@@ -969,7 +969,7 @@ contract SystemStateTest is Test {
 
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(0, lpFee, mintingStopped);
+        systemState.updateSystemState(0, lpFee, 0, mintingStopped);
 
         // Skip delay
         skip(delay);
@@ -1003,7 +1003,7 @@ contract SystemStateTest is Test {
 
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(0, lpFee2, mintingStopped2);
+        systemState.updateSystemState(0, lpFee2, 0, mintingStopped2);
 
         // Skip delay
         skip(delay2);
@@ -1025,7 +1025,7 @@ contract SystemStateTest is Test {
     function testFuzz_updateMintingStopped(bool mintingStopped) public {
         // Update system vaultState
         vm.prank(systemControl);
-        systemState.updateSystemState(0, 0, mintingStopped);
+        systemState.updateSystemState(0, 0, 0, mintingStopped);
 
         // Check system vaultState
         systemParams_ = systemState.systemParams();
@@ -1048,9 +1048,9 @@ contract SystemStateTest is Test {
 
         // Update system state
         vm.startPrank(systemControl);
-        systemState.updateSystemState(baseFee, lpFeeFake, mintingStoppedFake);
-        systemState.updateSystemState(0, lpFee, mintingStoppedFake);
-        systemState.updateSystemState(0, 0, mintingStopped);
+        systemState.updateSystemState(baseFee, lpFeeFake, 0, mintingStoppedFake);
+        systemState.updateSystemState(0, lpFee, 0, mintingStoppedFake);
+        systemState.updateSystemState(0, 0, 0, mintingStopped);
         vm.stopPrank();
 
         // Skip delay to apply the new fees
@@ -1095,7 +1095,7 @@ contract SystemStateTest is Test {
     function testFuzz_updateSystemStateNotSystemControl(uint16 baseFee, uint16 lpFee, bool mintingStopped) public {
         // Update system vaultState
         vm.expectRevert();
-        systemState.updateSystemState(baseFee, lpFee, mintingStopped);
+        systemState.updateSystemState(baseFee, lpFee, 0, mintingStopped);
     }
 
     function testFuzz_updateSystemVaultsNotSystemControl(uint16 numVaults) public {

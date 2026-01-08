@@ -34,6 +34,7 @@ contract SystemControl is Ownable2Step {
     event SystemStatusChanged(SystemStatus indexed oldStatus, SystemStatus indexed newStatus);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
+    event NewLPLockTime(uint40 lpLockTime);
     event TreasuryFeesWithdrawn(uint48 indexed vaultId, address indexed collateralToken, uint256 amount);
     event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);
     event OracleChanged(address indexed newOracle);
@@ -115,7 +116,7 @@ contract SystemControl is Ownable2Step {
         timestampStatusChanged = uint40(block.timestamp);
 
         // Hault minting of TEA and APE
-        vault.updateSystemState(0, 0, true);
+        vault.updateSystemState(0, 0, 0, true);
 
         // Hault minting of SIR
         sir.allowMinting(false);
@@ -134,7 +135,7 @@ contract SystemControl is Ownable2Step {
         timestampStatusChanged = uint40(block.timestamp);
 
         // Restore fees and redume minting of TEA and APE
-        vault.updateSystemState(0, 0, false);
+        vault.updateSystemState(0, 0, 0, false);
 
         // Restore minting of SIR
         sir.allowMinting(true);
@@ -180,7 +181,7 @@ contract SystemControl is Ownable2Step {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (baseFee_ == 0) revert FeeCannotBeZero();
 
-        vault.updateSystemState(baseFee_, 0, false);
+        vault.updateSystemState(baseFee_, 0, 0, false);
 
         emit NewBaseFee(baseFee_);
     }
@@ -192,9 +193,21 @@ contract SystemControl is Ownable2Step {
         if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
         if (lpFee_ == 0) revert FeeCannotBeZero();
 
-        vault.updateSystemState(0, lpFee_, false);
+        vault.updateSystemState(0, lpFee_, 0, false);
 
         emit NewLPFee(lpFee_);
+    }
+
+    /**
+     * @notice LP lock time can only be set when the system is in TrainingWheels status.
+     */
+    function setLPLockTime(uint40 lpLockTime_) external onlyOwner {
+        if (systemStatus != SystemStatus.TrainingWheels) revert WrongStatus();
+        if (lpLockTime_ == 0) revert FeeCannotBeZero();
+
+        vault.updateSystemState(0, 0, lpLockTime_, false);
+
+        emit NewLPLockTime(lpLockTime_);
     }
 
     /**

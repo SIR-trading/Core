@@ -188,8 +188,8 @@ contract VaultTest is Test {
             vm.startPrank(systemControl);
             vm.assume(systemParams.baseFee != 0);
             vm.assume(systemParams.lpFee != 0);
-            vault.updateSystemState(systemParams.baseFee, 0, false);
-            vault.updateSystemState(0, systemParams.lpFee, false);
+            vault.updateSystemState(systemParams.baseFee, 0, 0, false);
+            vault.updateSystemState(0, systemParams.lpFee, 0, false);
             vm.stopPrank();
             skip(SystemConstants.CHANGE_DELAY);
 
