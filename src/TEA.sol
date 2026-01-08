@@ -171,16 +171,15 @@ contract TEA is SystemState {
         if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
         // Lock time check and lock end update (skip if recipient is POL)
-        uint256 recipientBalance = balanceOf(to, vaultId);
         if (to != address(this)) {
-            if (recipientBalance == 0) {
-                // Only unlocked users can transfer to fresh addresses
-                if (block.timestamp < _lockEnd[from][vaultId]) revert TEALocked();
-            } else {
-                // Can only transfer to addresses with lockEnd >= sender's lockEnd
-                if (_lockEnd[from][vaultId] > _lockEnd[to][vaultId]) revert TransferToLowerLockEnd();
-            }
-            _updateLockEnd(to, vaultId, recipientBalance, amount, _lockEnd[from][vaultId]);
+            // Floor recipient's lock end at current time (expired/fresh = effectively unlocked)
+            uint256 lockEndTo = _lockEnd[to][vaultId];
+            if (lockEndTo < block.timestamp) lockEndTo = block.timestamp;
+
+            // Sender's lock end must not exceed recipient's effective lock end
+            if (_lockEnd[from][vaultId] > lockEndTo) revert TransferToLowerLockEnd();
+
+            _updateLockEnd(to, vaultId, balances[to][vaultId], amount, _lockEnd[from][vaultId]);
         }
 
         // Update balances
@@ -218,22 +217,23 @@ contract TEA is SystemState {
             if (msg.sender != from && !isApprovedForAll[from][msg.sender]) revert NotAuthorized();
 
             for (uint256 i = 0; i < vaultIds.length; ++i) {
+                uint256 vaultId = vaultIds[i];
+
                 // Lock time check and lock end update (skip if recipient is POL)
-                uint256 recipientBalance = balanceOf(to, vaultIds[i]);
                 if (to != address(this)) {
-                    uint40 senderLockEnd = _lockEnd[from][vaultIds[i]];
-                    if (recipientBalance == 0) {
-                        // Only unlocked users can transfer to fresh addresses
-                        if (block.timestamp < senderLockEnd) revert TEALocked();
-                    } else {
-                        // Can only transfer to addresses with lockEnd >= sender's lockEnd
-                        if (senderLockEnd > _lockEnd[to][vaultIds[i]]) revert TransferToLowerLockEnd();
-                    }
-                    _updateLockEnd(to, vaultIds[i], recipientBalance, amounts[i], senderLockEnd);
+                    // Floor recipient's lock end at current time (expired/fresh = effectively unlocked)
+                    uint256 lockEndTo = _lockEnd[to][vaultId];
+                    if (lockEndTo < block.timestamp) lockEndTo = block.timestamp;
+
+                    // Sender's lock end must not exceed recipient's effective lock end
+                    uint40 senderLockEnd = _lockEnd[from][vaultId];
+                    if (senderLockEnd > lockEndTo) revert TransferToLowerLockEnd();
+
+                    _updateLockEnd(to, vaultId, balances[to][vaultId], amounts[i], senderLockEnd);
                 }
 
                 // Update balances
-                _updateBalances(from, to, vaultIds[i], amounts[i]);
+                _updateBalances(from, to, vaultId, amounts[i]);
             }
 
             emit TransferBatch(msg.sender, from, to, vaultIds, amounts);
@@ -450,15 +450,22 @@ contract TEA is SystemState {
         uint256 amount,
         uint40 incomingLockEnd
     ) private {
+        // Floor expired locks at current time (expired locks = 0 remaining time)
+        uint256 incomingLockEndFloored = incomingLockEnd < block.timestamp ? block.timestamp : incomingLockEnd;
+
         if (oldBalance == 0) {
-            _lockEnd[account][vaultId] = incomingLockEnd;
+            _lockEnd[account][vaultId] = uint40(incomingLockEndFloored);
         } else {
-            // Weighted average (rounded UP): ceil((B1 * L1 + A * L2) / (B1 + A))
+            // Use current time as minimum for old lock end (expired locks = 0 remaining time)
+            uint256 oldLockEnd = _lockEnd[account][vaultId];
+            if (oldLockEnd < block.timestamp) oldLockEnd = block.timestamp;
+
+            // Weighted average (rounded UP): ceil((oldBalance * oldLockEnd + amount * incomingLockEnd) / newBalance)
             uint256 newBalance = oldBalance + amount;
             uint256 newLockEnd = (uint256(oldBalance) *
-                uint256(_lockEnd[account][vaultId]) +
+                oldLockEnd +
                 uint256(amount) *
-                uint256(incomingLockEnd) +
+                incomingLockEndFloored +
                 newBalance -
                 1) / newBalance;
             _lockEnd[account][vaultId] = uint40(newLockEnd);

@@ -56,6 +56,14 @@ contract TEAInstance is TEA, TEATestConstants {
         if (account == address(this)) totalSupplyAndBalanceVault[vaultId].balanceVault += uint128(amount);
         else balances[account][vaultId] += amount;
     }
+
+    function setLockEnd(address account, uint256 vaultId, uint40 lockEndValue) external {
+        _lockEnd[account][vaultId] = lockEndValue;
+    }
+
+    function getLockEnd(address account, uint256 vaultId) external view returns (uint40) {
+        return _lockEnd[account][vaultId];
+    }
 }
 
 contract TEATest is Test, TEATestConstants {
@@ -1126,5 +1134,263 @@ contract TEAInternal is TEA(address(0), address(0)), Test {
         vm.expectRevert();
         vm.prank(msg.sender);
         burn(VAULT_ID, _systemParams, vaultIssuanceParams[VAULT_ID], reserves, testBurnParams.tokensBurnt);
+    }
+}
+
+/// @dev Tests for the lock time dilution bug fix
+/// These tests verify that expired locks are correctly floored at block.timestamp
+/// to prevent lock time dilution attacks.
+contract TEALockTimeTest is Test, TEATestConstants {
+    error TransferToLowerLockEnd();
+
+    TEAInstance tea;
+    MockERC20 collateral;
+
+    address alice;
+    address bob;
+    address charlie;
+
+    uint40 constant ONE_YEAR = 365 days;
+
+    function setUp() public {
+        collateral = new MockERC20("Collateral token", "TKN", 18);
+        tea = new TEAInstance(address(collateral));
+
+        alice = vm.addr(1);
+        bob = vm.addr(2);
+        charlie = vm.addr(3);
+
+        // Start at a reasonable timestamp
+        vm.warp(1_700_000_000);
+    }
+
+    /// @notice Test that transferring from an account with an expired lock to a fresh address
+    /// results in the recipient having lockEnd = block.timestamp (effectively unlocked)
+    /// BUG: Old implementation would set lockEnd to the expired timestamp (way in the past)
+    function test_transferExpiredLockToFreshAddress() public {
+        // Setup: Alice has 1000 TEA with an expired lock (1000 seconds, way in the past)
+        tea.mint(alice, 1000e18);
+        tea.setLockEnd(alice, VAULT_ID, 1000); // Expired lock from long ago
+
+        // Alice transfers to Bob (fresh address with no TEA)
+        vm.prank(alice);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, 100e18, "");
+
+        // Bob's lockEnd should be block.timestamp (effectively unlocked), NOT 1000
+        uint40 bobLockEnd = tea.getLockEnd(bob, VAULT_ID);
+
+        // With the fix: lockEnd should be >= block.timestamp (floored)
+        assertGe(bobLockEnd, block.timestamp, "Lock end should be floored at current timestamp");
+
+        // With the bug: lockEnd would be 1000 (the expired value)
+        assertNotEq(bobLockEnd, 1000, "Lock end should NOT be the old expired timestamp");
+    }
+
+    /// @notice Test that an expired incoming lock doesn't dilute a recipient's future lock
+    /// BUG: Old implementation would do weighted average with raw timestamps, diluting the lock
+    function test_expiredIncomingLockDoesNotDiluteRecipientLock() public {
+        uint40 currentTime = uint40(block.timestamp);
+        uint40 bobFutureLock = currentTime + ONE_YEAR;
+
+        // Setup: Bob has 1000 TEA with a lock 1 year in the future
+        tea.mint(bob, 1000e18);
+        tea.setLockEnd(bob, VAULT_ID, bobFutureLock);
+
+        // Alice has 1 TEA with an expired lock (timestamp = 1000, way in the past)
+        tea.mint(alice, 1e18);
+        tea.setLockEnd(alice, VAULT_ID, 1000);
+
+        // Alice transfers 1 TEA to Bob
+        vm.prank(alice);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, 1e18, "");
+
+        // Bob's lockEnd should still be close to his original lock
+        uint40 bobNewLockEnd = tea.getLockEnd(bob, VAULT_ID);
+
+        // With the fix: incoming expired lock is floored to block.timestamp
+        // Weighted average: (1000 * (currentTime + 1 year) + 1 * currentTime) / 1001
+        // This should be very close to (currentTime + 1 year)
+        assertGe(bobNewLockEnd, currentTime + ONE_YEAR - 1 days, "Lock should not be significantly diluted");
+
+        // With the bug: incoming lock = 1000 (way in the past)
+        // Weighted average: (1000 * (currentTime + 1 year) + 1 * 1000) / 1001
+        // This would result in a much smaller value, potentially in the past!
+        assertGt(bobNewLockEnd, currentTime, "Lock should definitely be in the future");
+    }
+
+    /// @notice Test that an old expired recipient lock doesn't incorrectly affect weighted average
+    /// when both sender and recipient have expired locks
+    /// BUG: Old implementation would use the old timestamp in weighted average
+    function test_expiredRecipientLockDoesNotAffectNewLock() public {
+        uint40 currentTime = uint40(block.timestamp);
+
+        // Setup: Bob has 1000 TEA with an expired lock (timestamp = 1000)
+        tea.mint(bob, 1000e18);
+        tea.setLockEnd(bob, VAULT_ID, 1000);
+
+        // Alice has 1 TEA with a slightly less expired lock (timestamp = 500)
+        // Both are expired, so transfer should be allowed
+        tea.mint(alice, 1e18);
+        tea.setLockEnd(alice, VAULT_ID, 500);
+
+        // Alice transfers 1 TEA to Bob
+        vm.prank(alice);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, 1e18, "");
+
+        // Bob's lockEnd calculation:
+        // With fix: both oldLockEnd and incomingLockEnd are floored to currentTime
+        // Weighted average: (1000 * currentTime + 1 * currentTime) / 1001 = currentTime
+        uint40 bobNewLockEnd = tea.getLockEnd(bob, VAULT_ID);
+
+        // The new lock should be at current time (both effectively unlocked)
+        assertGe(bobNewLockEnd, currentTime, "Lock should be at least current time");
+
+        // With the bug: oldLockEnd = 1000, incomingLockEnd = 500
+        // Weighted average: (1000 * 1000 + 1 * 500) / 1001 ≈ 999
+        // This would be way in the past!
+        assertGe(bobNewLockEnd, currentTime, "Lock should not be in the past due to bug");
+    }
+
+    /// @notice Test transfer between two accounts with expired locks
+    /// Both should be treated as unlocked
+    function test_transferBetweenExpiredLocks() public {
+        uint40 currentTime = uint40(block.timestamp);
+
+        // Setup: Alice has TEA with expired lock at timestamp 500
+        tea.mint(alice, 1000e18);
+        tea.setLockEnd(alice, VAULT_ID, 500);
+
+        // Bob has TEA with expired lock at timestamp 1000
+        tea.mint(bob, 1000e18);
+        tea.setLockEnd(bob, VAULT_ID, 1000);
+
+        // Alice transfers to Bob - should succeed since both are effectively unlocked
+        vm.prank(alice);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, 100e18, "");
+
+        // Bob's lock should be floored at current time
+        uint40 bobNewLockEnd = tea.getLockEnd(bob, VAULT_ID);
+        assertGe(bobNewLockEnd, currentTime, "Lock should be floored at current time");
+    }
+
+    /// @notice Test that a locked sender cannot transfer to an unlocked recipient
+    function test_lockedSenderCannotTransferToUnlockedRecipient() public {
+        uint40 currentTime = uint40(block.timestamp);
+
+        // Setup: Alice has TEA with future lock
+        tea.mint(alice, 1000e18);
+        tea.setLockEnd(alice, VAULT_ID, currentTime + ONE_YEAR);
+
+        // Bob has TEA with expired lock (effectively unlocked)
+        tea.mint(bob, 1000e18);
+        tea.setLockEnd(bob, VAULT_ID, 1000);
+
+        // Alice tries to transfer to Bob - should fail because Alice is locked and Bob is unlocked
+        vm.prank(alice);
+        vm.expectRevert(TransferToLowerLockEnd.selector);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, 100e18, "");
+    }
+
+    /// @notice Test that a locked sender cannot transfer to a fresh address
+    function test_lockedSenderCannotTransferToFreshAddress() public {
+        uint40 currentTime = uint40(block.timestamp);
+
+        // Setup: Alice has TEA with future lock
+        tea.mint(alice, 1000e18);
+        tea.setLockEnd(alice, VAULT_ID, currentTime + ONE_YEAR);
+
+        // Alice tries to transfer to Charlie (fresh address) - should fail
+        vm.prank(alice);
+        vm.expectRevert(TransferToLowerLockEnd.selector);
+        tea.safeTransferFrom(alice, charlie, VAULT_ID, 100e18, "");
+    }
+
+    /// @notice Test weighted average calculation with specific values
+    function test_weightedAverageCalculation() public {
+        uint40 currentTime = uint40(block.timestamp);
+        uint40 futureLock = currentTime + ONE_YEAR;
+
+        // Setup: Bob has 900 TEA with future lock
+        tea.mint(bob, 900e18);
+        tea.setLockEnd(bob, VAULT_ID, futureLock);
+
+        // Alice has 100 TEA with same future lock
+        tea.mint(alice, 100e18);
+        tea.setLockEnd(alice, VAULT_ID, futureLock);
+
+        // Alice transfers to Bob
+        vm.prank(alice);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, 100e18, "");
+
+        // Bob's lock should remain approximately the same (weighted average of same values)
+        uint40 bobNewLockEnd = tea.getLockEnd(bob, VAULT_ID);
+
+        // Should be exactly futureLock or very close (due to rounding up)
+        assertGe(bobNewLockEnd, futureLock, "Lock should be at least the original value");
+        assertLe(bobNewLockEnd, futureLock + 1, "Lock should not exceed original by more than rounding");
+    }
+
+    /// @notice Fuzz test: expired locks should always result in lockEnd >= block.timestamp
+    function testFuzz_expiredLocksFlooredAtTimestamp(
+        uint40 expiredLockEnd,
+        uint256 senderBalance,
+        uint256 recipientBalance,
+        uint256 transferAmount
+    ) public {
+        uint40 currentTime = uint40(block.timestamp);
+
+        // Ensure lock is expired
+        expiredLockEnd = uint40(_bound(expiredLockEnd, 0, currentTime - 1));
+
+        // Bound balances
+        senderBalance = _bound(senderBalance, 1, 1e24);
+        recipientBalance = _bound(recipientBalance, 0, 1e24);
+        transferAmount = _bound(transferAmount, 1, senderBalance);
+
+        // Setup sender with expired lock
+        tea.mint(alice, senderBalance);
+        tea.setLockEnd(alice, VAULT_ID, expiredLockEnd);
+
+        // Setup recipient (may or may not have balance)
+        if (recipientBalance > 0) {
+            tea.mint(bob, recipientBalance);
+            tea.setLockEnd(bob, VAULT_ID, currentTime + ONE_YEAR); // Future lock
+        }
+
+        // Transfer
+        vm.prank(alice);
+        tea.safeTransferFrom(alice, bob, VAULT_ID, transferAmount, "");
+
+        // Recipient's lock should be >= current time
+        uint40 recipientLockEnd = tea.getLockEnd(bob, VAULT_ID);
+        assertGe(recipientLockEnd, currentTime, "Lock end should never be in the past");
+    }
+
+    /// @notice Test batch transfer with expired locks
+    function test_batchTransferWithExpiredLocks() public {
+        uint40 currentTime = uint40(block.timestamp);
+
+        // Setup: Alice has TEA in two vaults with expired locks
+        tea.mint(alice, uint48(VAULT_ID), 1000e18);
+        tea.setLockEnd(alice, VAULT_ID, 1000);
+
+        tea.mint(alice, uint48(MAX_VAULT_ID), 500e18);
+        tea.setLockEnd(alice, MAX_VAULT_ID, 2000);
+
+        uint256[] memory vaultIds = new uint256[](2);
+        vaultIds[0] = VAULT_ID;
+        vaultIds[1] = MAX_VAULT_ID;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 100e18;
+        amounts[1] = 50e18;
+
+        // Alice batch transfers to Bob
+        vm.prank(alice);
+        tea.safeBatchTransferFrom(alice, bob, vaultIds, amounts, "");
+
+        // Both of Bob's locks should be floored at current time
+        assertGe(tea.getLockEnd(bob, VAULT_ID), currentTime, "VAULT_ID lock should be floored");
+        assertGe(tea.getLockEnd(bob, MAX_VAULT_ID), currentTime, "MAX_VAULT_ID lock should be floored");
     }
 }
