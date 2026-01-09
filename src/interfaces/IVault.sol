@@ -15,13 +15,37 @@ interface IVault {
     error NotAWETHVault();
     error NotAuthorized();
     error StringsInsufficientHexLength(uint256 value, uint256 length);
+    error TEALocked();
     error TEAMaxSupplyExceeded();
+    error TransferToLowerLockEnd();
     error TransferToZeroAddress();
     error UnsafeRecipient();
     error VaultAlreadyInitialized();
     error VaultDoesNotExist();
 
     event ApprovalForAll(address indexed account, address indexed operator, bool approved);
+
+    event Mint(
+        uint48 indexed vaultId,
+        address indexed minter,
+        bool isAPE,
+        uint144 collateralIn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers,
+        uint256 tokenOut,
+        uint8 portionLockTime
+    );
+
+    event Burn(
+        uint48 indexed vaultId,
+        address indexed burner,
+        bool isAPE,
+        uint256 tokenIn,
+        uint144 collateralWithdrawn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers
+    );
+
     event ReservesChanged(uint48 indexed vaultId, bool isAPE, bool isMint, uint144 reserveLPers, uint144 reserveApes);
     event TransferBatch(
         address indexed operator,

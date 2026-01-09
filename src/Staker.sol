@@ -431,6 +431,7 @@ contract Staker {
 
     /**
      * @notice Bid on an auction.
+     * @dev The bid must be strictly greater than 5% higher than the current winning bid.
      * @param token Contract address of the token being auctioned.
      * @param amount Amount of WETH to bid (ignored if msg.value > 0).
      */

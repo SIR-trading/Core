@@ -150,7 +150,7 @@ abstract contract SystemState is SystemControlAccess {
     /**
      *  @notice Returns the global system parameters.
      *  @return systemParams_ A 4-tuple that includes (1) the base fee, (2) the LP fee,
-     *  (3) whether minting is stopped, and (4) the cumulative tax.
+     *  (3) whether minting is stopped, (4) the cumulative tax, and (5) the maximum time lock for LPs.
      */
     function systemParams() public view returns (SirStructs.SystemParameters memory systemParams_) {
         systemParams_ = _systemParams;
@@ -250,10 +250,12 @@ abstract contract SystemState is SystemControlAccess {
      * All these parameters are updated in a single function for bytecode efficiency.
      * All checks and balances are done at the SystemControl contract.
      */
-    function updateSystemState(uint16 baseFee, uint16 lpFee, uint40 lpLockTime, bool mintingStopped)
-        external
-        onlySystemControl
-    {
+    function updateSystemState(
+        uint16 baseFee,
+        uint16 lpFee,
+        uint40 lpLockTime,
+        bool mintingStopped
+    ) external onlySystemControl {
         SirStructs.SystemParameters memory systemParams_ = systemParams();
 
         if (baseFee != 0) {

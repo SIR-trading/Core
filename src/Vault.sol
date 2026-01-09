@@ -96,7 +96,8 @@ contract Vault is TEA {
         uint144 collateralIn,
         uint144 collateralFeeToStakers,
         uint144 collateralFeeToLPers,
-        uint256 tokenOut
+        uint256 tokenOut,
+        uint8 portionLockTime
     );
 
     event Burn(
@@ -242,7 +243,15 @@ contract Vault is TEA {
             if (amountToDeposit > type(uint144).max) revert ExcessiveDeposit();
 
             // Rest of the mint logic
-            amount = _mint(msg.sender, ape, vaultParams, uint144(amountToDeposit), vaultState, reserves, portionLockTime);
+            amount = _mint(
+                msg.sender,
+                ape,
+                vaultParams,
+                uint144(amountToDeposit),
+                vaultState,
+                reserves,
+                portionLockTime
+            );
 
             // If the user didn't send ETH, transfer the ERC20 collateral from the minter
             if (msg.value == 0) {
@@ -266,7 +275,16 @@ contract Vault is TEA {
 
             // Encode data for swap callback
             bool zeroForOne = vaultParams.collateralToken > vaultParams.debtToken;
-            bytes memory data = abi.encode(msg.sender, ape, vaultParams, vaultState, reserves, zeroForOne, isETH, portionLockTime);
+            bytes memory data = abi.encode(
+                msg.sender,
+                ape,
+                vaultParams,
+                vaultState,
+                reserves,
+                zeroForOne,
+                isETH,
+                portionLockTime
+            );
 
             // Swap
             int256 amountToDepositInt = int256(amountToDeposit);
@@ -317,7 +335,16 @@ contract Vault is TEA {
             uint8 portionLockTime
         ) = abi.decode(
                 data,
-                (address, address, SirStructs.VaultParameters, SirStructs.VaultState, SirStructs.Reserves, bool, bool, uint8)
+                (
+                    address,
+                    address,
+                    SirStructs.VaultParameters,
+                    SirStructs.VaultState,
+                    SirStructs.Reserves,
+                    bool,
+                    bool,
+                    uint8
+                )
             );
 
         // Retrieve amount of collateral to deposit and check it does not exceed max
@@ -332,7 +359,15 @@ contract Vault is TEA {
 
         // Rest of the mint logic
         if (collateralToDeposit > type(uint144).max) revert ExcessiveDeposit();
-        uint256 amount = _mint(minter, ape, vaultParams, uint144(collateralToDeposit), vaultState, reserves, portionLockTime);
+        uint256 amount = _mint(
+            minter,
+            ape,
+            vaultParams,
+            uint144(collateralToDeposit),
+            vaultState,
+            reserves,
+            portionLockTime
+        );
 
         // Transfer debt token to the pool
         // This is done last to avoid reentrancy attack from a bogus debt token contract
@@ -411,7 +446,8 @@ contract Vault is TEA {
             fees.collateralInOrWithdrawn,
             fees.collateralFeeToStakers,
             fees.collateralFeeToLPers,
-            amount
+            amount,
+            isAPE ? 0 : portionLockTime
         );
 
         /*  

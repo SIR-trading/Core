@@ -177,9 +177,10 @@ contract TEA is SystemState {
             if (lockEndTo < block.timestamp) lockEndTo = block.timestamp;
 
             // Sender's lock end must not exceed recipient's effective lock end
-            if (_lockEnd[from][vaultId] > lockEndTo) revert TransferToLowerLockEnd();
+            uint40 senderLockEnd = _lockEnd[from][vaultId];
+            if (senderLockEnd > lockEndTo) revert TransferToLowerLockEnd();
 
-            _updateLockEnd(to, vaultId, balances[to][vaultId], amount, _lockEnd[from][vaultId]);
+            _updateLockEnd(to, vaultId, balances[to][vaultId], amount, senderLockEnd);
         }
 
         // Update balances

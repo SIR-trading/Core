@@ -14,6 +14,8 @@ interface ISystemControl {
     event FundsWithdrawn(address indexed to, address indexed token, uint256 amount);
     event NewBaseFee(uint16 baseFee);
     event NewLPFee(uint16 lpFee);
+    event NewLPLockTime(uint40 lpLockTime);
+    event OracleChanged(address indexed newOracle);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event SystemStatusChanged(uint8 indexed oldStatus, uint8 indexed newStatus);
@@ -31,6 +33,7 @@ interface ISystemControl {
     function saveFunds(address[] memory tokens, address to) external;
     function setBaseFee(uint16 baseFee_) external;
     function setLPFee(uint16 lpFee_) external;
+    function setLPLockTime(uint40 lpLockTime_) external;
     function setOracle(address newOracle) external;
     function shutdownSystem() external;
     function sir() external view returns (address);

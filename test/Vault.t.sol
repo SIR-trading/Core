@@ -412,6 +412,123 @@ contract VaultTest is Test {
         }
     }
 
+    event Mint(
+        uint48 indexed vaultId,
+        address indexed minter,
+        bool isAPE,
+        uint144 collateralIn,
+        uint144 collateralFeeToStakers,
+        uint144 collateralFeeToLPers,
+        uint256 tokenOut,
+        uint8 portionLockTime
+    );
+
+    function testFuzz_mintTEAEmitsMintEventWithPortionLockTime(
+        SystemParams calldata systemParams,
+        InputsOutputs memory inputsOutputs,
+        SirStructs.Reserves memory reservesPre,
+        Balances memory balances,
+        uint8 portionLockTime
+    ) public {
+        bool isAPE = false; // TEA only
+        _initialize(systemParams, reservesPre);
+        _constraintBalances(isAPE, false, reservesPre, balances);
+        _makeDeposit(isAPE, systemParams, inputsOutputs, reservesPre, balances);
+
+        // User mints TEA with portionLockTime
+        vm.startPrank(user);
+        collateral.approve(address(vault), inputsOutputs.collateral);
+
+        // Calculate expected fees to verify the event
+        SirStructs.SystemParameters memory sysParams = vault.systemParams();
+        (SirStructs.Fees memory expectedFees, ) = Fees.feeMintTEA(
+            inputsOutputs.collateral,
+            sysParams.lpFee.fee,
+            portionLockTime,
+            sysParams.lpLockTime
+        );
+
+        // Expect the Mint event with the correct portionLockTime
+        vm.expectEmit(true, true, false, false);
+        emit Mint(
+            vaultId,
+            user,
+            false, // isAPE = false for TEA
+            expectedFees.collateralInOrWithdrawn,
+            expectedFees.collateralFeeToStakers,
+            expectedFees.collateralFeeToLPers,
+            0, // amount - we don't check this in the event matcher
+            portionLockTime
+        );
+
+        inputsOutputs.amount = vault.mint(isAPE, vaultParams, inputsOutputs.collateral, 0, 0, portionLockTime);
+        vm.stopPrank();
+    }
+
+    function test_mintTEAWithLockTimeEmitsCorrectPortionLockTime() public {
+        // Specific test to verify portionLockTime is correctly reflected in Mint event
+        SystemParams memory systemParams = SystemParams({
+            baseFee: 100,
+            lpFee: 200,
+            tax: 50,
+            leverageTier: 0,
+            tickPriceX42: 0
+        });
+        SirStructs.Reserves memory reservesPre = SirStructs.Reserves(0, 0, 0);
+
+        _initialize(systemParams, reservesPre);
+
+        // First deposit to initialize
+        uint144 firstDeposit = 1e18;
+        collateral.mint(user, firstDeposit);
+        vm.startPrank(user);
+        collateral.approve(address(vault), firstDeposit);
+        vault.mint(true, vaultParams, firstDeposit, 0, 0, 0); // Mint APE first to initialize
+        vm.stopPrank();
+
+        // Test with different portionLockTime values
+        _testMintTEAPortionLockTime(0);
+        _testMintTEAPortionLockTime(64);
+        _testMintTEAPortionLockTime(128);
+        _testMintTEAPortionLockTime(255);
+    }
+
+    function _testMintTEAPortionLockTime(uint8 portionLockTime) private {
+        uint144 depositAmount = 1e18;
+        collateral.mint(user, depositAmount);
+
+        vm.startPrank(user);
+        collateral.approve(address(vault), depositAmount);
+
+        // Record logs to check the Mint event
+        vm.recordLogs();
+        vault.mint(false, vaultParams, depositAmount, 0, 0, portionLockTime);
+        vm.stopPrank();
+
+        // Get the recorded logs and find the Mint event
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 mintEventSelector = keccak256("Mint(uint48,address,bool,uint144,uint144,uint144,uint256,uint8)");
+
+        bool foundMintEvent = false;
+        for (uint j = 0; j < logs.length; j++) {
+            if (logs[j].topics[0] == mintEventSelector) {
+                foundMintEvent = true;
+
+                // Decode the non-indexed data: (bool isAPE, uint144, uint144, uint144, uint256, uint8 portionLockTime)
+                (, , , , , uint8 eventPortionLockTime) = abi.decode(
+                    logs[j].data,
+                    (bool, uint144, uint144, uint144, uint256, uint8)
+                );
+
+                // THE MAIN CHECK: portionLockTime in the event should match what we passed
+                assertEq(eventPortionLockTime, portionLockTime, "Mint event portionLockTime mismatch");
+                break;
+            }
+        }
+
+        assertTrue(foundMintEvent, "Mint event was not emitted");
+    }
+
     function testFuzz_burn(
         bool isAPE,
         SystemParams calldata systemParams,
