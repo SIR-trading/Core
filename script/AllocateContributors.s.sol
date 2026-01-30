@@ -7,13 +7,13 @@ import {Contributors} from "src/Contributors.sol";
 /**
  * @title AllocateContributors
  * @notice Allocates contributors from allocations-deploy.json to an existing Contributors contract
- * @dev Run with:
+ * @dev cli for MegaETH testnet:
         forge script script/AllocateContributors.s.sol --rpc-url megatest --broadcast --private-key $PRIVATE_KEY \
         --skip-simulation --gas-price 10000000 --priority-gas-price 1000000 --gas-limit 1000000000 --slow
  */
 contract AllocateContributors is Script {
     // Set this to the deployed Contributors contract address
-    address constant CONTRIBUTORS = 0x6758b0Efc096D1d9b6043DEDaBEB27681Eb946c4;
+    address constant CONTRIBUTORS = 0x99033401338A06aA619eB76D8761b155c99244Cf;
 
     uint256 constant BATCH_SIZE = 5000;
 

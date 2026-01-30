@@ -87,18 +87,18 @@ contract DeployCore is AllocationsHelper {
         SystemControl(systemControl).initialize(vault, sir);
         console.log("SystemControl initialized.");
 
-        // // Allocate contributors from JSON file
-        // console.log("Starting contributor allocations...");
-        // (uint256 totalAddresses, uint256 totalAllocations) = readAndAllocate(contributors);
+        // Allocate contributors from JSON file
+        console.log("Starting contributor allocations...");
+        (uint256 totalAddresses, uint256 totalAllocations) = readAndAllocate(contributors);
 
-        // // Verify all allocations are done
-        // console.log("Total addresses allocated:", totalAddresses);
-        // console.log("Total allocations sum:", totalAllocations);
-        // uint24 remaining = Contributors(contributors).remainingAllocation();
-        // console.log("Remaining allocation:", remaining);
-        // require(remaining == 0, "Remaining allocation must be 0");
-        // require(totalAllocations == uint256(type(uint24).max), "Total allocations must equal type(uint24).max");
-        // console.log("All allocations completed successfully!");
+        // Verify all allocations are done
+        console.log("Total addresses allocated:", totalAddresses);
+        console.log("Total allocations sum:", totalAllocations);
+        uint24 remaining = Contributors(contributors).remainingAllocation();
+        console.log("Remaining allocation:", remaining);
+        require(remaining == 0, "Remaining allocation must be 0");
+        require(totalAllocations == uint256(type(uint24).max), "Total allocations must equal type(uint24).max");
+        console.log("All allocations completed successfully!");
 
         vm.stopBroadcast();
     }

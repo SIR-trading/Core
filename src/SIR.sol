@@ -6,13 +6,14 @@ import {SystemConstants} from "./libraries/SystemConstants.sol";
 import {Contributors} from "./Contributors.sol";
 import {Staker} from "./Staker.sol";
 import {SystemControlAccess} from "./SystemControlAccess.sol";
+import {Multicall} from "openzeppelin/utils/Multicall.sol";
 
 /**
  * @notice The SIR ERC-20 token is managed between this contractand the Staker contract.
  * In particular this contract handles the external functions for minting SIR by contributors,
  * who have a fixed allocation for the first 3 years, and LPers.
  */
-contract SIR is Staker, SystemControlAccess {
+contract SIR is Staker, SystemControlAccess, Multicall {
     event RewardsClaimed(address indexed contributor, uint256 indexed vaultId, uint80 rewards);
 
     Contributors public immutable CONTRIBUTORS;

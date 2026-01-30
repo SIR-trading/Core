@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-01-08T16:31:00.477Z",
+    "generatedAt": "2026-01-12T13:02:24.693Z",
     "maxUint16": "65535",
     "totalAddresses": 171,
     "lpAllocationPercent": 69,
@@ -95,22 +95,14 @@
       }
     },
     "0x6186290B28D511bFF971631c916244A9fC539cfE": {
-      "allocation": "2621",
-      "allocationPerc": "1.2%",
+      "allocation": "4521",
+      "allocationPerc": "2.1%",
       "type": "fixed",
-      "basisPointsOfTotal": 120,
-      "percentOfTotalIssuance": "1.2%",
-      "percentOfContributorPool": "4.00%"
+      "basisPointsOfTotal": 207,
+      "percentOfTotalIssuance": "2.07%",
+      "percentOfContributorPool": "6.90%"
     },
     "0x0f1b084c7aAf82bB5ad3DE9A1222ecC805b28f85": {
-      "allocation": "2184",
-      "allocationPerc": "1.0%",
-      "type": "fixed",
-      "basisPointsOfTotal": 100,
-      "percentOfTotalIssuance": "1%",
-      "percentOfContributorPool": "3.33%"
-    },
-    "0x00ACf1f79Ff43b1FF5b4ff28b537CBf27445869f": {
       "allocation": "2184",
       "allocationPerc": "1.0%",
       "type": "fixed",
@@ -150,7 +142,7 @@
       }
     },
     "0x81695c4A090caAbE58973e76ce970ccB473cD6e3": {
-      "allocation": "1866",
+      "allocation": "1867",
       "allocationPerc": "0.85%",
       "type": "weighted",
       "sources": {
@@ -208,7 +200,7 @@
       }
     },
     "0xFc3C962FAD2C1cC77f1a0d46e7B8a2De79A21774": {
-      "allocation": "1695",
+      "allocation": "1696",
       "allocationPerc": "0.78%",
       "type": "weighted",
       "sources": {
@@ -1007,7 +999,7 @@
       }
     },
     "0xA9aBEe56A0Ee419816698f1721dFFF14e3ECC0Fa": {
-      "allocation": "289",
+      "allocation": "288",
       "allocationPerc": "0.13%",
       "type": "weighted",
       "sources": {
@@ -1025,6 +1017,14 @@
         "hyperEVMPercentage": "0.0",
         "weightedPercentage": "0.000000000000000003"
       }
+    },
+    "0x5A9eF14B49a991082Ac388f071dB5A7E9af2D7ea": {
+      "allocation": "283",
+      "allocationPerc": "0.13%",
+      "type": "fixed",
+      "basisPointsOfTotal": 13,
+      "percentOfTotalIssuance": "0.13%",
+      "percentOfContributorPool": "0.43%"
     },
     "0x589F8D40370C9B5904f83B9C17815DDdB3eb6af9": {
       "allocation": "275",

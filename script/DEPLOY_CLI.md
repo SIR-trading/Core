@@ -11,6 +11,7 @@ RPC_URL="https://timothy.megaeth.com/rpc"
 
 ## Constants (MegaETH Testnet - Chain 6343)
 UNISWAP_FACTORY=0x94996d371622304F2eB85df1eb7f328F7B317C3E
+POOL_INIT_CODE_HASH=0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54
 WETH=0x4200000000000000000000000000000000000006
 ```
 
@@ -20,7 +21,7 @@ WETH=0x4200000000000000000000000000000000000006
 ORACLE=$(forge create src/Oracle.sol:Oracle \
   --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast \
   --gas-price 10000000 --priority-gas-price 1000000 --gas-limit 1000000000 \
-  --constructor-args "$UNISWAP_FACTORY" \
+  --constructor-args "$UNISWAP_FACTORY" "$POOL_INIT_CODE_HASH" \
   2>&1 | awk '/Deployed to:/ {print $3; exit}')
 echo "Oracle: $ORACLE"
 ```
@@ -149,13 +150,14 @@ set -e
 
 RPC_URL="https://timothy.megaeth.com/rpc"
 UNISWAP_FACTORY=0x94996d371622304F2eB85df1eb7f328F7B317C3E
+POOL_INIT_CODE_HASH=0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54
 WETH=0x4200000000000000000000000000000000000006
 
 echo "Deploying Oracle..."
 ORACLE=$(forge create src/Oracle.sol:Oracle \
   --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast \
   --gas-price 10000000 --priority-gas-price 1000000 --gas-limit 1000000000 \
-  --constructor-args "$UNISWAP_FACTORY" \
+  --constructor-args "$UNISWAP_FACTORY" "$POOL_INIT_CODE_HASH" \
   2>&1 | awk '/Deployed to:/ {print $3; exit}')
 echo "Oracle: $ORACLE"
 sleep 2

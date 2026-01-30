@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 /**
  * @notice Stores contributor allocations using packed storage to minimize gas costs.
  * @dev Uses uint16 allocations packed 16 per storage slot (256 bits / 16 bits = 16).
- * Total contributor allocation: 30%, LP allocation: 70%.
+ * Total contributor allocation: 29%, LP allocation: 69%.
  * Sum of all allocations must equal type(uint16).max.
  */
 contract Contributors {

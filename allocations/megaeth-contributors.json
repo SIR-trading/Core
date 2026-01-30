@@ -1,7 +1,7 @@
 [
     { "address": "0xbFb4D49C01dc40C53372D68d5F979a89811d8d6C", "allocationInBasisPoints": 800, "name": "Treasury" },
     { "address": "0x193AD6d624678b11Bec0C5cFD5723A34725A8433", "allocationInBasisPoints": 500, "name": "Xata" },
-    { "address": "0x6186290B28D511bFF971631c916244A9fC539cfE", "allocationInBasisPoints": 120, "name": "Barth" },
+    { "address": "0x6186290B28D511bFF971631c916244A9fC539cfE", "allocationInBasisPoints": 207, "name": "Barth" },
     { "address": "0x0f1b084c7aAf82bB5ad3DE9A1222ecC805b28f85", "allocationInBasisPoints": 100, "name": "RedTiger" },
-    { "address": "0x00ACf1f79Ff43b1FF5b4ff28b537CBf27445869f", "allocationInBasisPoints": 100, "name": "Ozark" }
+    { "address": "0x5A9eF14B49a991082Ac388f071dB5A7E9af2D7ea", "allocationInBasisPoints": 13, "name": "" }
 ]
